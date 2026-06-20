@@ -69,11 +69,6 @@ namespace Folderss
                 ActivatePane(previousActive);
 
             UpdateMaximizeButton();
-
-            // 검색 패널은 Ctrl+F로 열기 전까지 숨긴다.
-            if (!restored)
-                SearchDock.Hide();
-
             InitTrayIcon();
         }
 
@@ -200,8 +195,6 @@ namespace Folderss
         {
             if (contentId == "favorites")
                 return FavoritesPanel;
-            if (contentId == "search")
-                return SearchPanel;
             if (contentId == "left-folder")
                 return LeftPane;
             if (contentId == "right-folder")
@@ -478,11 +471,7 @@ namespace Folderss
 
         private void ShowFavorites_Click(object sender, RoutedEventArgs e)
         {
-            var favorite = DockManager.Layout.Descendents()
-                .OfType<LayoutAnchorable>()
-                .FirstOrDefault(item => item.ContentId == "favorites");
-            if (favorite != null)
-                favorite.Show();
+            FindDock("favorites")?.Show();
         }
 
         private void ResetDockLayout_Click(object sender, RoutedEventArgs e)
@@ -790,22 +779,58 @@ namespace Folderss
             }
         }
 
+        private LayoutAnchorable FindDock(string contentId)
+        {
+            // 도킹된 상태
+            var docked = DockManager.Layout.Descendents()
+                .OfType<LayoutAnchorable>()
+                .FirstOrDefault(a => a.ContentId == contentId);
+            if (docked != null)
+                return docked;
+
+            // Hide()로 숨겨진 상태
+            var hidden = DockManager.Layout.Hidden
+                .OfType<LayoutAnchorable>()
+                .FirstOrDefault(a => a.ContentId == contentId);
+            if (hidden != null)
+                return hidden;
+
+            // 플로팅 윈도우 상태
+            return DockManager.Layout.FloatingWindows
+                .SelectMany(fw => fw.Descendents().OfType<LayoutAnchorable>())
+                .FirstOrDefault(a => a.ContentId == contentId);
+        }
+
+        private void ShowSearch_Click(object sender, RoutedEventArgs e)
+        {
+            ShowSearchPanel();
+        }
+
         private void ShowSearchPanel()
         {
             SearchPanel.SetRootPath(ActivePane.CurrentPath);
-
-            var dock = DockManager.Layout.Descendents()
-                .OfType<LayoutAnchorable>()
-                .FirstOrDefault(a => a.ContentId == "search");
-            if (dock != null)
-                dock.Show();
-
+            if (SearchPopup.Visibility == Visibility.Visible)
+            {
+                SearchPopup.Visibility = Visibility.Collapsed;
+                return;
+            }
+            SearchPopup.Visibility = Visibility.Visible;
             Dispatcher.BeginInvoke(new Action(() => SearchPanel.FocusSearchBox()), DispatcherPriority.Input);
+        }
+
+        private void CloseSearchPopup_Click(object sender, RoutedEventArgs e)
+        {
+            SearchPopup.Visibility = Visibility.Collapsed;
         }
 
         private void SearchPanel_NavigateRequested(object sender, Controls.SearchNavigateEventArgs e)
         {
             ActivePane.NavigateTo(e.Path);
+        }
+
+        private void SearchPanel_HideRequested(object sender, EventArgs e)
+        {
+            SearchPopup.Visibility = Visibility.Collapsed;
         }
 
         private void SwitchToAdjacentPane(int direction)

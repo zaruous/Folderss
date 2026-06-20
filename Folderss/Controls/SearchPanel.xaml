@@ -1,6 +1,7 @@
 <UserControl x:Class="Folderss.Controls.SearchPanel"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             PreviewKeyDown="SearchPanel_PreviewKeyDown">
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -80,6 +81,8 @@
                   Foreground="{DynamicResource PrimaryText}"
                   BorderThickness="0"
                   MouseDoubleClick="ResultList_MouseDoubleClick"
+                  PreviewMouseRightButtonDown="ResultList_PreviewMouseRightButtonDown"
+                  MouseRightButtonUp="ResultList_MouseRightButtonUp"
                   VirtualizingPanel.IsVirtualizing="True"
                   VirtualizingPanel.VirtualizationMode="Recycling">
             <ListView.GroupStyle>

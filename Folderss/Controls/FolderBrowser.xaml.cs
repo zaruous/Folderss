@@ -15,6 +15,7 @@ using System.Windows.Media;
 using System.Windows.Interop;
 using System.Windows.Media.Imaging;
 using System.Threading.Tasks;
+using System.Windows.Threading;
 
 namespace Folderss.Controls
 {
@@ -29,6 +30,8 @@ namespace Folderss.Controls
         private string _sortProperty = "Name";
         private bool _sortAscending = true;
         private bool _updatingDriveCombo;
+        private FileSystemWatcher _watcher;
+        private DispatcherTimer _refreshDebounce;
 
         public event EventHandler Activated;
         public event EventHandler PathChanged;
@@ -60,6 +63,70 @@ namespace Folderss.Controls
         private void FolderBrowser_Loaded(object sender, RoutedEventArgs e)
         {
             UpdateSortHeaders();
+        }
+
+        private void FolderBrowser_Unloaded(object sender, RoutedEventArgs e)
+        {
+            StopWatcher();
+            _refreshDebounce?.Stop();
+        }
+
+        private void StartWatcher(string path)
+        {
+            StopWatcher();
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                return;
+
+            try
+            {
+                _watcher = new FileSystemWatcher(path)
+                {
+                    NotifyFilter = NotifyFilters.FileName | NotifyFilters.DirectoryName,
+                    EnableRaisingEvents = true
+                };
+                _watcher.Created += OnFileSystemChanged;
+                _watcher.Deleted += OnFileSystemChanged;
+                _watcher.Renamed += OnFileSystemChanged;
+                _watcher.Error += OnWatcherError;
+            }
+            catch
+            {
+                _watcher = null;
+            }
+        }
+
+        private void StopWatcher()
+        {
+            if (_watcher == null)
+                return;
+            _watcher.EnableRaisingEvents = false;
+            _watcher.Dispose();
+            _watcher = null;
+        }
+
+        private void OnFileSystemChanged(object sender, FileSystemEventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(ScheduleRefresh), DispatcherPriority.Background);
+        }
+
+        private void OnWatcherError(object sender, ErrorEventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(StopWatcher), DispatcherPriority.Background);
+        }
+
+        private void ScheduleRefresh()
+        {
+            if (_refreshDebounce == null)
+            {
+                _refreshDebounce = new DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+                _refreshDebounce.Tick += (s, e) =>
+                {
+                    _refreshDebounce.Stop();
+                    RefreshItems();
+                };
+            }
+            _refreshDebounce.Stop();
+            _refreshDebounce.Start();
         }
 
         private void PopulateDrives()
@@ -170,6 +237,7 @@ namespace Folderss.Controls
             SearchBox.Text = string.Empty;
             SyncDriveComboBox();
             RefreshItems();
+            StartWatcher(fullPath);
 
             var handler = PathChanged;
             if (handler != null)
@@ -218,6 +286,20 @@ namespace Folderss.Controls
             catch (Exception exception)
             {
                 MessageBox.Show(exception.Message, "파일을 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void FileList_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter)
+            {
+                FileList_MouseDoubleClick(sender, null);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Back)
+            {
+                NavigateUp();
+                e.Handled = true;
             }
         }
 
@@ -354,7 +436,10 @@ namespace Folderss.Controls
 
             var container = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
             if (container == null)
+            {
+                FileList.SelectedItems.Clear();
                 return;
+            }
 
             if (!container.IsSelected)
             {
@@ -368,8 +453,13 @@ namespace Folderss.Controls
         private void FileList_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             var selectedPaths = SelectedItems.Select(item => item.FullPath).ToList();
+
             if (selectedPaths.Count == 0)
-                return;
+            {
+                if (string.IsNullOrWhiteSpace(CurrentPath))
+                    return;
+                selectedPaths.Add(CurrentPath);
+            }
 
             var window = Window.GetWindow(this);
             if (window == null)

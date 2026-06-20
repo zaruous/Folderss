@@ -3,16 +3,20 @@ using Folderss.Services;
 using System;
 using System.Collections.ObjectModel;
 using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Data;
 using System.Windows.Input;
+using System.Windows.Interop;
+using System.Windows.Media;
 
 namespace Folderss.Controls
 {
     public partial class SearchPanel : UserControl
     {
         public event EventHandler<SearchNavigateEventArgs> NavigateRequested;
+        public event EventHandler HideRequested;
 
         private readonly ObservableCollection<SearchResult> _results = new ObservableCollection<SearchResult>();
         private CancellationTokenSource _cts;
@@ -38,6 +42,16 @@ namespace Folderss.Controls
             QueryBox.SelectAll();
         }
 
+        private void SearchPanel_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Escape)
+            {
+                CancelSearch();
+                HideRequested?.Invoke(this, EventArgs.Empty);
+                e.Handled = true;
+            }
+        }
+
         private void QueryBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
@@ -45,17 +59,11 @@ namespace Folderss.Controls
                 StartSearch();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Escape)
-            {
-                CancelSearch();
-                e.Handled = true;
-            }
         }
 
         private void QueryBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (!IsInitialized) return;
-            // 검색어가 비워지면 결과도 초기화
             if (string.IsNullOrEmpty(QueryBox.Text))
             {
                 CancelSearch();
@@ -82,16 +90,57 @@ namespace Folderss.Controls
             CancelSearch();
         }
 
-        private void ResultList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        private void ResultList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var result = ResultList.SelectedItem as SearchResult;
-            if (result == null || string.IsNullOrWhiteSpace(result.FolderPath))
+            var container = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
+            if (container == null)
+            {
+                ResultList.SelectedItems.Clear();
                 return;
-
-            NavigateRequested?.Invoke(this, new SearchNavigateEventArgs(result.FolderPath));
+            }
+            if (!container.IsSelected)
+            {
+                ResultList.SelectedItems.Clear();
+                container.IsSelected = true;
+            }
+            container.Focus();
         }
 
-        private void StartSearch()
+        private void ResultList_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            ShowResultContextMenu(e);
+        }
+
+        private void ResultList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            ShowResultContextMenu(e);
+        }
+
+        private void ShowResultContextMenu(MouseButtonEventArgs e)
+        {
+            var result = ResultList.SelectedItem as SearchResult;
+            if (result == null || string.IsNullOrWhiteSpace(result.FilePath))
+                return;
+
+            var window = Window.GetWindow(this);
+            if (window == null) return;
+
+            var screenPoint = ResultList.PointToScreen(e.GetPosition(ResultList));
+            try
+            {
+                ShellContextMenuService.Show(
+                    new WindowInteropHelper(window).Handle,
+                    new[] { result.FilePath },
+                    (int)screenPoint.X,
+                    (int)screenPoint.Y);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(ex.Message, "컨텍스트 메뉴를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private async void StartSearch()
         {
             var query = QueryBox.Text;
             if (string.IsNullOrEmpty(query) || string.IsNullOrWhiteSpace(_rootPath))
@@ -116,8 +165,9 @@ namespace Folderss.Controls
                 }
             }
 
-            _cts = new CancellationTokenSource();
-            var token = _cts.Token;
+            var cts = new CancellationTokenSource();
+            _cts = cts;
+            var token = cts.Token;
             CancelButton.Visibility = Visibility.Visible;
             StatusText.Text = "검색 중…";
 
@@ -128,34 +178,51 @@ namespace Folderss.Controls
                 StatusText.Text = string.Format("{0}건 발견됨", _resultCount);
             });
 
-            SearchService.SearchAsync(_rootPath, query, recursive, caseSensitive, useRegex, progress, token)
-                .ContinueWith(t =>
+            try
+            {
+                await SearchService.SearchAsync(_rootPath, query, recursive, caseSensitive, useRegex, progress, token);
+                StatusText.Text = _resultCount == 0
+                    ? "검색 결과가 없습니다."
+                    : string.Format("검색 완료 — {0}건 발견됨", _resultCount);
+            }
+            catch (OperationCanceledException)
+            {
+                StatusText.Text = string.Format("검색 취소됨 — {0}건 발견됨", _resultCount);
+            }
+            catch (Exception ex)
+            {
+                StatusText.Text = "검색 오류: " + ex.Message;
+            }
+            finally
+            {
+                if (CancelButton != null)
+                    CancelButton.Visibility = Visibility.Collapsed;
+                if (ReferenceEquals(_cts, cts))
                 {
-                    Dispatcher.Invoke(() =>
-                    {
-                        CancelButton.Visibility = Visibility.Collapsed;
-                        if (t.IsCanceled)
-                            StatusText.Text = string.Format("검색 취소됨 — {0}건 발견됨", _resultCount);
-                        else if (t.IsFaulted)
-                            StatusText.Text = "검색 오류: " + (t.Exception?.InnerException?.Message ?? "알 수 없는 오류");
-                        else
-                            StatusText.Text = _resultCount == 0
-                                ? "검색 결과가 없습니다."
-                                : string.Format("검색 완료 — {0}건 발견됨", _resultCount);
-                    });
-                });
+                    _cts = null;
+                    cts.Dispose();
+                }
+            }
         }
 
         private void CancelSearch()
         {
-            if (_cts != null)
-            {
-                _cts.Cancel();
-                _cts.Dispose();
-                _cts = null;
-            }
+            var cts = _cts;
+            _cts = null;
+            cts?.Cancel();
+            cts?.Dispose();
             if (CancelButton != null)
                 CancelButton.Visibility = Visibility.Collapsed;
+        }
+
+        private static T FindAncestor<T>(DependencyObject dep) where T : DependencyObject
+        {
+            while (dep != null)
+            {
+                if (dep is T target) return target;
+                dep = VisualTreeHelper.GetParent(dep);
+            }
+            return null;
         }
     }
 

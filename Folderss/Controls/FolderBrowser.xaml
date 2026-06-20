@@ -4,6 +4,7 @@
              MinWidth="360"
              Focusable="True"
              Loaded="FolderBrowser_Loaded"
+             Unloaded="FolderBrowser_Unloaded"
              GotKeyboardFocus="Pane_GotKeyboardFocus"
              MouseDown="Pane_MouseDown">
     <Border x:Name="PaneBorder"

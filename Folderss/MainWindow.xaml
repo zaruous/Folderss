@@ -87,7 +87,9 @@
                             <Separator/>
                             <MenuItem Header="새로 고침" InputGestureText="Ctrl+R" Click="Refresh_Click"/>
                             <MenuItem Header="보기">
+                                <MenuItem Header="파일 내용 검색" InputGestureText="Ctrl+F" Click="ShowSearch_Click"/>
                                 <MenuItem Header="즐겨찾기 표시" Click="ShowFavorites_Click"/>
+                                <Separator/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
                             <MenuItem Header="테마">
@@ -167,20 +169,46 @@
                             </layout:LayoutDocumentPane>
                         </layout:LayoutDocumentPaneGroup>
                     </layout:LayoutPanel>
-                    <layout:LayoutAnchorablePane DockHeight="200">
-                        <layout:LayoutAnchorable x:Name="SearchDock"
-                                                 Title="파일 내용 검색"
-                                                 ContentId="search"
-                                                 CanClose="True"
-                                                 CanHide="True"
-                                                 CanAutoHide="True">
-                            <controls:SearchPanel x:Name="SearchPanel"
-                                                  NavigateRequested="SearchPanel_NavigateRequested"/>
-                        </layout:LayoutAnchorable>
-                    </layout:LayoutAnchorablePane>
                 </layout:LayoutPanel>
             </layout:LayoutRoot>
         </avalon:DockingManager>
+
+        <!-- 파일 내용 검색 팝업 (Ctrl+F) -->
+        <Border x:Name="SearchPopup"
+                Grid.Row="1"
+                VerticalAlignment="Bottom"
+                Height="230"
+                Visibility="Collapsed"
+                Background="{DynamicResource SurfaceBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0"
+                Margin="6,0,6,0">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="30"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+                <Border Grid.Row="0"
+                        Background="{DynamicResource ControlBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="0,0,0,1">
+                    <DockPanel Margin="8,0">
+                        <Button DockPanel.Dock="Right"
+                                Content="×"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                ToolTip="닫기"
+                                Click="CloseSearchPopup_Click"/>
+                        <TextBlock Text="파일 내용 검색"
+                                   VerticalAlignment="Center"
+                                   FontWeight="SemiBold"/>
+                    </DockPanel>
+                </Border>
+                <controls:SearchPanel x:Name="SearchPanel"
+                                      Grid.Row="1"
+                                      NavigateRequested="SearchPanel_NavigateRequested"
+                                      HideRequested="SearchPanel_HideRequested"/>
+            </Grid>
+        </Border>
 
         <Border Grid.Row="2"
                 Margin="6,0,6,6"
