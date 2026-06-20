@@ -20,6 +20,9 @@ namespace Folderss
         private bool _resetDockLayoutRequested;
         private SessionState _sessionState;
         private bool _openingPanelFromAddTab;
+        private Forms.NotifyIcon _trayIcon;
+        private bool _reallyClose;
+        private bool _shownTrayBalloon;
 
         private FolderBrowser ActivePane
         {
@@ -66,6 +69,43 @@ namespace Folderss
                 ActivatePane(previousActive);
 
             UpdateMaximizeButton();
+
+            // 검색 패널은 Ctrl+F로 열기 전까지 숨긴다.
+            if (!restored)
+                SearchDock.Hide();
+
+            InitTrayIcon();
+        }
+
+        private void InitTrayIcon()
+        {
+            _trayIcon = new Forms.NotifyIcon { Text = "Folderss" };
+
+            var resource = Application.GetResourceStream(new Uri("pack://application:,,,/app.ico"));
+            if (resource != null)
+                _trayIcon.Icon = new System.Drawing.Icon(resource.Stream);
+
+            var menu = new Forms.ContextMenuStrip();
+            menu.Items.Add("열기", null, (s, e) => Dispatcher.Invoke(ShowFromTray));
+            menu.Items.Add(new Forms.ToolStripSeparator());
+            menu.Items.Add("종료", null, (s, e) => Dispatcher.Invoke(ExitApp));
+            _trayIcon.ContextMenuStrip = menu;
+            _trayIcon.DoubleClick += (s, e) => Dispatcher.Invoke(ShowFromTray);
+            _trayIcon.Visible = true;
+        }
+
+        private void ShowFromTray()
+        {
+            Show();
+            if (WindowState == WindowState.Minimized)
+                WindowState = WindowState.Normal;
+            Activate();
+        }
+
+        private void ExitApp()
+        {
+            _reallyClose = true;
+            Close();
         }
 
         private static string GetExistingPath(string savedPath, string fallbackPath)
@@ -160,6 +200,8 @@ namespace Folderss
         {
             if (contentId == "favorites")
                 return FavoritesPanel;
+            if (contentId == "search")
+                return SearchPanel;
             if (contentId == "left-folder")
                 return LeftPane;
             if (contentId == "right-folder")
@@ -360,6 +402,25 @@ namespace Folderss
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {
+            if (!_reallyClose)
+            {
+                e.Cancel = true;
+                Hide();
+                if (!_shownTrayBalloon)
+                {
+                    _shownTrayBalloon = true;
+                    _trayIcon?.ShowBalloonTip(
+                        3000,
+                        "Folderss",
+                        "트레이에서 계속 실행 중입니다. 아이콘을 더블클릭하면 창이 열립니다.",
+                        Forms.ToolTipIcon.Info);
+                }
+                return;
+            }
+
+            _trayIcon?.Dispose();
+            _trayIcon = null;
+
             SaveSessionState();
 
             if (!_resetDockLayoutRequested)
@@ -722,6 +783,29 @@ namespace Folderss
                 SwitchToAdjacentPane(1);
                 e.Handled = true;
             }
+            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                ShowSearchPanel();
+                e.Handled = true;
+            }
+        }
+
+        private void ShowSearchPanel()
+        {
+            SearchPanel.SetRootPath(ActivePane.CurrentPath);
+
+            var dock = DockManager.Layout.Descendents()
+                .OfType<LayoutAnchorable>()
+                .FirstOrDefault(a => a.ContentId == "search");
+            if (dock != null)
+                dock.Show();
+
+            Dispatcher.BeginInvoke(new Action(() => SearchPanel.FocusSearchBox()), DispatcherPriority.Input);
+        }
+
+        private void SearchPanel_NavigateRequested(object sender, Controls.SearchNavigateEventArgs e)
+        {
+            ActivePane.NavigateTo(e.Path);
         }
 
         private void SwitchToAdjacentPane(int direction)
@@ -801,7 +885,7 @@ namespace Folderss
 
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
-            Close();
+            ExitApp();
         }
     }
 }

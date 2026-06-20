@@ -136,7 +136,7 @@ namespace Folderss.Services
                 result.Add(name);
         }
 
-        private static bool LooksBinary(byte[] bytes)
+        internal static bool LooksBinary(byte[] bytes)
         {
             if (bytes.Length == 0)
                 return false;

@@ -127,6 +127,7 @@
                           SelectionMode="Extended"
                           SelectionChanged="FileList_SelectionChanged"
                           MouseDoubleClick="FileList_MouseDoubleClick"
+                          KeyDown="FileList_KeyDown"
                           PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown"
                           MouseRightButtonUp="FileList_MouseRightButtonUp"
                           GotKeyboardFocus="Pane_GotKeyboardFocus">
