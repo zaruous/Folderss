@@ -701,13 +701,23 @@ namespace Folderss
             {
                 if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
                     return;
-                SwitchToAdjacentPane(-1);
+                ActivePane.NavigateBack();
                 e.Handled = true;
             }
             else if (e.Key == Key.Right && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
                     return;
+                ActivePane.NavigateForward();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Left && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            {
+                SwitchToAdjacentPane(-1);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Right && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            {
                 SwitchToAdjacentPane(1);
                 e.Handled = true;
             }

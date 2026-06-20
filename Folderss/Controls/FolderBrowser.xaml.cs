@@ -417,6 +417,23 @@ namespace Folderss.Controls
                 NavigateTo(parent.FullName);
         }
 
+        public void NavigateBack()
+        {
+            if (_backHistory.Count == 0)
+                return;
+            _forwardHistory.Push(CurrentPath);
+            TrimHistory(_forwardHistory);
+            NavigateTo(_backHistory.Pop(), false);
+        }
+
+        public void NavigateForward()
+        {
+            if (_forwardHistory.Count == 0)
+                return;
+            PushHistory(_backHistory, CurrentPath);
+            NavigateTo(_forwardHistory.Pop(), false);
+        }
+
         public void FocusFileList()
         {
             FileList.Focus();
