@@ -3,6 +3,7 @@ using Folderss.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Linq;
@@ -24,6 +25,10 @@ namespace Folderss.Controls
         private readonly Stack<string> _backHistory = new Stack<string>();
         private readonly Stack<string> _forwardHistory = new Stack<string>();
         private int _previewRequestId;
+        private bool _showHidden;
+        private string _sortProperty = "Name";
+        private bool _sortAscending = true;
+        private bool _updatingDriveCombo;
 
         public event EventHandler Activated;
         public event EventHandler PathChanged;
@@ -45,6 +50,22 @@ namespace Folderss.Controls
         {
             InitializeComponent();
             FileList.ItemsSource = _items;
+            FileList.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(ColumnHeader_Click));
+            PopulateDrives();
+            var view = CollectionViewSource.GetDefaultView(_items);
+            view.SortDescriptions.Add(new SortDescription("IsDirectory", ListSortDirection.Descending));
+            view.SortDescriptions.Add(new SortDescription("Name", ListSortDirection.Ascending));
+        }
+
+        private void FolderBrowser_Loaded(object sender, RoutedEventArgs e)
+        {
+            UpdateSortHeaders();
+        }
+
+        private void PopulateDrives()
+        {
+            foreach (var drive in DriveInfo.GetDrives())
+                DriveComboBox.Items.Add(drive.RootDirectory.FullName);
         }
 
         public void Initialize(string initialPath)
@@ -73,6 +94,8 @@ namespace Folderss.Controls
 
                 foreach (var childDirectory in directory.EnumerateDirectories())
                 {
+                    if (!_showHidden && (childDirectory.Attributes & FileAttributes.Hidden) != 0)
+                        continue;
                     entries.Add(new FileSystemItem
                     {
                         Name = childDirectory.Name,
@@ -84,6 +107,8 @@ namespace Folderss.Controls
 
                 foreach (var file in directory.EnumerateFiles())
                 {
+                    if (!_showHidden && (file.Attributes & FileAttributes.Hidden) != 0)
+                        continue;
                     entries.Add(new FileSystemItem
                     {
                         Name = file.Name,
@@ -95,7 +120,7 @@ namespace Folderss.Controls
                 }
 
                 _items.Clear();
-                foreach (var item in entries.OrderByDescending(x => x.IsDirectory).ThenBy(x => x.Name, StringComparer.CurrentCultureIgnoreCase))
+                foreach (var item in entries)
                     _items.Add(item);
 
                 ApplyFilter();
@@ -143,6 +168,7 @@ namespace Folderss.Controls
             CurrentPath = fullPath;
             PathBox.Text = fullPath;
             SearchBox.Text = string.Empty;
+            SyncDriveComboBox();
             RefreshItems();
 
             var handler = PathChanged;
@@ -434,6 +460,85 @@ namespace Folderss.Controls
         {
             SearchBox.Clear();
             SearchBox.Focus();
+        }
+
+        private void DriveComboBox_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (_updatingDriveCombo)
+                return;
+            var selected = DriveComboBox.SelectedItem as string;
+            if (selected != null)
+                NavigateTo(selected);
+        }
+
+        private void SyncDriveComboBox()
+        {
+            if (string.IsNullOrWhiteSpace(CurrentPath))
+                return;
+            var root = Path.GetPathRoot(CurrentPath);
+            _updatingDriveCombo = true;
+            DriveComboBox.SelectedItem = root;
+            _updatingDriveCombo = false;
+        }
+
+        private void ToggleHidden_Changed(object sender, RoutedEventArgs e)
+        {
+            _showHidden = ShowHiddenButton.IsChecked == true;
+            RefreshItems();
+        }
+
+        private void ColumnHeader_Click(object sender, RoutedEventArgs e)
+        {
+            var header = e.OriginalSource as GridViewColumnHeader;
+            if (header == null || header.Role == GridViewColumnHeaderRole.Padding || header.Tag == null)
+                return;
+
+            var property = header.Tag.ToString();
+            if (_sortProperty == property)
+                _sortAscending = !_sortAscending;
+            else
+            {
+                _sortProperty = property;
+                _sortAscending = true;
+            }
+
+            var view = CollectionViewSource.GetDefaultView(FileList.ItemsSource);
+            view.SortDescriptions.Clear();
+            view.SortDescriptions.Add(new SortDescription("IsDirectory", ListSortDirection.Descending));
+            view.SortDescriptions.Add(new SortDescription(_sortProperty,
+                _sortAscending ? ListSortDirection.Ascending : ListSortDirection.Descending));
+            view.Refresh();
+            UpdateSortHeaders();
+        }
+
+        private void UpdateSortHeaders()
+        {
+            var gridView = FileList.View as GridView;
+            if (gridView == null) return;
+
+            foreach (var column in gridView.Columns)
+            {
+                var colHeader = column.Header as GridViewColumnHeader;
+                if (colHeader == null || colHeader.Tag == null) continue;
+
+                var tag = colHeader.Tag.ToString();
+                var label = GetBaseHeaderLabel(tag);
+                colHeader.Content = tag == _sortProperty
+                    ? label + (_sortAscending ? " ↑" : " ↓")
+                    : label;
+            }
+        }
+
+        private static string GetBaseHeaderLabel(string property)
+        {
+            switch (property)
+            {
+                case "Name": return "이름";
+                case "ModifiedAt": return "수정한 날짜";
+                case "Kind": return "유형";
+                case "Size": return "크기";
+                default: return property;
+            }
         }
 
         private void Pane_GotKeyboardFocus(object sender, KeyboardFocusChangedEventArgs e)

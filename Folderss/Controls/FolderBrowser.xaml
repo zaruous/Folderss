@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              MinWidth="360"
              Focusable="True"
+             Loaded="FolderBrowser_Loaded"
              GotKeyboardFocus="Pane_GotKeyboardFocus"
              MouseDown="Pane_MouseDown">
     <Border x:Name="PaneBorder"
@@ -23,6 +24,7 @@
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
                 </Grid.ColumnDefinitions>
                 <Button Grid.Column="0"
@@ -34,8 +36,16 @@
                 <Button Grid.Column="2"
                         Style="{StaticResource CompactToolButtonStyle}"
                         Content="↑" ToolTip="상위 폴더" Click="Up_Click"/>
+                <ComboBox x:Name="DriveComboBox"
+                          Grid.Column="3"
+                          Width="70"
+                          Height="28"
+                          Margin="5,0,0,0"
+                          VerticalContentAlignment="Center"
+                          ToolTip="드라이브 선택"
+                          SelectionChanged="DriveComboBox_SelectionChanged"/>
                 <TextBox x:Name="PathBox"
-                         Grid.Column="3"
+                         Grid.Column="4"
                          Height="28"
                          Margin="5,0,0,0"
                          Padding="8,3"
@@ -47,6 +57,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
@@ -88,6 +99,17 @@
                            TextAlignment="Right"
                            Foreground="{DynamicResource SecondaryText}"
                            FontSize="11"/>
+                <ToggleButton x:Name="ShowHiddenButton"
+                              Grid.Column="3"
+                              Style="{StaticResource CompactToggleButtonStyle}"
+                              Width="42"
+                              Height="28"
+                              Margin="4,0,0,0"
+                              Content="숨김"
+                              FontSize="11"
+                              ToolTip="숨김 파일 표시/숨기기"
+                              Checked="ToggleHidden_Changed"
+                              Unchecked="ToggleHidden_Changed"/>
             </Grid>
 
             <Grid Grid.Row="2" Margin="8,0">
@@ -111,10 +133,18 @@
                     <ListView.View>
                         <GridView>
                             <GridViewColumn Header="" Width="38" DisplayMemberBinding="{Binding Icon}"/>
-                            <GridViewColumn Header="이름" Width="280" DisplayMemberBinding="{Binding Name}"/>
-                            <GridViewColumn Header="수정한 날짜" Width="145" DisplayMemberBinding="{Binding ModifiedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}"/>
-                            <GridViewColumn Header="유형" Width="100" DisplayMemberBinding="{Binding Kind}"/>
-                            <GridViewColumn Header="크기" Width="90" DisplayMemberBinding="{Binding DisplaySize}"/>
+                            <GridViewColumn Width="280" DisplayMemberBinding="{Binding Name}">
+                                <GridViewColumnHeader Content="이름" Tag="Name"/>
+                            </GridViewColumn>
+                            <GridViewColumn Width="145" DisplayMemberBinding="{Binding ModifiedAt, StringFormat={}{0:yyyy-MM-dd HH:mm}}">
+                                <GridViewColumnHeader Content="수정한 날짜" Tag="ModifiedAt"/>
+                            </GridViewColumn>
+                            <GridViewColumn Width="100" DisplayMemberBinding="{Binding Kind}">
+                                <GridViewColumnHeader Content="유형" Tag="Kind"/>
+                            </GridViewColumn>
+                            <GridViewColumn Width="90" DisplayMemberBinding="{Binding DisplaySize}">
+                                <GridViewColumnHeader Content="크기" Tag="Size"/>
+                            </GridViewColumn>
                         </GridView>
                     </ListView.View>
                 </ListView>
