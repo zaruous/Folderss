@@ -749,7 +749,8 @@ namespace Folderss
             if (layoutContent != null)
                 layoutContent.IsActive = true;
 
-            nextPane.FocusFileList();
+            // AvalonDock 레이아웃 업데이트 후 포커스를 이동해야 덮어쓰지 않는다.
+            Dispatcher.BeginInvoke(new Action(() => nextPane.FocusFileList()), DispatcherPriority.Input);
         }
 
         private void CopyToClipboard()
