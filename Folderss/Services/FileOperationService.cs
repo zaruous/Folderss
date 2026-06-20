@@ -1,5 +1,7 @@
 using System;
 using System.IO;
+using System.Runtime.InteropServices;
+using System.Runtime.InteropServices.ComTypes;
 using Microsoft.VisualBasic.FileIO;
 
 namespace Folderss.Services
@@ -8,6 +10,7 @@ namespace Folderss.Services
     {
         public static void Copy(string source, string destinationDirectory)
         {
+            ValidateTransfer(source, destinationDirectory, false);
             if (Directory.Exists(source))
             {
                 var destination = GetUniquePath(Path.Combine(destinationDirectory, Path.GetFileName(source)), true);
@@ -21,6 +24,7 @@ namespace Folderss.Services
 
         public static void Move(string source, string destinationDirectory)
         {
+            ValidateTransfer(source, destinationDirectory, true);
             var isDirectory = Directory.Exists(source);
             var destination = GetUniquePath(Path.Combine(destinationDirectory, Path.GetFileName(source)), isDirectory);
 
@@ -28,6 +32,34 @@ namespace Folderss.Services
                 Directory.Move(source, destination);
             else
                 File.Move(source, destination);
+        }
+
+        public static void CreateShortcut(string source, string destinationDirectory)
+        {
+            if (!File.Exists(source) && !Directory.Exists(source))
+                throw new FileNotFoundException("바로가기를 만들 원본이 존재하지 않습니다.", source);
+
+            var shortcutPath = GetUniquePath(
+                Path.Combine(destinationDirectory, Path.GetFileName(source) + ".lnk"),
+                false);
+            var shellLink = (IShellLinkW)new ShellLink();
+            try
+            {
+                shellLink.SetPath(source);
+                shellLink.SetDescription(Path.GetFileName(source) + " 바로가기");
+
+                var workingDirectory = Directory.Exists(source)
+                    ? source
+                    : Path.GetDirectoryName(source);
+                if (!string.IsNullOrWhiteSpace(workingDirectory))
+                    shellLink.SetWorkingDirectory(workingDirectory);
+
+                ((IPersistFile)shellLink).Save(shortcutPath, false);
+            }
+            finally
+            {
+                Marshal.FinalReleaseComObject(shellLink);
+            }
         }
 
         public static void MoveToRecycleBin(string path)
@@ -99,6 +131,37 @@ namespace Folderss.Services
                 CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
         }
 
+        private static void ValidateTransfer(string source, string destinationDirectory, bool move)
+        {
+            var sourceFullPath = NormalizePath(source);
+            var destinationFullPath = NormalizePath(destinationDirectory);
+            var sourceParent = Path.GetDirectoryName(sourceFullPath);
+
+            if (move && string.Equals(NormalizePath(sourceParent), destinationFullPath, StringComparison.OrdinalIgnoreCase))
+                throw new IOException("원본과 대상 폴더가 같습니다.");
+
+            if (!Directory.Exists(source))
+                return;
+
+            if (string.Equals(sourceFullPath, destinationFullPath, StringComparison.OrdinalIgnoreCase) ||
+                destinationFullPath.StartsWith(
+                    sourceFullPath + Path.DirectorySeparatorChar,
+                    StringComparison.OrdinalIgnoreCase))
+                throw new IOException("폴더를 자기 자신이나 하위 폴더로 복사 또는 이동할 수 없습니다.");
+        }
+
+        private static string NormalizePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return string.Empty;
+
+            var fullPath = Path.GetFullPath(path);
+            var root = Path.GetPathRoot(fullPath);
+            return string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase)
+                ? root
+                : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
         private static string GetUniquePath(string requestedPath, bool isDirectory)
         {
             if (!File.Exists(requestedPath) && !Directory.Exists(requestedPath))
@@ -118,6 +181,41 @@ namespace Folderss.Services
             while (File.Exists(candidate) || Directory.Exists(candidate));
 
             return candidate;
+        }
+
+        [ComImport]
+        [Guid("00021401-0000-0000-C000-000000000046")]
+        private class ShellLink
+        {
+        }
+
+        [ComImport]
+        [InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+        [Guid("000214F9-0000-0000-C000-000000000046")]
+        private interface IShellLinkW
+        {
+            void GetPath([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder filePath, int maxPath,
+                IntPtr findData, uint flags);
+            void GetIDList(out IntPtr itemIdList);
+            void SetIDList(IntPtr itemIdList);
+            void GetDescription([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder name, int maxName);
+            void SetDescription([MarshalAs(UnmanagedType.LPWStr)] string name);
+            void GetWorkingDirectory([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder directory,
+                int maxPath);
+            void SetWorkingDirectory([MarshalAs(UnmanagedType.LPWStr)] string directory);
+            void GetArguments([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder arguments,
+                int maxPath);
+            void SetArguments([MarshalAs(UnmanagedType.LPWStr)] string arguments);
+            void GetHotkey(out short hotkey);
+            void SetHotkey(short hotkey);
+            void GetShowCmd(out int showCommand);
+            void SetShowCmd(int showCommand);
+            void GetIconLocation([Out, MarshalAs(UnmanagedType.LPWStr)] System.Text.StringBuilder iconPath,
+                int iconPathLength, out int iconIndex);
+            void SetIconLocation([MarshalAs(UnmanagedType.LPWStr)] string iconPath, int iconIndex);
+            void SetRelativePath([MarshalAs(UnmanagedType.LPWStr)] string path, uint reserved);
+            void Resolve(IntPtr windowHandle, uint flags);
+            void SetPath([MarshalAs(UnmanagedType.LPWStr)] string filePath);
         }
     }
 }

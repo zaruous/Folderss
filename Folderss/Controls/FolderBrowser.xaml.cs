@@ -32,6 +32,8 @@ namespace Folderss.Controls
         private bool _updatingDriveCombo;
         private FileSystemWatcher _watcher;
         private DispatcherTimer _refreshDebounce;
+        private Point _dragStartPoint;
+        private bool _dragPending;
 
         public event EventHandler Activated;
         public event EventHandler PathChanged;
@@ -191,7 +193,7 @@ namespace Folderss.Controls
                     _items.Add(item);
 
                 ApplyFilter();
-                StatusText.Text = string.Format("{0:N0}개 항목", _items.Count);
+                UpdateStatusText();
             }
             catch (UnauthorizedAccessException)
             {
@@ -260,6 +262,11 @@ namespace Folderss.Controls
                 : string.Format("{0:N0}/{1:N0}개", view.Cast<object>().Count(), _items.Count);
         }
 
+        private void UpdateStatusText()
+        {
+            StatusText.Text = string.Format("{0:N0}개 항목", _items.Count);
+        }
+
         private void Activate()
         {
             var handler = Activated;
@@ -301,6 +308,201 @@ namespace Folderss.Controls
                 NavigateUp();
                 e.Handled = true;
             }
+        }
+
+        private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStartPoint = e.GetPosition(FileList);
+            var container = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
+            _dragPending = container != null;
+            if (container != null && !container.IsSelected)
+            {
+                FileList.SelectedItems.Clear();
+                container.IsSelected = true;
+            }
+        }
+
+        private void FileList_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (!_dragPending || e.LeftButton != MouseButtonState.Pressed)
+                return;
+
+            var currentPoint = e.GetPosition(FileList);
+            if (Math.Abs(currentPoint.X - _dragStartPoint.X) < SystemParameters.MinimumHorizontalDragDistance &&
+                Math.Abs(currentPoint.Y - _dragStartPoint.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            _dragPending = false;
+            var paths = SelectedItems
+                .Select(item => item.FullPath)
+                .Where(path => File.Exists(path) || Directory.Exists(path))
+                .ToArray();
+            if (paths.Length == 0)
+                return;
+
+            var data = new DataObject(DataFormats.FileDrop, paths);
+            DragDrop.DoDragDrop(FileList, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+        }
+
+        private void FileList_DragOver(object sender, DragEventArgs e)
+        {
+            var paths = GetDroppedPaths(e.Data);
+            var destination = GetDropDestination(e.OriginalSource as DependencyObject);
+            if (paths.Length == 0 || string.IsNullOrWhiteSpace(destination) || !Directory.Exists(destination))
+            {
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
+
+            e.Effects = GetDropEffect(e, paths, destination);
+            StatusText.Text = string.Format("{0}: {1}", GetDropEffectLabel(e.Effects), destination);
+            e.Handled = true;
+        }
+
+        private void FileList_DragLeave(object sender, DragEventArgs e)
+        {
+            UpdateStatusText();
+        }
+
+        private void FileList_Drop(object sender, DragEventArgs e)
+        {
+            var paths = GetDroppedPaths(e.Data);
+            var destination = GetDropDestination(e.OriginalSource as DependencyObject);
+            var effect = GetDropEffect(e, paths, destination);
+            e.Effects = effect;
+            e.Handled = true;
+
+            if (paths.Length == 0 || effect == DragDropEffects.None ||
+                string.IsNullOrWhiteSpace(destination) || !Directory.Exists(destination))
+            {
+                UpdateStatusText();
+                return;
+            }
+
+            if (effect == DragDropEffects.Copy)
+            {
+                var answer = MessageBox.Show(
+                    string.Format(
+                        "{0}개 항목을 다음 폴더로 복사하시겠습니까?\n\n{1}",
+                        paths.Length,
+                        destination),
+                    "파일 복사 확인",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.Yes);
+                if (answer != MessageBoxResult.Yes)
+                {
+                    e.Effects = DragDropEffects.None;
+                    UpdateStatusText();
+                    return;
+                }
+            }
+
+            var errors = new List<string>();
+            foreach (var source in paths)
+            {
+                try
+                {
+                    if (effect == DragDropEffects.Link)
+                        FileOperationService.CreateShortcut(source, destination);
+                    else if (effect == DragDropEffects.Move)
+                        FileOperationService.Move(source, destination);
+                    else
+                        FileOperationService.Copy(source, destination);
+                }
+                catch (Exception exception)
+                {
+                    errors.Add(Path.GetFileName(source) + ": " + exception.Message);
+                }
+            }
+
+            RefreshItems();
+            if (errors.Count > 0)
+            {
+                MessageBox.Show(
+                    string.Join(Environment.NewLine, errors),
+                    GetDropEffectLabel(effect) + " 오류",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
+        }
+
+        private string GetDropDestination(DependencyObject originalSource)
+        {
+            var container = FindAncestor<ListViewItem>(originalSource);
+            var item = container == null ? null : container.DataContext as FileSystemItem;
+            return item != null && item.IsDirectory ? item.FullPath : CurrentPath;
+        }
+
+        private static string[] GetDroppedPaths(IDataObject data)
+        {
+            if (data == null || !data.GetDataPresent(DataFormats.FileDrop))
+                return new string[0];
+
+            var paths = data.GetData(DataFormats.FileDrop) as string[];
+            return paths == null
+                ? new string[0]
+                : paths.Where(path => File.Exists(path) || Directory.Exists(path)).ToArray();
+        }
+
+        private static DragDropEffects GetDropEffect(DragEventArgs e, IEnumerable<string> paths, string destination)
+        {
+            if (string.IsNullOrWhiteSpace(destination))
+                return DragDropEffects.None;
+
+            var allowed = e.AllowedEffects;
+            var modifiers = Keyboard.Modifiers;
+            if ((modifiers & ModifierKeys.Alt) != 0 && (allowed & DragDropEffects.Link) != 0)
+                return DragDropEffects.Link;
+            if ((modifiers & ModifierKeys.Control) != 0 && (allowed & DragDropEffects.Copy) != 0)
+                return DragDropEffects.Copy;
+            if ((modifiers & ModifierKeys.Shift) != 0 && (allowed & DragDropEffects.Move) != 0)
+                return paths.All(path => !IsSameDirectory(Path.GetDirectoryName(path), destination))
+                    ? DragDropEffects.Move
+                    : DragDropEffects.None;
+
+            if (paths.All(path => IsSameDirectory(Path.GetDirectoryName(path), destination)))
+                return DragDropEffects.None;
+
+            if ((allowed & DragDropEffects.Copy) != 0)
+                return DragDropEffects.Copy;
+            if ((allowed & DragDropEffects.Move) != 0)
+                return DragDropEffects.Move;
+            if ((allowed & DragDropEffects.Link) != 0)
+                return DragDropEffects.Link;
+            return DragDropEffects.None;
+        }
+
+        private static bool IsSameDirectory(string first, string second)
+        {
+            if (string.IsNullOrWhiteSpace(first) || string.IsNullOrWhiteSpace(second))
+                return false;
+
+            return string.Equals(
+                NormalizeDirectoryPath(first),
+                NormalizeDirectoryPath(second),
+                StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeDirectoryPath(string path)
+        {
+            var fullPath = Path.GetFullPath(path);
+            var root = Path.GetPathRoot(fullPath);
+            return string.Equals(fullPath, root, StringComparison.OrdinalIgnoreCase)
+                ? root
+                : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        private static string GetDropEffectLabel(DragDropEffects effect)
+        {
+            if (effect == DragDropEffects.Link)
+                return "바로가기 만들기";
+            if (effect == DragDropEffects.Move)
+                return "이동";
+            if (effect == DragDropEffects.Copy)
+                return "복사";
+            return "드롭할 수 없음";
         }
 
         private async void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)

@@ -2,11 +2,13 @@ using Folderss.Models;
 using Folderss.Services;
 using System;
 using System.Collections.ObjectModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Media;
 
 namespace Folderss.Controls
 {
@@ -71,10 +73,63 @@ namespace Folderss.Controls
                 handler(this, new FavoriteNavigateEventArgs(favorite.Path));
         }
 
+        private void FavoritesList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var container = FindAncestor<ListBoxItem>(e.OriginalSource as DependencyObject);
+            if (container == null)
+            {
+                FavoritesList.SelectedItem = null;
+                return;
+            }
+
+            container.IsSelected = true;
+            container.Focus();
+        }
+
+        private void FavoritesList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            if (FavoritesList.SelectedItem == null)
+                e.Handled = true;
+        }
+
+        private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
+        {
+            var favorite = FavoritesList.SelectedItem as FavoriteLocation;
+            if (favorite == null)
+                return;
+
+            if (!Directory.Exists(favorite.Path))
+            {
+                MessageBox.Show("즐겨찾기 폴더가 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + favorite.Path + "\"")
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, "Explorer를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void Remove_Click(object sender, RoutedEventArgs e)
         {
             var favorite = FavoritesList.SelectedItem as FavoriteLocation;
             if (favorite == null)
+                return;
+
+            var answer = MessageBox.Show(
+                string.Format("'{0}' 즐겨찾기를 삭제하시겠습니까?", favorite.Name),
+                "즐겨찾기 삭제",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question,
+                MessageBoxResult.No);
+            if (answer != MessageBoxResult.Yes)
                 return;
 
             _favorites.Remove(favorite);
@@ -117,6 +172,20 @@ namespace Folderss.Controls
             {
                 MessageBox.Show(exception.Message, "즐겨찾기를 저장할 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
+        }
+
+        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                var match = current as T;
+                if (match != null)
+                    return match;
+
+                current = VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
         }
     }
 

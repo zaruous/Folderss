@@ -125,12 +125,18 @@
                           Background="{DynamicResource PanelBackground}"
                           Foreground="{DynamicResource PrimaryText}"
                           BorderThickness="0"
+                          AllowDrop="True"
                           SelectionMode="Extended"
                           SelectionChanged="FileList_SelectionChanged"
                           MouseDoubleClick="FileList_MouseDoubleClick"
                           KeyDown="FileList_KeyDown"
+                          PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
+                          PreviewMouseMove="FileList_PreviewMouseMove"
                           PreviewMouseRightButtonDown="FileList_PreviewMouseRightButtonDown"
                           MouseRightButtonUp="FileList_MouseRightButtonUp"
+                          DragOver="FileList_DragOver"
+                          DragLeave="FileList_DragLeave"
+                          Drop="FileList_Drop"
                           GotKeyboardFocus="Pane_GotKeyboardFocus">
                     <ListView.View>
                         <GridView>
