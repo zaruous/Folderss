@@ -697,17 +697,17 @@ namespace Folderss
                 PasteFromClipboard();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt)
+            else if (e.SystemKey == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt)
             {
                 ActivePane.NavigateBack();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt)
+            else if (e.SystemKey == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt)
             {
                 ActivePane.NavigateForward();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Up && Keyboard.Modifiers == ModifierKeys.Alt)
+            else if (e.SystemKey == Key.Up && Keyboard.Modifiers == ModifierKeys.Alt)
             {
                 ActivePane.NavigateUp();
                 e.Handled = true;
