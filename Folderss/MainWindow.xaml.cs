@@ -697,18 +697,19 @@ namespace Folderss
                 PasteFromClipboard();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Left && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (e.Key == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt)
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
-                    return;
                 ActivePane.NavigateBack();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Right && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (e.Key == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt)
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
-                    return;
                 ActivePane.NavigateForward();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Up && Keyboard.Modifiers == ModifierKeys.Alt)
+            {
+                ActivePane.NavigateUp();
                 e.Handled = true;
             }
             else if (e.Key == Key.Left && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
@@ -719,13 +720,6 @@ namespace Folderss
             else if (e.Key == Key.Right && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
             {
                 SwitchToAdjacentPane(1);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.Up && Keyboard.Modifiers == ModifierKeys.Control)
-            {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
-                    return;
-                ActivePane.NavigateUp();
                 e.Handled = true;
             }
         }
