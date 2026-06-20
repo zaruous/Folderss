@@ -91,26 +91,79 @@ Folderss\Themes\Controls.xaml
 
 ## 단축키
 
-- `F2`: 이름 변경
-- `F5`: 반대편 패널로 복사
-- `F6`: 반대편 패널로 이동
-- `Delete`: 휴지통으로 이동
-- `Shift+Delete`: 영구 삭제
-- `Ctrl+R`: 양쪽 패널 새로 고침
-- `Ctrl+Shift+N`: 새 폴더
+### 탐색
 
-## 실행
+| 단축키 | 동작 |
+|---|---|
+| `Alt+←` | 뒤로 가기 |
+| `Alt+→` | 앞으로 가기 |
+| `Alt+↑` | 상위 폴더 |
+| `Ctrl+Shift+←` | 이전 패널로 전환 |
+| `Ctrl+Shift+→` | 다음 패널로 전환 |
 
-Visual Studio에서 `Folderss.sln`을 열고 실행하거나 다음 파일을 실행합니다.
+### 파일 작업
 
-```text
-Folderss\bin\Debug\Folderss.exe
-```
+| 단축키 | 동작 |
+|---|---|
+| `F2` | 이름 변경 |
+| `F5` | 반대편 패널로 복사 |
+| `F6` | 반대편 패널로 이동 |
+| `Delete` | 휴지통으로 이동 |
+| `Shift+Delete` | 영구 삭제 |
+| `Ctrl+C` | 선택 항목 클립보드 복사 |
+| `Ctrl+V` | 클립보드에서 붙여넣기 |
+| `Ctrl+Shift+N` | 새 폴더 |
 
-Build Tools로 빌드하려면:
+### 보기
+
+| 단축키 | 동작 |
+|---|---|
+| `Ctrl+R` | 양쪽 패널 새로 고침 |
+| `Ctrl+T` | 새 폴더 패널 추가 |
+
+## 빌드
+
+### 요구 사항
+
+- Windows 10 이상
+- [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48)
+- 다음 중 하나
+  - Visual Studio 2019 이상 (워크로드: **.NET 데스크톱 개발**)
+  - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-studio-build-tools/) (구성 요소: **MSBuild**)
+
+### Visual Studio에서 빌드
+
+1. `Folderss.sln`을 Visual Studio에서 열기
+2. 솔루션 탐색기에서 `Folderss` 프로젝트 우클릭 → **빌드**
+3. 또는 `Ctrl+Shift+B`로 전체 솔루션 빌드
+
+### MSBuild(커맨드라인)로 빌드
+
+**Debug 빌드**
 
 ```powershell
 & 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Rebuild /p:Configuration=Debug
+```
+
+**Release 빌드**
+
+```powershell
+& 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Rebuild /p:Configuration=Release
+```
+
+### 빌드 결과물
+
+| 구성 | 경로 |
+|---|---|
+| Debug | `Folderss\bin\Debug\Folderss.exe` |
+| Release | `Folderss\bin\Release\Folderss.exe` |
+
+## 실행
+
+빌드 없이 바로 실행하려면 최신 Release 바이너리를 사용합니다.
+
+```text
+Folderss\bin\Release\Folderss.exe
 ```
 
 > 기본 삭제는 Windows 휴지통으로 이동합니다. `Shift+Delete`는 휴지통을 거치지 않고 영구 삭제합니다.
