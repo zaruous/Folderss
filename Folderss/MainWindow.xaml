@@ -180,7 +180,7 @@
                            DockPanel.Dock="Left"
                            Foreground="{DynamicResource SecondaryText}"/>
                 <TextBlock DockPanel.Dock="Right"
-                           Text="F2 이름 변경 · F5 복사 · F6 이동 · Del 삭제 · Ctrl+T 패널"
+                           Text="F2 이름변경 · F5 복사 · F6 이동 · Del 삭제 · Ctrl+C/V 클립보드 · Ctrl+←/→ 패널전환 · Ctrl+↑ 상위폴더 · Ctrl+T 패널추가"
                            Foreground="{DynamicResource SecondaryText}"/>
             </DockPanel>
         </Border>

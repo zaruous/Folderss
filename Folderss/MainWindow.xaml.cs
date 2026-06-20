@@ -683,6 +683,106 @@ namespace Folderss
                 AddFolderPanel_Click(sender, e);
                 e.Handled = true;
             }
+            else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
+                    return;
+                CopyToClipboard();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
+                    return;
+                PasteFromClipboard();
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Left && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
+                    return;
+                SwitchToAdjacentPane(-1);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Right && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
+                    return;
+                SwitchToAdjacentPane(1);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.Up && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
+                    return;
+                ActivePane.NavigateUp();
+                e.Handled = true;
+            }
+        }
+
+        private void SwitchToAdjacentPane(int direction)
+        {
+            var browsers = GetFolderBrowsers();
+            if (browsers.Count <= 1)
+                return;
+
+            var currentIndex = browsers.IndexOf(ActivePane);
+            if (currentIndex < 0)
+                return;
+
+            var nextIndex = (currentIndex + direction + browsers.Count) % browsers.Count;
+            var nextPane = browsers[nextIndex];
+
+            var layoutContent = DockManager.Layout.Descendents()
+                .OfType<LayoutContent>()
+                .FirstOrDefault(c => ReferenceEquals(c.Content, nextPane));
+            if (layoutContent != null)
+                layoutContent.IsActive = true;
+
+            nextPane.FocusFileList();
+        }
+
+        private void CopyToClipboard()
+        {
+            var selected = ActivePane.SelectedItems.ToList();
+            if (selected.Count == 0)
+                return;
+
+            var paths = new System.Collections.Specialized.StringCollection();
+            foreach (var item in selected)
+                paths.Add(item.FullPath);
+
+            Clipboard.SetFileDropList(paths);
+        }
+
+        private void PasteFromClipboard()
+        {
+            if (!Clipboard.ContainsFileDropList())
+                return;
+
+            var files = Clipboard.GetFileDropList();
+            if (files.Count == 0)
+                return;
+
+            var targetPath = ActivePane.CurrentPath;
+            if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
+                return;
+
+            var errors = new List<string>();
+            foreach (string source in files)
+            {
+                try
+                {
+                    FileOperationService.Copy(source, targetPath);
+                }
+                catch (Exception exception)
+                {
+                    errors.Add(Path.GetFileName(source) + ": " + exception.Message);
+                }
+            }
+
+            ActivePane.RefreshItems();
+            ShowErrorsIfAny("붙여넣기", errors);
         }
 
         private void About_Click(object sender, RoutedEventArgs e)

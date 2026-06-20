@@ -410,6 +410,18 @@ namespace Folderss.Controls
             return null;
         }
 
+        public void NavigateUp()
+        {
+            var parent = Directory.GetParent(CurrentPath);
+            if (parent != null)
+                NavigateTo(parent.FullName);
+        }
+
+        public void FocusFileList()
+        {
+            FileList.Focus();
+        }
+
         private void Back_Click(object sender, RoutedEventArgs e)
         {
             if (_backHistory.Count == 0)
