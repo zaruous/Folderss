@@ -59,6 +59,7 @@
                   PreviewMouseLeftButtonDown="FavoritesTree_PreviewMouseLeftButtonDown"
                   PreviewMouseMove="FavoritesTree_PreviewMouseMove"
                   PreviewMouseRightButtonDown="FavoritesTree_PreviewMouseRightButtonDown"
+                  PreviewKeyDown="FavoritesTree_PreviewKeyDown"
                   DragOver="FavoritesTree_DragOver"
                   Drop="FavoritesTree_Drop"
                   MouseDoubleClick="FavoritesTree_MouseDoubleClick">
@@ -67,6 +68,13 @@
                     <MenuItem x:Name="OpenInExplorerMenuItem"
                               Header="Explorer에서 폴더 열기"
                               Click="OpenInExplorer_Click"/>
+                    <MenuItem x:Name="OpenTerminalMenuItem"
+                              Header="터미널">
+                        <MenuItem Header="PowerShell 열기"
+                                  Click="OpenPowerShell_Click"/>
+                        <MenuItem Header="CMD 열기"
+                                  Click="OpenCmd_Click"/>
+                    </MenuItem>
                     <MenuItem x:Name="MoveToGroupMenuItem"
                               Header="다른 그룹으로 이동"/>
                     <Separator x:Name="FavoriteActionsSeparator"/>

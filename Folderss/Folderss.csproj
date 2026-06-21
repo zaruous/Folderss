@@ -108,6 +108,7 @@
     <Compile Include="Services\SessionStateService.cs" />
     <Compile Include="Services\ShellContextMenuService.cs" />
     <Compile Include="Services\ThemeManager.cs" />
+    <Compile Include="AboutWindow.cs" />
     <Compile Include="PromptWindow.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>

@@ -17,7 +17,7 @@ namespace Folderss
         {
             Title = title;
             Width = 430;
-            Height = 170;
+            Height = 185;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             ResizeMode = ResizeMode.NoResize;
 

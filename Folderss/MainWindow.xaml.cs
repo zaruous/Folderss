@@ -22,6 +22,7 @@ namespace Folderss
         private bool _openingPanelFromAddTab;
         private Forms.NotifyIcon _trayIcon;
         private bool _reallyClose;
+        private bool _fixingAddPanelLayout;
         private bool _shownTrayBalloon;
 
         private FolderBrowser ActivePane
@@ -62,6 +63,7 @@ namespace Folderss
                 RestoreAdditionalPanels(_sessionState.OpenFolderPaths);
 
             EnsureAddPanelTab();
+            DockManager.LayoutChanged += DockManager_LayoutChanged;
 
             var previousActive = GetFolderBrowsers().FirstOrDefault(
                 pane => string.Equals(pane.CurrentPath, _sessionState.ActiveFolderPath, StringComparison.OrdinalIgnoreCase));
@@ -280,7 +282,6 @@ namespace Folderss
                     Title = "＋",
                     ContentId = "add-folder-panel",
                     CanClose = false,
-                    CanFloat = false,
                     Content = new System.Windows.Controls.Grid()
                 };
                 pane.Children.Add(addDocument);
@@ -289,6 +290,34 @@ namespace Folderss
             addDocument.IsActiveChanged -= AddPanelDocument_IsActiveChanged;
             addDocument.IsActiveChanged += AddPanelDocument_IsActiveChanged;
             addDocument.Title = "＋ 새 패널";
+        }
+
+        private void DockManager_LayoutChanged(object sender, EventArgs e)
+        {
+            if (_fixingAddPanelLayout)
+                return;
+
+            var addDocFloating = DockManager.Layout.FloatingWindows
+                .SelectMany(fw => fw.Descendents().OfType<LayoutDocument>())
+                .FirstOrDefault(d => d.ContentId == "add-folder-panel");
+
+            if (addDocFloating == null)
+                return;
+
+            _fixingAddPanelLayout = true;
+            try
+            {
+                addDocFloating.Parent?.RemoveChild(addDocFloating);
+                var targetPane = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocumentPane>()
+                    .FirstOrDefault();
+                targetPane?.Children.Add(addDocFloating);
+                EnsureAddPanelTab();
+            }
+            finally
+            {
+                _fixingAddPanelLayout = false;
+            }
         }
 
         private LayoutDocument GetAddPanelDocument()
@@ -309,15 +338,8 @@ namespace Folderss
             {
                 try
                 {
-                    AddFolderPanel_Click(addDocument, new RoutedEventArgs());
-                    if (addDocument.IsActive)
-                    {
-                        var activeContent = DockManager.Layout.Descendents()
-                            .OfType<LayoutContent>()
-                            .FirstOrDefault(content => ReferenceEquals(content.Content, ActivePane));
-                        if (activeContent != null)
-                            activeContent.IsActive = true;
-                    }
+                    var defaultPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+                    AddFolderPanel(defaultPath);
                 }
                 finally
                 {
@@ -700,6 +722,8 @@ namespace Folderss
         {
             if (e.Key == Key.F2)
             {
+                if (FavoritesPanel.IsKeyboardFocusWithin)
+                    return;
                 Rename_Click(sender, e);
                 e.Handled = true;
             }
@@ -901,11 +925,7 @@ namespace Folderss
 
         private void About_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show(
-                "Folderss 1.0\n\n가볍게 시작한 듀얼 패널 Windows 파일 관리자입니다.",
-                "Folderss 정보",
-                MessageBoxButton.OK,
-                MessageBoxImage.Information);
+            new AboutWindow { Owner = this }.ShowDialog();
         }
 
         private void Exit_Click(object sender, RoutedEventArgs e)

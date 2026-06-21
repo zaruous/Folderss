@@ -80,8 +80,6 @@
                             <MenuItem Header="폴더 패널 추가..." InputGestureText="Ctrl+T" Click="AddFolderPanel_Click"/>
                             <MenuItem Header="새 폴더" InputGestureText="Ctrl+Shift+N" Click="NewFolder_Click"/>
                             <Separator/>
-                            <MenuItem Header="반대편으로 복사" InputGestureText="F5" Click="Copy_Click"/>
-                            <MenuItem Header="반대편으로 이동" InputGestureText="F6" Click="Move_Click"/>
                             <MenuItem Header="이름 변경" InputGestureText="F2" Click="Rename_Click"/>
                             <MenuItem Header="휴지통으로 이동" InputGestureText="Delete" Click="Delete_Click"/>
                             <Separator/>
@@ -148,7 +146,7 @@
                                                          NavigateRequested="FavoritesPanel_NavigateRequested"/>
                             </layout:LayoutAnchorable>
                         </layout:LayoutAnchorablePane>
-                        <layout:LayoutDocumentPaneGroup Orientation="Horizontal">
+                        <layout:LayoutDocumentPaneGroup>
                             <layout:LayoutDocumentPane>
                                 <layout:LayoutDocument Title="왼쪽 폴더"
                                                        ContentId="left-folder"
@@ -157,8 +155,7 @@
                                 </layout:LayoutDocument>
                                 <layout:LayoutDocument Title="＋ 새 패널"
                                                        ContentId="add-folder-panel"
-                                                       CanClose="False"
-                                                       CanFloat="False"/>
+                                                       CanClose="False"/>
                             </layout:LayoutDocumentPane>
                             <layout:LayoutDocumentPane>
                                 <layout:LayoutDocument Title="오른쪽 폴더"
@@ -222,7 +219,7 @@
                            DockPanel.Dock="Left"
                            Foreground="{DynamicResource SecondaryText}"/>
                 <TextBlock DockPanel.Dock="Right"
-                           Text="F2 이름변경 · F5 복사 · F6 이동 · Del 삭제 · Ctrl+C/V 클립보드 · Alt+←/→ 뒤로/앞으로 · Alt+↑ 상위폴더 · Ctrl+Shift+←/→ 패널전환 · Ctrl+T 패널추가 · Ctrl+F 내용검색"
+                           Text="F2 이름변경 · F5 복사 · F6 이동 · Del 삭제 · Ctrl+C/V 클립보드 · Alt+←/→ 뒤로/앞으로 · Alt+↑ 상위폴더 · Ctrl+Shift+←/→ 패널전환 · Ctrl+T 패널추가 · Ctrl+F 내용검색 · 패널 드래그로 상하좌우 배치"
                            Foreground="{DynamicResource SecondaryText}"/>
             </DockPanel>
         </Border>

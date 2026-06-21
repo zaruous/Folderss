@@ -215,6 +215,7 @@ namespace Folderss.Controls
 
             var isFavorite = favorite != null;
             OpenInExplorerMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+            OpenTerminalMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
             MoveToGroupMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
             FavoriteActionsSeparator.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
             RemoveMenuItem.Header = isFavorite ? "즐겨찾기 삭제" : "그룹 삭제";
@@ -259,6 +260,62 @@ namespace Folderss.Controls
             catch (Exception exception)
             {
                 MessageBox.Show(exception.Message, "Explorer를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void OpenPowerShell_Click(object sender, RoutedEventArgs e)
+        {
+            OpenTerminal("powershell.exe", "PowerShell");
+        }
+
+        private void OpenCmd_Click(object sender, RoutedEventArgs e)
+        {
+            OpenTerminal("cmd.exe", "CMD");
+        }
+
+        private void OpenTerminal(string executable, string displayName)
+        {
+            var favorite = FavoritesTree.SelectedItem as FavoriteLocation;
+            if (favorite == null)
+                return;
+
+            if (!Directory.Exists(favorite.Path))
+            {
+                MessageBox.Show("즐겨찾기 폴더가 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo(executable)
+                {
+                    WorkingDirectory = favorite.Path,
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, displayName + "을 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void FavoritesTree_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.F2)
+            {
+                Rename_Click(sender, e);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.C &&
+                (Keyboard.Modifiers & ModifierKeys.Control) != 0 &&
+                (Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+            {
+                var favorite = FavoritesTree.SelectedItem as FavoriteLocation;
+                if (favorite != null)
+                {
+                    Clipboard.SetText(favorite.Path);
+                    e.Handled = true;
+                }
             }
         }
 
