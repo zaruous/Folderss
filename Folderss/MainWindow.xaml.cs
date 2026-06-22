@@ -1086,7 +1086,22 @@ namespace Folderss
 
                 progressWindow.Close();
 
-                LaunchUpdaterBatch(tempPath);
+                var exePath = tempPath;
+                if (ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
+                {
+                    exePath = ExtractExeFromZip(tempPath);
+                    if (exePath == null)
+                    {
+                        MessageBox.Show(
+                            "zip 파일에서 Folderss.exe를 찾을 수 없습니다.",
+                            "업데이트 오류",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Error);
+                        return;
+                    }
+                }
+
+                LaunchUpdaterBatch(exePath);
                 ExitApp();
             }
             catch (Exception ex)
@@ -1098,6 +1113,20 @@ namespace Folderss
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
+        }
+
+        private static string ExtractExeFromZip(string zipPath)
+        {
+            var extractDir = System.IO.Path.Combine(
+                System.IO.Path.GetDirectoryName(zipPath), "extracted");
+
+            if (System.IO.Directory.Exists(extractDir))
+                System.IO.Directory.Delete(extractDir, true);
+
+            System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir);
+
+            return System.IO.Directory.GetFiles(extractDir, "Folderss.exe",
+                System.IO.SearchOption.AllDirectories).FirstOrDefault();
         }
 
         private static void LaunchUpdaterBatch(string newExePath)

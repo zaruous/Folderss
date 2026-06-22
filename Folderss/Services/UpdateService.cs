@@ -51,7 +51,7 @@ namespace Folderss.Services
                 // assets 배열에서 .exe 또는 .msi 다운로드 URL 추출
                 var downloadMatch = Regex.Match(
                     json,
-                    "\"browser_download_url\"\\s*:\\s*\"([^\"]+\\.(?:exe|msi))\"",
+                    "\"browser_download_url\"\\s*:\\s*\"([^\"]+\\.(?:exe|msi|zip))\"",
                     RegexOptions.IgnoreCase);
                 var downloadUrl = downloadMatch.Success ? downloadMatch.Groups[1].Value : null;
 
