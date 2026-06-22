@@ -1,6 +1,7 @@
 using Folderss.Models;
 using Folderss.Services;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,10 +19,12 @@ namespace Folderss.Controls
         public event EventHandler<SearchNavigateEventArgs> NavigateRequested;
         public event EventHandler HideRequested;
 
+        private readonly List<SearchResult> _allResults = new List<SearchResult>();
         private readonly ObservableCollection<SearchResult> _results = new ObservableCollection<SearchResult>();
+        private const int PageSize = 100;
+        private int _currentPage;
         private CancellationTokenSource _cts;
         private string _rootPath;
-        private int _resultCount;
 
         public SearchPanel()
         {
@@ -68,7 +71,9 @@ namespace Folderss.Controls
             {
                 CancelSearch();
                 _results.Clear();
-                _resultCount = 0;
+                _allResults.Clear();
+                _currentPage = 0;
+                UpdatePaginationControls();
                 StatusText.Text = "검색어를 입력하고 Enter를 누르세요.";
             }
         }
@@ -148,7 +153,9 @@ namespace Folderss.Controls
 
             CancelSearch();
             _results.Clear();
-            _resultCount = 0;
+            _allResults.Clear();
+            _currentPage = 0;
+            UpdatePaginationControls();
 
             var caseSensitive = CaseToggle.IsChecked == true;
             var useRegex = RegexToggle.IsChecked == true;
@@ -173,21 +180,26 @@ namespace Folderss.Controls
 
             var progress = new Progress<SearchResult>(result =>
             {
-                _results.Add(result);
-                _resultCount++;
-                StatusText.Text = string.Format("{0}건 발견됨", _resultCount);
+                _allResults.Add(result);
+                if (_allResults.Count <= PageSize)
+                    _results.Add(result);
+                StatusText.Text = string.Format("검색 중… {0}건 발견됨", _allResults.Count);
+                if (_allResults.Count == PageSize + 1)
+                    UpdatePaginationControls();
             });
 
             try
             {
                 await SearchService.SearchAsync(_rootPath, query, recursive, caseSensitive, useRegex, progress, token);
-                StatusText.Text = _resultCount == 0
+                StatusText.Text = _allResults.Count == 0
                     ? "검색 결과가 없습니다."
-                    : string.Format("검색 완료 — {0}건 발견됨", _resultCount);
+                    : FormatStatus();
             }
             catch (OperationCanceledException)
             {
-                StatusText.Text = string.Format("검색 취소됨 — {0}건 발견됨", _resultCount);
+                StatusText.Text = _allResults.Count == 0
+                    ? "검색 취소됨"
+                    : string.Format("검색 취소됨 — {0}", FormatStatus());
             }
             catch (Exception ex)
             {
@@ -197,12 +209,58 @@ namespace Folderss.Controls
             {
                 if (CancelButton != null)
                     CancelButton.Visibility = Visibility.Collapsed;
+                UpdatePaginationControls();
                 if (ReferenceEquals(_cts, cts))
                 {
                     _cts = null;
                     cts.Dispose();
                 }
             }
+        }
+
+        private void PrevButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentPage > 0)
+                ShowPage(_currentPage - 1);
+        }
+
+        private void NextButton_Click(object sender, RoutedEventArgs e)
+        {
+            int totalPages = (_allResults.Count + PageSize - 1) / PageSize;
+            if (_currentPage < totalPages - 1)
+                ShowPage(_currentPage + 1);
+        }
+
+        private void ShowPage(int page)
+        {
+            _currentPage = page;
+            _results.Clear();
+            int start = page * PageSize;
+            int end = Math.Min(start + PageSize, _allResults.Count);
+            for (int i = start; i < end; i++)
+                _results.Add(_allResults[i]);
+            UpdatePaginationControls();
+            StatusText.Text = FormatStatus();
+            if (ResultList.Items.Count > 0)
+                ResultList.ScrollIntoView(ResultList.Items[0]);
+        }
+
+        private void UpdatePaginationControls()
+        {
+            int totalPages = (_allResults.Count + PageSize - 1) / PageSize;
+            PrevButton.Visibility = _currentPage > 0 ? Visibility.Visible : Visibility.Collapsed;
+            NextButton.Visibility = _currentPage < totalPages - 1 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private string FormatStatus()
+        {
+            int total = _allResults.Count;
+            int totalPages = (total + PageSize - 1) / PageSize;
+            if (totalPages <= 1)
+                return string.Format("검색 완료 — {0}건 발견됨", total);
+            int start = _currentPage * PageSize + 1;
+            int end = Math.Min((_currentPage + 1) * PageSize, total);
+            return string.Format("{0}-{1} / {2}건 (페이지 {3}/{4})", start, end, total, _currentPage + 1, totalPages);
         }
 
         private void CancelSearch()
