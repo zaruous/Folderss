@@ -64,6 +64,9 @@ namespace Folderss
             if (!restored)
                 RestoreAdditionalPanels(_sessionState.OpenFolderPaths);
 
+            // 검색 패널은 Ctrl+F로 열기 전까지 숨김
+            FindDock("search-panel")?.Hide();
+
             EnsureAddPanelTab();
             DockManager.LayoutChanged += DockManager_LayoutChanged;
 
@@ -205,6 +208,8 @@ namespace Folderss
                 return RightPane;
             if (contentId == "add-folder-panel")
                 return new System.Windows.Controls.Grid();
+            if (contentId == "search-panel")
+                return SearchPanel;
 
             const string prefix = "folder-panel|";
             if (string.IsNullOrWhiteSpace(contentId) || !contentId.StartsWith(prefix, StringComparison.Ordinal))
@@ -842,18 +847,16 @@ namespace Folderss
         private void ShowSearchPanel()
         {
             SearchPanel.SetRootPath(ActivePane.CurrentPath);
-            if (SearchPopup.Visibility == Visibility.Visible)
+            var dock = FindDock("search-panel");
+            if (dock == null) return;
+
+            if (dock.IsVisible)
             {
-                SearchPopup.Visibility = Visibility.Collapsed;
+                dock.Hide();
                 return;
             }
-            SearchPopup.Visibility = Visibility.Visible;
+            dock.Show();
             Dispatcher.BeginInvoke(new Action(() => SearchPanel.FocusSearchBox()), DispatcherPriority.Input);
-        }
-
-        private void CloseSearchPopup_Click(object sender, RoutedEventArgs e)
-        {
-            SearchPopup.Visibility = Visibility.Collapsed;
         }
 
         private void SearchPanel_NavigateRequested(object sender, Controls.SearchNavigateEventArgs e)
@@ -863,7 +866,7 @@ namespace Folderss
 
         private void SearchPanel_HideRequested(object sender, EventArgs e)
         {
-            SearchPopup.Visibility = Visibility.Collapsed;
+            FindDock("search-panel")?.Hide();
         }
 
         private void SwitchToAdjacentPane(int direction)
