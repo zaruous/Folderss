@@ -26,6 +26,8 @@ namespace Folderss
         private bool _shownTrayBalloon;
         private bool _isCut;
         private HashSet<string> _cutPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        private Window _searchWindow;
+        private Controls.SearchPanel _searchPanel;
 
         private FolderBrowser ActivePane
         {
@@ -63,9 +65,6 @@ namespace Folderss
             var restored = DockLayoutService.Restore(DockManager, ResolveDockContent);
             if (!restored)
                 RestoreAdditionalPanels(_sessionState.OpenFolderPaths);
-
-            // 검색 패널은 Ctrl+F로 열기 전까지 숨김
-            FindDock("search-panel")?.Hide();
 
             EnsureAddPanelTab();
             DockManager.LayoutChanged += DockManager_LayoutChanged;
@@ -208,9 +207,6 @@ namespace Folderss
                 return RightPane;
             if (contentId == "add-folder-panel")
                 return new System.Windows.Controls.Grid();
-            if (contentId == "search-panel")
-                return SearchPanel;
-
             const string prefix = "folder-panel|";
             if (string.IsNullOrWhiteSpace(contentId) || !contentId.StartsWith(prefix, StringComparison.Ordinal))
                 return null;
@@ -846,27 +842,39 @@ namespace Folderss
 
         private void ShowSearchPanel()
         {
-            SearchPanel.SetRootPath(ActivePane.CurrentPath);
-            var dock = FindDock("search-panel");
-            if (dock == null) return;
-
-            if (dock.IsVisible)
+            if (_searchPanel == null)
             {
-                dock.Hide();
+                _searchPanel = new Controls.SearchPanel();
+                _searchPanel.NavigateRequested += (s, e) => ActivePane.SelectAndScrollTo(e.Path);
+                _searchPanel.HideRequested += (s, e) => _searchWindow?.Hide();
+            }
+
+            if (_searchWindow == null || !_searchWindow.IsLoaded)
+            {
+                _searchWindow = new Window
+                {
+                    Title = "파일 내용 검색",
+                    Width = 900,
+                    Height = 420,
+                    MinWidth = 500,
+                    MinHeight = 250,
+                    Content = _searchPanel,
+                    Owner = this,
+                    ShowInTaskbar = false,
+                    WindowStyle = WindowStyle.ToolWindow
+                };
+                _searchWindow.Closing += (s, e) => { e.Cancel = true; _searchWindow.Hide(); };
+            }
+
+            if (_searchWindow.IsVisible)
+            {
+                _searchWindow.Hide();
                 return;
             }
-            dock.Show();
-            Dispatcher.BeginInvoke(new Action(() => SearchPanel.FocusSearchBox()), DispatcherPriority.Input);
-        }
 
-        private void SearchPanel_NavigateRequested(object sender, Controls.SearchNavigateEventArgs e)
-        {
-            ActivePane.NavigateTo(e.Path);
-        }
-
-        private void SearchPanel_HideRequested(object sender, EventArgs e)
-        {
-            FindDock("search-panel")?.Hide();
+            _searchPanel.SetRootPath(ActivePane.CurrentPath);
+            _searchWindow.Show();
+            Dispatcher.BeginInvoke(new Action(() => _searchPanel.FocusSearchBox()), DispatcherPriority.Input);
         }
 
         private void SwitchToAdjacentPane(int direction)

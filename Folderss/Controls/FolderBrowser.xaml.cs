@@ -729,6 +729,33 @@ namespace Folderss.Controls
             NavigateTo(_forwardHistory.Pop(), false);
         }
 
+        public void SelectAndScrollTo(string filePath)
+        {
+            if (string.IsNullOrWhiteSpace(filePath))
+                return;
+
+            var folder = Path.GetDirectoryName(filePath);
+            var fileName = Path.GetFileName(filePath);
+
+            if (!string.IsNullOrWhiteSpace(folder) &&
+                !string.Equals(CurrentPath, folder, StringComparison.OrdinalIgnoreCase))
+            {
+                NavigateTo(folder);
+            }
+
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                var item = _items.FirstOrDefault(i =>
+                    string.Equals(i.Name, fileName, StringComparison.OrdinalIgnoreCase));
+                if (item == null)
+                    return;
+
+                FileList.SelectedItem = item;
+                FileList.ScrollIntoView(item);
+                FileList.Focus();
+            }), DispatcherPriority.Background);
+        }
+
         public void FocusFileList()
         {
             FileList.Focus();

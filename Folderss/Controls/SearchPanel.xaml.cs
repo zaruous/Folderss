@@ -118,7 +118,12 @@ namespace Folderss.Controls
 
         private void ResultList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            ShowResultContextMenu(e);
+            var result = ResultList.SelectedItem as SearchResult;
+            if (result == null || string.IsNullOrWhiteSpace(result.FilePath))
+                return;
+
+            NavigateRequested?.Invoke(this, new SearchNavigateEventArgs(result.FilePath));
+            e.Handled = true;
         }
 
         private void ShowResultContextMenu(MouseButtonEventArgs e)

@@ -166,20 +166,6 @@
                             </layout:LayoutDocumentPane>
                         </layout:LayoutDocumentPaneGroup>
                     </layout:LayoutPanel>
-                    <layout:LayoutAnchorablePane x:Name="SearchDockPane"
-                                                 DockHeight="230">
-                        <layout:LayoutAnchorable x:Name="SearchDock"
-                                                 Title="파일 내용 검색"
-                                                 ContentId="search-panel"
-                                                 CanClose="True"
-                                                 CanHide="True"
-                                                 CanAutoHide="True"
-                                                 IsSelected="True">
-                            <controls:SearchPanel x:Name="SearchPanel"
-                                                  NavigateRequested="SearchPanel_NavigateRequested"
-                                                  HideRequested="SearchPanel_HideRequested"/>
-                        </layout:LayoutAnchorable>
-                    </layout:LayoutAnchorablePane>
                 </layout:LayoutPanel>
             </layout:LayoutRoot>
         </avalon:DockingManager>
