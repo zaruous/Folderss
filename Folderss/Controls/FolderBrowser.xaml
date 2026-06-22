@@ -138,6 +138,15 @@
                           DragLeave="FileList_DragLeave"
                           Drop="FileList_Drop"
                           GotKeyboardFocus="Pane_GotKeyboardFocus">
+                    <ListView.ItemContainerStyle>
+                        <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding IsCut}" Value="True">
+                                    <Setter Property="Opacity" Value="0.4"/>
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </ListView.ItemContainerStyle>
                     <ListView.View>
                         <GridView>
                             <GridViewColumn Header="" Width="38" DisplayMemberBinding="{Binding Icon}"/>

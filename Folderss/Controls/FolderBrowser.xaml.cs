@@ -40,6 +40,7 @@ namespace Folderss.Controls
 
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
+        public HashSet<string> CutPaths { get; set; }
 
         public FileSystemItem SelectedItem
         {
@@ -170,7 +171,8 @@ namespace Folderss.Controls
                         Name = childDirectory.Name,
                         FullPath = childDirectory.FullName,
                         IsDirectory = true,
-                        ModifiedAt = childDirectory.LastWriteTime
+                        ModifiedAt = childDirectory.LastWriteTime,
+                        IsCut = CutPaths != null && CutPaths.Contains(childDirectory.FullName)
                     });
                 }
 
@@ -184,7 +186,8 @@ namespace Folderss.Controls
                         FullPath = file.FullName,
                         IsDirectory = false,
                         Size = file.Length,
-                        ModifiedAt = file.LastWriteTime
+                        ModifiedAt = file.LastWriteTime,
+                        IsCut = CutPaths != null && CutPaths.Contains(file.FullName)
                     });
                 }
 

@@ -24,6 +24,8 @@ namespace Folderss
         private bool _reallyClose;
         private bool _fixingAddPanelLayout;
         private bool _shownTrayBalloon;
+        private bool _isCut;
+        private HashSet<string> _cutPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
         private FolderBrowser ActivePane
         {
@@ -764,6 +766,13 @@ namespace Folderss
                 CopyToClipboard();
                 e.Handled = true;
             }
+            else if (e.Key == Key.X && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
+                    return;
+                CutToClipboard();
+                e.Handled = true;
+            }
             else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
             {
                 if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
@@ -891,6 +900,44 @@ namespace Folderss
                 paths.Add(item.FullPath);
 
             Clipboard.SetFileDropList(paths);
+            ClearCutState();
+        }
+
+        private void CutToClipboard()
+        {
+            var selected = ActivePane.SelectedItems.ToList();
+            if (selected.Count == 0)
+                return;
+
+            var paths = new System.Collections.Specialized.StringCollection();
+            foreach (var item in selected)
+                paths.Add(item.FullPath);
+
+            Clipboard.SetFileDropList(paths);
+
+            _isCut = true;
+            _cutPaths = new HashSet<string>(selected.Select(i => i.FullPath), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var pane in GetFolderBrowsers())
+            {
+                pane.CutPaths = _cutPaths;
+                pane.RefreshItems();
+            }
+        }
+
+        private void ClearCutState()
+        {
+            if (!_isCut)
+                return;
+
+            _isCut = false;
+            _cutPaths.Clear();
+
+            foreach (var pane in GetFolderBrowsers())
+            {
+                pane.CutPaths = null;
+                pane.RefreshItems();
+            }
         }
 
         private void PasteFromClipboard()
@@ -906,12 +953,16 @@ namespace Folderss
             if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
                 return;
 
+            bool isCut = _isCut;
             var errors = new List<string>();
             foreach (string source in files)
             {
                 try
                 {
-                    FileOperationService.Copy(source, targetPath);
+                    if (isCut)
+                        FileOperationService.Move(source, targetPath);
+                    else
+                        FileOperationService.Copy(source, targetPath);
                 }
                 catch (Exception exception)
                 {
@@ -919,7 +970,21 @@ namespace Folderss
                 }
             }
 
-            ActivePane.RefreshItems();
+            if (isCut)
+            {
+                _isCut = false;
+                _cutPaths.Clear();
+                foreach (var pane in GetFolderBrowsers())
+                {
+                    pane.CutPaths = null;
+                    pane.RefreshItems();
+                }
+            }
+            else
+            {
+                ActivePane.RefreshItems();
+            }
+
             ShowErrorsIfAny("붙여넣기", errors);
         }
 
