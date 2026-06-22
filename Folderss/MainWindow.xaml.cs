@@ -1045,7 +1045,7 @@ namespace Folderss
             var tempPath = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(),
                 "Folderss-update",
-                string.Format("Folderss-Setup-{0}{1}", info.TagName, ext));
+                string.Format("Folderss-{0}{1}", info.TagName, ext));
 
             System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(tempPath));
 
@@ -1086,8 +1086,7 @@ namespace Folderss
 
                 progressWindow.Close();
 
-                System.Diagnostics.Process.Start(
-                    new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true });
+                LaunchUpdaterBatch(tempPath);
                 ExitApp();
             }
             catch (Exception ex)
@@ -1099,6 +1098,36 @@ namespace Folderss
                     MessageBoxButton.OK,
                     MessageBoxImage.Error);
             }
+        }
+
+        private static void LaunchUpdaterBatch(string newExePath)
+        {
+            var currentExePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            var batchPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "folderss_update.bat");
+
+            // 현재 프로세스가 종료될 때까지 copy를 재시도하다가
+            // 성공하면 새 exe를 실행하고 배치 파일 자신을 삭제한다.
+            var batch =
+                "@echo off\r\n" +
+                ":retry\r\n" +
+                "copy /y \"" + newExePath + "\" \"" + currentExePath + "\" >nul 2>&1\r\n" +
+                "if errorlevel 1 (\r\n" +
+                "    ping -n 2 127.0.0.1 >nul\r\n" +
+                "    goto retry\r\n" +
+                ")\r\n" +
+                "start \"\" \"" + currentExePath + "\"\r\n" +
+                "del \"%~f0\"\r\n";
+
+            System.IO.File.WriteAllText(batchPath, batch, System.Text.Encoding.Default);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c \"" + batchPath + "\"",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
         }
 
         private static void OpenUrl(string url)
