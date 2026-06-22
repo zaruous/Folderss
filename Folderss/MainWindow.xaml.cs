@@ -28,7 +28,6 @@ namespace Folderss
         private HashSet<string> _cutPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Window _searchWindow;
         private Controls.SearchPanel _searchPanel;
-        private string _updateUrl;
 
         private FolderBrowser ActivePane
         {
@@ -77,7 +76,6 @@ namespace Folderss
 
             UpdateMaximizeButton();
             InitTrayIcon();
-            CheckForUpdateAsync();
         }
 
         private void InitTrayIcon()
@@ -999,22 +997,6 @@ namespace Folderss
             }
 
             ShowErrorsIfAny("붙여넣기", errors);
-        }
-
-        private async void CheckForUpdateAsync()
-        {
-            var info = await Services.UpdateService.CheckAsync();
-            if (info == null)
-                return;
-
-            _updateUrl = info.HtmlUrl;
-            UpdateButton.Content = string.Format("↑ {0} 업데이트", info.TagName);
-            UpdateButton.Visibility = Visibility.Visible;
-        }
-
-        private void UpdateButton_Click(object sender, RoutedEventArgs e)
-        {
-            OpenUrl(_updateUrl);
         }
 
         private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
