@@ -120,6 +120,19 @@ namespace Folderss.Services
             return Directory.CreateDirectory(path).FullName;
         }
 
+        public static string CreateFile(string parent, string name)
+        {
+            if (string.IsNullOrWhiteSpace(name) || name.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+                throw new ArgumentException("사용할 수 없는 파일 이름입니다.");
+
+            var path = Path.Combine(parent, name.Trim());
+            if (File.Exists(path) || Directory.Exists(path))
+                throw new IOException("같은 이름의 항목이 이미 있습니다.");
+
+            File.Create(path).Dispose();
+            return path;
+        }
+
         private static void CopyDirectory(string source, string destination)
         {
             Directory.CreateDirectory(destination);
