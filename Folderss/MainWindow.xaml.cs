@@ -28,6 +28,7 @@ namespace Folderss
         private HashSet<string> _cutPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Window _searchWindow;
         private Controls.SearchPanel _searchPanel;
+        private string _updateUrl;
 
         private FolderBrowser ActivePane
         {
@@ -76,6 +77,7 @@ namespace Folderss
 
             UpdateMaximizeButton();
             InitTrayIcon();
+            CheckForUpdateAsync();
         }
 
         private void InitTrayIcon()
@@ -997,6 +999,59 @@ namespace Folderss
             }
 
             ShowErrorsIfAny("붙여넣기", errors);
+        }
+
+        private async void CheckForUpdateAsync()
+        {
+            var info = await Services.UpdateService.CheckAsync();
+            if (info == null)
+                return;
+
+            _updateUrl = info.HtmlUrl;
+            UpdateButton.Content = string.Format("↑ {0} 업데이트", info.TagName);
+            UpdateButton.Visibility = Visibility.Visible;
+        }
+
+        private void UpdateButton_Click(object sender, RoutedEventArgs e)
+        {
+            OpenUrl(_updateUrl);
+        }
+
+        private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            var info = await Services.UpdateService.CheckAsync();
+            if (info == null)
+            {
+                MessageBox.Show(
+                    "현재 최신 버전입니다.",
+                    "업데이트 확인",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Information);
+                return;
+            }
+
+            var result = MessageBox.Show(
+                string.Format("새 버전 {0}이(가) 있습니다. 다운로드 페이지를 여시겠습니까?", info.TagName),
+                "업데이트 확인",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Information);
+
+            if (result == MessageBoxResult.Yes)
+                OpenUrl(info.HtmlUrl);
+        }
+
+        private static void OpenUrl(string url)
+        {
+            if (string.IsNullOrWhiteSpace(url))
+                return;
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch { }
         }
 
         private void About_Click(object sender, RoutedEventArgs e)

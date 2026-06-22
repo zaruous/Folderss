@@ -102,6 +102,7 @@
                             </MenuItem>
                             <Separator/>
                             <MenuItem Header="Folderss 정보" Click="About_Click"/>
+                            <MenuItem Header="업데이트 확인" Click="CheckUpdate_Click"/>
                             <MenuItem Header="종료" Click="Exit_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
@@ -181,6 +182,13 @@
                 <TextBlock x:Name="ActivePaneText"
                            DockPanel.Dock="Left"
                            Foreground="{DynamicResource SecondaryText}"/>
+                <Button x:Name="UpdateButton"
+                        DockPanel.Dock="Right"
+                        Visibility="Collapsed"
+                        Style="{StaticResource CompactToolButtonStyle}"
+                        Foreground="{DynamicResource AccentBrush}"
+                        Margin="8,0,8,0"
+                        Click="UpdateButton_Click"/>
                 <TextBlock DockPanel.Dock="Right"
                            Text="F2 이름변경 · F5 복사 · F6 이동 · Del 삭제 · Ctrl+C/V 클립보드 · Alt+←/→ 뒤로/앞으로 · Alt+↑ 상위폴더 · Ctrl+Shift+←/→ 패널전환 · Ctrl+T 패널추가 · Ctrl+F 내용검색 · 패널 드래그로 상하좌우 배치"
                            Foreground="{DynamicResource SecondaryText}"/>
