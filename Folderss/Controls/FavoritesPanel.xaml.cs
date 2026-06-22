@@ -218,6 +218,9 @@ namespace Folderss.Controls
             OpenTerminalMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
             MoveToGroupMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
             FavoriteActionsSeparator.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+            NewFolderMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+            NewFileMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+            NewItemSeparator.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
             RemoveMenuItem.Header = isFavorite ? "즐겨찾기 삭제" : "그룹 삭제";
             MoveToGroupMenuItem.IsEnabled = isFavorite && _configuration.Groups.Count > 1;
 
@@ -236,6 +239,64 @@ namespace Folderss.Controls
             }
 
             BuildMoveToGroupMenu(favorite);
+        }
+
+        private void NewFolder_Click(object sender, RoutedEventArgs e)
+        {
+            var favorite = FavoritesTree.SelectedItem as FavoriteLocation;
+            if (favorite == null)
+                return;
+
+            if (!Directory.Exists(favorite.Path))
+            {
+                MessageBox.Show("즐겨찾기 폴더가 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var prompt = new PromptWindow("새 폴더", "만들 폴더 이름을 입력하세요.", "새 폴더")
+            {
+                Owner = Window.GetWindow(this)
+            };
+            if (prompt.ShowDialog() != true)
+                return;
+
+            try
+            {
+                FileOperationService.CreateDirectory(favorite.Path, prompt.Value);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, "폴더를 만들 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
+        private void NewFile_Click(object sender, RoutedEventArgs e)
+        {
+            var favorite = FavoritesTree.SelectedItem as FavoriteLocation;
+            if (favorite == null)
+                return;
+
+            if (!Directory.Exists(favorite.Path))
+            {
+                MessageBox.Show("즐겨찾기 폴더가 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var prompt = new PromptWindow("새 파일", "만들 파일 이름을 입력하세요.", "새 파일.txt")
+            {
+                Owner = Window.GetWindow(this)
+            };
+            if (prompt.ShowDialog() != true)
+                return;
+
+            try
+            {
+                FileOperationService.CreateFile(favorite.Path, prompt.Value);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, "파일을 만들 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private void OpenInExplorer_Click(object sender, RoutedEventArgs e)

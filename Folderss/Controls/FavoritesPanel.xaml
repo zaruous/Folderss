@@ -78,6 +78,13 @@
                     <MenuItem x:Name="MoveToGroupMenuItem"
                               Header="다른 그룹으로 이동"/>
                     <Separator x:Name="FavoriteActionsSeparator"/>
+                    <MenuItem x:Name="NewFolderMenuItem"
+                              Header="새 폴더"
+                              Click="NewFolder_Click"/>
+                    <MenuItem x:Name="NewFileMenuItem"
+                              Header="새 파일"
+                              Click="NewFile_Click"/>
+                    <Separator x:Name="NewItemSeparator"/>
                     <MenuItem x:Name="RenameMenuItem"
                               Header="이름 변경"
                               Click="Rename_Click"/>

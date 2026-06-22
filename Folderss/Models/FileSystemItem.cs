@@ -10,6 +10,7 @@ namespace Folderss.Models
         public bool IsDirectory { get; set; }
         public long Size { get; set; }
         public DateTime ModifiedAt { get; set; }
+        public bool IsCut { get; set; }
 
         public string Kind
         {
