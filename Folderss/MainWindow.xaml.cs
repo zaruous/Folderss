@@ -9,6 +9,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Threading.Tasks;
 using System.Windows.Threading;
 using Forms = System.Windows.Forms;
 
@@ -1012,14 +1013,92 @@ namespace Folderss
                 return;
             }
 
-            var result = MessageBox.Show(
-                string.Format("새 버전 {0}이(가) 있습니다. 다운로드 페이지를 여시겠습니까?", info.TagName),
+            if (info.DownloadUrl == null)
+            {
+                // 인스톨러 asset 없음 → 브라우저로 릴리즈 페이지 열기
+                var result = MessageBox.Show(
+                    string.Format("새 버전 {0}이(가) 있습니다.\n다운로드 페이지를 여시겠습니까?", info.TagName),
+                    "업데이트 확인",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Information);
+                if (result == MessageBoxResult.Yes)
+                    OpenUrl(info.HtmlUrl);
+                return;
+            }
+
+            // 인스톨러 asset 있음 → 자동 설치 제안
+            var install = MessageBox.Show(
+                string.Format("새 버전 {0}이(가) 있습니다.\n지금 설치하시겠습니까?", info.TagName),
                 "업데이트 확인",
                 MessageBoxButton.YesNo,
                 MessageBoxImage.Information);
 
-            if (result == MessageBoxResult.Yes)
-                OpenUrl(info.HtmlUrl);
+            if (install != MessageBoxResult.Yes)
+                return;
+
+            await DownloadAndInstallAsync(info);
+        }
+
+        private async Task DownloadAndInstallAsync(Services.UpdateService.UpdateInfo info)
+        {
+            var ext = System.IO.Path.GetExtension(info.DownloadUrl);
+            var tempPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(),
+                "Folderss-update",
+                string.Format("Folderss-Setup-{0}{1}", info.TagName, ext));
+
+            System.IO.Directory.CreateDirectory(System.IO.Path.GetDirectoryName(tempPath));
+
+            // 다운로드 진행률 창 구성
+            var progressBar = new System.Windows.Controls.ProgressBar
+            {
+                Minimum = 0,
+                Maximum = 100,
+                Height = 20
+            };
+            var statusLabel = new System.Windows.Controls.TextBlock
+            {
+                Text = string.Format("Folderss {0} 다운로드 중...", info.TagName),
+                Margin = new Thickness(0, 0, 0, 8)
+            };
+            var panel = new System.Windows.Controls.StackPanel { Margin = new Thickness(16) };
+            panel.Children.Add(statusLabel);
+            panel.Children.Add(progressBar);
+
+            var progressWindow = new Window
+            {
+                Title = "업데이트 다운로드",
+                Width = 420,
+                Height = 110,
+                ResizeMode = ResizeMode.NoResize,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner,
+                Owner = this,
+                ShowInTaskbar = false,
+                WindowStyle = WindowStyle.ToolWindow,
+                Content = panel
+            };
+            progressWindow.Show();
+
+            try
+            {
+                var progress = new Progress<int>(p => progressBar.Value = p);
+                await Services.UpdateService.DownloadAsync(info.DownloadUrl, tempPath, progress);
+
+                progressWindow.Close();
+
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo(tempPath) { UseShellExecute = true });
+                ExitApp();
+            }
+            catch (Exception ex)
+            {
+                progressWindow.Close();
+                MessageBox.Show(
+                    "다운로드 중 오류가 발생했습니다.\n" + ex.Message,
+                    "업데이트 오류",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Error);
+            }
         }
 
         private static void OpenUrl(string url)
@@ -1028,10 +1107,8 @@ namespace Folderss
                 return;
             try
             {
-                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo(url)
-                {
-                    UseShellExecute = true
-                });
+                System.Diagnostics.Process.Start(
+                    new System.Diagnostics.ProcessStartInfo(url) { UseShellExecute = true });
             }
             catch { }
         }
