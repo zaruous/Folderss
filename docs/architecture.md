@@ -6,7 +6,10 @@
 Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위)
-│   └── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
+│   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
+│   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
+├── Viewers/
+│   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
 │   └── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델
@@ -17,6 +20,7 @@ Folderss/
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
 │   ├── FavoritesService.cs         — 즐겨찾기 목록 저장·복원
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
+│   ├── ViewerConfigService.cs      — 확장자 ↔ 뷰어 매핑 (viewer-config.json 저장)
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
 │   └── ThemeManager.cs             — 테마 전환 및 저장
 ├── Themes/

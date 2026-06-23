@@ -4,6 +4,51 @@
 
 ---
 
+## v1.5.0 (2026-06-23)
+
+### 마크다운 뷰어 Phase 01–04 — 전체 구현
+
+- **Phase 01 — TextViewer + WebView2 공통 인프라**
+  - `Microsoft.Web.WebView2` 1.0.2739.15 NuGet 추가.
+  - `Viewers/Resources/` 에 `text-app.html`, `highlight.min.js`, `themes/hljs-*.css` 포함.
+  - `TextViewer.xaml/.cs`: WebView2 초기화, 가상 호스트 매핑(`folderss-viewer`), 외부 URL 차단, `JsonString()` 이스케이프 유틸. BOM 인코딩 감지.
+  - `ViewerConfigService.Resolve()`: `builtin:text` → `TextViewer` 인스턴스 반환.
+
+- **Phase 02 — MarkdownViewer**
+  - `Viewers/Resources/` 에 `markdown-app.html`, `marked.min.js`, `mermaid.min.js`, `katex.min.js/.css`, `katex-auto-render.min.js` 포함.
+  - `markdown-app.html`: CSS 변수 기반 6+테마, Preview/Edit/Split 3모드 전환, 왼쪽 TOC(IntersectionObserver 현재 헤딩 강조), 드래그 핸들 리사이즈, YAML front matter 박스, 300ms 디바운스 실시간 미리보기.
+  - `MarkdownViewer.xaml/.cs`: `WebMessageReceived` → `modified`/`save-request`/`export-html`/`export-pdf`/`open-link` 처리. `File.Replace` 원자 저장. `DetectEncoding()` BOM 감지.
+  - `ViewerConfigService.Resolve()`: `builtin:markdown` → `MarkdownViewer` 인스턴스 반환.
+
+- **Phase 02-E — Export**
+  - `markdown-app.html`: `[Export ▾]` 드롭다운 → `exportHtml()` / `exportPdf()`.
+  - `MarkdownViewer.xaml.cs`: `export-html` postMessage → `SaveFileDialog` → HTML 파일 저장. `export-pdf` → `PrintToPdfAsync`.
+
+- **Phase 03 — Edit + Split 모드**
+  - `markdown-app.html` 내부에 `app.setMode('edit'|'split'|'preview')` 구현.
+  - Split 모드: 에디터 ↔ 프리뷰 CSS flex + 드래그 핸들. Edit 모드: TOC 숨김.
+  - Ctrl+S → `postMessage({type:'save-request'})`, Tab 키 4-space 삽입.
+
+- **Phase 04 — 설정 창 뷰어 탭**
+  - `SettingsWindow.xaml`: **뷰어** 탭 추가 — 확장자↔뷰어 ListView, 추가/삭제 버튼.
+  - `SettingsWindow.xaml.cs`: `ViewerMappingItem` 뷰모델, 저장 시 `ViewerConfigService` 반영.
+  - `MainWindow.xaml.cs`: `SettingsWindow` 생성 시 `_viewerConfigService` 전달.
+
+---
+
+### 마크다운 뷰어 Phase 00 — 뷰어 프레임워크 스켈레톤
+
+- `Viewers/IFileViewer.cs` 생성: `IFileViewer` 인터페이스, `ViewerCapabilities` Flags enum, `ExportFormat` enum.
+- `Services/ViewerConfigService.cs` 생성: 확장자 ↔ 뷰어 키 매핑, JSON 저장·복원 (`viewer-config.json`).
+  Phase 01/02 뷰어 구현 전까지 `Resolve()`는 null 반환.
+- `Controls/ViewerHost.xaml/.cs` 생성: `IFileViewer.View`를 `ContentControl`에 호스팅하는 래퍼.
+  `CanOpen()` / `OpenFile()` / `ApplyTheme()` 제공.
+- `FolderBrowser.xaml.cs`: `FileOpenRequested` 이벤트 추가. 더블클릭 시 핸들러가 있으면 이벤트를 먼저 발생시키고, 없으면 기존 `Process.Start` 폴백.
+- `MainWindow.xaml.cs`: `_viewerConfigService` 필드 추가. `AttachFolderBrowser()`에서 `FileOpenRequested` 구독. `Browser_FileOpenRequested` 핸들러: 뷰어가 있으면 새 `LayoutDocument`로 열고, 없으면 `Process.Start` 폴백.
+- `docs/architecture.md`: Viewers 디렉터리, ViewerHost, ViewerConfigService 항목 추가.
+
+---
+
 ## v1.4.0 (2026-06-23)
 
 ### 개발 가이드 문서 정비

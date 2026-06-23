@@ -72,6 +72,9 @@
                     <ListBoxItem Tag="Theme">
                         <TextBlock Text="테마"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="Viewers">
+                        <TextBlock Text="뷰어"/>
+                    </ListBoxItem>
                 </ListBox>
             </Border>
 
@@ -222,6 +225,71 @@
                                 <TextBlock Text="GitHub" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
+                    </StackPanel>
+                </Grid>
+
+                <!-- Viewers panel -->
+                <Grid x:Name="ViewersPanel" Margin="24,16" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Text="뷰어 설정"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="1"
+                               Text="파일 확장자와 뷰어의 매핑을 관리합니다. 저장 시 반영됩니다."
+                               FontSize="11"
+                               Margin="0,0,0,12">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <ListView x:Name="ViewerMappingList"
+                              Grid.Row="2"
+                              SelectionMode="Single"
+                              BorderThickness="1"
+                              BorderBrush="{DynamicResource BorderBrush}">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="확장자" Width="100" DisplayMemberBinding="{Binding Extension}"/>
+                                <GridViewColumn Header="뷰어" Width="200" DisplayMemberBinding="{Binding ViewerKey}"/>
+                                <GridViewColumn Header="" Width="64">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <Button Content="삭제"
+                                                    Tag="{Binding Extension}"
+                                                    Click="RemoveViewer_Click"
+                                                    Padding="8,3"
+                                                    Margin="0"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+
+                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
+                        <TextBox x:Name="NewExtBox" Width="80" Margin="0,0,8,0"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="{DynamicResource BorderBrush}"
+                                 Background="{DynamicResource ControlBackground}"
+                                 Foreground="{DynamicResource PrimaryText}"
+                                 Text=".ext"/>
+                        <ComboBox x:Name="NewViewerCombo" Width="160" Margin="0,0,8,0">
+                            <ComboBoxItem Content="builtin:markdown"/>
+                            <ComboBoxItem Content="builtin:text"/>
+                        </ComboBox>
+                        <Button Content="추가" Click="AddViewer_Click" Padding="12,4"/>
                     </StackPanel>
                 </Grid>
 

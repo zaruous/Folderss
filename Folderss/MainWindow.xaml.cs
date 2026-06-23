@@ -30,6 +30,7 @@ namespace Folderss
         private Window _searchWindow;
         private Controls.SearchPanel _searchPanel;
         private readonly KeyBindingService _keyBindingService = new KeyBindingService();
+        private readonly ViewerConfigService _viewerConfigService = new ViewerConfigService();
 
         private FolderBrowser ActivePane
         {
@@ -366,8 +367,55 @@ namespace Folderss
         {
             browser.Activated -= Pane_Activated;
             browser.PathChanged -= FolderBrowser_PathChanged;
+            browser.FileOpenRequested -= Browser_FileOpenRequested;
             browser.Activated += Pane_Activated;
             browser.PathChanged += FolderBrowser_PathChanged;
+            browser.FileOpenRequested += Browser_FileOpenRequested;
+        }
+
+        private void Browser_FileOpenRequested(object sender, string filePath)
+        {
+            var viewerHost = new ViewerHost(_viewerConfigService);
+            if (!viewerHost.CanOpen(filePath))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(
+                        new System.Diagnostics.ProcessStartInfo(filePath) { UseShellExecute = true });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(ex.Message, "파일을 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+                return;
+            }
+
+            var pane = DockManager.Layout.Descendents()
+                .OfType<LayoutDocumentPane>().FirstOrDefault();
+            if (pane == null)
+                return;
+
+            viewerHost.TitleChanged += (s, title) =>
+            {
+                var doc = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocument>()
+                    .FirstOrDefault(d => ReferenceEquals(d.Content, s));
+                if (doc != null)
+                    doc.Title = title;
+            };
+
+            var fileName = Path.GetFileName(filePath);
+            var document = new LayoutDocument
+            {
+                Title = fileName,
+                ContentId = string.Format("viewer|{0}", Uri.EscapeDataString(filePath)),
+                Content = viewerHost,
+                CanClose = true
+            };
+            pane.InsertChildAt(pane.ChildrenCount, document);
+            document.IsActive = true;
+
+            viewerHost.OpenFile(filePath);
         }
 
         private void FolderBrowser_PathChanged(object sender, EventArgs e)
@@ -869,7 +917,7 @@ namespace Folderss
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
-            var win = new SettingsWindow(_keyBindingService) { Owner = this };
+            var win = new SettingsWindow(_keyBindingService, _viewerConfigService) { Owner = this };
             win.ShowDialog();
         }
 
@@ -1238,6 +1286,85 @@ namespace Folderss
         private void Exit_Click(object sender, RoutedEventArgs e)
         {
             ExitApp();
+        }
+
+        // ── Tab context menu ──────────────────────────────────────────────
+
+        private void DockManager_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var tab = FindVisualAncestor<AvalonDock.Controls.LayoutDocumentTabItem>(
+                e.OriginalSource as DependencyObject);
+            if (tab == null) return;
+
+            var document = tab.Model as LayoutDocument;
+            if (document == null) return;
+
+            e.Handled = true;
+
+            var menu = new System.Windows.Controls.ContextMenu();
+
+            var closeItem = new System.Windows.Controls.MenuItem { Header = "닫기" };
+            closeItem.IsEnabled = document.CanClose;
+            closeItem.Click += (s, _) => document.Close();
+            menu.Items.Add(closeItem);
+
+            menu.Items.Add(new System.Windows.Controls.Separator());
+
+            var closeOthers = new System.Windows.Controls.MenuItem { Header = "다른 탭 닫기" };
+            closeOthers.Click += (s, _) => CloseTabsExcept(document);
+            menu.Items.Add(closeOthers);
+
+            var closeLeft = new System.Windows.Controls.MenuItem { Header = "왼쪽 탭 닫기" };
+            closeLeft.Click += (s, _) => CloseTabsToLeft(document);
+            menu.Items.Add(closeLeft);
+
+            var closeRight = new System.Windows.Controls.MenuItem { Header = "오른쪽 탭 닫기" };
+            closeRight.Click += (s, _) => CloseTabsToRight(document);
+            menu.Items.Add(closeRight);
+
+            menu.PlacementTarget = tab;
+            menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
+            menu.IsOpen = true;
+        }
+
+        private List<LayoutDocument> GetSiblingDocuments(LayoutDocument target)
+        {
+            var pane = target.Parent as LayoutDocumentPane;
+            if (pane == null) return new List<LayoutDocument>();
+            return pane.Children.OfType<LayoutDocument>().ToList();
+        }
+
+        private void CloseTabsExcept(LayoutDocument target)
+        {
+            foreach (var doc in GetSiblingDocuments(target)
+                .Where(d => !ReferenceEquals(d, target) && d.CanClose).ToList())
+                doc.Close();
+        }
+
+        private void CloseTabsToLeft(LayoutDocument target)
+        {
+            var siblings = GetSiblingDocuments(target);
+            var idx = siblings.IndexOf(target);
+            foreach (var doc in siblings.Take(idx).Where(d => d.CanClose).ToList())
+                doc.Close();
+        }
+
+        private void CloseTabsToRight(LayoutDocument target)
+        {
+            var siblings = GetSiblingDocuments(target);
+            var idx = siblings.IndexOf(target);
+            foreach (var doc in siblings.Skip(idx + 1).Where(d => d.CanClose).ToList())
+                doc.Close();
+        }
+
+        private static T FindVisualAncestor<T>(DependencyObject element) where T : DependencyObject
+        {
+            while (element != null)
+            {
+                if (element is T found) return found;
+                element = System.Windows.Media.VisualTreeHelper.GetParent(element);
+            }
+            return null;
         }
     }
 }

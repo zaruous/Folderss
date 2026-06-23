@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'self' https://folderss-viewer; script-src 'self' https://folderss-viewer 'unsafe-inline'; style-src 'self' https://folderss-viewer 'unsafe-inline';">
+<title>Text Viewer</title>
+<link id="hljs-theme" rel="stylesheet" href="themes/hljs-dark.css">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+
+  body {
+    background: var(--bg, #1e1e1e);
+    color: var(--fg, #d4d4d4);
+    font-family: 'Cascadia Code', 'Consolas', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  #container {
+    height: 100vh;
+    overflow: auto;
+    padding: 16px 20px;
+  }
+
+  pre {
+    margin: 0;
+    white-space: pre;
+    word-break: normal;
+    overflow-wrap: normal;
+  }
+
+  code {
+    font-family: inherit;
+    font-size: inherit;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+
+  /* line numbers */
+  .line-numbers-wrap {
+    display: flex;
+  }
+  .line-numbers {
+    user-select: none;
+    text-align: right;
+    padding-right: 16px;
+    color: var(--line-num, #555);
+    min-width: 3ch;
+  }
+  .code-wrap { flex: 1; overflow: auto; }
+
+  /* plain text (no highlight) */
+  .plain { white-space: pre-wrap; word-break: break-word; }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: var(--scroll, #444); border-radius: 4px; }
+
+  /* theme overrides */
+  body.light {
+    --bg: #ffffff; --fg: #24292f; --line-num: #aaa; --scroll: #ccc;
+  }
+  body.dark  {
+    --bg: #0d1117; --fg: #e6edf3; --line-num: #484f58; --scroll: #30363d;
+  }
+  body.nord  {
+    --bg: #2e3440; --fg: #d8dee9; --line-num: #4c566a; --scroll: #434c5e;
+  }
+  body.catppuccin {
+    --bg: #1e1e2e; --fg: #cdd6f4; --line-num: #45475a; --scroll: #313244;
+  }
+  body.solarized {
+    --bg: #002b36; --fg: #839496; --line-num: #586e75; --scroll: #073642;
+  }
+  body.dracula {
+    --bg: #282a36; --fg: #f8f8f2; --line-num: #6272a4; --scroll: #44475a;
+  }
+  body.github {
+    --bg: #ffffff; --fg: #24292f; --line-num: #aaa; --scroll: #ccc;
+  }
+</style>
+</head>
+<body class="dark">
+<div id="container">
+  <div class="line-numbers-wrap">
+    <div class="line-numbers" id="lineNums"></div>
+    <div class="code-wrap">
+      <pre><code id="code"></code></pre>
+    </div>
+  </div>
+</div>
+<script src="highlight.min.js"></script>
+<script>
+var _content = '';
+var _language = 'plaintext';
+var _readonly = true;
+
+var DARK_THEMES  = ['dark','black','nord','catppuccin','solarized','dracula'];
+var LIGHT_THEMES = ['light','github'];
+
+var HLJS_THEME_DARK  = 'themes/hljs-dark.css';
+var HLJS_THEME_LIGHT = 'themes/hljs-light.css';
+
+function setHljsTheme(theme) {
+  var link = document.getElementById('hljs-theme');
+  link.href = DARK_THEMES.indexOf(theme) >= 0 ? HLJS_THEME_DARK : HLJS_THEME_LIGHT;
+}
+
+function renderContent() {
+  var codeEl = document.getElementById('code');
+  var numsEl = document.getElementById('lineNums');
+
+  if (_language === 'plaintext' || _language === 'txt') {
+    codeEl.className = 'plain';
+    codeEl.textContent = _content;
+  } else {
+    codeEl.className = _language;
+    codeEl.textContent = _content;
+    hljs.highlightElement(codeEl);
+  }
+
+  var lines = _content.split('\n');
+  // remove trailing empty line artifact
+  if (lines[lines.length - 1] === '') lines.pop();
+  numsEl.textContent = lines.map(function(_, i) { return i + 1; }).join('\n');
+}
+
+var app = {
+  open: function(content, language, theme, readonly) {
+    _content  = content;
+    _language = language || 'plaintext';
+    _readonly = readonly !== false;
+    document.body.className = theme || 'dark';
+    setHljsTheme(theme || 'dark');
+    renderContent();
+  },
+
+  setTheme: function(theme) {
+    document.body.className = theme || 'dark';
+    setHljsTheme(theme || 'dark');
+  }
+};
+</script>
+</body>
+</html>

@@ -155,7 +155,8 @@
         <avalon:DockingManager x:Name="DockManager"
                                Grid.Row="1"
                                Margin="6"
-                               Background="{DynamicResource WindowBackground}">
+                               Background="{DynamicResource WindowBackground}"
+                               PreviewMouseRightButtonDown="DockManager_PreviewMouseRightButtonDown">
             <layout:LayoutRoot>
                 <layout:LayoutPanel Orientation="Vertical">
                     <layout:LayoutPanel Orientation="Horizontal">

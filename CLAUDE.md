@@ -52,6 +52,14 @@ Windows WPF 듀얼 패널 파일 관리자. .NET Framework 4.8, AvalonDock 4.74.
 - [ ] `SettingsWindow.xaml.cs` — 초기화 및 저장 로직 추가
 - [ ] 설정 저장 서비스(해당 서비스) 업데이트
 
+### 뷰어 추가 시
+- [ ] `Viewers/<Name>Viewer.xaml/.cs` — `IFileViewer` 구현 (WebView2 기반은 `TextViewer` 참고)
+- [ ] `.csproj` — `<Page>` 및 `<Compile>` 항목 추가
+- [ ] `Services/ViewerConfigService.cs` — `Resolve()` switch에 `"builtin:<name>"` 케이스 등록
+- [ ] `SettingsWindow.xaml` — 뷰어 탭 `NewViewerCombo`에 ComboBoxItem 추가
+- [ ] `Viewers/Resources/` — HTML/JS/CSS 리소스 추가 시 `.csproj` `<Content>` 항목도 추가
+- [ ] `docs/architecture.md` — 뷰어 목록 업데이트
+
 ### 새 서비스/컨트롤 추가 시
 - [ ] `docs/architecture.md` — 서비스·컨트롤 목록 업데이트
 - [ ] `README.md` — 아키텍처 요약 업데이트

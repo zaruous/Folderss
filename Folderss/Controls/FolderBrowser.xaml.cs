@@ -37,6 +37,7 @@ namespace Folderss.Controls
 
         public event EventHandler Activated;
         public event EventHandler PathChanged;
+        public event EventHandler<string> FileOpenRequested;
 
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
@@ -286,6 +287,13 @@ namespace Folderss.Controls
             if (item.IsDirectory)
             {
                 NavigateTo(item.FullPath);
+                return;
+            }
+
+            var handler = FileOpenRequested;
+            if (handler != null)
+            {
+                handler(this, item.FullPath);
                 return;
             }
 

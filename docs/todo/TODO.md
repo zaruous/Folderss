@@ -1,5 +1,14 @@
 # TODO
 
+## 마크다운 뷰어
+
+- [x] Phase 00 — 뷰어 프레임워크 스켈레톤 (IFileViewer, ViewerConfigService, ViewerHost, FolderBrowser 이벤트 연동)
+- [x] Phase 01 — TextViewer (highlight.js 기반, WebView2 공통 인프라)
+- [x] Phase 02 — MarkdownViewer (WebView2 + marked.js + mermaid.js + KaTeX + TOC)
+- [x] Phase 02-E — Export (HTML + PDF via PrintToPdfAsync)
+- [x] Phase 03 — 편집 모드 + 분할 뷰 (Edit / Split / Preview 모드 전환)
+- [x] Phase 04 — 설정 창 뷰어 관리 탭
+
 ## 파일 컴포넌트
 
 - [x] 파일 컴포넌트에 선택된 폴더의 변경 사항이 있으면 파일 리스너 기능으로 파일 내용 최신화 시킬 수 있는 기능 필요.

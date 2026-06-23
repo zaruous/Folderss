@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'self' https://folderss-viewer; script-src 'self' https://folderss-viewer 'unsafe-inline'; style-src 'self' https://folderss-viewer 'unsafe-inline'; font-src 'self' https://folderss-viewer data:;">
+<title>Markdown Viewer</title>
+<link rel="stylesheet" href="katex.min.css">
+<style>
+/* ── Reset ───────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+
+/* ── Design tokens ───────────────────────── */
+body {
+  --bg:        #1e1e1e;
+  --panel:     #252526;
+  --border:    #3c3c3c;
+  --fg:        #d4d4d4;
+  --fg2:       #888;
+  --accent:    #569cd6;
+  --hover:     #2a2d2e;
+  --sel:       #094771;
+  --toolbar-h: 34px;
+  --toc-w:     220px;
+  --font-mono: 'Cascadia Code', 'Consolas', monospace;
+  --font-sans: 'Segoe UI', system-ui, sans-serif;
+  font-family: var(--font-sans);
+  font-size: 13px;
+  color: var(--fg);
+  background: var(--bg);
+}
+
+body.light {
+  --bg: #ffffff; --panel: #f3f3f3; --border: #ddd; --fg: #24292f;
+  --fg2: #777; --accent: #0550ae; --hover: #f0f0f0; --sel: #cce5ff;
+}
+body.nord {
+  --bg: #2e3440; --panel: #3b4252; --border: #4c566a; --fg: #d8dee9;
+  --fg2: #7b88a1; --accent: #88c0d0; --hover: #434c5e; --sel: #4c566a;
+}
+body.catppuccin {
+  --bg: #1e1e2e; --panel: #181825; --border: #45475a; --fg: #cdd6f4;
+  --fg2: #6c7086; --accent: #89b4fa; --hover: #313244; --sel: #45475a;
+}
+body.solarized {
+  --bg: #002b36; --panel: #073642; --border: #586e75; --fg: #839496;
+  --fg2: #586e75; --accent: #268bd2; --hover: #073642; --sel: #0d3640;
+}
+body.dracula {
+  --bg: #282a36; --panel: #1e1f29; --border: #44475a; --fg: #f8f8f2;
+  --fg2: #6272a4; --accent: #bd93f9; --hover: #44475a; --sel: #44475a;
+}
+body.github {
+  --bg: #ffffff; --panel: #f6f8fa; --border: #d0d7de; --fg: #24292f;
+  --fg2: #656d76; --accent: #0969da; --hover: #f3f4f6; --sel: #ddf4ff;
+}
+
+/* ── Layout ──────────────────────────────── */
+#root {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+/* toolbar */
+#toolbar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 0 8px;
+  height: var(--toolbar-h);
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+
+.tb-sep { width: 1px; height: 18px; background: var(--border); margin: 0 4px; }
+
+button.tb {
+  background: transparent;
+  border: none;
+  color: var(--fg2);
+  padding: 3px 8px;
+  border-radius: 3px;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+}
+button.tb:hover { background: var(--hover); color: var(--fg); }
+button.tb.active { background: var(--sel); color: var(--accent); }
+
+/* export dropdown */
+.tb-dropdown { position: relative; }
+#exportMenu {
+  display: none;
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  box-shadow: 0 4px 12px rgba(0,0,0,.3);
+  z-index: 100;
+  min-width: 140px;
+}
+#exportMenu.open { display: block; }
+#exportMenu button {
+  display: block; width: 100%;
+  background: transparent; border: none;
+  color: var(--fg); text-align: left;
+  padding: 7px 12px; font-size: 12px; cursor: pointer;
+}
+#exportMenu button:hover { background: var(--hover); }
+
+/* main area */
+#main {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+}
+
+/* toc */
+#toc-panel {
+  width: var(--toc-w);
+  min-width: 80px;
+  max-width: 400px;
+  overflow-y: auto;
+  border-right: 1px solid var(--border);
+  padding: 8px 0;
+  flex-shrink: 0;
+  background: var(--panel);
+}
+#toc-panel.hidden { display: none; }
+
+#toc-panel .toc-item {
+  display: block;
+  padding: 3px 12px;
+  color: var(--fg2);
+  text-decoration: none;
+  font-size: 12px;
+  cursor: pointer;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  border-left: 2px solid transparent;
+}
+#toc-panel .toc-item:hover { background: var(--hover); color: var(--fg); }
+#toc-panel .toc-item.active { border-left-color: var(--accent); color: var(--accent); }
+#toc-panel .toc-h2 { padding-left: 20px; }
+#toc-panel .toc-h3 { padding-left: 32px; }
+#toc-panel .toc-h4 { padding-left: 44px; }
+#toc-panel .toc-h5 { padding-left: 56px; }
+#toc-panel .toc-h6 { padding-left: 68px; }
+
+/* resize handle */
+.resize-handle {
+  width: 4px;
+  cursor: col-resize;
+  background: var(--border);
+  flex-shrink: 0;
+  transition: background .15s;
+}
+.resize-handle:hover, .resize-handle.dragging { background: var(--accent); }
+
+/* content area */
+#content-area {
+  flex: 1;
+  display: flex;
+  overflow: hidden;
+}
+
+/* editor pane */
+#editor-pane {
+  flex: 1;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+#editor-textarea {
+  flex: 1;
+  width: 100%;
+  background: var(--bg);
+  color: var(--fg);
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 16px 20px;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  tab-size: 4;
+}
+
+/* preview pane */
+#preview-pane {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 28px;
+}
+
+/* ── Markdown prose styles ───────────────── */
+#preview-pane {
+  line-height: 1.7;
+  font-family: var(--font-sans);
+}
+#preview-pane h1,#preview-pane h2,#preview-pane h3,
+#preview-pane h4,#preview-pane h5,#preview-pane h6 {
+  margin: 1.2em 0 .4em;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--fg);
+}
+#preview-pane h1 { font-size: 1.7em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+#preview-pane h2 { font-size: 1.35em; border-bottom: 1px solid var(--border); padding-bottom: .2em; }
+#preview-pane h3 { font-size: 1.15em; }
+#preview-pane p  { margin: .7em 0; }
+#preview-pane a  { color: var(--accent); }
+#preview-pane a:hover { text-decoration: underline; }
+#preview-pane code {
+  font-family: var(--font-mono);
+  font-size: .88em;
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: .1em .4em;
+}
+#preview-pane pre {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 14px 16px;
+  overflow-x: auto;
+  margin: .8em 0;
+}
+#preview-pane pre code {
+  background: transparent;
+  border: none;
+  padding: 0;
+  font-size: .9em;
+}
+#preview-pane blockquote {
+  border-left: 4px solid var(--accent);
+  margin: .8em 0;
+  padding: .3em 0 .3em 1em;
+  color: var(--fg2);
+}
+#preview-pane ul, #preview-pane ol { padding-left: 1.8em; margin: .5em 0; }
+#preview-pane li { margin: .2em 0; }
+#preview-pane table { border-collapse: collapse; margin: .8em 0; width: 100%; }
+#preview-pane th, #preview-pane td {
+  border: 1px solid var(--border);
+  padding: 6px 12px;
+  text-align: left;
+}
+#preview-pane th { background: var(--panel); font-weight: 600; }
+#preview-pane tr:hover { background: var(--hover); }
+#preview-pane img { max-width: 100%; border-radius: 4px; }
+#preview-pane hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
+#preview-pane input[type=checkbox] { margin-right: .4em; }
+
+/* front-matter box */
+.frontmatter-box {
+  background: var(--panel);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-bottom: 1em;
+  font-size: .85em;
+  font-family: var(--font-mono);
+  color: var(--fg2);
+  white-space: pre;
+  overflow-x: auto;
+}
+
+/* mermaid wrapper */
+.mermaid-wrap { text-align: center; margin: .8em 0; }
+.mermaid-wrap svg { max-width: 100%; }
+
+/* scrollbar */
+::-webkit-scrollbar { width: 8px; height: 8px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+::-webkit-scrollbar-thumb:hover { background: var(--fg2); }
+
+/* mode: preview only / edit only / split */
+body.mode-preview #editor-pane { display: none; }
+body.mode-edit    #preview-pane { display: none; }
+body.mode-edit    #toc-panel,
+body.mode-split   #toc-panel   { display: none !important; }
+
+/* split resize handle between editor and preview */
+#split-handle { display: none; }
+body.mode-split #split-handle {
+  display: block;
+  width: 4px;
+  cursor: col-resize;
+  background: var(--border);
+  flex-shrink: 0;
+}
+body.mode-split #split-handle:hover { background: var(--accent); }
+</style>
+</head>
+<body class="dark mode-preview">
+
+<div id="root">
+  <!-- toolbar -->
+  <div id="toolbar">
+    <button class="tb" id="btnEdit"    onclick="setMode('edit')"    title="편집 모드">Edit</button>
+    <button class="tb" id="btnSplit"   onclick="setMode('split')"   title="분할 모드">Split</button>
+    <button class="tb active" id="btnPreview" onclick="setMode('preview')" title="미리보기 모드">Preview</button>
+    <div class="tb-sep"></div>
+    <button class="tb" id="btnToc"     onclick="toggleToc()"        title="목차 토글">≡</button>
+    <div style="flex:1"></div>
+    <div class="tb-dropdown">
+      <button class="tb" onclick="toggleExportMenu()" title="내보내기">Export ▾</button>
+      <div id="exportMenu">
+        <button onclick="exportHtml()">HTML로 저장</button>
+        <button onclick="exportPdf()">PDF로 저장</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- main -->
+  <div id="main">
+    <!-- TOC -->
+    <div id="toc-panel"></div>
+    <div class="resize-handle" id="toc-handle"></div>
+
+    <!-- content -->
+    <div id="content-area">
+      <div id="editor-pane">
+        <textarea id="editor-textarea" spellcheck="false"></textarea>
+      </div>
+      <div class="resize-handle" id="split-handle"></div>
+      <div id="preview-pane"></div>
+    </div>
+  </div>
+</div>
+
+<script src="marked.min.js"></script>
+<script src="mermaid.min.js"></script>
+<script src="katex.min.js"></script>
+<script src="katex-auto-render.min.js"></script>
+<script src="highlight.min.js"></script>
+<script>
+'use strict';
+
+// ── State ─────────────────────────────────
+var _content = '';
+var _mode    = 'preview';
+var _theme   = 'dark';
+var _modified = false;
+var _renderTimer = null;
+var _tocVisible = true;
+
+// ── Init ──────────────────────────────────
+mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
+marked.use({ gfm: true, breaks: false, allowDangerousHtml: false });
+
+// ── Toolbar mode buttons ──────────────────
+function setMode(mode) {
+  _mode = mode;
+  document.body.className = _theme + ' mode-' + mode;
+  document.getElementById('btnEdit').classList.toggle('active', mode === 'edit');
+  document.getElementById('btnSplit').classList.toggle('active', mode === 'split');
+  document.getElementById('btnPreview').classList.toggle('active', mode === 'preview');
+  // TOC only in preview mode
+  var tocPanel = document.getElementById('toc-panel');
+  var tocHandle = document.getElementById('toc-handle');
+  if (mode === 'preview') {
+    tocPanel.classList.toggle('hidden', !_tocVisible);
+    tocHandle.style.display = _tocVisible ? '' : 'none';
+  }
+}
+
+function toggleToc() {
+  _tocVisible = !_tocVisible;
+  var tocPanel = document.getElementById('toc-panel');
+  var tocHandle = document.getElementById('toc-handle');
+  if (_mode === 'preview') {
+    tocPanel.classList.toggle('hidden', !_tocVisible);
+    tocHandle.style.display = _tocVisible ? '' : 'none';
+  }
+}
+
+// ── Export menu ───────────────────────────
+function toggleExportMenu() {
+  document.getElementById('exportMenu').classList.toggle('open');
+}
+document.addEventListener('click', function(e) {
+  if (!e.target.closest('.tb-dropdown'))
+    document.getElementById('exportMenu').classList.remove('open');
+});
+
+function exportHtml() {
+  document.getElementById('exportMenu').classList.remove('open');
+  var preview = document.getElementById('preview-pane');
+  var styles  = Array.from(document.styleSheets)
+    .map(function(s) { try { return Array.from(s.cssRules).map(function(r){return r.cssText;}).join('\n'); } catch(e){return '';} })
+    .join('\n');
+  var full = '<!DOCTYPE html><html><head><meta charset="utf-8">'
+    + '<style>' + styles + '</style></head>'
+    + '<body class="' + _theme + '">'
+    + '<div id="preview-pane">' + preview.innerHTML + '</div>'
+    + '</body></html>';
+  window.chrome.webview.postMessage({ type: 'export-html', content: full });
+}
+
+function exportPdf() {
+  document.getElementById('exportMenu').classList.remove('open');
+  window.chrome.webview.postMessage({ type: 'export-pdf' });
+}
+
+// ── Rendering ─────────────────────────────
+function renderPreview() {
+  var raw = _content;
+  var frontmatter = '';
+
+  // strip YAML front matter
+  if (raw.startsWith('---\n') || raw.startsWith('---\r\n')) {
+    var end = raw.indexOf('\n---', 3);
+    if (end > 0) {
+      frontmatter = raw.substring(4, end);
+      raw = raw.substring(end + 4).replace(/^\r?\n/, '');
+    }
+  }
+
+  var html = '';
+  if (frontmatter)
+    html += '<div class="frontmatter-box">' + escapeHtml(frontmatter) + '</div>';
+
+  html += marked.parse(raw);
+
+  var preview = document.getElementById('preview-pane');
+  preview.innerHTML = html;
+
+  // syntax highlight code blocks
+  preview.querySelectorAll('pre code').forEach(function(el) {
+    hljs.highlightElement(el);
+  });
+
+  // mermaid
+  var mermaidBlocks = [];
+  preview.querySelectorAll('code.language-mermaid').forEach(function(el) {
+    var wrap = document.createElement('div');
+    wrap.className = 'mermaid-wrap';
+    var inner = document.createElement('div');
+    inner.className = 'mermaid';
+    inner.textContent = el.textContent;
+    wrap.appendChild(inner);
+    el.parentNode.parentNode.replaceChild(wrap, el.parentNode);
+    mermaidBlocks.push(inner);
+  });
+  if (mermaidBlocks.length) {
+    mermaid.run({ nodes: mermaidBlocks }).catch(function(){});
+  }
+
+  // KaTeX
+  renderMathInElement(preview, {
+    delimiters: [
+      { left: '$$', right: '$$', display: true },
+      { left: '$', right: '$', display: false },
+      { left: '\\[', right: '\\]', display: true },
+      { left: '\\(', right: '\\)', display: false }
+    ],
+    throwOnError: false
+  });
+
+  // intercept links
+  preview.querySelectorAll('a[href]').forEach(function(a) {
+    a.addEventListener('click', function(e) {
+      e.preventDefault();
+      window.chrome.webview.postMessage({ type: 'open-link', uri: a.href });
+    });
+  });
+
+  buildToc();
+}
+
+function escapeHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── TOC ───────────────────────────────────
+function buildToc() {
+  var preview = document.getElementById('preview-pane');
+  var tocPanel = document.getElementById('toc-panel');
+  var headings = Array.from(preview.querySelectorAll('h1,h2,h3,h4,h5,h6'));
+
+  if (!headings.length) {
+    tocPanel.innerHTML = '';
+    return;
+  }
+
+  var frag = document.createDocumentFragment();
+  headings.forEach(function(h, i) {
+    var id = 'h-' + i;
+    h.id = id;
+    var a = document.createElement('a');
+    a.className = 'toc-item toc-' + h.tagName.toLowerCase();
+    a.textContent = h.textContent;
+    a.href = '#';
+    a.dataset.target = id;
+    a.addEventListener('click', function(e) {
+      e.preventDefault();
+      document.getElementById(id).scrollIntoView({ behavior: 'smooth', block: 'start' });
+    });
+    frag.appendChild(a);
+  });
+  tocPanel.innerHTML = '';
+  tocPanel.appendChild(frag);
+
+  // IntersectionObserver for active highlight
+  var observer = new IntersectionObserver(function(entries) {
+    entries.forEach(function(entry) {
+      if (!entry.isIntersecting) return;
+      tocPanel.querySelectorAll('.toc-item.active').forEach(function(el){ el.classList.remove('active'); });
+      var link = tocPanel.querySelector('[data-target="' + entry.target.id + '"]');
+      if (link) link.classList.add('active');
+    });
+  }, { rootMargin: '-10% 0px -80% 0px', threshold: 0 });
+
+  headings.forEach(function(h) { observer.observe(h); });
+}
+
+// ── Editor ────────────────────────────────
+var editor = document.getElementById('editor-textarea');
+editor.addEventListener('input', function() {
+  _content = editor.value;
+  if (!_modified) {
+    _modified = true;
+    window.chrome.webview.postMessage({ type: 'modified', value: true });
+  }
+  clearTimeout(_renderTimer);
+  _renderTimer = setTimeout(renderPreview, 300);
+});
+
+editor.addEventListener('keydown', function(e) {
+  // Ctrl+S
+  if (e.ctrlKey && e.key === 's') {
+    e.preventDefault();
+    window.chrome.webview.postMessage({ type: 'save-request', content: editor.value });
+  }
+  // Tab insert
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    var s = editor.selectionStart, end = editor.selectionEnd;
+    editor.value = editor.value.substring(0, s) + '    ' + editor.value.substring(end);
+    editor.selectionStart = editor.selectionEnd = s + 4;
+  }
+});
+
+// ── Resize handles ────────────────────────
+function makeResizeHandle(handleEl, getLeftEl, setSize) {
+  handleEl.addEventListener('mousedown', function(e) {
+    e.preventDefault();
+    handleEl.classList.add('dragging');
+    var startX = e.clientX;
+    var startSize = getLeftEl().getBoundingClientRect().width;
+
+    function onMove(ev) { setSize(startSize + ev.clientX - startX); }
+    function onUp()   {
+      handleEl.classList.remove('dragging');
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+    }
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  });
+}
+
+makeResizeHandle(
+  document.getElementById('toc-handle'),
+  function() { return document.getElementById('toc-panel'); },
+  function(w) {
+    var clamped = Math.max(80, Math.min(400, w));
+    document.getElementById('toc-panel').style.width = clamped + 'px';
+  }
+);
+
+makeResizeHandle(
+  document.getElementById('split-handle'),
+  function() { return document.getElementById('editor-pane'); },
+  function(w) {
+    var ca = document.getElementById('content-area');
+    var total = ca.getBoundingClientRect().width;
+    var clamped = Math.max(100, Math.min(total - 100, w));
+    document.getElementById('editor-pane').style.flex = 'none';
+    document.getElementById('editor-pane').style.width = clamped + 'px';
+  }
+);
+
+// ── Public API (called from C# via ExecuteScriptAsync) ────
+var app = {
+  open: function(content, theme, mode) {
+    _content = content;
+    _theme   = theme || 'dark';
+    _mode    = mode  || 'preview';
+    _modified = false;
+    document.body.className = _theme + ' mode-' + _mode;
+    editor.value = content;
+    renderPreview();
+    // restore mode buttons
+    document.getElementById('btnEdit').classList.toggle('active', _mode === 'edit');
+    document.getElementById('btnSplit').classList.toggle('active', _mode === 'split');
+    document.getElementById('btnPreview').classList.toggle('active', _mode === 'preview');
+    // mermaid theme
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict',
+      theme: (_theme === 'light' || _theme === 'github') ? 'default' : 'dark' });
+  },
+
+  setTheme: function(theme) {
+    _theme = theme || 'dark';
+    document.body.className = _theme + ' mode-' + _mode;
+    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict',
+      theme: (_theme === 'light' || _theme === 'github') ? 'default' : 'dark' });
+    renderPreview();
+  },
+
+  markSaved: function() {
+    _modified = false;
+    window.chrome.webview.postMessage({ type: 'modified', value: false });
+  }
+};
+</script>
+</body>
+</html>
