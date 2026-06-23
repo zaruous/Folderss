@@ -2,6 +2,43 @@
 
 완료된 항목은 `docs/todo/TODO.md`에서 체크한 뒤 이 파일로 옮깁니다.
 
+---
+
+## v1.4.0 (2026-06-23)
+
+### 개발 가이드 문서 정비
+
+- `CLAUDE.md` 생성: 기능별 수정 체크리스트, AvalonDock 주의사항, 문서 작성 규칙 정의.
+- `docs/architecture.md` 생성: 파일 구조, 서비스 역할, 확장 포인트 상세 참조 문서.
+- `docs/todo/`, `docs/done/` 기반 개발 요청 관리 워크플로 확립.
+
+### 테마 5개 추가 및 크래시 수정
+
+- Nord, Catppuccin Mocha, Solarized Dark, Dracula, GitHub Primer 테마 추가.
+- 각 테마별 XAML 팔레트, AppTheme enum, MainWindow 메뉴, SettingsWindow RadioButton 등록.
+- `IsThemeDictionary()` 하드코딩 문제 수정 → `Enum.GetNames()`로 신규 테마 자동 인식.
+- 신규 XAML 파일 `.csproj` `<Page>` 미등록으로 인한 런타임 크래시 수정.
+
+### 블랙 테마 UI 버그 수정
+
+- ContextMenu 테두리 두꺼움: ControlTemplate 재정의로 WPF 기본 드롭섀도 제거.
+- 폴더패널 탭 X(닫기) 버튼 검정색: AvalonDock 기본 템플릿이 색상 하드코딩하는 문제를
+  `LayoutDocumentTabItem` ControlTemplate 완전 재정의로 해결.
+- `Controls.xaml`에서 선언 순서 문제로 인한 `{StaticResource}` → `{DynamicResource}` 수정.
+
+### 단축키 시스템 및 설정 창
+
+- `KeybindingManager` 서비스 도입: 기본 매핑 + JSON 커스터마이징 저장.
+- 설정 창에 단축키 탭 추가, `KeyCaptureWindow` 팝업 구현.
+- 설정 창에 테마 탭 추가: RadioButton 즉시 적용 + 취소 시 원복.
+- UX 개선 (코드 리뷰 반영): Settings, KeyCapture 화면.
+
+### F5 키 동작 변경
+
+- F5 키 동작을 반대편 패널로 복사 → 양쪽 패널 새로고침으로 변경.
+
+---
+
 ## v1.1.0
 
 ### 폴더 컴포넌트 드래그앤드롭
