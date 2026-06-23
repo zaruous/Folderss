@@ -523,6 +523,31 @@ namespace Folderss
             ApplyTheme(AppTheme.Light);
         }
 
+        private void NordTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Nord);
+        }
+
+        private void CatppuccinTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Catppuccin);
+        }
+
+        private void SolarizedTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Solarized);
+        }
+
+        private void DraculaTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Dracula);
+        }
+
+        private void GitHubTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.GitHub);
+        }
+
         private void ApplyTheme(AppTheme theme)
         {
             ThemeManager.ApplyTheme(theme);
@@ -533,8 +558,13 @@ namespace Folderss
 
         private void UpdateThemeMenuChecks()
         {
-            BlackThemeMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Black;
-            LightThemeMenuItem.IsChecked = ThemeManager.CurrentTheme == AppTheme.Light;
+            BlackThemeMenuItem.IsChecked       = ThemeManager.CurrentTheme == AppTheme.Black;
+            LightThemeMenuItem.IsChecked       = ThemeManager.CurrentTheme == AppTheme.Light;
+            NordThemeMenuItem.IsChecked        = ThemeManager.CurrentTheme == AppTheme.Nord;
+            CatppuccinThemeMenuItem.IsChecked  = ThemeManager.CurrentTheme == AppTheme.Catppuccin;
+            SolarizedThemeMenuItem.IsChecked   = ThemeManager.CurrentTheme == AppTheme.Solarized;
+            DraculaThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Dracula;
+            GitHubThemeMenuItem.IsChecked      = ThemeManager.CurrentTheme == AppTheme.GitHub;
         }
 
         private void ActivatePane(FolderBrowser pane)

@@ -100,6 +100,27 @@
                                           Header="라이트 테마"
                                           IsCheckable="True"
                                           Click="LightTheme_Click"/>
+                                <Separator/>
+                                <MenuItem x:Name="NordThemeMenuItem"
+                                          Header="Nord"
+                                          IsCheckable="True"
+                                          Click="NordTheme_Click"/>
+                                <MenuItem x:Name="CatppuccinThemeMenuItem"
+                                          Header="Catppuccin"
+                                          IsCheckable="True"
+                                          Click="CatppuccinTheme_Click"/>
+                                <MenuItem x:Name="SolarizedThemeMenuItem"
+                                          Header="Solarized Dark"
+                                          IsCheckable="True"
+                                          Click="SolarizedTheme_Click"/>
+                                <MenuItem x:Name="DraculaThemeMenuItem"
+                                          Header="Dracula"
+                                          IsCheckable="True"
+                                          Click="DraculaTheme_Click"/>
+                                <MenuItem x:Name="GitHubThemeMenuItem"
+                                          Header="GitHub"
+                                          IsCheckable="True"
+                                          Click="GitHubTheme_Click"/>
                             </MenuItem>
                             <Separator/>
                             <MenuItem Header="설정" Click="Settings_Click"/>

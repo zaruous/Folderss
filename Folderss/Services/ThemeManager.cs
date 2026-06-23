@@ -8,7 +8,12 @@ namespace Folderss.Services
     public enum AppTheme
     {
         Black,
-        Light
+        Light,
+        Nord,
+        Catppuccin,
+        Solarized,
+        Dracula,
+        GitHub
     }
 
     public static class ThemeManager
