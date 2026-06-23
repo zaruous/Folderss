@@ -11,6 +11,8 @@ namespace Folderss.Viewers
 {
     public partial class MarkdownViewer : UserControl, IFileViewer
     {
+        private const long LargeMarkdownBytes = 5L * 1024 * 1024;
+
         private static readonly string ResourcesPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
             "Viewers", "Resources");
@@ -20,6 +22,7 @@ namespace Folderss.Viewers
         private AppTheme _currentTheme = AppTheme.Black;
         private bool _webViewReady;
         private bool _modified;
+        private bool _largeFileMode;
 
         private string _pendingContent;
 
@@ -139,6 +142,7 @@ namespace Folderss.Viewers
         {
             _filePath = filePath;
             _encoding = DetectEncoding(filePath);
+            _largeFileMode = new FileInfo(filePath).Length > LargeMarkdownBytes;
             var content = File.ReadAllText(filePath, _encoding);
 
             TitleChanged?.Invoke(this, Path.GetFileName(filePath));
@@ -156,10 +160,11 @@ namespace Folderss.Viewers
         {
             _pendingContent = null;
             var script = string.Format(
-                "app.open({0},{1},{2})",
+                "app.open({0},{1},{2},{3})",
                 JsonString(content),
                 JsonString(ThemeName(_currentTheme)),
-                JsonString("preview"));
+                JsonString(_largeFileMode ? "edit" : "preview"),
+                _largeFileMode ? "true" : "false");
             await WebView.CoreWebView2.ExecuteScriptAsync(script);
         }
 

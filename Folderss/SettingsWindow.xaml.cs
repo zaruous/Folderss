@@ -1,5 +1,6 @@
 using Folderss.Models;
 using Folderss.Services;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
@@ -12,12 +13,21 @@ namespace Folderss
     {
         private string _viewerKey;
         public string Extension { get; set; }
+        public string DefaultViewerKey { get; set; }
+        public string DefaultViewerDisplayName { get; set; }
+        public bool IsBuiltInDefault { get; set; }
         public string ViewerKey
         {
             get { return _viewerKey; }
             set { _viewerKey = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(ViewerKey))); }
         }
         public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+    }
+
+    public class ViewerOption
+    {
+        public string Key { get; set; }
+        public string DisplayName { get; set; }
     }
 
     public partial class SettingsWindow : Window
@@ -28,6 +38,7 @@ namespace Folderss
         private readonly ObservableCollection<ViewerMappingItem> _workingMappings;
         private bool _initializingTheme;
         private readonly AppTheme _originalTheme;
+        public IReadOnlyList<ViewerOption> ViewerOptions { get; }
 
         public SettingsWindow(KeyBindingService service) : this(service, new ViewerConfigService()) { }
 
@@ -35,20 +46,33 @@ namespace Folderss
         {
             _service = service;
             _viewerConfig = viewerConfig;
+            ViewerOptions = ViewerConfigService.GetViewerKeys()
+                .Select(key => new ViewerOption { Key = key, DisplayName = ToViewerDisplayName(key) })
+                .ToList();
             _workingBindings = new ObservableCollection<KeyBindingEntry>(
                 service.Bindings.Select(b => b.Clone()));
 
             _workingMappings = new ObservableCollection<ViewerMappingItem>(
-                viewerConfig.GetAllMappings()
-                    .OrderBy(kv => kv.Key)
-                    .Select(kv => new ViewerMappingItem { Extension = kv.Key, ViewerKey = kv.Value }));
+                viewerConfig.GetMappingRows()
+                    .Select(row => new ViewerMappingItem
+                    {
+                        Extension = row.Extension,
+                        ViewerKey = row.ViewerKey,
+                        DefaultViewerKey = row.DefaultViewerKey,
+                        DefaultViewerDisplayName = string.IsNullOrEmpty(row.DefaultViewerKey)
+                            ? "System Default"
+                            : ToViewerDisplayName(row.DefaultViewerKey),
+                        IsBuiltInDefault = row.IsBuiltInDefault
+                    }));
 
             _originalTheme = ThemeManager.CurrentTheme;
 
             InitializeComponent();
+            DataContext = this;
 
             ShortcutList.ItemsSource = _workingBindings;
             ViewerMappingList.ItemsSource = _workingMappings;
+            NewViewerCombo.SelectedValue = ViewerConfigService.SystemDefaultKey;
 
             _initializingTheme = true;
             BlackThemeRadio.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Black;
@@ -79,8 +103,7 @@ namespace Folderss
         {
             var ext = NewExtBox.Text.Trim();
             if (!ext.StartsWith(".")) ext = "." + ext;
-            var viewerItem = NewViewerCombo.SelectedItem as ComboBoxItem;
-            var viewerKey = viewerItem?.Content?.ToString();
+            var viewerKey = NewViewerCombo.SelectedValue as string;
             if (string.IsNullOrWhiteSpace(ext) || string.IsNullOrWhiteSpace(viewerKey)) return;
 
             var existing = _workingMappings.FirstOrDefault(m =>
@@ -91,6 +114,7 @@ namespace Folderss
                 _workingMappings.Add(new ViewerMappingItem { Extension = ext, ViewerKey = viewerKey });
 
             NewExtBox.Text = ".ext";
+            NewViewerCombo.SelectedValue = ViewerConfigService.SystemDefaultKey;
         }
 
         private void RemoveViewer_Click(object sender, RoutedEventArgs e)
@@ -98,7 +122,12 @@ namespace Folderss
             var ext = (string)((FrameworkElement)sender).Tag;
             var item = _workingMappings.FirstOrDefault(m =>
                 string.Equals(m.Extension, ext, System.StringComparison.OrdinalIgnoreCase));
-            if (item != null)
+            if (item == null)
+                return;
+
+            if (item.IsBuiltInDefault)
+                item.ViewerKey = ViewerConfigService.SystemDefaultKey;
+            else
                 _workingMappings.Remove(item);
         }
 
@@ -180,6 +209,18 @@ namespace Folderss
                 _viewerConfig.SetMapping(item.Extension, item.ViewerKey);
 
             DialogResult = true;
+        }
+
+        private static string ToViewerDisplayName(string key)
+        {
+            switch (key)
+            {
+                case ViewerConfigService.SystemDefaultKey: return "System Default";
+                case ViewerConfigService.BuiltInMarkdownKey: return "Markdown";
+                case ViewerConfigService.BuiltInMonacoKey: return "Monaco";
+                case ViewerConfigService.BuiltInTextKey: return "Text";
+                default: return key;
+            }
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

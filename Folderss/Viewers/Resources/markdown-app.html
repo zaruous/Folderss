@@ -353,6 +353,7 @@ var _theme   = 'dark';
 var _modified = false;
 var _renderTimer = null;
 var _tocVisible = true;
+var _largeFileMode = false;
 
 // ── Init ──────────────────────────────────
 mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
@@ -414,6 +415,13 @@ function exportPdf() {
 
 // ── Rendering ─────────────────────────────
 function renderPreview() {
+  if (_largeFileMode) {
+    var previewLarge = document.getElementById('preview-pane');
+    previewLarge.innerHTML = '<p style="color:var(--fg2);padding:16px">대용량 Markdown 파일은 성능 보호를 위해 미리보기를 렌더링하지 않습니다.</p>';
+    document.getElementById('toc-panel').innerHTML = '';
+    return;
+  }
+
   var raw = _content;
   var frontmatter = '';
 
@@ -533,7 +541,8 @@ editor.addEventListener('input', function() {
     window.chrome.webview.postMessage({ type: 'modified', value: true });
   }
   clearTimeout(_renderTimer);
-  _renderTimer = setTimeout(renderPreview, 300);
+  if (!_largeFileMode)
+    _renderTimer = setTimeout(renderPreview, 300);
 });
 
 editor.addEventListener('keydown', function(e) {
@@ -593,10 +602,11 @@ makeResizeHandle(
 
 // ── Public API (called from C# via ExecuteScriptAsync) ────
 var app = {
-  open: function(content, theme, mode) {
+  open: function(content, theme, mode, largeFileMode) {
     _content = content;
     _theme   = theme || 'dark';
     _mode    = mode  || 'preview';
+    _largeFileMode = largeFileMode === true;
     _modified = false;
     document.body.className = _theme + ' mode-' + _mode;
     editor.value = content;

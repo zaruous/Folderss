@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy"
+  content="default-src 'self' https://folderss-viewer blob:; script-src 'self' https://folderss-viewer 'unsafe-inline' 'unsafe-eval'; style-src 'self' https://folderss-viewer 'unsafe-inline'; font-src 'self' https://folderss-viewer data:; worker-src 'self' https://folderss-viewer blob:;">
+<title>Monaco Viewer</title>
+<style>
+  html, body, #editor {
+    width: 100%;
+    height: 100%;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  body {
+    background: #1e1e1e;
+  }
+</style>
+</head>
+<body>
+<div id="editor"></div>
+<script src="monaco/vs/loader.js"></script>
+<script>
+var editor = null;
+var model = null;
+var currentTheme = 'vs-dark';
+var pending = null;
+var modified = false;
+var suppressChange = false;
+
+require.config({ paths: { vs: 'monaco/vs' } });
+require(['vs/editor/editor.main'], function() {
+  monaco.editor.defineTheme('folderss-dark', {
+    base: 'vs-dark',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#0e1013',
+      'editor.foreground': '#f3f4f6',
+      'editorLineNumber.foreground': '#6b7280',
+      'editor.selectionBackground': '#244a7c'
+    }
+  });
+
+  monaco.editor.defineTheme('folderss-light', {
+    base: 'vs',
+    inherit: true,
+    rules: [],
+    colors: {
+      'editor.background': '#ffffff',
+      'editor.foreground': '#171a1f',
+      'editorLineNumber.foreground': '#9aa2ad',
+      'editor.selectionBackground': '#cfe0ff'
+    }
+  });
+
+  editor = monaco.editor.create(document.getElementById('editor'), {
+    value: '',
+    language: 'plaintext',
+    theme: currentTheme,
+    readOnly: false,
+    automaticLayout: true,
+    minimap: { enabled: true },
+    scrollBeyondLastLine: false,
+    fontFamily: 'Cascadia Code, Consolas, monospace',
+    fontSize: 13,
+    lineHeight: 20,
+    renderWhitespace: 'selection'
+  });
+
+  editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
+    window.chrome.webview.postMessage({
+      type: 'save-request',
+      content: model ? model.getValue() : ''
+    });
+  });
+
+  if (pending) {
+    openDocument(
+      pending.content,
+      pending.language,
+      pending.theme,
+      pending.readonly,
+      pending.largeFileMode,
+      pending.hugeFileMode
+    );
+    pending = null;
+  }
+});
+
+function themeName(theme) {
+  return (theme === 'light' || theme === 'github') ? 'folderss-light' : 'folderss-dark';
+}
+
+function openDocument(content, language, theme, readonly, largeFileMode, hugeFileMode) {
+  if (!editor || !window.monaco) {
+    pending = {
+      content: content,
+      language: language,
+      theme: theme,
+      readonly: readonly,
+      largeFileMode: largeFileMode,
+      hugeFileMode: hugeFileMode
+    };
+    return;
+  }
+
+  currentTheme = themeName(theme);
+  monaco.editor.setTheme(currentTheme);
+
+  if (model) {
+    model.dispose();
+  }
+
+  suppressChange = true;
+  modified = false;
+  model = monaco.editor.createModel(content || '', hugeFileMode ? 'plaintext' : (language || 'plaintext'));
+  model.onDidChangeContent(function() {
+    if (suppressChange) {
+      return;
+    }
+    if (!modified) {
+      modified = true;
+      window.chrome.webview.postMessage({ type: 'modified', value: true });
+    }
+  });
+  editor.setModel(model);
+  editor.updateOptions({
+    readOnly: readonly !== false || hugeFileMode === true,
+    minimap: { enabled: largeFileMode !== true && hugeFileMode !== true },
+    folding: largeFileMode !== true && hugeFileMode !== true,
+    links: largeFileMode !== true && hugeFileMode !== true,
+    renderValidationDecorations: largeFileMode === true || hugeFileMode === true ? 'off' : 'editable',
+    occurrencesHighlight: largeFileMode === true || hugeFileMode === true ? 'off' : 'singleFile',
+    wordBasedSuggestions: largeFileMode === true || hugeFileMode === true ? 'off' : 'matchingDocuments'
+  });
+  suppressChange = false;
+}
+
+var app = {
+  open: function(content, language, theme, readonly, largeFileMode, hugeFileMode) {
+    openDocument(content, language, theme, readonly, largeFileMode, hugeFileMode);
+  },
+
+  setTheme: function(theme) {
+    currentTheme = themeName(theme);
+    if (window.monaco) {
+      monaco.editor.setTheme(currentTheme);
+    }
+  },
+
+  markSaved: function() {
+    modified = false;
+    window.chrome.webview.postMessage({ type: 'modified', value: false });
+  }
+};
+</script>
+</body>
+</html>

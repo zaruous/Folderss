@@ -262,7 +262,20 @@
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn Header="확장자" Width="100" DisplayMemberBinding="{Binding Extension}"/>
-                                <GridViewColumn Header="뷰어" Width="200" DisplayMemberBinding="{Binding ViewerKey}"/>
+                                <GridViewColumn Header="기본값" Width="140" DisplayMemberBinding="{Binding DefaultViewerDisplayName}"/>
+                                <GridViewColumn Header="뷰어" Width="180">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <ComboBox ItemsSource="{Binding DataContext.ViewerOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                      SelectedValue="{Binding ViewerKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                      SelectedValuePath="Key"
+                                                      DisplayMemberPath="DisplayName"
+                                                      MinWidth="150"
+                                                      Margin="0"
+                                                      Padding="7,4"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                                 <GridViewColumn Header="" Width="64">
                                     <GridViewColumn.CellTemplate>
                                         <DataTemplate>
@@ -285,10 +298,12 @@
                                  Background="{DynamicResource ControlBackground}"
                                  Foreground="{DynamicResource PrimaryText}"
                                  Text=".ext"/>
-                        <ComboBox x:Name="NewViewerCombo" Width="160" Margin="0,0,8,0">
-                            <ComboBoxItem Content="builtin:markdown"/>
-                            <ComboBoxItem Content="builtin:text"/>
-                        </ComboBox>
+                        <ComboBox x:Name="NewViewerCombo"
+                                  Width="160"
+                                  Margin="0,0,8,0"
+                                  ItemsSource="{Binding ViewerOptions}"
+                                  SelectedValuePath="Key"
+                                  DisplayMemberPath="DisplayName"/>
                         <Button Content="추가" Click="AddViewer_Click" Padding="12,4"/>
                     </StackPanel>
                 </Grid>
