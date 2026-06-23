@@ -4,6 +4,7 @@ using System.Collections.ObjectModel;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace Folderss
 {
@@ -55,10 +56,9 @@ namespace Folderss
                 ThemeManager.ApplyTheme(theme);
         }
 
-        private void ChangeBinding_Click(object sender, RoutedEventArgs e)
+        private void OpenChangeBinding(KeyBindingEntry entry)
         {
-            var entry = (KeyBindingEntry)((FrameworkElement)sender).DataContext;
-            var capture = new KeyCaptureWindow { Owner = this };
+            var capture = new KeyCaptureWindow(_workingBindings, entry.CommandId) { Owner = this };
             if (capture.ShowDialog() == true)
             {
                 entry.Key = capture.CapturedKey;
@@ -66,8 +66,27 @@ namespace Folderss
             }
         }
 
+        private void ChangeBinding_Click(object sender, RoutedEventArgs e)
+        {
+            var entry = (KeyBindingEntry)((FrameworkElement)sender).DataContext;
+            OpenChangeBinding(entry);
+        }
+
+        private void ShortcutList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if (ShortcutList.SelectedItem is KeyBindingEntry entry)
+                OpenChangeBinding(entry);
+        }
+
         private void ResetDefaults_Click(object sender, RoutedEventArgs e)
         {
+            var result = MessageBox.Show(
+                "모든 단축키를 기본값으로 초기화하시겠습니까?",
+                "기본값으로 초기화",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+            if (result != MessageBoxResult.Yes) return;
+
             var defaults = KeyBindingService.GetDefaults();
             _workingBindings.Clear();
             foreach (var d in defaults)
@@ -76,6 +95,25 @@ namespace Folderss
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
+            var duplicates = _workingBindings
+                .Where(b => b.Key != Key.None)
+                .GroupBy(b => new { b.Key, b.Modifiers })
+                .Where(g => g.Count() > 1)
+                .SelectMany(g => g)
+                .Select(b => b.DisplayName)
+                .ToList();
+
+            if (duplicates.Any())
+            {
+                var names = string.Join(", ", duplicates);
+                MessageBox.Show(
+                    "동일한 단축키가 여러 항목에 지정되어 있습니다:\n" + names + "\n\n충돌을 해결한 후 저장하세요.",
+                    "단축키 충돌",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                return;
+            }
+
             _service.Save(_workingBindings);
             DialogResult = true;
         }

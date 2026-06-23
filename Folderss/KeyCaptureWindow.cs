@@ -1,5 +1,6 @@
 using Folderss.Models;
 using System.Collections.Generic;
+using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -12,19 +13,26 @@ namespace Folderss
         public ModifierKeys CapturedModifiers { get; private set; } = ModifierKeys.None;
 
         private TextBlock _keyDisplay;
+        private TextBlock _conflictLabel;
         private Button _okButton;
+        private readonly IEnumerable<KeyBindingEntry> _existingBindings;
+        private readonly string _currentCommandId;
 
-        public KeyCaptureWindow()
+        public KeyCaptureWindow(IEnumerable<KeyBindingEntry> existingBindings = null, string currentCommandId = null)
         {
+            _existingBindings = existingBindings;
+            _currentCommandId = currentCommandId;
+
             Title = "단축키 변경";
-            Width = 320;
-            Height = 200;
+            Width = 360;
+            Height = 230;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
             ResizeMode = ResizeMode.NoResize;
 
             var root = new Grid();
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = new GridLength(1, GridUnitType.Star) });
+            root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
             root.RowDefinitions.Add(new RowDefinition { Height = GridLength.Auto });
 
             var instr = new TextBlock
@@ -58,11 +66,22 @@ namespace Folderss
             Grid.SetRow(keyBorder, 1);
             root.Children.Add(keyBorder);
 
+            _conflictLabel = new TextBlock
+            {
+                Margin = new Thickness(20, 4, 20, 0),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 11,
+                Visibility = Visibility.Collapsed
+            };
+            _conflictLabel.SetResourceReference(TextBlock.ForegroundProperty, "AccentBrush");
+            Grid.SetRow(_conflictLabel, 2);
+            root.Children.Add(_conflictLabel);
+
             var btnRow = new StackPanel
             {
                 Orientation = Orientation.Horizontal,
                 HorizontalAlignment = HorizontalAlignment.Right,
-                Margin = new Thickness(20, 12, 20, 16)
+                Margin = new Thickness(20, 10, 20, 16)
             };
 
             _okButton = new Button
@@ -75,12 +94,27 @@ namespace Folderss
             };
             _okButton.Click += (s, e) => { DialogResult = true; Close(); };
 
+            var clearBtn = new Button
+            {
+                Content = "없음으로 설정",
+                MinWidth = 90,
+                Margin = new Thickness(0, 0, 8, 0)
+            };
+            clearBtn.Click += (s, e) =>
+            {
+                CapturedKey = Key.None;
+                CapturedModifiers = ModifierKeys.None;
+                DialogResult = true;
+                Close();
+            };
+
             var cancelBtn = new Button { Content = "취소", MinWidth = 75, IsCancel = true };
             cancelBtn.Click += (s, e) => Close();
 
             btnRow.Children.Add(_okButton);
+            btnRow.Children.Add(clearBtn);
             btnRow.Children.Add(cancelBtn);
-            Grid.SetRow(btnRow, 2);
+            Grid.SetRow(btnRow, 3);
             root.Children.Add(btnRow);
 
             Content = root;
@@ -90,10 +124,8 @@ namespace Folderss
 
         private void Capture_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            // Resolve the actual key (Alt combos come in as Key.System)
             var key = (e.Key == Key.System) ? e.SystemKey : e.Key;
 
-            // Ignore modifier-only keys and Escape (Escape is handled by IsCancel button)
             if (key == Key.LeftCtrl || key == Key.RightCtrl ||
                 key == Key.LeftAlt || key == Key.RightAlt ||
                 key == Key.LeftShift || key == Key.RightShift ||
@@ -114,6 +146,24 @@ namespace Folderss
             _keyDisplay.Text = string.Join("+", parts);
             _keyDisplay.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryText");
             _okButton.IsEnabled = true;
+
+            if (_existingBindings != null)
+            {
+                var conflict = _existingBindings.FirstOrDefault(b =>
+                    b.CommandId != _currentCommandId &&
+                    b.Key == key && b.Key != Key.None &&
+                    b.Modifiers == mods);
+                if (conflict != null)
+                {
+                    _conflictLabel.Text = "⚠ 이미 [" + conflict.DisplayName + "]에 사용 중입니다.";
+                    _conflictLabel.Visibility = Visibility.Visible;
+                }
+                else
+                {
+                    _conflictLabel.Visibility = Visibility.Collapsed;
+                }
+            }
+
             e.Handled = true;
         }
     }
