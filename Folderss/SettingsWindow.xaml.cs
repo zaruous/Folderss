@@ -28,8 +28,13 @@ namespace Folderss
             ShortcutList.ItemsSource = _workingBindings;
 
             _initializingTheme = true;
-            BlackThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.Black;
-            LightThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.Light;
+            BlackThemeRadio.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Black;
+            LightThemeRadio.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Light;
+            NordThemeRadio.IsChecked       = ThemeManager.CurrentTheme == AppTheme.Nord;
+            CatppuccinThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.Catppuccin;
+            SolarizedThemeRadio.IsChecked  = ThemeManager.CurrentTheme == AppTheme.Solarized;
+            DraculaThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.Dracula;
+            GitHubThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.GitHub;
             _initializingTheme = false;
 
             TabNav.SelectedIndex = 0;

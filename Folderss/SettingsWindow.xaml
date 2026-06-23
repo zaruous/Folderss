@@ -124,6 +124,7 @@
 
                         <RadioButton x:Name="LightThemeRadio"
                                      GroupName="AppTheme"
+                                     Margin="0,0,0,14"
                                      Checked="ThemeRadio_Checked"
                                      Tag="Light">
                             <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
@@ -135,6 +136,90 @@
                                         VerticalAlignment="Center"
                                         Margin="0,0,10,0"/>
                                 <TextBlock Text="라이트 테마" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="NordThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,0,0,14"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Nord">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#2E3440"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Nord" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="CatppuccinThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,0,0,14"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Catppuccin">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#1E1E2E"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Catppuccin" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="SolarizedThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,0,0,14"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Solarized">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#002B36"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Solarized Dark" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="DraculaThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,0,0,14"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Dracula">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#282A36"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Dracula" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="GitHubThemeRadio"
+                                     GroupName="AppTheme"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="GitHub">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#F6F8FA"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="GitHub" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
                     </StackPanel>
