@@ -69,11 +69,64 @@
                     <ListBoxItem Tag="Shortcuts">
                         <TextBlock Text="단축키"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="Theme">
+                        <TextBlock Text="테마"/>
+                    </ListBoxItem>
                 </ListBox>
             </Border>
 
             <!-- Right content area -->
             <Grid Grid.Column="1">
+
+                <!-- Theme panel -->
+                <Grid x:Name="ThemePanel" Margin="24,16" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Text="테마 설정"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,20"/>
+
+                    <StackPanel Grid.Row="1" Orientation="Vertical">
+                        <RadioButton x:Name="BlackThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,0,0,14"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Black">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#08090B"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="블랙 테마" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="LightThemeRadio"
+                                     GroupName="AppTheme"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Light">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#EEF1F5"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="라이트 테마" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+                    </StackPanel>
+                </Grid>
 
                 <!-- Shortcuts panel -->
                 <Grid x:Name="ShortcutsPanel" Margin="24,16">

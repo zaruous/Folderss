@@ -11,6 +11,7 @@ namespace Folderss
     {
         private readonly KeyBindingService _service;
         private readonly ObservableCollection<KeyBindingEntry> _workingBindings;
+        private bool _initializingTheme;
 
         public SettingsWindow(KeyBindingService service)
         {
@@ -21,12 +22,34 @@ namespace Folderss
             InitializeComponent();
 
             ShortcutList.ItemsSource = _workingBindings;
+
+            _initializingTheme = true;
+            BlackThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.Black;
+            LightThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.Light;
+            _initializingTheme = false;
+
             TabNav.SelectedIndex = 0;
         }
 
         private void TabNav_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            // Only one tab for now; add Visibility switching here when more tabs are added.
+            if (ShortcutsPanel == null) return;
+
+            var item = TabNav.SelectedItem as System.Windows.Controls.ListBoxItem;
+            var tag = item?.Tag?.ToString();
+
+            ShortcutsPanel.Visibility = tag == "Shortcuts" ? Visibility.Visible : Visibility.Collapsed;
+            ThemePanel.Visibility = tag == "Theme" ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ThemeRadio_Checked(object sender, RoutedEventArgs e)
+        {
+            if (_initializingTheme) return;
+            var rb = (System.Windows.Controls.RadioButton)sender;
+            if (rb.Tag == null) return;
+            AppTheme theme;
+            if (System.Enum.TryParse<AppTheme>(rb.Tag.ToString(), out theme))
+                ThemeManager.ApplyTheme(theme);
         }
 
         private void ChangeBinding_Click(object sender, RoutedEventArgs e)
