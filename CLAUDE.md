@@ -32,6 +32,7 @@ Windows WPF 듀얼 패널 파일 관리자. .NET Framework 4.8, AvalonDock 4.74.
 
 ### 테마 추가 시
 - [ ] `Themes/<이름>.xaml` — 색상 팔레트 파일 생성
+- [ ] `Folderss.csproj` — `<Page Include="Themes\<이름>.xaml">` 항목 추가 (누락 시 런타임 크래시)
 - [ ] `Services/ThemeManager.cs` — `AppTheme` enum에 값 추가
 - [ ] `MainWindow.xaml` — 테마 ContextMenu에 MenuItem 추가
 - [ ] `MainWindow.xaml.cs` — 클릭 핸들러 + `UpdateThemeMenuChecks()` 업데이트
