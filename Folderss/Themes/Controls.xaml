@@ -339,6 +339,13 @@
         </Setter>
     </Style>
 
+    <Style TargetType="{x:Type dockControls:ContextMenuEx}"
+           BasedOn="{StaticResource {x:Type ContextMenu}}">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+    </Style>
+
     <Style TargetType="MenuItem">
         <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
         <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
@@ -353,6 +360,39 @@
                 <Setter Property="Background" Value="{DynamicResource SelectionBrush}"/>
             </Trigger>
         </Style.Triggers>
+    </Style>
+
+    <Style TargetType="{x:Type dockControls:MenuItemEx}"
+           BasedOn="{StaticResource {x:Type MenuItem}}">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+    </Style>
+
+    <Style TargetType="{x:Type dockControls:NavigatorWindow}"
+           BasedOn="{StaticResource {x:Type Window}}">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+        <Style.Resources>
+            <Style TargetType="ListBox">
+                <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            </Style>
+            <Style TargetType="ListBoxItem">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                <Style.Triggers>
+                    <Trigger Property="IsMouseOver" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource RowHoverBrush}"/>
+                    </Trigger>
+                    <Trigger Property="IsSelected" Value="True">
+                        <Setter Property="Background" Value="{DynamicResource SelectionBrush}"/>
+                        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                    </Trigger>
+                </Style.Triggers>
+            </Style>
+        </Style.Resources>
     </Style>
 
     <Style TargetType="Separator">
