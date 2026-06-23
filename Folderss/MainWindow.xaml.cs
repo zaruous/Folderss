@@ -733,7 +733,7 @@ namespace Folderss
             }
             else if (e.Key == Key.F5)
             {
-                Copy_Click(sender, e);
+                RefreshBothPanes();
                 e.Handled = true;
             }
             else if (e.Key == Key.F6)
