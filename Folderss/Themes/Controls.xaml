@@ -318,6 +318,27 @@
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
     </Style>
 
+    <Style TargetType="ContextMenu">
+        <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+        <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="0,2"/>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContextMenu">
+                    <Border Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="{TemplateBinding BorderThickness}"
+                            Padding="{TemplateBinding Padding}"
+                            SnapsToDevicePixels="True">
+                        <ItemsPresenter SnapsToDevicePixels="{TemplateBinding SnapsToDevicePixels}"/>
+                    </Border>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <Style TargetType="MenuItem">
         <Setter Property="Background" Value="{DynamicResource SurfaceBackground}"/>
         <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
@@ -411,28 +432,71 @@
         <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
         <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
         <Setter Property="MinWidth" Value="96"/>
-        <Setter Property="Padding" Value="12,2"/>
+        <Setter Property="Padding" Value="12,5"/>
         <Setter Property="Margin" Value="0"/>
         <Setter Property="FontSize" Value="12"/>
-        <Style.Resources>
-            <Style TargetType="{x:Type Button}">
-                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
-                <Setter Property="Background" Value="Transparent"/>
-                <Setter Property="BorderBrush" Value="Transparent"/>
-                <Setter Property="Opacity" Value="0.95"/>
-                <Style.Triggers>
-                    <Trigger Property="IsMouseOver" Value="True">
-                        <Setter Property="Foreground" Value="White"/>
-                        <Setter Property="Background" Value="{DynamicResource ControlHoverBrush}"/>
-                        <Setter Property="Opacity" Value="1"/>
-                    </Trigger>
-                </Style.Triggers>
-            </Style>
-            <Style TargetType="{x:Type Path}">
-                <Setter Property="Fill" Value="{DynamicResource PrimaryText}"/>
-                <Setter Property="Stroke" Value="{DynamicResource PrimaryText}"/>
-            </Style>
-        </Style.Resources>
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="{x:Type dockControls:LayoutDocumentTabItem}">
+                    <Border x:Name="Bd"
+                            Background="{TemplateBinding Background}"
+                            BorderBrush="{TemplateBinding BorderBrush}"
+                            BorderThickness="1,0,1,0"
+                            Padding="{TemplateBinding Padding}">
+                        <Grid VerticalAlignment="Center">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Grid.Column="0"
+                                       Text="{Binding Model.Title, RelativeSource={RelativeSource TemplatedParent}}"
+                                       Foreground="{TemplateBinding Foreground}"
+                                       VerticalAlignment="Center"
+                                       TextTrimming="CharacterEllipsis"/>
+                            <Button x:Name="PART_CloseBtn"
+                                    Grid.Column="1"
+                                    Command="{Binding Path=LayoutItem.CloseCommand, RelativeSource={RelativeSource TemplatedParent}}"
+                                    Focusable="False"
+                                    Width="18" Height="18"
+                                    Padding="0"
+                                    Margin="6,0,0,0"
+                                    Background="Transparent"
+                                    BorderBrush="Transparent"
+                                    BorderThickness="0"
+                                    Visibility="{Binding Path=IsEnabled, RelativeSource={RelativeSource Self}, Mode=OneWay, Converter={dockConverters:BoolToVisibilityConverter}}">
+                                <Button.Template>
+                                    <ControlTemplate TargetType="Button">
+                                        <Border x:Name="BtnBd"
+                                                Background="{TemplateBinding Background}"
+                                                CornerRadius="3">
+                                            <ContentPresenter HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                                        </Border>
+                                        <ControlTemplate.Triggers>
+                                            <Trigger Property="IsMouseOver" Value="True">
+                                                <Setter TargetName="BtnBd" Property="Background" Value="{DynamicResource ControlHoverBrush}"/>
+                                            </Trigger>
+                                            <Trigger Property="IsPressed" Value="True">
+                                                <Setter TargetName="BtnBd" Property="Background" Value="{DynamicResource ControlPressedBrush}"/>
+                                            </Trigger>
+                                        </ControlTemplate.Triggers>
+                                    </ControlTemplate>
+                                </Button.Template>
+                                <Path Style="{DynamicResource DockPaneCloseGlyphStyle}"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+                    <ControlTemplate.Triggers>
+                        <DataTrigger Binding="{Binding Model.IsSelected, RelativeSource={RelativeSource Self}}" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource PanelBackground}"/>
+                            <Setter Property="Panel.ZIndex" Value="1"/>
+                        </DataTrigger>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource ControlHoverBrush}"/>
+                        </Trigger>
+                    </ControlTemplate.Triggers>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <Style TargetType="{x:Type dockControls:LayoutAnchorableTabItem}">
