@@ -75,9 +75,11 @@ namespace Folderss.Services
                 return false;
 
             var source = dictionary.Source.OriginalString.Replace('\\', '/');
-            return source.StartsWith(ThemeDictionaryPrefix, StringComparison.OrdinalIgnoreCase) &&
-                   (source.EndsWith("Black.xaml", StringComparison.OrdinalIgnoreCase) ||
-                    source.EndsWith("Light.xaml", StringComparison.OrdinalIgnoreCase));
+            if (!source.StartsWith(ThemeDictionaryPrefix, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            return Enum.GetNames(typeof(AppTheme))
+                       .Any(name => source.EndsWith(name + ".xaml", StringComparison.OrdinalIgnoreCase));
         }
 
         private static void SaveTheme(AppTheme theme)
