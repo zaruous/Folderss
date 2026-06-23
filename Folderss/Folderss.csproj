@@ -99,12 +99,14 @@
       <DependentUpon>SearchPanel.xaml</DependentUpon>
     </Compile>
     <Compile Include="Models\FavoriteLocation.cs" />
+    <Compile Include="Models\KeyBindingEntry.cs" />
     <Compile Include="Models\SearchResult.cs" />
     <Compile Include="Models\FileSystemItem.cs" />
     <Compile Include="Services\DockLayoutService.cs" />
     <Compile Include="Services\FavoritesService.cs" />
     <Compile Include="Services\FileOperationService.cs" />
     <Compile Include="Services\FilePreviewService.cs" />
+    <Compile Include="Services\KeyBindingService.cs" />
     <Compile Include="Services\SearchService.cs" />
     <Resource Include="app.ico"/>
     <Compile Include="Services\SessionStateService.cs" />
@@ -112,7 +114,15 @@
     <Compile Include="Services\ThemeManager.cs" />
     <Compile Include="Services\UpdateService.cs" />
     <Compile Include="AboutWindow.cs" />
+    <Compile Include="KeyCaptureWindow.cs" />
     <Compile Include="PromptWindow.cs" />
+    <Page Include="SettingsWindow.xaml">
+      <Generator>MSBuild:Compile</Generator>
+      <SubType>Designer</SubType>
+    </Page>
+    <Compile Include="SettingsWindow.xaml.cs">
+      <DependentUpon>SettingsWindow.xaml</DependentUpon>
+    </Compile>
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />

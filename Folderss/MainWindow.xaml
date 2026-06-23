@@ -101,6 +101,8 @@
                                           Click="LightTheme_Click"/>
                             </MenuItem>
                             <Separator/>
+                            <MenuItem Header="설정" Click="Settings_Click"/>
+                            <Separator/>
                             <MenuItem Header="Folderss 정보" Click="About_Click"/>
                             <MenuItem Header="업데이트 확인" Click="CheckUpdate_Click"/>
                             <MenuItem Header="종료" Click="Exit_Click"/>

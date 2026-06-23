@@ -29,6 +29,7 @@ namespace Folderss
         private HashSet<string> _cutPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Window _searchWindow;
         private Controls.SearchPanel _searchPanel;
+        private readonly KeyBindingService _keyBindingService = new KeyBindingService();
 
         private FolderBrowser ActivePane
         {
@@ -53,6 +54,7 @@ namespace Folderss
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             _sessionState = SessionStateService.Load();
+            _keyBindingService.Load();
 
             AttachFolderBrowser(LeftPane);
             AttachFolderBrowser(RightPane);
@@ -724,94 +726,99 @@ namespace Folderss
 
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key == Key.F2)
+            var kb = _keyBindingService;
+
+            if (kb.Matches(e, "Rename"))
             {
-                if (FavoritesPanel.IsKeyboardFocusWithin)
-                    return;
+                if (FavoritesPanel.IsKeyboardFocusWithin) return;
                 Rename_Click(sender, e);
                 e.Handled = true;
             }
-            else if (e.Key == Key.F5)
+            else if (kb.Matches(e, "Refresh"))
             {
                 RefreshBothPanes();
                 e.Handled = true;
             }
-            else if (e.Key == Key.F6)
+            else if (kb.Matches(e, "Move"))
             {
                 Move_Click(sender, e);
                 e.Handled = true;
             }
-            else if (e.Key == Key.Delete)
+            else if (kb.Matches(e, "Delete", ModifierKeys.Shift))
             {
+                // Shift+Delete = permanent delete; plain Delete = recycle bin
                 DeleteSelected((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
                 e.Handled = true;
             }
-            else if (e.Key == Key.R && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (kb.Matches(e, "RefreshAlt"))
             {
                 RefreshBothPanes();
                 e.Handled = true;
             }
-            else if (e.Key == Key.N && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            else if (kb.Matches(e, "NewFolder"))
             {
                 NewFolder_Click(sender, e);
                 e.Handled = true;
             }
-            else if (e.Key == Key.T && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (kb.Matches(e, "AddPanel"))
             {
                 AddFolderPanel_Click(sender, e);
                 e.Handled = true;
             }
-            else if (e.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (kb.Matches(e, "CopyClipboard"))
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
-                    return;
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 CopyToClipboard();
                 e.Handled = true;
             }
-            else if (e.Key == Key.X && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (kb.Matches(e, "CutClipboard"))
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
-                    return;
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 CutToClipboard();
                 e.Handled = true;
             }
-            else if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (kb.Matches(e, "PasteClipboard"))
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox)
-                    return;
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 PasteFromClipboard();
                 e.Handled = true;
             }
-            else if (e.SystemKey == Key.Left && Keyboard.Modifiers == ModifierKeys.Alt)
+            else if (kb.Matches(e, "NavigateBack"))
             {
                 ActivePane.NavigateBack();
                 e.Handled = true;
             }
-            else if (e.SystemKey == Key.Right && Keyboard.Modifiers == ModifierKeys.Alt)
+            else if (kb.Matches(e, "NavigateForward"))
             {
                 ActivePane.NavigateForward();
                 e.Handled = true;
             }
-            else if (e.SystemKey == Key.Up && Keyboard.Modifiers == ModifierKeys.Alt)
+            else if (kb.Matches(e, "NavigateUp"))
             {
                 ActivePane.NavigateUp();
                 e.Handled = true;
             }
-            else if (e.Key == Key.Left && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            else if (kb.Matches(e, "SwitchPaneLeft"))
             {
                 SwitchToAdjacentPane(-1);
                 e.Handled = true;
             }
-            else if (e.Key == Key.Right && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
+            else if (kb.Matches(e, "SwitchPaneRight"))
             {
                 SwitchToAdjacentPane(1);
                 e.Handled = true;
             }
-            else if (e.Key == Key.F && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (kb.Matches(e, "ShowSearch"))
             {
                 ShowSearchPanel();
                 e.Handled = true;
             }
+        }
+
+        private void Settings_Click(object sender, RoutedEventArgs e)
+        {
+            var win = new SettingsWindow(_keyBindingService) { Owner = this };
+            win.ShowDialog();
         }
 
         private LayoutAnchorable FindDock(string contentId)
