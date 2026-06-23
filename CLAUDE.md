@@ -64,6 +64,10 @@ Windows WPF 듀얼 패널 파일 관리자. .NET Framework 4.8, AvalonDock 4.74.
 - [ ] `docs/architecture.md` — 서비스·컨트롤 목록 업데이트
 - [ ] `README.md` — 아키텍처 요약 업데이트
 
+### 태그/릴리스 생성 시
+- [ ] `Properties/AssemblyInfo.cs` — `AssemblyVersion`, `AssemblyFileVersion`을 태그 버전에 맞게 갱신
+- [ ] 정보 창(`AboutWindow`)이 실제 어셈블리 버전을 표시하는지 확인
+
 ---
 
 ## 주요 패턴

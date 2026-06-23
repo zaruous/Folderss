@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Reflection;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Documents;
@@ -20,7 +21,7 @@ namespace Folderss
 
             root.Children.Add(new TextBlock
             {
-                Text = "Folderss 1.0",
+                Text = "Folderss " + GetVersionText(),
                 FontSize = 16,
                 FontWeight = FontWeights.SemiBold,
                 Margin = new Thickness(0, 0, 0, 8)
@@ -58,6 +59,17 @@ namespace Folderss
             root.Children.Add(ok);
 
             Content = root;
+        }
+
+        private static string GetVersionText()
+        {
+            var version = Assembly.GetExecutingAssembly().GetName().Version;
+            if (version == null)
+                return string.Empty;
+
+            return version.Revision > 0
+                ? version.ToString()
+                : string.Format("{0}.{1}.{2}", version.Major, version.Minor, version.Build);
         }
     }
 }

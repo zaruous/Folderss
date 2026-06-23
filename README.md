@@ -2,13 +2,13 @@
 
 Windows용 듀얼 패널 파일 관리자입니다. WPF와 .NET Framework 4.8로 구현했으며, AvalonDock을 활용한 자유로운 패널 도킹·탭·분리 창을 지원합니다.
 
-현재 버전: **v1.2.0**
+현재 버전: **v1.4.1**
 
 ![Folderss 스크린샷](<docs/images/program image.png>)
 
 ## 개요
 
-경로 탐색, 검색, 파일 목록은 재사용 가능한 `Controls/FolderBrowser` 컴포넌트 하나로 구성되며, 이 컴포넌트를 AvalonDock 레이아웃 위에 여러 개 배치합니다. 왼쪽에는 즐겨찾기 패널, 아래에는 선택 파일 미리보기·메타정보 영역이 붙어 있습니다.
+경로 탐색, 검색, 파일 목록은 재사용 가능한 `Controls/FolderBrowser` 컴포넌트 하나로 구성되며, 이 컴포넌트를 AvalonDock 레이아웃 위에 여러 개 배치합니다. 왼쪽에는 즐겨찾기 패널, 아래에는 선택 파일 미리보기·메타정보 영역이 붙어 있습니다. 파일을 열 때는 확장자 매핑에 따라 Markdown, Monaco, Text 뷰어를 별도 탭으로 띄우거나 Windows 기본 프로그램으로 넘깁니다.
 
 ### 아키텍처 요약
 
@@ -16,31 +16,49 @@ Windows용 듀얼 패널 파일 관리자입니다. WPF와 .NET Framework 4.8로
 Folderss/
 ├── Controls/
 │   ├── FolderBrowser       — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위)
-│   └── FavoritesPanel      — 즐겨찾기 패널
+│   ├── FavoritesPanel      — 즐겨찾기 패널
+│   ├── SearchPanel         — 파일 내용 검색 패널
+│   └── ViewerHost          — 내장 파일 뷰어 호스트
+├── Viewers/
+│   ├── MarkdownViewer      — Markdown 미리보기·편집·내보내기
+│   ├── MonacoViewer        — 코드/텍스트 편집기
+│   ├── TextViewer          — 읽기 전용 텍스트 뷰어
+│   └── IFileViewer         — 뷰어 공통 인터페이스
 ├── Models/
 │   ├── FileSystemItem      — 파일·폴더 뷰모델
-│   └── FavoriteLocation    — 즐겨찾기 그룹·항목 모델
+│   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델
+│   ├── KeyBindingEntry     — 단축키 설정 모델
+│   └── SearchResult        — 내용 검색 결과 모델
 ├── Services/
 │   ├── FileOperationService    — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService      — 텍스트·이미지 미리보기 + 메타데이터
 │   ├── DockLayoutService       — AvalonDock 레이아웃 저장·복원 (XML)
 │   ├── SessionStateService     — 열린 폴더 경로 세션 저장·복원 (XML)
 │   ├── FavoritesService        — 즐겨찾기 목록 저장·복원
+│   ├── KeyBindingService       — 단축키 기본값·사용자 설정 저장
+│   ├── SearchService           — 파일 내용 검색
+│   ├── ViewerConfigService     — 확장자별 내장 뷰어 매핑
+│   ├── UpdateService           — GitHub 최신 릴리스 확인·다운로드
 │   ├── ShellContextMenuService — Windows 쉘 우클릭 컨텍스트 메뉴
-│   └── ThemeManager            — 블랙·라이트 테마 전환 및 저장
+│   └── ThemeManager            — 테마 전환 및 저장
 ├── Themes/
-│   ├── Black.xaml / Light.xaml — 테마 색상 정의
+│   ├── Black / Light / Nord / Catppuccin / Solarized / Dracula / GitHub
 │   └── Controls.xaml           — 공통 컨트롤 스타일
-├── MainWindow               — 메인 창 및 AvalonDock 호스트
-└── PromptWindow             — 이름 변경·새 폴더 입력 다이얼로그
+├── MainWindow                  — 메인 창 및 AvalonDock 호스트
+├── SettingsWindow              — 테마·단축키·뷰어 설정
+├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
+├── AboutWindow                 — 버전 정보 창
+└── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
 ```
 
 ### 설계 특징
 
 - **`FolderBrowser` 재사용**: 좌·우 기본 패널과 추가 패널 모두 동일한 컨트롤 인스턴스를 사용합니다.
+- **내장 뷰어 시스템**: `IFileViewer` 인터페이스와 `ViewerHost`를 통해 Markdown, Monaco, Text 뷰어를 AvalonDock 문서 탭으로 엽니다.
 - **비동기 미리보기**: 파일 미리보기는 `Task.Run`으로 백그라운드에서 읽고, 요청 ID 비교로 레이스 컨디션을 방지합니다.
 - **이동 이력**: 뒤로·앞으로 이동 이력을 패널별 스택으로 관리하며 최대 10개까지 유지합니다.
 - **세션 복원**: 종료 시 열린 폴더 경로·활성 패널(`session.xml`)과 도킹 배치(`dock-layout.xml`)를 `%LOCALAPPDATA%\Folderss\`에 저장하고 다음 실행 시 복원합니다.
+- **사용자 설정**: 테마(`theme.txt`), 단축키(`keybindings.xml`), 뷰어 매핑(`viewer-config.json`)을 사용자별로 저장합니다.
 - **테마**: `ResourceDictionary` 교체 방식으로 런타임에 즉시 전환합니다.
 
 ## 현재 기능
@@ -52,15 +70,32 @@ Folderss/
 - 파일 실행
 - 파일 및 폴더의 Windows 컨텍스트 메뉴
 - 반대편 패널로 복사 및 이동
+- Explorer 및 다른 패널과의 파일 드래그 앤 드롭
 - 이름 변경, 새 폴더, 휴지통 삭제
 - 다중 선택 파일 작업
-- 블랙/라이트 테마 실시간 전환 및 사용자 설정 저장
+- 클립보드 복사, 잘라내기, 붙여넣기
+- Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
+- 설정 창에서 단축키와 확장자별 뷰어 매핑 변경
 - AvalonDock 기반 패널 도킹, 탭, 분리 창, 자동 숨김
 - 도킹 배치 자동 저장 및 복원
 - 그룹별 즐겨찾기 구성과 사용자별 저장
 - 즐겨찾기 그룹 간 드래그 앤 드롭 이동
 - 폴더 목록 하단의 선택 파일 미리보기와 메타정보
 - 파일 내용 검색 (대/소문자 구분, 정규식, 하위 폴더 탐색 옵션)
+- 내장 Markdown, Monaco, Text 뷰어 탭
+- GitHub 최신 릴리스 기반 업데이트 확인 및 설치 파일 다운로드
+
+## 내장 뷰어
+
+확장자별 뷰어 매핑은 `설정 > 뷰어`에서 변경할 수 있으며 `%LOCALAPPDATA%\Folderss\viewer-config.json`에 저장됩니다.
+
+| 뷰어 | 기본 확장자 | 주요 기능 |
+|---|---|---|
+| Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기, TOC, front matter 표시, Mermaid, KaTeX, HTML/PDF 내보내기 |
+| Monaco | `.json`, `.xml` | Monaco Editor 기반 편집, 구문 강조, 대용량 파일 모드 |
+| Text | 사용자 매핑 | 읽기 전용 텍스트 보기와 구문 강조 |
+
+매핑되지 않은 확장자는 Windows 기본 프로그램으로 열립니다.
 
 ## 파일 미리보기
 
@@ -87,15 +122,41 @@ Folderss/
 
 ## 테마
 
-`설정` 메뉴에서 블랙 테마와 라이트 테마를 전환할 수 있습니다. 마지막 선택은 사용자별로 저장됩니다.
+`설정` 메뉴 또는 `설정 > 테마`에서 다음 테마를 전환할 수 있습니다. 마지막 선택은 사용자별로 저장됩니다.
+
+- Black
+- Light
+- Nord
+- Catppuccin Mocha
+- Solarized Dark
+- Dracula
+- GitHub Primer Light
 
 테마 색상과 공통 컨트롤 스타일은 다음 파일로 분리되어 있습니다.
 
 ```text
 Folderss\Themes\Black.xaml
 Folderss\Themes\Light.xaml
+Folderss\Themes\Nord.xaml
+Folderss\Themes\Catppuccin.xaml
+Folderss\Themes\Solarized.xaml
+Folderss\Themes\Dracula.xaml
+Folderss\Themes\GitHub.xaml
 Folderss\Themes\Controls.xaml
 ```
+
+## 사용자 설정 파일
+
+사용자별 설정은 `%LOCALAPPDATA%\Folderss\` 아래에 저장됩니다.
+
+| 파일 | 내용 |
+|---|---|
+| `theme.txt` | 마지막 선택 테마 |
+| `keybindings.xml` | 사용자 단축키 |
+| `viewer-config.json` | 확장자별 뷰어 매핑 |
+| `favorites.xml` | 즐겨찾기 그룹과 항목 |
+| `session.xml` | 열린 폴더 패널과 활성 패널 |
+| `dock-layout.xml` | AvalonDock 패널 배치 |
 
 ## 단축키
 
@@ -114,11 +175,12 @@ Folderss\Themes\Controls.xaml
 | 단축키 | 동작 |
 |---|---|
 | `F2` | 이름 변경 |
-| `F5` | 반대편 패널로 복사 |
+| `F5` | 새로 고침 |
 | `F6` | 반대편 패널로 이동 |
 | `Delete` | 휴지통으로 이동 |
 | `Shift+Delete` | 영구 삭제 |
 | `Ctrl+C` | 선택 항목 클립보드 복사 |
+| `Ctrl+X` | 선택 항목 클립보드 잘라내기 |
 | `Ctrl+V` | 클립보드에서 붙여넣기 |
 | `Ctrl+Shift+N` | 새 폴더 |
 
@@ -130,15 +192,23 @@ Folderss\Themes\Controls.xaml
 | `Ctrl+T` | 새 폴더 패널 추가 |
 | `Ctrl+F` | 파일 내용 검색 패널 열기 |
 
+기본 단축키는 `설정 > 단축키`에서 변경하거나 기본값으로 초기화할 수 있습니다.
+
 ## 빌드
 
 ### 요구 사항
 
 - Windows 10 이상
 - [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48)
+- [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (내장 뷰어 사용 시 필요)
 - 다음 중 하나
   - Visual Studio 2019 이상 (워크로드: **.NET 데스크톱 개발**)
   - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-studio-build-tools/) (구성 요소: **MSBuild**)
+
+NuGet 패키지는 `packages.config` 기준으로 복원됩니다.
+
+- `Dirkster.AvalonDock` 4.74.1
+- `Microsoft.Web.WebView2` 1.0.2739.15
 
 ### Visual Studio에서 빌드
 
@@ -148,16 +218,18 @@ Folderss\Themes\Controls.xaml
 
 ### MSBuild(커맨드라인)로 빌드
 
+Visual Studio 또는 Build Tools 설치 경로에 맞는 `MSBuild.exe`를 사용합니다. 아래는 Build Tools 설치 예시입니다.
+
 **Debug 빌드**
 
 ```powershell
-& 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Rebuild /p:Configuration=Debug
+& 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Restore,Rebuild /p:Configuration=Debug
 ```
 
 **Release 빌드**
 
 ```powershell
-& 'C:\Program Files (x86)\Microsoft Visual Studio\18\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Rebuild /p:Configuration=Release
+& 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Restore,Rebuild /p:Configuration=Release
 ```
 
 ### 빌드 결과물
