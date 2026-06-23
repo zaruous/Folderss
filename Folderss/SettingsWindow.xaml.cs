@@ -12,12 +12,15 @@ namespace Folderss
         private readonly KeyBindingService _service;
         private readonly ObservableCollection<KeyBindingEntry> _workingBindings;
         private bool _initializingTheme;
+        private readonly AppTheme _originalTheme;
 
         public SettingsWindow(KeyBindingService service)
         {
             _service = service;
             _workingBindings = new ObservableCollection<KeyBindingEntry>(
                 service.Bindings.Select(b => b.Clone()));
+
+            _originalTheme = ThemeManager.CurrentTheme;
 
             InitializeComponent();
 
@@ -75,11 +78,12 @@ namespace Folderss
         {
             _service.Save(_workingBindings);
             DialogResult = true;
-            Close();
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)
         {
+            if (ThemeManager.CurrentTheme != _originalTheme)
+                ThemeManager.ApplyTheme(_originalTheme);
             Close();
         }
     }

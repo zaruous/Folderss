@@ -746,7 +746,7 @@ namespace Folderss
             }
             else if (kb.Matches(e, "Delete", ModifierKeys.Shift))
             {
-                // Shift+Delete = permanent delete; plain Delete = recycle bin
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 DeleteSelected((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
                 e.Handled = true;
             }

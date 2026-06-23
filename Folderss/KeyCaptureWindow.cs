@@ -93,12 +93,12 @@ namespace Folderss
             // Resolve the actual key (Alt combos come in as Key.System)
             var key = (e.Key == Key.System) ? e.SystemKey : e.Key;
 
-            // Ignore standalone modifier keys
+            // Ignore modifier-only keys and Escape (Escape is handled by IsCancel button)
             if (key == Key.LeftCtrl || key == Key.RightCtrl ||
                 key == Key.LeftAlt || key == Key.RightAlt ||
                 key == Key.LeftShift || key == Key.RightShift ||
                 key == Key.LWin || key == Key.RWin ||
-                key == Key.System || key == Key.None)
+                key == Key.Escape || key == Key.None)
                 return;
 
             var mods = Keyboard.Modifiers;

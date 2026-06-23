@@ -85,11 +85,19 @@ namespace Folderss.Services
             var dir = Path.GetDirectoryName(SettingsPath);
             if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
+            // Write to a temp file first, then atomically replace — prevents corrupt
+            // keybindings.xml if the process is killed mid-write.
+            var tempPath = SettingsPath + ".tmp";
             var ser = new XmlSerializer(typeof(List<KeyBindingEntry>));
-            using (var stream = File.Create(SettingsPath))
+            using (var stream = File.Create(tempPath))
             {
                 ser.Serialize(stream, _bindings);
             }
+
+            if (File.Exists(SettingsPath))
+                File.Replace(tempPath, SettingsPath, null);
+            else
+                File.Move(tempPath, SettingsPath);
         }
 
         public KeyBindingEntry GetBinding(string commandId)
