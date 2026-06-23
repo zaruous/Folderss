@@ -698,6 +698,23 @@ namespace Folderss
             }
         }
 
+        private void NewFile_Click(object sender, RoutedEventArgs e)
+        {
+            var prompt = new PromptWindow("새 파일", "파일 이름을 입력하세요.", "새 파일.txt") { Owner = this };
+            if (prompt.ShowDialog() != true)
+                return;
+
+            try
+            {
+                FileOperationService.CreateFile(ActivePane.CurrentPath, prompt.Value);
+                ActivePane.RefreshItems();
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, "파일을 만들 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         private void Refresh_Click(object sender, RoutedEventArgs e)
         {
             RefreshBothPanes();
@@ -754,6 +771,11 @@ namespace Folderss
             else if (e.Key == Key.N && Keyboard.Modifiers == (ModifierKeys.Control | ModifierKeys.Shift))
             {
                 NewFolder_Click(sender, e);
+                e.Handled = true;
+            }
+            else if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                NewFile_Click(sender, e);
                 e.Handled = true;
             }
             else if (e.Key == Key.T && Keyboard.Modifiers == ModifierKeys.Control)

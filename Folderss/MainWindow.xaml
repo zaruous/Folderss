@@ -79,6 +79,7 @@
                         <ContextMenu x:Name="MainContextMenu">
                             <MenuItem Header="폴더 패널 추가..." InputGestureText="Ctrl+T" Click="AddFolderPanel_Click"/>
                             <MenuItem Header="새 폴더" InputGestureText="Ctrl+Shift+N" Click="NewFolder_Click"/>
+                            <MenuItem Header="새 파일" InputGestureText="Ctrl+N" Click="NewFile_Click"/>
                             <Separator/>
                             <MenuItem Header="이름 변경" InputGestureText="F2" Click="Rename_Click"/>
                             <MenuItem Header="휴지통으로 이동" InputGestureText="Delete" Click="Delete_Click"/>
