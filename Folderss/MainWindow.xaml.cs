@@ -1,16 +1,19 @@
 using Folderss.Controls;
 using Folderss.Services;
 using AvalonDock.Layout;
+using AvalonDock.Layout.Serialization;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.IO;
 using System.Linq;
+using System.Text;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
 using System.Threading.Tasks;
 using System.Windows.Threading;
+using System.Xml;
 using Forms = System.Windows.Forms;
 
 namespace Folderss
@@ -31,6 +34,9 @@ namespace Folderss
         private Controls.SearchPanel _searchPanel;
         private readonly KeyBindingService _keyBindingService = new KeyBindingService();
         private readonly ViewerConfigService _viewerConfigService = new ViewerConfigService();
+        private bool _isPanelMaximized = false;
+        private string _savedLayoutXml = null;
+        private string _maximizedContentId = null;
 
         private FolderBrowser ActivePane
         {
@@ -190,6 +196,78 @@ namespace Folderss
             WindowState = WindowState == WindowState.Maximized
                 ? WindowState.Normal
                 : WindowState.Maximized;
+        }
+
+        private void TogglePanelMaximize()
+        {
+            if (!_isPanelMaximized)
+            {
+                var activeDoc = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocument>()
+                    .FirstOrDefault(d => d.IsActive);
+                if (activeDoc == null) return;
+
+                var sb = new StringBuilder();
+                using (var xmlWriter = XmlWriter.Create(sb, new XmlWriterSettings { Indent = false }))
+                {
+                    new XmlLayoutSerializer(DockManager).Serialize(xmlWriter);
+                }
+                _savedLayoutXml = sb.ToString();
+                _maximizedContentId = activeDoc.ContentId;
+
+                var content = activeDoc.Content;
+                var title = activeDoc.Title;
+                var contentId = activeDoc.ContentId;
+
+                var newRoot = new LayoutRoot();
+                var panel = new LayoutPanel { Orientation = System.Windows.Controls.Orientation.Horizontal };
+                var docPane = new LayoutDocumentPane();
+                var doc = new LayoutDocument
+                {
+                    Title = title,
+                    ContentId = contentId,
+                    Content = content,
+                    CanClose = false
+                };
+                docPane.Children.Add(doc);
+                panel.Children.Add(docPane);
+                newRoot.RootPanel = panel;
+                DockManager.Layout = newRoot;
+                doc.IsActive = true;
+
+                _isPanelMaximized = true;
+            }
+            else
+            {
+                var activeBrowser = _activePane;
+                var maxContentId = _maximizedContentId;
+
+                var serializer = new XmlLayoutSerializer(DockManager);
+                serializer.LayoutSerializationCallback += (sender, args) =>
+                {
+                    if (maxContentId != null && args.Model.ContentId == maxContentId && activeBrowser != null)
+                    {
+                        args.Content = activeBrowser;
+                        return;
+                    }
+                    var content = ResolveDockContent(args.Model.ContentId);
+                    if (content != null)
+                        args.Content = content;
+                    else
+                        args.Cancel = true;
+                };
+                using (var reader = XmlReader.Create(new StringReader(_savedLayoutXml)))
+                {
+                    serializer.Deserialize(reader);
+                }
+
+                _savedLayoutXml = null;
+                _maximizedContentId = null;
+                _isPanelMaximized = false;
+
+                if (activeBrowser != null)
+                    ActivatePane(activeBrowser);
+            }
         }
 
         private void UpdateMaximizeButton()
@@ -911,6 +989,11 @@ namespace Folderss
             else if (kb.Matches(e, "ShowSearch"))
             {
                 ShowSearchPanel();
+                e.Handled = true;
+            }
+            else if (kb.Matches(e, "PanelMaximize"))
+            {
+                TogglePanelMaximize();
                 e.Handled = true;
             }
         }
