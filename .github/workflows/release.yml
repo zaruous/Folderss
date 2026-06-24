@@ -25,6 +25,19 @@ jobs:
       - name: Setup MSBuild
         uses: microsoft/setup-msbuild@v2
 
+      - name: Set version from tag
+        shell: pwsh
+        run: |
+          $tag = "${{ github.ref_name }}".TrimStart('v')
+          $parts = $tag.Split('.')
+          while ($parts.Count -lt 4) { $parts += '0' }
+          $ver = $parts -join '.'
+          $file = "Folderss/Properties/AssemblyInfo.cs"
+          (Get-Content $file) `
+            -replace 'AssemblyVersion\("[^"]*"\)', "AssemblyVersion(`"$ver`")" `
+            -replace 'AssemblyFileVersion\("[^"]*"\)', "AssemblyFileVersion(`"$ver`")" |
+            Set-Content $file
+
       - name: Build Release
         run: msbuild Folderss/Folderss.csproj /p:Configuration=Release /p:Platform=AnyCPU /v:minimal
 
