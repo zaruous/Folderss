@@ -378,22 +378,18 @@ namespace Folderss
             addDocument.IsActiveChanged += AddPanelDocument_IsActiveChanged;
             addDocument.Title = "＋ 새 패널";
 
-            // "+" 탭이 이미 선택된 상태인 경우(세션 복원·F11 복원 직후 등)
-            // IsActive가 이미 true여서 IsActiveChanged가 발생하지 않으므로 즉시 처리
-            if (addDocument.IsSelected && !_openingPanelFromAddTab)
+            // "+" 탭이 이미 활성화된 상태(세션 복원·F11 복원 직후 등)이면
+            // IsActiveChanged가 재발화하지 않으므로, 인접 폴더 패널로 전환하여
+            // 다음 "+" 클릭 시 이벤트가 정상 발화하도록 초기화한다
+            if (addDocument.IsActive && !_openingPanelFromAddTab)
             {
-                _openingPanelFromAddTab = true;
-                Dispatcher.BeginInvoke(new Action(() =>
-                {
-                    try
-                    {
-                        AddFolderPanel(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
-                    }
-                    finally
-                    {
-                        _openingPanelFromAddTab = false;
-                    }
-                }), DispatcherPriority.Background);
+                var folderDoc = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocument>()
+                    .FirstOrDefault(d => d.ContentId != "add-folder-panel" && d.Content is FolderBrowser);
+                if (folderDoc != null)
+                    Dispatcher.BeginInvoke(
+                        new Action(() => folderDoc.IsActive = true),
+                        DispatcherPriority.Background);
             }
         }
 
