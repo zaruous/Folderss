@@ -44,6 +44,7 @@ namespace Folderss.Services
                 new KeyBindingEntry { CommandId = "SwitchPaneLeft",  DisplayName = "왼쪽 패널 전환",   Key = Key.Left,  Modifiers = ModifierKeys.Control | ModifierKeys.Shift },
                 new KeyBindingEntry { CommandId = "SwitchPaneRight", DisplayName = "오른쪽 패널 전환", Key = Key.Right, Modifiers = ModifierKeys.Control | ModifierKeys.Shift },
                 new KeyBindingEntry { CommandId = "ShowSearch",      DisplayName = "내용 검색",        Key = Key.F,     Modifiers = ModifierKeys.Control },
+                new KeyBindingEntry { CommandId = "PanelMaximize",  DisplayName = "패널 최대화 토글", Key = Key.F11 },
             };
         }
 

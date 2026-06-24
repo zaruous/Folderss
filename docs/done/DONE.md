@@ -4,6 +4,20 @@
 
 ---
 
+## v1.5.1 (2026-06-24)
+
+### F11 폴더 패널 최대화 토글
+
+- `KeyBindingService.cs` — `PanelMaximize` (F11) 기본 바인딩 추가.
+- `MainWindow.xaml.cs` — `TogglePanelMaximize()` 메서드 추가.
+  - 최대화 시: 현재 레이아웃 XML을 메모리에 저장 후 활성 패널만 남긴 최소 레이아웃으로 교체.
+  - 복원 시: 저장된 XML을 `XmlLayoutSerializer`로 역직렬화, 최대화됐던 FolderBrowser 인스턴스를 그대로 재연결(`_activePane` 참조 보존).
+  - `Window_PreviewKeyDown`에 `PanelMaximize` 분기 추가.
+- `MainWindow.xaml` — 상태바 힌트 텍스트에 "F11 패널최대화" 추가.
+- 사용: F11 → 현재 활성 폴더 패널이 DockManager 전체 영역을 점유. 다시 F11 → 원래 레이아웃 복원.
+
+---
+
 ## v1.5.0 (2026-06-23)
 
 ### 마크다운 뷰어 Phase 01–04 — 전체 구현
