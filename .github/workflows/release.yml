@@ -39,7 +39,7 @@ jobs:
             Set-Content $file
 
       - name: Build Release
-        run: msbuild Folderss/Folderss.csproj /p:Configuration=Release /p:Platform=AnyCPU /v:minimal
+        run: msbuild Folderss/Folderss.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:PlatformTarget=x64 /v:minimal
 
       - name: Create ZIP
         shell: pwsh
