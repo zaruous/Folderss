@@ -265,6 +265,8 @@ namespace Folderss
                 _maximizedContentId = null;
                 _isPanelMaximized = false;
 
+                EnsureAddPanelTab();
+
                 if (activeBrowser != null)
                     ActivatePane(activeBrowser);
             }
@@ -375,6 +377,24 @@ namespace Folderss
             addDocument.IsActiveChanged -= AddPanelDocument_IsActiveChanged;
             addDocument.IsActiveChanged += AddPanelDocument_IsActiveChanged;
             addDocument.Title = "＋ 새 패널";
+
+            // "+" 탭이 이미 선택된 상태인 경우(세션 복원·F11 복원 직후 등)
+            // IsActive가 이미 true여서 IsActiveChanged가 발생하지 않으므로 즉시 처리
+            if (addDocument.IsSelected && !_openingPanelFromAddTab)
+            {
+                _openingPanelFromAddTab = true;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    try
+                    {
+                        AddFolderPanel(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                    }
+                    finally
+                    {
+                        _openingPanelFromAddTab = false;
+                    }
+                }), DispatcherPriority.Background);
+            }
         }
 
         private void DockManager_LayoutChanged(object sender, EventArgs e)
