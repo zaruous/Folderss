@@ -12,6 +12,7 @@ namespace Folderss.Services
     {
         private const uint CmdFirst = 1;
         private const uint CmdLast = 0x7FFF;
+        private const uint CustomCmdBase = 0x8000;
         private const uint CmfNormal = 0;
         private const uint TpmReturnCmd = 0x0100;
         private const uint TpmRightButton = 0x0002;
@@ -21,8 +22,17 @@ namespace Folderss.Services
         private const int WmDrawItem = 0x002B;
         private const int WmMeasureItem = 0x002C;
         private const int WmMenuChar = 0x0120;
+        private const uint MfSeparator = 0x0800;
+        private const uint MfString = 0x0000;
 
-        public static void Show(IntPtr ownerHandle, IEnumerable<string> paths, int x, int y)
+        public struct CustomMenuItem
+        {
+            public string Label;
+            public Action Invoke;
+        }
+
+        public static void Show(IntPtr ownerHandle, IEnumerable<string> paths, int x, int y,
+            IList<CustomMenuItem> customItems = null)
         {
             var selectedPaths = paths
                 .Where(path => !string.IsNullOrWhiteSpace(path))
@@ -105,6 +115,14 @@ namespace Folderss.Services
 
                 ThrowIfFailed(contextMenu.QueryContextMenu(menuHandle, 0, CmdFirst, CmdLast, CmfNormal));
 
+                var customList = customItems != null ? customItems : new List<CustomMenuItem>();
+                if (customList.Count > 0)
+                {
+                    AppendMenu(menuHandle, MfSeparator, 0, null);
+                    for (int i = 0; i < customList.Count; i++)
+                        AppendMenu(menuHandle, MfString, CustomCmdBase + (uint)i, customList[i].Label);
+                }
+
                 using (var messageForwarder = new MenuMessageForwarder(ownerHandle, contextMenu))
                 {
                     var command = TrackPopupMenuEx(
@@ -115,8 +133,16 @@ namespace Folderss.Services
                         ownerHandle,
                         IntPtr.Zero);
 
-                    if (command >= CmdFirst)
+                    if (command >= CustomCmdBase)
+                    {
+                        var idx = (int)(command - CustomCmdBase);
+                        if (idx < customList.Count)
+                            customList[idx].Invoke?.Invoke();
+                    }
+                    else if (command >= CmdFirst)
+                    {
                         InvokeCommand(contextMenu, ownerHandle, command - CmdFirst, parentPath);
+                    }
                 }
             }
             finally
@@ -374,5 +400,9 @@ namespace Folderss.Services
             int y,
             IntPtr owner,
             IntPtr parameters);
+
+        [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        [return: MarshalAs(UnmanagedType.Bool)]
+        private static extern bool AppendMenu(IntPtr menu, uint flags, uint id, string text);
     }
 }

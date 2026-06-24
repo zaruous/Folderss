@@ -75,6 +75,9 @@
                     <ListBoxItem Tag="Viewers">
                         <TextBlock Text="뷰어"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="OpenWith">
+                        <TextBlock Text="열기 프로그램"/>
+                    </ListBoxItem>
                 </ListBox>
             </Border>
 
@@ -306,6 +309,159 @@
                                   DisplayMemberPath="DisplayName"/>
                         <Button Content="추가" Click="AddViewer_Click" Padding="12,4"/>
                     </StackPanel>
+                </Grid>
+
+                <!-- OpenWith panel -->
+                <Grid x:Name="OpenWithPanel" Margin="24,16" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Text="열기 프로그램"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="1"
+                               FontSize="11"
+                               Margin="0,0,0,12">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                <Setter Property="Text" Value="파일/폴더 우클릭 시 나타날 프로그램을 등록합니다. 확장자 마스크: * (전체), folder (폴더), .txt,.cs (특정 확장자)"/>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <ListView x:Name="OpenWithList"
+                              Grid.Row="2"
+                              SelectionMode="Single"
+                              BorderThickness="1"
+                              BorderBrush="{DynamicResource BorderBrush}"
+                              SelectionChanged="OpenWithList_SelectionChanged">
+                        <ListView.View>
+                            <GridView>
+                                <GridViewColumn Header="이름" Width="110" DisplayMemberBinding="{Binding Name}"/>
+                                <GridViewColumn Header="설명" Width="140" DisplayMemberBinding="{Binding Description}"/>
+                                <GridViewColumn Header="실행 파일" Width="180" DisplayMemberBinding="{Binding ExecutablePath}"/>
+                                <GridViewColumn Header="확장자 마스크" Width="120" DisplayMemberBinding="{Binding ExtensionMask}"/>
+                            </GridView>
+                        </ListView.View>
+                    </ListView>
+
+                    <!-- Edit form -->
+                    <Grid Grid.Row="3" Margin="0,10,0,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <Grid Grid.Row="0" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="이름" FontSize="11" Margin="0,0,0,3">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBox x:Name="OpenWithNameBox"
+                                         BorderBrush="{DynamicResource BorderBrush}"
+                                         Background="{DynamicResource ControlBackground}"
+                                         Foreground="{DynamicResource PrimaryText}"
+                                         Padding="6,4"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="설명" FontSize="11" Margin="0,0,0,3">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBox x:Name="OpenWithDescBox"
+                                         BorderBrush="{DynamicResource BorderBrush}"
+                                         Background="{DynamicResource ControlBackground}"
+                                         Foreground="{DynamicResource PrimaryText}"
+                                         Padding="6,4"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <Grid Grid.Row="1" Margin="0,0,0,6">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="160"/>
+                                <ColumnDefinition Width="16"/>
+                                <ColumnDefinition Width="140"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0">
+                                <TextBlock Text="실행 파일 경로" FontSize="11" Margin="0,0,0,3">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <DockPanel>
+                                    <Button Content="찾기"
+                                            DockPanel.Dock="Right"
+                                            Margin="4,0,0,0"
+                                            Padding="8,4"
+                                            Click="OpenWithBrowse_Click"/>
+                                    <TextBox x:Name="OpenWithExeBox"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             Background="{DynamicResource ControlBackground}"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             Padding="6,4"/>
+                                </DockPanel>
+                            </StackPanel>
+                            <StackPanel Grid.Column="2">
+                                <TextBlock Text="인수 ({0} = 경로)" FontSize="11" Margin="0,0,0,3">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBox x:Name="OpenWithArgsBox"
+                                         BorderBrush="{DynamicResource BorderBrush}"
+                                         Background="{DynamicResource ControlBackground}"
+                                         Foreground="{DynamicResource PrimaryText}"
+                                         Padding="6,4"/>
+                            </StackPanel>
+                            <StackPanel Grid.Column="4">
+                                <TextBlock Text="확장자 마스크" FontSize="11" Margin="0,0,0,3">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
+                                <TextBox x:Name="OpenWithMaskBox"
+                                         BorderBrush="{DynamicResource BorderBrush}"
+                                         Background="{DynamicResource ControlBackground}"
+                                         Foreground="{DynamicResource PrimaryText}"
+                                         Padding="6,4"/>
+                            </StackPanel>
+                        </Grid>
+
+                        <StackPanel Grid.Row="2" Orientation="Horizontal">
+                            <Button Content="새 항목" Click="OpenWithNew_Click" Padding="10,4" Margin="0,0,8,0"/>
+                            <Button Content="저장" Click="OpenWithSaveEntry_Click" Padding="10,4" Margin="0,0,8,0"/>
+                            <Button Content="삭제" Click="OpenWithDelete_Click" Padding="10,4"/>
+                        </StackPanel>
+                    </Grid>
                 </Grid>
 
                 <!-- Shortcuts panel -->

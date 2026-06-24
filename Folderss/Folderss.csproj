@@ -155,6 +155,7 @@
     <Compile Include="Viewers\MarkdownViewer.xaml.cs">
       <DependentUpon>MarkdownViewer.xaml</DependentUpon>
     </Compile>
+    <Compile Include="Services\OpenWithService.cs" />
     <Compile Include="Services\ViewerConfigService.cs" />
     <Content Include="Viewers\Resources\markdown-app.html">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
@@ -200,6 +201,7 @@
     </Content>
     <Compile Include="Models\FavoriteLocation.cs" />
     <Compile Include="Models\KeyBindingEntry.cs" />
+    <Compile Include="Models\OpenWithEntry.cs" />
     <Compile Include="Models\SearchResult.cs" />
     <Compile Include="Models\FileSystemItem.cs" />
     <Compile Include="Services\DockLayoutService.cs" />

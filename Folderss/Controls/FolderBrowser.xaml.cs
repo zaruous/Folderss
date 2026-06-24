@@ -678,6 +678,20 @@ namespace Folderss.Controls
             if (window == null)
                 return;
 
+            var matchingEntries = OpenWithService.GetMatchingEntries(selectedPaths);
+            var customItems = matchingEntries
+                .Select(entry =>
+                {
+                    var captured = entry;
+                    var capturedPaths = selectedPaths.ToList();
+                    return new ShellContextMenuService.CustomMenuItem
+                    {
+                        Label = "Open with " + entry.Name,
+                        Invoke = () => OpenWithService.Launch(captured, capturedPaths)
+                    };
+                })
+                .ToList();
+
             var screenPoint = PointToScreen(e.GetPosition(this));
             try
             {
@@ -685,7 +699,8 @@ namespace Folderss.Controls
                     new WindowInteropHelper(window).Handle,
                     selectedPaths,
                     (int)screenPoint.X,
-                    (int)screenPoint.Y);
+                    (int)screenPoint.Y,
+                    customItems.Count > 0 ? customItems : null);
             }
             catch (Exception exception)
             {

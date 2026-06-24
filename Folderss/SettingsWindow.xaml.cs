@@ -6,6 +6,7 @@ using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Microsoft.Win32;
 
 namespace Folderss
 {
@@ -36,6 +37,8 @@ namespace Folderss
         private readonly ViewerConfigService _viewerConfig;
         private readonly ObservableCollection<KeyBindingEntry> _workingBindings;
         private readonly ObservableCollection<ViewerMappingItem> _workingMappings;
+        private readonly ObservableCollection<OpenWithEntry> _workingOpenWith;
+        private string _editingOpenWithId;
         private bool _initializingTheme;
         private readonly AppTheme _originalTheme;
         public IReadOnlyList<ViewerOption> ViewerOptions { get; }
@@ -65,6 +68,9 @@ namespace Folderss
                         IsBuiltInDefault = row.IsBuiltInDefault
                     }));
 
+            _workingOpenWith = new ObservableCollection<OpenWithEntry>(
+                OpenWithService.GetAll().Select(e => e.Clone()));
+
             _originalTheme = ThemeManager.CurrentTheme;
 
             InitializeComponent();
@@ -72,7 +78,9 @@ namespace Folderss
 
             ShortcutList.ItemsSource = _workingBindings;
             ViewerMappingList.ItemsSource = _workingMappings;
+            OpenWithList.ItemsSource = _workingOpenWith;
             NewViewerCombo.SelectedValue = ViewerConfigService.SystemDefaultKey;
+            ClearOpenWithForm();
 
             _initializingTheme = true;
             BlackThemeRadio.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Black;
@@ -97,6 +105,7 @@ namespace Folderss
             ShortcutsPanel.Visibility = tag == "Shortcuts" ? Visibility.Visible : Visibility.Collapsed;
             ThemePanel.Visibility     = tag == "Theme"     ? Visibility.Visible : Visibility.Collapsed;
             ViewersPanel.Visibility   = tag == "Viewers"   ? Visibility.Visible : Visibility.Collapsed;
+            OpenWithPanel.Visibility  = tag == "OpenWith"  ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void AddViewer_Click(object sender, RoutedEventArgs e)
@@ -208,7 +217,101 @@ namespace Folderss
             foreach (var item in _workingMappings)
                 _viewerConfig.SetMapping(item.Extension, item.ViewerKey);
 
+            // Save open-with entries
+            OpenWithService.Save(_workingOpenWith);
+
             DialogResult = true;
+        }
+
+        private void OpenWithList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var entry = OpenWithList.SelectedItem as OpenWithEntry;
+            if (entry == null) return;
+            _editingOpenWithId = entry.Id;
+            OpenWithNameBox.Text = entry.Name;
+            OpenWithDescBox.Text = entry.Description;
+            OpenWithExeBox.Text = entry.ExecutablePath;
+            OpenWithArgsBox.Text = entry.Arguments;
+            OpenWithMaskBox.Text = entry.ExtensionMask;
+        }
+
+        private void OpenWithNew_Click(object sender, RoutedEventArgs e)
+        {
+            OpenWithList.SelectedItem = null;
+            ClearOpenWithForm();
+        }
+
+        private void OpenWithSaveEntry_Click(object sender, RoutedEventArgs e)
+        {
+            var name = OpenWithNameBox.Text.Trim();
+            var exe = OpenWithExeBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(exe))
+            {
+                MessageBox.Show("이름과 실행 파일 경로는 필수입니다.", "입력 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (_editingOpenWithId != null)
+            {
+                var existing = _workingOpenWith.FirstOrDefault(x => x.Id == _editingOpenWithId);
+                if (existing != null)
+                {
+                    existing.Name = name;
+                    existing.Description = OpenWithDescBox.Text.Trim();
+                    existing.ExecutablePath = exe;
+                    existing.Arguments = OpenWithArgsBox.Text;
+                    existing.ExtensionMask = string.IsNullOrWhiteSpace(OpenWithMaskBox.Text) ? "*" : OpenWithMaskBox.Text.Trim();
+                    // Refresh ListView
+                    var idx = _workingOpenWith.IndexOf(existing);
+                    _workingOpenWith.RemoveAt(idx);
+                    _workingOpenWith.Insert(idx, existing);
+                    OpenWithList.SelectedItem = existing;
+                    return;
+                }
+            }
+
+            var entry = new OpenWithEntry
+            {
+                Name = name,
+                Description = OpenWithDescBox.Text.Trim(),
+                ExecutablePath = exe,
+                Arguments = OpenWithArgsBox.Text,
+                ExtensionMask = string.IsNullOrWhiteSpace(OpenWithMaskBox.Text) ? "*" : OpenWithMaskBox.Text.Trim()
+            };
+            _workingOpenWith.Add(entry);
+            _editingOpenWithId = entry.Id;
+            OpenWithList.SelectedItem = entry;
+        }
+
+        private void OpenWithDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (_editingOpenWithId == null) return;
+            var existing = _workingOpenWith.FirstOrDefault(x => x.Id == _editingOpenWithId);
+            if (existing == null) return;
+            _workingOpenWith.Remove(existing);
+            ClearOpenWithForm();
+        }
+
+        private void OpenWithBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "실행 파일 선택",
+                Filter = "실행 파일 (*.exe)|*.exe|모든 파일 (*.*)|*.*",
+                CheckFileExists = true
+            };
+            if (dlg.ShowDialog(this) == true)
+                OpenWithExeBox.Text = dlg.FileName;
+        }
+
+        private void ClearOpenWithForm()
+        {
+            _editingOpenWithId = null;
+            OpenWithNameBox.Text = "";
+            OpenWithDescBox.Text = "";
+            OpenWithExeBox.Text = "";
+            OpenWithArgsBox.Text = "\"{0}\"";
+            OpenWithMaskBox.Text = "*";
         }
 
         private static string ToViewerDisplayName(string key)

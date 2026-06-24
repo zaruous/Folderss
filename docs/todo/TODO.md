@@ -1,5 +1,9 @@
 # TODO
 
+## Open With 컨텍스트 메뉴
+
+- [x] 선택한 파일/폴더 확장자 기반 Open with 컨텍스트 메뉴 기능 구현
+
 ## 마크다운 뷰어
 
 - [x] Phase 00 — 뷰어 프레임워크 스켈레톤 (IFileViewer, ViewerConfigService, ViewerHost, FolderBrowser 이벤트 연동)

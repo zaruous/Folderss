@@ -4,6 +4,19 @@
 
 ---
 
+## v1.6.0 (2026-06-24)
+
+### Open With 컨텍스트 메뉴
+
+- `Models/OpenWithEntry.cs` — 신규 모델. Id(GUID), Name, Description, ExecutablePath, Arguments(`{0}` = 경로), ExtensionMask(`*`/`folder`/`.txt,.cs`) 필드.
+- `Services/OpenWithService.cs` — 정적 서비스. XML 저장(`%LOCALAPPDATA%\Folderss\open-with.xml`). `GetMatchingEntries(paths)`: 경로 목록의 확장자와 마스크 매칭. `Launch(entry, paths)`: `{0}`을 공백 구분 따옴표 경로로 치환 후 `Process.Start`. `Save(entries)`: 설정 창에서 일괄 저장.
+- `Services/ShellContextMenuService.cs` — `Show()` 시그니처에 `IList<CustomMenuItem> customItems = null` 추가. `QueryContextMenu` 후 구분선 + 커스텀 항목(`MF_STRING`, ID 0x8000+) 삽입. `TrackPopupMenuEx` 반환값이 커스텀 범위이면 `Invoke()` 호출, 셸 범위이면 기존 `InvokeCommand` 호출.
+- `Controls/FolderBrowser.xaml.cs` — 우클릭 시 `OpenWithService.GetMatchingEntries()`로 매칭 항목 조회 후 `CustomMenuItem` 리스트 생성, `ShellContextMenuService.Show()`에 전달.
+- `SettingsWindow.xaml` — 좌측 네비에 "열기 프로그램" 탭 추가. OpenWithPanel 그리드: 항목 ListView + 인라인 편집 폼(이름/설명/실행파일/인수/마스크) + 새 항목·저장·삭제 버튼.
+- `SettingsWindow.xaml.cs` — `_workingOpenWith` ObservableCollection, 폼 CRUD 핸들러, 파일 찾기 다이얼로그(`Microsoft.Win32.OpenFileDialog`), 저장 시 `OpenWithService.Save()` 호출.
+
+---
+
 ## v1.5.1 (2026-06-24)
 
 ### F11 폴더 패널 최대화 토글
