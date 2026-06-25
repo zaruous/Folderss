@@ -327,12 +327,12 @@
                                Margin="0,0,0,4"/>
 
                     <TextBlock Grid.Row="1"
+                               Text="파일/폴더 우클릭 시 나타날 프로그램을 등록합니다. 확장자 마스크: * (전체), folder (폴더), .txt,.cs (특정 확장자)"
                                FontSize="11"
                                Margin="0,0,0,12">
                         <TextBlock.Style>
                             <Style TargetType="TextBlock">
                                 <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
-                                <Setter Property="Text" Value="파일/폴더 우클릭 시 나타날 프로그램을 등록합니다. 확장자 마스크: * (전체), folder (폴더), .txt,.cs (특정 확장자)"/>
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>

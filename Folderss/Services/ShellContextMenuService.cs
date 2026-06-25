@@ -118,9 +118,9 @@ namespace Folderss.Services
                 var customList = customItems != null ? customItems : new List<CustomMenuItem>();
                 if (customList.Count > 0)
                 {
-                    AppendMenu(menuHandle, MfSeparator, 0, null);
+                    AppendMenu(menuHandle, MfSeparator, UIntPtr.Zero, null);
                     for (int i = 0; i < customList.Count; i++)
-                        AppendMenu(menuHandle, MfString, CustomCmdBase + (uint)i, customList[i].Label);
+                        AppendMenu(menuHandle, MfString, new UIntPtr(CustomCmdBase + (uint)i), customList[i].Label);
                 }
 
                 using (var messageForwarder = new MenuMessageForwarder(ownerHandle, contextMenu))
@@ -403,6 +403,6 @@ namespace Folderss.Services
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool AppendMenu(IntPtr menu, uint flags, uint id, string text);
+        private static extern bool AppendMenu(IntPtr menu, uint flags, UIntPtr id, string text);
     }
 }
