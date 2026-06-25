@@ -143,9 +143,54 @@ namespace Folderss
 
         private void MainMenuButton_Click(object sender, RoutedEventArgs e)
         {
+            PopulateOpenWithMenu();
             MainContextMenu.PlacementTarget = MainMenuButton;
             MainContextMenu.Placement = PlacementMode.Bottom;
             MainContextMenu.IsOpen = true;
+        }
+
+        private void PopulateOpenWithMenu()
+        {
+            var selected = ActivePane?.SelectedItems?.ToList();
+            List<string> paths;
+            if (selected != null && selected.Count > 0)
+                paths = selected.Select(item => item.FullPath).ToList();
+            else if (!string.IsNullOrEmpty(ActivePane?.CurrentPath))
+                paths = new List<string> { ActivePane.CurrentPath };
+            else
+                paths = new List<string>();
+
+            OpenWithMenuItem.Items.Clear();
+
+            if (paths.Count == 0)
+            {
+                OpenWithSeparator.Visibility = System.Windows.Visibility.Collapsed;
+                OpenWithMenuItem.Visibility = System.Windows.Visibility.Collapsed;
+                return;
+            }
+
+            var entries = OpenWithService.GetMatchingEntries(paths);
+
+            if (entries.Count == 0)
+            {
+                OpenWithSeparator.Visibility = System.Windows.Visibility.Collapsed;
+                OpenWithMenuItem.Visibility = System.Windows.Visibility.Collapsed;
+                return;
+            }
+
+            OpenWithSeparator.Visibility = System.Windows.Visibility.Visible;
+            OpenWithMenuItem.Visibility = System.Windows.Visibility.Visible;
+
+            var capturedPaths = paths.ToList();
+            foreach (var entry in entries)
+            {
+                var captured = entry;
+                var item = new System.Windows.Controls.MenuItem { Header = entry.Name };
+                if (!string.IsNullOrWhiteSpace(entry.Description))
+                    item.ToolTip = entry.Description;
+                item.Click += (s, args) => OpenWithService.Launch(captured, capturedPaths);
+                OpenWithMenuItem.Items.Add(item);
+            }
         }
 
         private void TitleBar_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)

@@ -83,6 +83,8 @@
                             <Separator/>
                             <MenuItem Header="이름 변경" InputGestureText="F2" Click="Rename_Click"/>
                             <MenuItem Header="휴지통으로 이동" InputGestureText="Delete" Click="Delete_Click"/>
+                            <Separator x:Name="OpenWithSeparator" Visibility="Collapsed"/>
+                            <MenuItem x:Name="OpenWithMenuItem" Header="다음으로 열기" Visibility="Collapsed"/>
                             <Separator/>
                             <MenuItem Header="새로 고침" InputGestureText="Ctrl+R" Click="Refresh_Click"/>
                             <MenuItem Header="보기">
