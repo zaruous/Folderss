@@ -24,6 +24,7 @@ namespace Folderss.Services
         private const int WmMenuChar = 0x0120;
         private const uint MfSeparator = 0x0800;
         private const uint MfString = 0x0000;
+        private const uint MfByPosition = 0x0400;
 
         public struct CustomMenuItem
         {
@@ -118,9 +119,10 @@ namespace Folderss.Services
                 var customList = customItems != null ? customItems : new List<CustomMenuItem>();
                 if (customList.Count > 0)
                 {
-                    AppendMenu(menuHandle, MfSeparator, UIntPtr.Zero, null);
+                    // Insert at the TOP so items are immediately visible without scrolling
                     for (int i = 0; i < customList.Count; i++)
-                        AppendMenu(menuHandle, MfString, new UIntPtr(CustomCmdBase + (uint)i), customList[i].Label);
+                        InsertMenu(menuHandle, (uint)i, MfByPosition | MfString, new UIntPtr(CustomCmdBase + (uint)i), customList[i].Label);
+                    InsertMenu(menuHandle, (uint)customList.Count, MfByPosition | MfSeparator, UIntPtr.Zero, null);
                 }
 
                 using (var messageForwarder = new MenuMessageForwarder(ownerHandle, contextMenu))
@@ -403,6 +405,6 @@ namespace Folderss.Services
 
         [DllImport("user32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         [return: MarshalAs(UnmanagedType.Bool)]
-        private static extern bool AppendMenu(IntPtr menu, uint flags, UIntPtr id, string text);
+        private static extern bool InsertMenu(IntPtr menu, uint position, uint flags, UIntPtr id, string text);
     }
 }
