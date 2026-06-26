@@ -14,6 +14,7 @@ namespace Folderss.Controls
 
         public event EventHandler<string> TitleChanged;
         public event EventHandler<bool> ModifiedChanged;
+        public event EventHandler<string> FileOpenRequested;
 
         public ViewerHost(ViewerConfigService viewerConfig)
         {
@@ -39,6 +40,9 @@ namespace Folderss.Controls
             _currentViewer = viewer;
             viewer.TitleChanged += Viewer_TitleChanged;
             viewer.ModifiedChanged += Viewer_ModifiedChanged;
+            var fileOpenRequester = viewer as IFileOpenRequester;
+            if (fileOpenRequester != null)
+                fileOpenRequester.FileOpenRequested += Viewer_FileOpenRequested;
             viewer.Load(filePath);
             viewer.ApplyTheme(ThemeManager.CurrentTheme);
             HostContent.Content = viewer.View;
@@ -56,6 +60,9 @@ namespace Folderss.Controls
 
             _currentViewer.TitleChanged -= Viewer_TitleChanged;
             _currentViewer.ModifiedChanged -= Viewer_ModifiedChanged;
+            var fileOpenRequester = _currentViewer as IFileOpenRequester;
+            if (fileOpenRequester != null)
+                fileOpenRequester.FileOpenRequested -= Viewer_FileOpenRequested;
             HostContent.Content = null;
             _currentViewer = null;
         }
@@ -72,6 +79,13 @@ namespace Folderss.Controls
             var handler = ModifiedChanged;
             if (handler != null)
                 handler(this, modified);
+        }
+
+        private void Viewer_FileOpenRequested(object sender, string filePath)
+        {
+            var handler = FileOpenRequested;
+            if (handler != null)
+                handler(this, filePath);
         }
     }
 }

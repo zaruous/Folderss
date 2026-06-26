@@ -17,6 +17,11 @@ namespace Folderss.Viewers
         event EventHandler<bool>   ModifiedChanged;
     }
 
+    public interface IFileOpenRequester
+    {
+        event EventHandler<string> FileOpenRequested;
+    }
+
     [Flags]
     public enum ViewerCapabilities
     {

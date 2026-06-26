@@ -27,6 +27,16 @@ namespace Folderss.Controls
             FavoritesTree.ItemsSource = _configuration.Groups;
         }
 
+        public bool CopySelectedFavoritePath()
+        {
+            var favorite = FavoritesTree.SelectedItem as FavoriteLocation;
+            if (favorite == null)
+                return false;
+
+            Clipboard.SetText(favorite.Path);
+            return true;
+        }
+
         public bool AddFavorite(string path, string displayName = null)
         {
             if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
@@ -108,6 +118,8 @@ namespace Folderss.Controls
             _dragStartPoint = e.GetPosition(FavoritesTree);
             var container = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
             _draggedFavorite = container == null ? null : container.DataContext as FavoriteLocation;
+            if (container != null)
+                container.Focus();
         }
 
         private void FavoritesTree_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -368,13 +380,10 @@ namespace Folderss.Controls
                 e.Handled = true;
             }
             else if (e.Key == Key.C &&
-                (Keyboard.Modifiers & ModifierKeys.Control) != 0 &&
-                (Keyboard.Modifiers & ModifierKeys.Shift) != 0)
+                (Keyboard.Modifiers & ModifierKeys.Control) != 0)
             {
-                var favorite = FavoritesTree.SelectedItem as FavoriteLocation;
-                if (favorite != null)
+                if (CopySelectedFavoritePath())
                 {
-                    Clipboard.SetText(favorite.Path);
                     e.Handled = true;
                 }
             }

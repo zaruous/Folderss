@@ -9,7 +9,7 @@ using WinForms = System.Windows.Forms;
 
 namespace Folderss.Viewers
 {
-    public partial class MarkdownViewer : UserControl, IFileViewer
+    public partial class MarkdownViewer : UserControl, IFileViewer, IFileOpenRequester
     {
         private const long LargeMarkdownBytes = 5L * 1024 * 1024;
 
@@ -32,6 +32,7 @@ namespace Folderss.Viewers
 
         public event EventHandler<string> TitleChanged;
         public event EventHandler<bool> ModifiedChanged;
+        public event EventHandler<string> FileOpenRequested;
 
         public MarkdownViewer()
         {
@@ -132,8 +133,9 @@ namespace Folderss.Viewers
 
                 case "open-link":
                     var uri = ExtractJsonString(json, "uri");
-                    if (uri != null)
-                        HandleLinkClick(uri);
+                    var href = ExtractJsonString(json, "href");
+                    if (uri != null || href != null)
+                        HandleLinkClick(uri, href);
                     break;
             }
         }
@@ -231,27 +233,41 @@ namespace Folderss.Viewers
             }
         }
 
-        private void HandleLinkClick(string uri)
+        private void HandleLinkClick(string uri, string href)
         {
             try
             {
-                var u = new Uri(uri);
+                var link = string.IsNullOrWhiteSpace(href) ? uri : href;
+                if (string.IsNullOrWhiteSpace(link) || link.StartsWith("#", StringComparison.Ordinal))
+                    return;
+
+                var path = ResolveLocalLinkPath(link);
+                if (path != null)
+                {
+                    var ext = Path.GetExtension(path);
+                    if ((ext.Equals(".md", StringComparison.OrdinalIgnoreCase) ||
+                         ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) &&
+                        File.Exists(path))
+                    {
+                        var handler = FileOpenRequested;
+                        if (handler != null)
+                            handler(this, path);
+                        return;
+                    }
+
+                    if (File.Exists(path) || Directory.Exists(path))
+                    {
+                        System.Diagnostics.Process.Start(
+                            new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
+                        return;
+                    }
+                }
+
+                var u = new Uri(uri ?? link);
                 if (u.Scheme == "http" || u.Scheme == "https")
                 {
                     System.Diagnostics.Process.Start(
                         new System.Diagnostics.ProcessStartInfo(uri) { UseShellExecute = true });
-                }
-                else if (u.Scheme == "file")
-                {
-                    var path = u.LocalPath;
-                    if (Path.GetExtension(path).Equals(".md", StringComparison.OrdinalIgnoreCase) ||
-                        Path.GetExtension(path).Equals(".markdown", StringComparison.OrdinalIgnoreCase))
-                    {
-                        // Raise to parent via TitleChanged trick is not clean; use postMessage roundtrip
-                        // For now open in OS handler
-                        System.Diagnostics.Process.Start(
-                            new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
-                    }
                 }
             }
             catch { }
@@ -310,6 +326,48 @@ namespace Folderss.Viewers
             }
             sb.Append('"');
             return sb.ToString();
+        }
+
+        private string ResolveLocalLinkPath(string link)
+        {
+            var pathPart = StripFragmentAndQuery(link);
+            if (string.IsNullOrWhiteSpace(pathPart))
+                return null;
+
+            var unescapedPath = Uri.UnescapeDataString(pathPart);
+            if (Path.IsPathRooted(unescapedPath))
+                return Path.GetFullPath(unescapedPath);
+
+            Uri absoluteUri;
+            if (Uri.TryCreate(pathPart, UriKind.Absolute, out absoluteUri))
+            {
+                if (absoluteUri.Scheme == "file")
+                    return absoluteUri.LocalPath;
+                return null;
+            }
+
+            pathPart = unescapedPath.Replace('/', Path.DirectorySeparatorChar);
+
+            if (string.IsNullOrWhiteSpace(_filePath))
+                return null;
+
+            var baseDir = Path.GetDirectoryName(_filePath);
+            if (string.IsNullOrWhiteSpace(baseDir))
+                return null;
+
+            return Path.GetFullPath(Path.Combine(baseDir, pathPart));
+        }
+
+        private static string StripFragmentAndQuery(string value)
+        {
+            var end = value.Length;
+            var hash = value.IndexOf('#');
+            if (hash >= 0 && hash < end)
+                end = hash;
+            var query = value.IndexOf('?');
+            if (query >= 0 && query < end)
+                end = query;
+            return value.Substring(0, end);
         }
 
         // Minimal JSON string extractor — no external deps

@@ -422,6 +422,7 @@ namespace Folderss
             addDocument.IsActiveChanged -= AddPanelDocument_IsActiveChanged;
             addDocument.IsActiveChanged += AddPanelDocument_IsActiveChanged;
             addDocument.Title = "＋ 새 패널";
+            MoveAddPanelTabToEnd();
 
             // If the add tab is already active after layout restore, IsActiveChanged
             // will not fire on the next click. Move focus back to a folder tab first.
@@ -472,6 +473,21 @@ namespace Folderss
                 .FirstOrDefault(document => document.ContentId == "add-folder-panel");
         }
 
+        private void MoveAddPanelTabToEnd()
+        {
+            var addDocument = GetAddPanelDocument();
+            var pane = addDocument == null ? null : addDocument.Parent as LayoutDocumentPane;
+            if (pane == null)
+                return;
+
+            var index = pane.IndexOfChild(addDocument);
+            if (index < 0 || index == pane.ChildrenCount - 1)
+                return;
+
+            pane.RemoveChild(addDocument);
+            pane.Children.Add(addDocument);
+        }
+
         private void AddPanelDocument_IsActiveChanged(object sender, EventArgs e)
         {
             var addDocument = sender as LayoutDocument;
@@ -513,6 +529,11 @@ namespace Folderss
 
         private void Browser_FileOpenRequested(object sender, string filePath)
         {
+            OpenViewerTab(filePath);
+        }
+
+        private void OpenViewerTab(string filePath)
+        {
             var viewerHost = new ViewerHost(_viewerConfigService);
             if (!viewerHost.CanOpen(filePath))
             {
@@ -541,6 +562,7 @@ namespace Folderss
                 if (doc != null)
                     doc.Title = title;
             };
+            viewerHost.FileOpenRequested += (s, requestedPath) => OpenViewerTab(requestedPath);
 
             var fileName = Path.GetFileName(filePath);
             var document = new LayoutDocument
@@ -550,7 +572,15 @@ namespace Folderss
                 Content = viewerHost,
                 CanClose = true
             };
-            pane.InsertChildAt(pane.ChildrenCount, document);
+            var addDocument = GetAddPanelDocument();
+            var insertIndex = addDocument != null && ReferenceEquals(addDocument.Parent, pane)
+                ? pane.IndexOfChild(addDocument)
+                : pane.ChildrenCount;
+            if (insertIndex < 0)
+                insertIndex = pane.ChildrenCount;
+
+            pane.InsertChildAt(insertIndex, document);
+            MoveAddPanelTabToEnd();
             document.IsActive = true;
 
             viewerHost.OpenFile(filePath);
@@ -1006,6 +1036,11 @@ namespace Folderss
             else if (kb.Matches(e, "CopyClipboard"))
             {
                 if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
+                if (FavoritesPanel.IsKeyboardFocusWithin && FavoritesPanel.CopySelectedFavoritePath())
+                {
+                    e.Handled = true;
+                    return;
+                }
                 CopyToClipboard();
                 e.Handled = true;
             }
