@@ -310,6 +310,8 @@ namespace Folderss
                 _maximizedContentId = null;
                 _isPanelMaximized = false;
 
+                EnsureAddPanelTab();
+
                 if (activeBrowser != null)
                     ActivatePane(activeBrowser);
             }
@@ -420,6 +422,19 @@ namespace Folderss
             addDocument.IsActiveChanged -= AddPanelDocument_IsActiveChanged;
             addDocument.IsActiveChanged += AddPanelDocument_IsActiveChanged;
             addDocument.Title = "＋ 새 패널";
+
+            // If the add tab is already active after layout restore, IsActiveChanged
+            // will not fire on the next click. Move focus back to a folder tab first.
+            if (addDocument.IsActive && !_openingPanelFromAddTab)
+            {
+                var folderDoc = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocument>()
+                    .FirstOrDefault(d => d.ContentId != "add-folder-panel" && d.Content is FolderBrowser);
+                if (folderDoc != null)
+                    Dispatcher.BeginInvoke(
+                        new Action(() => folderDoc.IsActive = true),
+                        DispatcherPriority.Background);
+            }
         }
 
         private void DockManager_LayoutChanged(object sender, EventArgs e)

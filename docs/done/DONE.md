@@ -19,6 +19,12 @@
 
 ## v1.5.1 (2026-06-24)
 
+### "+" 새 패널 탭 클릭 시 빈 화면 버그 수정
+
+- `MainWindow.xaml.cs` — `TogglePanelMaximize()` F11 복원 경로에 `EnsureAddPanelTab()` 호출 추가. `XmlLayoutSerializer.Deserialize()` 이후 "+" 탭 이벤트 핸들러가 소실될 수 있는 상태를 보정.
+- `MainWindow.xaml.cs` — `EnsureAddPanelTab()` 내부에서 "+" 탭이 이미 `IsActive=true`인 경우 인접 폴더 패널로 포커스를 전환. 다음 "+" 클릭 시 `IsActiveChanged`가 정상 발화하도록 초기화.
+- 재현 경로: F11 최대화 후 복원 또는 "+" 탭이 활성화된 상태의 세션 복원 이후 "+" 클릭 시 빈 화면이 나올 수 있는 케이스.
+
 ### F11 폴더 패널 최대화 토글
 
 - `KeyBindingService.cs` — `PanelMaximize` (F11) 기본 바인딩 추가.
