@@ -22,6 +22,11 @@ namespace Folderss.Viewers
         event EventHandler<string> FileOpenRequested;
     }
 
+    public interface IViewerActivationAware
+    {
+        void SetActive(bool isActive);
+    }
+
     [Flags]
     public enum ViewerCapabilities
     {

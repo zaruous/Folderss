@@ -97,7 +97,7 @@ Folderss/
 
 | 뷰어 | 기본 확장자 | 주요 기능 |
 |---|---|---|
-| Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기, TOC, front matter 표시, Mermaid, KaTeX, HTML/PDF 내보내기 |
+| Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기, 활성 탭 중심 파일 변경 자동 반영, TOC, front matter 표시, Mermaid, KaTeX, HTML/PDF 내보내기 |
 | Monaco | `.json`, `.xml` | Monaco Editor 기반 편집, 구문 강조, 대용량 파일 모드 |
 | Text | 사용자 매핑 | 읽기 전용 텍스트 보기와 구문 강조 |
 

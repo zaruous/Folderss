@@ -75,6 +75,8 @@ namespace Folderss
             var restored = DockLayoutService.Restore(DockManager, ResolveDockContent);
             if (!restored)
                 RestoreAdditionalPanels(_sessionState.OpenFolderPaths);
+            else
+                AttachRestoredViewerDocuments();
 
             EnsureAddPanelTab();
             DockManager.LayoutChanged += DockManager_LayoutChanged;
@@ -336,8 +338,26 @@ namespace Folderss
                 return RightPane;
             if (contentId == "add-folder-panel")
                 return new System.Windows.Controls.Grid();
+            if (string.IsNullOrWhiteSpace(contentId))
+                return null;
+
+            const string viewerPrefix = "viewer|";
+            if (contentId.StartsWith(viewerPrefix, StringComparison.Ordinal))
+            {
+                var filePath = Uri.UnescapeDataString(contentId.Substring(viewerPrefix.Length));
+                if (!File.Exists(filePath))
+                    return null;
+
+                var viewerHost = CreateViewerHost(filePath, false);
+                if (viewerHost == null)
+                    return null;
+
+                viewerHost.OpenFile(filePath);
+                return viewerHost;
+            }
+
             const string prefix = "folder-panel|";
-            if (string.IsNullOrWhiteSpace(contentId) || !contentId.StartsWith(prefix, StringComparison.Ordinal))
+            if (!contentId.StartsWith(prefix, StringComparison.Ordinal))
                 return null;
 
             var separatorIndex = contentId.IndexOf('|', prefix.Length);
@@ -370,6 +390,9 @@ namespace Folderss
 
         private void AddFolderPanel(string path)
         {
+            if (TryActivateExistingFolderDocument(path))
+                return;
+
             var addDocument = GetAddPanelDocument();
             var pane = addDocument == null
                 ? DockManager.Layout.Descendents().OfType<LayoutDocumentPane>().FirstOrDefault()
@@ -534,8 +557,11 @@ namespace Folderss
 
         private void OpenViewerTab(string filePath)
         {
-            var viewerHost = new ViewerHost(_viewerConfigService);
-            if (!viewerHost.CanOpen(filePath))
+            if (TryActivateExistingViewerDocument(filePath))
+                return;
+
+            var viewerHost = CreateViewerHost(filePath, true);
+            if (viewerHost == null)
             {
                 try
                 {
@@ -552,17 +578,10 @@ namespace Folderss
             var pane = DockManager.Layout.Descendents()
                 .OfType<LayoutDocumentPane>().FirstOrDefault();
             if (pane == null)
-                return;
-
-            viewerHost.TitleChanged += (s, title) =>
             {
-                var doc = DockManager.Layout.Descendents()
-                    .OfType<LayoutDocument>()
-                    .FirstOrDefault(d => ReferenceEquals(d.Content, s));
-                if (doc != null)
-                    doc.Title = title;
-            };
-            viewerHost.FileOpenRequested += (s, requestedPath) => OpenViewerTab(requestedPath);
+                viewerHost.Dispose();
+                return;
+            }
 
             var fileName = Path.GetFileName(filePath);
             var document = new LayoutDocument
@@ -572,6 +591,7 @@ namespace Folderss
                 Content = viewerHost,
                 CanClose = true
             };
+            AttachViewerDocument(document, viewerHost);
             var addDocument = GetAddPanelDocument();
             var insertIndex = addDocument != null && ReferenceEquals(addDocument.Parent, pane)
                 ? pane.IndexOfChild(addDocument)
@@ -582,8 +602,137 @@ namespace Folderss
             pane.InsertChildAt(insertIndex, document);
             MoveAddPanelTabToEnd();
             document.IsActive = true;
+            viewerHost.SetActive(document.IsActive);
 
             viewerHost.OpenFile(filePath);
+        }
+
+        private ViewerHost CreateViewerHost(string filePath, bool isActive)
+        {
+            var viewerHost = new ViewerHost(_viewerConfigService);
+            if (!viewerHost.CanOpen(filePath))
+                return null;
+
+            viewerHost.SetActive(isActive);
+            viewerHost.TitleChanged += (s, title) =>
+            {
+                var doc = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocument>()
+                    .FirstOrDefault(d => ReferenceEquals(d.Content, s));
+                if (doc != null)
+                    doc.Title = title;
+            };
+            viewerHost.FileOpenRequested += (s, requestedPath) => OpenViewerTab(requestedPath);
+            return viewerHost;
+        }
+
+        private void AttachViewerDocument(LayoutDocument document, ViewerHost viewerHost)
+        {
+            document.IsActiveChanged += (s, e) => viewerHost.SetActive(document.IsActive);
+            document.Closed += (s, e) => DisposeDocumentContent(document);
+        }
+
+        private void AttachRestoredViewerDocuments()
+        {
+            foreach (var document in DockManager.Layout.Descendents().OfType<LayoutDocument>())
+            {
+                var viewerHost = document.Content as ViewerHost;
+                if (viewerHost == null)
+                    continue;
+
+                AttachViewerDocument(document, viewerHost);
+                viewerHost.SetActive(document.IsActive);
+            }
+        }
+
+        private bool TryActivateExistingFolderDocument(string path)
+        {
+            var normalizedPath = NormalizeDirectoryPath(path);
+            if (normalizedPath == null)
+                return false;
+
+            foreach (var document in GetAllLayoutDocuments())
+            {
+                var browser = document.Content as FolderBrowser;
+                if (browser == null)
+                    continue;
+
+                var currentPath = NormalizeDirectoryPath(browser.CurrentPath);
+                if (!string.Equals(currentPath, normalizedPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                document.IsActive = true;
+                ActivatePane(browser);
+                return true;
+            }
+
+            return false;
+        }
+
+        private bool TryActivateExistingViewerDocument(string filePath)
+        {
+            var normalizedPath = NormalizeFilePath(filePath);
+            if (normalizedPath == null)
+                return false;
+
+            foreach (var document in GetAllLayoutDocuments())
+            {
+                var existingPath = GetViewerPathFromContentId(document.ContentId);
+                if (existingPath == null)
+                    continue;
+
+                if (!string.Equals(NormalizeFilePath(existingPath), normalizedPath, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                document.IsActive = true;
+                var viewerHost = document.Content as ViewerHost;
+                if (viewerHost != null)
+                    viewerHost.SetActive(true);
+                return true;
+            }
+
+            return false;
+        }
+
+        private IEnumerable<LayoutDocument> GetAllLayoutDocuments()
+        {
+            var docked = DockManager.Layout.Descendents().OfType<LayoutDocument>();
+            var floating = DockManager.Layout.FloatingWindows
+                .SelectMany(window => window.Descendents().OfType<LayoutDocument>());
+            return docked.Concat(floating).Distinct();
+        }
+
+        private static string GetViewerPathFromContentId(string contentId)
+        {
+            const string prefix = "viewer|";
+            if (string.IsNullOrWhiteSpace(contentId) || !contentId.StartsWith(prefix, StringComparison.Ordinal))
+                return null;
+
+            return Uri.UnescapeDataString(contentId.Substring(prefix.Length));
+        }
+
+        private static string NormalizeFilePath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+
+            try
+            {
+                return Path.GetFullPath(path);
+            }
+            catch
+            {
+                return null;
+            }
+        }
+
+        private static string NormalizeDirectoryPath(string path)
+        {
+            var normalizedPath = NormalizeFilePath(path);
+            if (normalizedPath == null)
+                return null;
+
+            return normalizedPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
         private void FolderBrowser_PathChanged(object sender, EventArgs e)
@@ -654,6 +803,8 @@ namespace Folderss
                 }
                 return;
             }
+
+            DisposeAllDisposableDocumentContent();
 
             _trayIcon?.Dispose();
             _trayIcon = null;
@@ -1533,6 +1684,19 @@ namespace Folderss
             var idx = siblings.IndexOf(target);
             foreach (var doc in siblings.Skip(idx + 1).Where(d => d.CanClose).ToList())
                 doc.Close();
+        }
+
+        private void DisposeAllDisposableDocumentContent()
+        {
+            foreach (var doc in DockManager.Layout.Descendents().OfType<LayoutDocument>().ToList())
+                DisposeDocumentContent(doc);
+        }
+
+        private static void DisposeDocumentContent(LayoutDocument document)
+        {
+            var disposable = document == null ? null : document.Content as IDisposable;
+            if (disposable != null)
+                disposable.Dispose();
         }
 
         private static T FindVisualAncestor<T>(DependencyObject element) where T : DependencyObject

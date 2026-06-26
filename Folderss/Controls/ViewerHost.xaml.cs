@@ -7,10 +7,11 @@ using System.Windows.Controls;
 
 namespace Folderss.Controls
 {
-    public partial class ViewerHost : UserControl
+    public partial class ViewerHost : UserControl, IDisposable
     {
         private readonly ViewerConfigService _viewerConfig;
         private IFileViewer _currentViewer;
+        private bool _isActive = true;
 
         public event EventHandler<string> TitleChanged;
         public event EventHandler<bool> ModifiedChanged;
@@ -45,7 +46,18 @@ namespace Folderss.Controls
                 fileOpenRequester.FileOpenRequested += Viewer_FileOpenRequested;
             viewer.Load(filePath);
             viewer.ApplyTheme(ThemeManager.CurrentTheme);
+            var activationAware = viewer as IViewerActivationAware;
+            if (activationAware != null)
+                activationAware.SetActive(_isActive);
             HostContent.Content = viewer.View;
+        }
+
+        public void SetActive(bool isActive)
+        {
+            _isActive = isActive;
+            var activationAware = _currentViewer as IViewerActivationAware;
+            if (activationAware != null)
+                activationAware.SetActive(isActive);
         }
 
         public void ApplyTheme(AppTheme theme)
@@ -63,8 +75,16 @@ namespace Folderss.Controls
             var fileOpenRequester = _currentViewer as IFileOpenRequester;
             if (fileOpenRequester != null)
                 fileOpenRequester.FileOpenRequested -= Viewer_FileOpenRequested;
+            var disposable = _currentViewer as IDisposable;
+            if (disposable != null)
+                disposable.Dispose();
             HostContent.Content = null;
             _currentViewer = null;
+        }
+
+        public void Dispose()
+        {
+            DetachCurrentViewer();
         }
 
         private void Viewer_TitleChanged(object sender, string title)

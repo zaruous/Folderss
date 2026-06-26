@@ -4,6 +4,22 @@
 
 ---
 
+## v1.6.1 (2026-06-27)
+
+### Markdown 뷰어 파일 변경 자동 반영
+
+- `MarkdownViewer.xaml.cs` — `FileSystemWatcher`와 300ms 디바운스를 추가해 열린 Markdown 파일이 외부에서 변경되면 디스크 내용을 다시 읽고 WebView 뷰어에 반영.
+- `MarkdownViewer.xaml.cs`, `ViewerHost.xaml.cs`, `MainWindow.xaml.cs` — 비활성 Markdown 탭은 변경 감지만 기록하고, 탭이 활성화될 때 한 번만 재로드/재렌더링하도록 최적화.
+- `markdown-app.html` — 현재 보기 모드를 유지하면서 내용만 교체하는 `app.reloadContent()` API 추가.
+- `MainWindow.xaml.cs` — 저장된 AvalonDock 레이아웃의 `viewer|...` ContentId를 복원해 프로그램 재실행 후 Markdown 뷰어 탭이 다시 열리도록 처리.
+- `MainWindow.xaml.cs` — 이미 열린 폴더 패널이나 파일 뷰어를 다시 열 때 중복 탭을 만들지 않고 기존 탭으로 포커스 이동.
+- `ViewerHost.xaml.cs` — 뷰어 교체/닫기 시 `IDisposable` 뷰어를 정리해 파일 감시자가 남지 않도록 처리.
+- `MainWindow.xaml.cs` — Markdown 뷰어 탭 닫기와 실제 앱 종료 시 뷰어 리소스를 정리하도록 처리.
+- `markdown-app.html` — 목차의 하단 항목 클릭 시 미리보기 스크롤 컨테이너 기준으로 이동하고, 마지막 헤딩도 상단 근처까지 스크롤될 수 있도록 하단 여유 공간과 TOC 활성 표시 기준을 보정.
+- README와 아키텍처 문서에 Markdown 뷰어 파일 변경 자동 반영 기능을 반영.
+
+---
+
 ## v1.6.0 (2026-06-24)
 
 ### 문서 정리

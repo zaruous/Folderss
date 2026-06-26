@@ -5,11 +5,12 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
 
 namespace Folderss.Viewers
 {
-    public partial class MarkdownViewer : UserControl, IFileViewer, IFileOpenRequester
+    public partial class MarkdownViewer : UserControl, IFileViewer, IFileOpenRequester, IViewerActivationAware, IDisposable
     {
         private const long LargeMarkdownBytes = 5L * 1024 * 1024;
 
@@ -23,6 +24,12 @@ namespace Folderss.Viewers
         private bool _webViewReady;
         private bool _modified;
         private bool _largeFileMode;
+        private FileSystemWatcher _fileWatcher;
+        private readonly DispatcherTimer _fileReloadTimer;
+        private string _lastLoadedContent;
+        private bool _disposed;
+        private bool _isActive = true;
+        private bool _pendingExternalReload;
 
         private string _pendingContent;
 
@@ -37,6 +44,11 @@ namespace Folderss.Viewers
         public MarkdownViewer()
         {
             InitializeComponent();
+            _fileReloadTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+            _fileReloadTimer.Tick += OnFileReloadTimerTick;
             Loaded += OnLoaded;
         }
 
@@ -142,12 +154,17 @@ namespace Folderss.Viewers
 
         public void Load(string filePath)
         {
+            StopFileWatcher();
+
             _filePath = filePath;
             _encoding = DetectEncoding(filePath);
             _largeFileMode = new FileInfo(filePath).Length > LargeMarkdownBytes;
             var content = File.ReadAllText(filePath, _encoding);
+            _lastLoadedContent = content;
+            _pendingExternalReload = false;
 
             TitleChanged?.Invoke(this, Path.GetFileName(filePath));
+            StartFileWatcher(filePath);
 
             if (!_webViewReady)
             {
@@ -170,6 +187,22 @@ namespace Folderss.Viewers
             await WebView.CoreWebView2.ExecuteScriptAsync(script);
         }
 
+        private async System.Threading.Tasks.Task CallAppReloadContent(string content)
+        {
+            _pendingContent = null;
+            if (!_webViewReady)
+            {
+                _pendingContent = content;
+                return;
+            }
+
+            var script = string.Format(
+                "app.reloadContent({0},{1})",
+                JsonString(content),
+                _largeFileMode ? "true" : "false");
+            await WebView.CoreWebView2.ExecuteScriptAsync(script);
+        }
+
         private void Save(string content)
         {
             if (_filePath == null) return;
@@ -179,6 +212,8 @@ namespace Folderss.Viewers
                 File.WriteAllText(tmp, content, _encoding);
                 File.Delete(_filePath);
                 File.Move(tmp, _filePath);
+                _lastLoadedContent = content;
+                _pendingExternalReload = false;
                 var _ = WebView.CoreWebView2.ExecuteScriptAsync("app.markSaved()");
             }
             catch (Exception ex)
@@ -275,7 +310,127 @@ namespace Folderss.Viewers
 
         public bool IsModified => _modified;
 
+        public void SetActive(bool isActive)
+        {
+            _isActive = isActive;
+            if (_isActive && _pendingExternalReload)
+                ScheduleExternalReload();
+        }
+
         // ── Helpers ──────────────────────────────────────────────────────
+
+        private void StartFileWatcher(string filePath)
+        {
+            var dir = Path.GetDirectoryName(filePath);
+            var fileName = Path.GetFileName(filePath);
+            if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(fileName) || !Directory.Exists(dir))
+                return;
+
+            _fileWatcher = new FileSystemWatcher(dir, fileName)
+            {
+                NotifyFilter = NotifyFilters.FileName |
+                               NotifyFilters.LastWrite |
+                               NotifyFilters.Size |
+                               NotifyFilters.CreationTime
+            };
+            _fileWatcher.Changed += OnWatchedFileChanged;
+            _fileWatcher.Created += OnWatchedFileChanged;
+            _fileWatcher.Renamed += OnWatchedFileChanged;
+            _fileWatcher.EnableRaisingEvents = true;
+        }
+
+        private void StopFileWatcher()
+        {
+            _fileReloadTimer.Stop();
+            if (_fileWatcher == null)
+                return;
+
+            _fileWatcher.EnableRaisingEvents = false;
+            _fileWatcher.Changed -= OnWatchedFileChanged;
+            _fileWatcher.Created -= OnWatchedFileChanged;
+            _fileWatcher.Renamed -= OnWatchedFileChanged;
+            _fileWatcher.Dispose();
+            _fileWatcher = null;
+        }
+
+        private void OnWatchedFileChanged(object sender, FileSystemEventArgs e)
+        {
+            if (_disposed || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            Dispatcher.BeginInvoke(new Action(delegate
+            {
+                if (_disposed)
+                    return;
+
+                _pendingExternalReload = true;
+                if (_isActive)
+                    ScheduleExternalReload();
+            }));
+        }
+
+        private async void OnFileReloadTimerTick(object sender, EventArgs e)
+        {
+            _fileReloadTimer.Stop();
+            await ReloadExternalFileAsync();
+        }
+
+        private void ScheduleExternalReload()
+        {
+            _fileReloadTimer.Stop();
+            _fileReloadTimer.Start();
+        }
+
+        private async System.Threading.Tasks.Task ReloadExternalFileAsync()
+        {
+            if (string.IsNullOrWhiteSpace(_filePath) || !File.Exists(_filePath))
+                return;
+
+            if (_modified)
+                return;
+
+            try
+            {
+                _encoding = DetectEncoding(_filePath);
+                _largeFileMode = new FileInfo(_filePath).Length > LargeMarkdownBytes;
+                var content = ReadAllTextAllowingWriters(_filePath, _encoding);
+                if (string.Equals(content, _lastLoadedContent, StringComparison.Ordinal))
+                {
+                    _pendingExternalReload = false;
+                    return;
+                }
+
+                _lastLoadedContent = content;
+                _pendingExternalReload = false;
+                _modified = false;
+                ModifiedChanged?.Invoke(this, false);
+                await CallAppReloadContent(content);
+            }
+            catch (IOException)
+            {
+                if (_isActive)
+                    ScheduleExternalReload();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                if (_isActive)
+                    ScheduleExternalReload();
+            }
+        }
+
+        private static string ReadAllTextAllowingWriters(string filePath, Encoding encoding)
+        {
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(fs, encoding, true))
+                return reader.ReadToEnd();
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+            StopFileWatcher();
+        }
 
         private static Encoding DetectEncoding(string filePath)
         {

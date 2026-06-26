@@ -9,6 +9,9 @@ Folderss/
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
+│   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
+│   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기
+│   ├── TextViewer.xaml/.cs         — 읽기 전용 텍스트 뷰어
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
