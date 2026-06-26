@@ -71,7 +71,7 @@ namespace Folderss.Models
                     case ".log":
                         return "📄";
                     default:
-                        return "◻";
+                        return "📄";
                 }
             }
         }

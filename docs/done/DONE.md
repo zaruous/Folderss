@@ -6,6 +6,11 @@
 
 ## v1.6.0 (2026-06-24)
 
+### 문서 정리
+
+- 완료된 마크다운 뷰어 구현계획 문서를 `docs/done/마크다운뷰어_구현계획_완료.md`로 이동.
+- `docs/todo/TODO.md`에서 완료된 항목을 제거하고 현재 미완료 항목 없음 상태로 정리.
+
 ### Open With 컨텍스트 메뉴
 
 - `Models/OpenWithEntry.cs` — 신규 모델. Id(GUID), Name, Description, ExecutablePath, Arguments(`{0}` = 경로), ExtensionMask(`*`/`folder`/`.txt,.cs`) 필드.
@@ -14,6 +19,16 @@
 - `Controls/FolderBrowser.xaml.cs` — 우클릭 시 `OpenWithService.GetMatchingEntries()`로 매칭 항목 조회 후 `CustomMenuItem` 리스트 생성, `ShellContextMenuService.Show()`에 전달.
 - `SettingsWindow.xaml` — 좌측 네비에 "열기 프로그램" 탭 추가. OpenWithPanel 그리드: 항목 ListView + 인라인 편집 폼(이름/설명/실행파일/인수/마스크) + 새 항목·저장·삭제 버튼.
 - `SettingsWindow.xaml.cs` — `_workingOpenWith` ObservableCollection, 폼 CRUD 핸들러, 파일 찾기 다이얼로그(`Microsoft.Win32.OpenFileDialog`), 저장 시 `OpenWithService.Save()` 호출.
+
+### 파일 컴포넌트
+
+- `Controls/FolderBrowser.xaml.cs` — `FileSystemWatcher` 기반 변경 감지와 400ms 디바운스를 적용해 현재 폴더 항목 변경 시 목록을 갱신.
+- `Controls/FolderBrowser.xaml.cs` — 파일 목록 빈 영역 우클릭 시 현재 폴더 기준 Windows 쉘 컨텍스트 메뉴가 열리도록 처리.
+
+### 파일 내용 검색
+
+- `MainWindow.xaml.cs` — `Ctrl+F` 파일 내용 검색 패널을 같은 단축키로 다시 숨길 수 있도록 토글 처리.
+- `SearchPanel.xaml.cs` — `Esc` 입력 시 검색 패널 숨김 처리.
 
 ---
 

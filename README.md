@@ -2,7 +2,7 @@
 
 Windows용 듀얼 패널 파일 관리자입니다. WPF와 .NET Framework 4.8로 구현했으며, AvalonDock을 활용한 자유로운 패널 도킹·탭·분리 창을 지원합니다.
 
-현재 버전: **v1.4.1**
+현재 버전: **v1.4.5**
 
 ![Folderss 스크린샷](<docs/images/program image.png>)
 
@@ -28,6 +28,7 @@ Folderss/
 │   ├── FileSystemItem      — 파일·폴더 뷰모델
 │   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델
 │   ├── KeyBindingEntry     — 단축키 설정 모델
+│   ├── OpenWithEntry       — 사용자 지정 열기 프로그램 모델
 │   └── SearchResult        — 내용 검색 결과 모델
 ├── Services/
 │   ├── FileOperationService    — 복사·이동·삭제·이름변경·새 폴더
@@ -38,6 +39,7 @@ Folderss/
 │   ├── KeyBindingService       — 단축키 기본값·사용자 설정 저장
 │   ├── SearchService           — 파일 내용 검색
 │   ├── ViewerConfigService     — 확장자별 내장 뷰어 매핑
+│   ├── OpenWithService         — 사용자 지정 Open With 항목 저장·실행
 │   ├── UpdateService           — GitHub 최신 릴리스 확인·다운로드
 │   ├── ShellContextMenuService — Windows 쉘 우클릭 컨텍스트 메뉴
 │   └── ThemeManager            — 테마 전환 및 저장
@@ -45,7 +47,7 @@ Folderss/
 │   ├── Black / Light / Nord / Catppuccin / Solarized / Dracula / GitHub
 │   └── Controls.xaml           — 공통 컨트롤 스타일
 ├── MainWindow                  — 메인 창 및 AvalonDock 호스트
-├── SettingsWindow              — 테마·단축키·뷰어 설정
+├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램 설정
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
@@ -55,10 +57,11 @@ Folderss/
 
 - **`FolderBrowser` 재사용**: 좌·우 기본 패널과 추가 패널 모두 동일한 컨트롤 인스턴스를 사용합니다.
 - **내장 뷰어 시스템**: `IFileViewer` 인터페이스와 `ViewerHost`를 통해 Markdown, Monaco, Text 뷰어를 AvalonDock 문서 탭으로 엽니다.
+- **사용자 지정 Open With**: 파일·폴더 확장자 마스크에 맞는 외부 프로그램을 메인 메뉴와 Windows 컨텍스트 메뉴 상단에 노출합니다.
 - **비동기 미리보기**: 파일 미리보기는 `Task.Run`으로 백그라운드에서 읽고, 요청 ID 비교로 레이스 컨디션을 방지합니다.
 - **이동 이력**: 뒤로·앞으로 이동 이력을 패널별 스택으로 관리하며 최대 10개까지 유지합니다.
 - **세션 복원**: 종료 시 열린 폴더 경로·활성 패널(`session.xml`)과 도킹 배치(`dock-layout.xml`)를 `%LOCALAPPDATA%\Folderss\`에 저장하고 다음 실행 시 복원합니다.
-- **사용자 설정**: 테마(`theme.txt`), 단축키(`keybindings.xml`), 뷰어 매핑(`viewer-config.json`)을 사용자별로 저장합니다.
+- **사용자 설정**: 테마(`theme.txt`), 단축키(`keybindings.xml`), 뷰어 매핑(`viewer-config.json`), 열기 프로그램(`open-with.xml`)을 사용자별로 저장합니다.
 - **테마**: `ResourceDictionary` 교체 방식으로 런타임에 즉시 전환합니다.
 
 ## 현재 기능
@@ -69,6 +72,7 @@ Folderss/
 - 현재 폴더 이름 검색
 - 파일 실행
 - 파일 및 폴더의 Windows 컨텍스트 메뉴
+- 확장자·폴더별 사용자 지정 `다음으로 열기` 프로그램
 - 반대편 패널로 복사 및 이동
 - Explorer 및 다른 패널과의 파일 드래그 앤 드롭
 - 이름 변경, 새 폴더, 휴지통 삭제
@@ -76,7 +80,9 @@ Folderss/
 - 클립보드 복사, 잘라내기, 붙여넣기
 - Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
 - 설정 창에서 단축키와 확장자별 뷰어 매핑 변경
+- 설정 창에서 사용자 지정 열기 프로그램 등록 및 확장자 마스크 관리
 - AvalonDock 기반 패널 도킹, 탭, 분리 창, 자동 숨김
+- `F11`로 현재 폴더 패널 최대화 및 복원
 - 도킹 배치 자동 저장 및 복원
 - 그룹별 즐겨찾기 구성과 사용자별 저장
 - 즐겨찾기 그룹 간 드래그 앤 드롭 이동
@@ -96,6 +102,15 @@ Folderss/
 | Text | 사용자 매핑 | 읽기 전용 텍스트 보기와 구문 강조 |
 
 매핑되지 않은 확장자는 Windows 기본 프로그램으로 열립니다.
+
+## 열기 프로그램
+
+`설정 > 열기 프로그램`에서 파일이나 폴더를 열 외부 프로그램을 등록할 수 있습니다. 등록한 항목은 선택한 파일/폴더와 확장자 마스크가 맞을 때 메인 메뉴의 `다음으로 열기`와 Windows 컨텍스트 메뉴 상단에 표시됩니다.
+
+- 확장자 마스크 `*`: 모든 파일/폴더
+- 확장자 마스크 `folder`: 폴더
+- 확장자 마스크 `.txt,.cs`: 특정 확장자 목록
+- 인수의 `{0}`은 선택한 파일/폴더 경로 목록으로 치환됩니다.
 
 ## 파일 미리보기
 
@@ -154,6 +169,7 @@ Folderss\Themes\Controls.xaml
 | `theme.txt` | 마지막 선택 테마 |
 | `keybindings.xml` | 사용자 단축키 |
 | `viewer-config.json` | 확장자별 뷰어 매핑 |
+| `open-with.xml` | 사용자 지정 열기 프로그램 |
 | `favorites.xml` | 즐겨찾기 그룹과 항목 |
 | `session.xml` | 열린 폴더 패널과 활성 패널 |
 | `dock-layout.xml` | AvalonDock 패널 배치 |
@@ -190,7 +206,8 @@ Folderss\Themes\Controls.xaml
 |---|---|
 | `Ctrl+R` | 양쪽 패널 새로 고침 |
 | `Ctrl+T` | 새 폴더 패널 추가 |
-| `Ctrl+F` | 파일 내용 검색 패널 열기 |
+| `F11` | 현재 폴더 패널 최대화/복원 |
+| `Ctrl+F` | 파일 내용 검색 패널 열기/닫기 |
 
 기본 단축키는 `설정 > 단축키`에서 변경하거나 기본값으로 초기화할 수 있습니다.
 
