@@ -133,6 +133,7 @@ namespace Folderss.Viewers
 
             var title = Path.GetFileName(filePath);
             TitleChanged?.Invoke(this, title);
+            ModifiedChanged?.Invoke(this, false);
 
             if (!_webViewReady)
             {
