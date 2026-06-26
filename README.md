@@ -232,6 +232,12 @@ Visual Studio 또는 Build Tools 설치 경로에 맞는 `MSBuild.exe`를 사용
 & 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Restore,Rebuild /p:Configuration=Release
 ```
 
+Visual Studio 2022 Community 설치 환경에서는 다음 명령으로 Release 빌드가 성공했습니다.
+
+```powershell
+& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\amd64\MSBuild.exe' .\Folderss.sln /p:Configuration=Release /p:Platform='Any CPU' /m
+```
+
 ### 빌드 결과물
 
 | 구성 | 경로 |
