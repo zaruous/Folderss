@@ -78,6 +78,16 @@ namespace Folderss
                 catch { }
             }
 
+            // 복원 시작 전, 기존 XAML에 하드코딩 결합되어 있던 console의 콘텐츠 바인딩을 분리합니다.
+            // (WPF 이중 부모 비주얼 트리 소유권 충돌로 인해 하단 등 커스텀 도킹 역직렬화 이식이 거부되는 것을 원천 차단)
+            var consoleDoc = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(d => d.ContentId == "console");
+            if (consoleDoc != null)
+            {
+                consoleDoc.Content = null;
+            }
+
             // 콘솔 패널 경로 공급자 및 인스턴스 조기 안전 바인딩
             GetConsolePanel();
 
