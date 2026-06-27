@@ -16,14 +16,10 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup NuGet
-        uses: NuGet/setup-nuget@v2
-
-      - name: Restore NuGet packages
-        run: nuget restore Folderss.sln
-
-      - name: Setup MSBuild
-        uses: microsoft/setup-msbuild@v2
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
 
       - name: Set version from tag
         shell: pwsh
@@ -38,12 +34,27 @@ jobs:
             -replace 'AssemblyFileVersion\("[^"]*"\)', "AssemblyFileVersion(`"$ver`")" |
             Set-Content $file
 
-      - name: Build Release
-        run: msbuild Folderss/Folderss.csproj /p:Configuration=Release /p:Platform=AnyCPU /p:PlatformTarget=x64 /v:minimal
+      - name: Restore
+        run: dotnet restore .\Folderss.sln
+
+      - name: Publish Release
+        shell: pwsh
+        run: |
+          $packageDir = "artifacts/Folderss-${{ github.ref_name }}"
+          if (Test-Path $packageDir) {
+            Remove-Item $packageDir -Recurse -Force
+          }
+          dotnet publish .\Folderss\Folderss.csproj -c Release -o $packageDir --nologo
 
       - name: Create ZIP
         shell: pwsh
-        run: Compress-Archive -Path Folderss/bin/Release/* -DestinationPath "Folderss-${{ github.ref_name }}.zip"
+        run: |
+          $packageDir = "artifacts/Folderss-${{ github.ref_name }}"
+          $zipPath = "Folderss-${{ github.ref_name }}.zip"
+          if (Test-Path $zipPath) {
+            Remove-Item $zipPath -Force
+          }
+          Compress-Archive -Path "$packageDir\*" -DestinationPath $zipPath
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2

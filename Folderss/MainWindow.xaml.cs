@@ -5,6 +5,7 @@ using AvalonDock.Layout.Serialization;
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -1580,22 +1581,25 @@ namespace Folderss
 
                 progressWindow.Close();
 
-                var exePath = tempPath;
                 if (ext.Equals(".zip", StringComparison.OrdinalIgnoreCase))
                 {
-                    exePath = ExtractExeFromZip(tempPath);
-                    if (exePath == null)
+                    var packageDir = ExtractUpdatePackageDirectory(tempPath);
+                    if (packageDir == null)
                     {
                         MessageBox.Show(
-                            "zip 파일에서 Folderss.exe를 찾을 수 없습니다.",
+                            "zip 파일에서 Folderss 전체 배포본을 찾을 수 없습니다.",
                             "업데이트 오류",
                             MessageBoxButton.OK,
                             MessageBoxImage.Error);
                         return;
                     }
+
+                    LaunchZipUpdaterBatch(packageDir);
+                    ExitApp();
+                    return;
                 }
 
-                LaunchUpdaterBatch(exePath);
+                LaunchInstallerBatch(tempPath);
                 ExitApp();
             }
             catch (Exception ex)
@@ -1609,7 +1613,7 @@ namespace Folderss
             }
         }
 
-        private static string ExtractExeFromZip(string zipPath)
+        private static string ExtractUpdatePackageDirectory(string zipPath)
         {
             var extractDir = System.IO.Path.Combine(
                 System.IO.Path.GetDirectoryName(zipPath), "extracted");
@@ -1619,22 +1623,36 @@ namespace Folderss
 
             System.IO.Compression.ZipFile.ExtractToDirectory(zipPath, extractDir);
 
-            return System.IO.Directory.GetFiles(extractDir, "Folderss.exe",
+            var exePath = System.IO.Directory.GetFiles(
+                extractDir,
+                "Folderss.exe",
                 System.IO.SearchOption.AllDirectories).FirstOrDefault();
+            if (exePath == null)
+                return null;
+
+            var packageDir = System.IO.Path.GetDirectoryName(exePath);
+            var dllPath = System.IO.Path.Combine(packageDir, "Folderss.dll");
+            var depsPath = System.IO.Path.Combine(packageDir, "Folderss.deps.json");
+            var runtimeConfigPath = System.IO.Path.Combine(packageDir, "Folderss.runtimeconfig.json");
+
+            if (!File.Exists(dllPath) || !File.Exists(depsPath) || !File.Exists(runtimeConfigPath))
+                return null;
+
+            return packageDir;
         }
 
-        private static void LaunchUpdaterBatch(string newExePath)
+        private static void LaunchZipUpdaterBatch(string packageDir)
         {
-            var currentExePath = System.Reflection.Assembly.GetExecutingAssembly().Location;
+            var currentExePath = GetCurrentProcessExecutablePath();
+            var installDir = System.IO.Path.GetDirectoryName(currentExePath);
             var batchPath = System.IO.Path.Combine(
                 System.IO.Path.GetTempPath(), "folderss_update.bat");
 
-            // 현재 프로세스가 종료될 때까지 copy를 재시도하다가
-            // 성공하면 새 exe를 실행하고 배치 파일 자신을 삭제한다.
+            // 현재 프로세스가 종료될 때까지 전체 배포본 복사를 재시도한 뒤 새 앱을 실행한다.
             var batch =
                 "@echo off\r\n" +
                 ":retry\r\n" +
-                "copy /y \"" + newExePath + "\" \"" + currentExePath + "\" >nul 2>&1\r\n" +
+                "xcopy /e /i /y \"" + packageDir + "\\*\" \"" + installDir + "\\\" >nul 2>&1\r\n" +
                 "if errorlevel 1 (\r\n" +
                 "    ping -n 2 127.0.0.1 >nul\r\n" +
                 "    goto retry\r\n" +
@@ -1651,6 +1669,45 @@ namespace Folderss
                 CreateNoWindow = true,
                 UseShellExecute = false
             });
+        }
+
+        private static void LaunchInstallerBatch(string installerPath)
+        {
+            var batchPath = System.IO.Path.Combine(
+                System.IO.Path.GetTempPath(), "folderss_update.bat");
+
+            // 설치형 자산은 현재 앱을 덮어쓰지 않고 종료 후 그대로 실행한다.
+            var batch =
+                "@echo off\r\n" +
+                ":retry\r\n" +
+                "start \"\" \"" + installerPath + "\"\r\n" +
+                "if errorlevel 1 (\r\n" +
+                "    ping -n 2 127.0.0.1 >nul\r\n" +
+                "    goto retry\r\n" +
+                ")\r\n" +
+                "del \"%~f0\"\r\n";
+
+            System.IO.File.WriteAllText(batchPath, batch, System.Text.Encoding.Default);
+
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = "cmd.exe",
+                Arguments = "/c \"" + batchPath + "\"",
+                CreateNoWindow = true,
+                UseShellExecute = false
+            });
+        }
+
+        private static string GetCurrentProcessExecutablePath()
+        {
+            var processPath = Environment.ProcessPath;
+            if (!string.IsNullOrWhiteSpace(processPath))
+                return processPath;
+
+            using (var process = Process.GetCurrentProcess())
+            {
+                return process.MainModule.FileName;
+            }
         }
 
         private static void OpenUrl(string url)
