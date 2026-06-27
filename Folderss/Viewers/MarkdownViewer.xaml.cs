@@ -22,6 +22,7 @@ namespace Folderss.Viewers
         private Encoding _encoding;
         private AppTheme _currentTheme = AppTheme.Black;
         private bool _webViewReady;
+        private bool _pageReady;
         private bool _modified;
         private bool _largeFileMode;
         private FileSystemWatcher _fileWatcher;
@@ -30,6 +31,9 @@ namespace Folderss.Viewers
         private bool _disposed;
         private bool _isActive = true;
         private bool _pendingExternalReload;
+        private CoreWebView2ContextMenuItem _printMenuItem;
+        private CoreWebView2ContextMenuItem _saveAsMenuItem;
+        private CoreWebView2ContextMenuItem _shareMenuItem;
 
         private string _pendingContent;
 
@@ -86,11 +90,13 @@ namespace Folderss.Viewers
                 "*", CoreWebView2WebResourceContext.All);
             WebView.CoreWebView2.WebResourceRequested += OnWebResourceRequested;
             WebView.CoreWebView2.NavigationStarting   += OnNavigationStarting;
+            WebView.CoreWebView2.NavigationCompleted  += OnNavigationCompleted;
             WebView.CoreWebView2.WebMessageReceived   += OnWebMessageReceived;
+            WebView.CoreWebView2.ContextMenuRequested += OnContextMenuRequested;
+            InitializeContentContextMenuItems();
 
             _webViewReady = true;
             WebView.CoreWebView2.Navigate("https://folderss-viewer/markdown-app.html");
-            WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
         }
 
         private void OnWebResourceRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
@@ -104,14 +110,23 @@ namespace Folderss.Viewers
         {
             var uri = new Uri(e.Uri);
             if (!string.Equals(uri.Host, "folderss-viewer", StringComparison.OrdinalIgnoreCase))
+            {
                 e.Cancel = true;
+                return;
+            }
+
+            _pageReady = false;
         }
 
         private async void OnNavigationCompleted(object sender, CoreWebView2NavigationCompletedEventArgs e)
         {
-            WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
-            if (_pendingContent != null)
-                await CallAppOpen(_pendingContent);
+            if (!e.IsSuccess || _disposed)
+                return;
+
+            _pageReady = true;
+            var content = _pendingContent ?? _lastLoadedContent;
+            if (content != null)
+                await CallAppOpen(content);
         }
 
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
@@ -152,6 +167,48 @@ namespace Folderss.Viewers
             }
         }
 
+        private void OnContextMenuRequested(object sender, CoreWebView2ContextMenuRequestedEventArgs e)
+        {
+            ReplaceContextMenuItem(e, "print", _printMenuItem);
+            ReplaceContextMenuItem(e, "saveAs", _saveAsMenuItem);
+            ReplaceContextMenuItem(e, "share", _shareMenuItem);
+        }
+
+        private void InitializeContentContextMenuItems()
+        {
+            _printMenuItem = CreateContentContextMenuItem("인쇄", "app.printContent()");
+            _saveAsMenuItem = CreateContentContextMenuItem("다른 이름으로 저장", "app.saveContentAs()");
+            _shareMenuItem = CreateContentContextMenuItem("공유", "app.shareContent()");
+        }
+
+        private CoreWebView2ContextMenuItem CreateContentContextMenuItem(string label, string script)
+        {
+            var item = WebView.CoreWebView2.Environment.CreateContextMenuItem(
+                label, null, CoreWebView2ContextMenuItemKind.Command);
+            item.CustomItemSelected += async (s, e) =>
+            {
+                if (!_disposed && _pageReady)
+                    await WebView.CoreWebView2.ExecuteScriptAsync(script);
+            };
+            return item;
+        }
+
+        private void ReplaceContextMenuItem(
+            CoreWebView2ContextMenuRequestedEventArgs args,
+            string defaultName,
+            CoreWebView2ContextMenuItem replacement)
+        {
+            for (var i = 0; i < args.MenuItems.Count; i++)
+            {
+                if (!string.Equals(args.MenuItems[i].Name, defaultName, StringComparison.OrdinalIgnoreCase))
+                    continue;
+
+                args.MenuItems.RemoveAt(i);
+                args.MenuItems.Insert(i, replacement);
+                return;
+            }
+        }
+
         public void Load(string filePath)
         {
             StopFileWatcher();
@@ -166,7 +223,7 @@ namespace Folderss.Viewers
             TitleChanged?.Invoke(this, Path.GetFileName(filePath));
             StartFileWatcher(filePath);
 
-            if (!_webViewReady)
+            if (!_webViewReady || !_pageReady)
             {
                 _pendingContent = content;
                 return;
@@ -177,6 +234,12 @@ namespace Folderss.Viewers
 
         private async System.Threading.Tasks.Task CallAppOpen(string content)
         {
+            if (!_webViewReady || !_pageReady)
+            {
+                _pendingContent = content;
+                return;
+            }
+
             _pendingContent = null;
             var script = string.Format(
                 "app.open({0},{1},{2},{3})",
@@ -190,7 +253,7 @@ namespace Folderss.Viewers
         private async System.Threading.Tasks.Task CallAppReloadContent(string content)
         {
             _pendingContent = null;
-            if (!_webViewReady)
+            if (!_webViewReady || !_pageReady)
             {
                 _pendingContent = content;
                 return;
@@ -264,7 +327,15 @@ namespace Folderss.Viewers
                 dlg.DefaultExt = "pdf";
                 dlg.FileName = Path.GetFileNameWithoutExtension(_filePath ?? "export");
                 if (dlg.ShowDialog() != WinForms.DialogResult.OK) return;
-                await WebView.CoreWebView2.PrintToPdfAsync(dlg.FileName);
+                try
+                {
+                    await WebView.CoreWebView2.PrintToPdfAsync(dlg.FileName);
+                }
+                finally
+                {
+                    await WebView.CoreWebView2.ExecuteScriptAsync(
+                        "document.getElementById('operation-surface').innerHTML = ''");
+                }
             }
         }
 
@@ -430,6 +501,14 @@ namespace Folderss.Viewers
         {
             _disposed = true;
             StopFileWatcher();
+            if (WebView.CoreWebView2 != null)
+            {
+                WebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+                WebView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
+                WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+                WebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
+                WebView.CoreWebView2.ContextMenuRequested -= OnContextMenuRequested;
+            }
         }
 
         private static Encoding DetectEncoding(string filePath)

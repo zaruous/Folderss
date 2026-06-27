@@ -85,8 +85,8 @@ namespace Folderss.Services
             try
             {
                 FileSystemSecurity security = isDirectory
-                    ? (FileSystemSecurity)Directory.GetAccessControl(path)
-                    : File.GetAccessControl(path);
+                    ? (FileSystemSecurity)new DirectoryInfo(path).GetAccessControl()
+                    : new FileInfo(path).GetAccessControl();
                 var identity = WindowsIdentity.GetCurrent();
                 var identities = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 

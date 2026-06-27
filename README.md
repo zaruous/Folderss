@@ -18,6 +18,7 @@ Folderss/
 │   ├── FolderBrowser       — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위)
 │   ├── FavoritesPanel      — 즐겨찾기 패널
 │   ├── SearchPanel         — 파일 내용 검색 패널
+│   ├── ConsolePanel        — 내장 라인 기반 콘솔 패널
 │   └── ViewerHost          — 내장 파일 뷰어 호스트
 ├── Viewers/
 │   ├── MarkdownViewer      — Markdown 미리보기·편집·내보내기
@@ -40,6 +41,8 @@ Folderss/
 │   ├── SearchService           — 파일 내용 검색
 │   ├── ViewerConfigService     — 확장자별 내장 뷰어 매핑
 │   ├── OpenWithService         — 사용자 지정 Open With 항목 저장·실행
+│   ├── ConsoleSettingsService  — 콘솔 패널 설정 저장
+│   ├── ConsoleSessionService   — PowerShell/cmd 콘솔 세션 관리
 │   ├── UpdateService           — GitHub 최신 릴리스 확인·다운로드
 │   ├── ShellContextMenuService — Windows 쉘 우클릭 컨텍스트 메뉴
 │   └── ThemeManager            — 테마 전환 및 저장
@@ -47,7 +50,7 @@ Folderss/
 │   ├── Black / Light / Nord / Catppuccin / Solarized / Dracula / GitHub
 │   └── Controls.xaml           — 공통 컨트롤 스타일
 ├── MainWindow                  — 메인 창 및 AvalonDock 호스트
-├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램 설정
+├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔 설정
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
@@ -61,7 +64,7 @@ Folderss/
 - **비동기 미리보기**: 파일 미리보기는 `Task.Run`으로 백그라운드에서 읽고, 요청 ID 비교로 레이스 컨디션을 방지합니다.
 - **이동 이력**: 뒤로·앞으로 이동 이력을 패널별 스택으로 관리하며 최대 10개까지 유지합니다.
 - **세션 복원**: 종료 시 열린 폴더 경로·활성 패널(`session.xml`)과 도킹 배치(`dock-layout.xml`)를 `%LOCALAPPDATA%\Folderss\`에 저장하고 다음 실행 시 복원합니다.
-- **사용자 설정**: 테마(`theme.txt`), 단축키(`keybindings.xml`), 뷰어 매핑(`viewer-config.json`), 열기 프로그램(`open-with.xml`)을 사용자별로 저장합니다.
+- **사용자 설정**: 테마(`theme.txt`), 단축키(`keybindings.xml`), 뷰어 매핑(`viewer-config.json`), 열기 프로그램(`open-with.xml`), 콘솔 설정(`console-settings.xml`)을 사용자별로 저장합니다.
 - **테마**: `ResourceDictionary` 교체 방식으로 런타임에 즉시 전환합니다.
 
 ## 현재 기능
@@ -81,6 +84,8 @@ Folderss/
 - Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
 - 설정 창에서 단축키와 확장자별 뷰어 매핑 변경
 - 설정 창에서 사용자 지정 열기 프로그램 등록 및 확장자 마스크 관리
+- 설정 창에서 콘솔 최대 출력 줄 수 변경
+- `보기 > 콘솔` 하단 도킹 패널에서 PowerShell/cmd 명령 실행
 - AvalonDock 기반 패널 도킹, 탭, 분리 창, 자동 숨김
 - `F11`로 현재 폴더 패널 최대화 및 복원
 - 도킹 배치 자동 저장 및 복원
@@ -111,6 +116,16 @@ Folderss/
 - 확장자 마스크 `folder`: 폴더
 - 확장자 마스크 `.txt,.cs`: 특정 확장자 목록
 - 인수의 `{0}`은 선택한 파일/폴더 경로 목록으로 치환됩니다.
+
+## 콘솔
+
+`보기 > 콘솔`에서 하단 도킹 콘솔 패널을 열 수 있습니다. 기본 셸은 Windows PowerShell이며, PowerShell 7이 설치된 경우 선택 목록에 표시되고 명령 프롬프트도 사용할 수 있습니다.
+
+- 콘솔은 현재 활성 폴더를 작업 디렉터리로 시작합니다.
+- `현재 폴더로 이동`은 실행 중인 셸을 활성 폴더 위치로 이동합니다.
+- 출력은 설정된 최대 줄 수만 보관하며 기본값은 5,000줄입니다.
+- 라인 기반 표준 입출력 콘솔이므로 전체 화면 TTY 프로그램이나 ANSI 커서 제어 앱은 완전한 터미널처럼 동작하지 않을 수 있습니다.
+- `claude`, `codex`, `gemini`, `vim`, `ssh`처럼 TTY가 필요한 명령은 외부 터미널에서 실행하도록 안내합니다.
 
 ## 파일 미리보기
 
@@ -170,6 +185,7 @@ Folderss\Themes\Controls.xaml
 | `keybindings.xml` | 사용자 단축키 |
 | `viewer-config.json` | 확장자별 뷰어 매핑 |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
+| `console-settings.xml` | 콘솔 설정(기본 최대 출력 5,000줄) |
 | `favorites.xml` | 즐겨찾기 그룹과 항목 |
 | `session.xml` | 열린 폴더 패널과 활성 패널 |
 | `dock-layout.xml` | AvalonDock 패널 배치 |

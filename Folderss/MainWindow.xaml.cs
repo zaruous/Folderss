@@ -32,11 +32,13 @@ namespace Folderss
         private HashSet<string> _cutPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         private Window _searchWindow;
         private Controls.SearchPanel _searchPanel;
+        private Controls.ConsolePanel _consolePanel;
         private readonly KeyBindingService _keyBindingService = new KeyBindingService();
         private readonly ViewerConfigService _viewerConfigService = new ViewerConfigService();
         private bool _isPanelMaximized = false;
         private string _savedLayoutXml = null;
         private string _maximizedContentId = null;
+        private object _maximizedContent = null;
 
         private FolderBrowser ActivePane
         {
@@ -58,6 +60,27 @@ namespace Folderss
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            // 구버전 레이아웃 XML(LayoutAnchorable 방식) 호환성 체크 및 충돌 삭제 처리
+            var layoutPath = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "Folderss",
+                "dock-layout.xml");
+            if (File.Exists(layoutPath))
+            {
+                try
+                {
+                    var xml = File.ReadAllText(layoutPath);
+                    if (xml.Contains("<LayoutAnchorable") && xml.Contains("ContentId=\"console\""))
+                    {
+                        File.Delete(layoutPath);
+                    }
+                }
+                catch { }
+            }
+
+            // 콘솔 패널 경로 공급자 및 인스턴스 조기 안전 바인딩
+            GetConsolePanel();
+
             var home = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
             var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             _sessionState = SessionStateService.Load();
@@ -261,6 +284,7 @@ namespace Folderss
                 }
                 _savedLayoutXml = sb.ToString();
                 _maximizedContentId = activeDoc.ContentId;
+                _maximizedContent = activeDoc.Content;
 
                 var content = activeDoc.Content;
                 var title = activeDoc.Title;
@@ -288,13 +312,14 @@ namespace Folderss
             {
                 var activeBrowser = _activePane;
                 var maxContentId = _maximizedContentId;
+                var maxContent = _maximizedContent;
 
                 var serializer = new XmlLayoutSerializer(DockManager);
                 serializer.LayoutSerializationCallback += (sender, args) =>
                 {
-                    if (maxContentId != null && args.Model.ContentId == maxContentId && activeBrowser != null)
+                    if (maxContentId != null && args.Model.ContentId == maxContentId && maxContent != null)
                     {
-                        args.Content = activeBrowser;
+                        args.Content = maxContent;
                         return;
                     }
                     var content = ResolveDockContent(args.Model.ContentId);
@@ -310,6 +335,7 @@ namespace Folderss
 
                 _savedLayoutXml = null;
                 _maximizedContentId = null;
+                _maximizedContent = null;
                 _isPanelMaximized = false;
 
                 EnsureAddPanelTab();
@@ -1707,6 +1733,47 @@ namespace Folderss
                 element = System.Windows.Media.VisualTreeHelper.GetParent(element);
             }
             return null;
+        }
+
+        private Controls.ConsolePanel GetConsolePanel()
+        {
+            if (_consolePanel != null)
+                return _consolePanel;
+
+            _consolePanel = ConsolePanel;
+            if (_consolePanel != null)
+            {
+                _consolePanel.ActiveDirectoryProvider = () => ActivePane.CurrentPath;
+            }
+            return _consolePanel;
+        }
+
+        private void ShowConsolePanel()
+        {
+            var doc = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(d => d.ContentId == "console");
+
+            if (doc != null)
+            {
+                doc.IsActive = true;
+            }
+
+            var panel = GetConsolePanel();
+            if (panel != null)
+            {
+                panel.EnsureStarted();
+                Dispatcher.BeginInvoke(new Action(panel.FocusCommandBox), DispatcherPriority.Input);
+            }
+        }
+
+        private void ShowConsole_Click(object sender, RoutedEventArgs e)
+        {
+            ShowConsolePanel();
+        }
+
+        private void DockManager_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
         }
     }
 }

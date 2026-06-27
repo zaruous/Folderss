@@ -1,8 +1,10 @@
-Microsoft Visual Studio Solution File, Format Version 12.00
+﻿Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 17
 VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{60DC8134-EBA5-43B8-BCC9-BB4BC16C2548}") = "Folderss", "Folderss\Folderss.csproj", "{0E7EA81C-76E0-4A73-BC01-827D43BE7586}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Folderss.Diagnose", "Folderss.Diagnose\Folderss.Diagnose.csproj", "{A0175506-806D-4623-8CB4-69F3B531894C}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -14,5 +16,9 @@ Global
 		{0E7EA81C-76E0-4A73-BC01-827D43BE7586}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0E7EA81C-76E0-4A73-BC01-827D43BE7586}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0E7EA81C-76E0-4A73-BC01-827D43BE7586}.Release|Any CPU.Build.0 = Release|Any CPU
+		{A0175506-806D-4623-8CB4-69F3B531894C}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{A0175506-806D-4623-8CB4-69F3B531894C}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{A0175506-806D-4623-8CB4-69F3B531894C}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{A0175506-806D-4623-8CB4-69F3B531894C}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

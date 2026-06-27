@@ -1,0 +1,175 @@
+<UserControl x:Class="Folderss.Controls.ConsolePanel"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:term="clr-namespace:EasyWindowsTerminalControl;assembly=EasyWindowsTerminalControl"
+             MinHeight="160"
+             PreviewKeyDown="ConsolePanel_PreviewKeyDown">
+    <UserControl.Resources>
+        <!-- 탭 헤더 템플릿: 제목 + 닫기(X) 버튼 + 컨텍스트 메뉴 -->
+        <DataTemplate x:Key="ConsoleTabHeaderTemplate">
+            <StackPanel x:Name="HeaderPanel" Orientation="Horizontal" VerticalAlignment="Center" Background="Transparent">
+                <StackPanel.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="이름 변경" Click="RenameTab_Click" Tag="{Binding}"/>
+                        <Separator/>
+                        <MenuItem Header="닫기" Click="CloseTabMenu_Click" Tag="{Binding}"/>
+                        <MenuItem Header="다른 탭 닫기" Click="CloseOtherTabs_Click" Tag="{Binding}"/>
+                        <MenuItem Header="오른쪽 탭 닫기" Click="CloseRightTabs_Click" Tag="{Binding}"/>
+                    </ContextMenu>
+                </StackPanel.ContextMenu>
+                <TextBlock x:Name="TabText"
+                           Text="{Binding Title}" 
+                           VerticalAlignment="Center" 
+                           Foreground="{Binding RelativeSource={RelativeSource AncestorType=TabItem}, Path=Foreground}"
+                           Margin="0,0,6,0"/>
+                <Button x:Name="CloseBtn"
+                        Content="×" 
+                        Width="14" 
+                        Height="14" 
+                        Padding="0,-3,0,0"
+                        FontSize="10"
+                        FontWeight="Bold"
+                        VerticalAlignment="Center"
+                        HorizontalContentAlignment="Center"
+                        VerticalContentAlignment="Center"
+                        Background="Transparent"
+                        BorderBrush="Transparent"
+                        Foreground="{DynamicResource SecondaryText}"
+                        Click="CloseTab_Click"
+                        Tag="{Binding}">
+                    <Button.Style>
+                        <Style TargetType="Button">
+                            <Style.Triggers>
+                                <Trigger Property="IsMouseOver" Value="True">
+                                    <Setter Property="Foreground" Value="Red"/>
+                                    <Setter Property="FontWeight" Value="ExtraBold"/>
+                                </Trigger>
+                            </Style.Triggers>
+                        </Style>
+                    </Button.Style>
+                </Button>
+            </StackPanel>
+            <DataTemplate.Triggers>
+                <!-- IsAddTab이 True인 고정 추가 탭은 닫기 버튼과 우클릭 컨텍스트 메뉴를 모두 숨김 -->
+                <DataTrigger Binding="{Binding IsAddTab}" Value="True">
+                    <Setter TargetName="CloseBtn" Property="Visibility" Value="Collapsed"/>
+                    <Setter TargetName="TabText" Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                    <Setter TargetName="TabText" Property="FontWeight" Value="Bold"/>
+                    <Setter TargetName="HeaderPanel" Property="ContextMenu" Value="{x:Null}"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
+    
+    <!-- 폴더 브라우저 패널과 통일감을 주기 위해 외곽 Border 장착 -->
+    <Border Background="{DynamicResource PanelBackground}"
+            BorderBrush="{DynamicResource BorderBrush}"
+            BorderThickness="1"
+            CornerRadius="5">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="*"/>
+            </Grid.RowDefinitions>
+
+            <!-- 툴바 영역: 새 탭 버튼이 삭제되고 상태 콤보박스 및 일반 커맨드 툴바만 탑재 -->
+            <Border Grid.Row="0"
+                    Padding="9,6"
+                    Background="{DynamicResource SurfaceBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="0,0,0,1">
+                <DockPanel>
+                    <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <ComboBox x:Name="ShellCombo"
+                                  Width="150"
+                                  Height="26"
+                                  Margin="0,0,6,0"
+                                  VerticalContentAlignment="Center"
+                                  DisplayMemberPath="DisplayName"
+                                  SelectedValuePath="Kind"
+                                  SelectionChanged="ShellCombo_SelectionChanged"/>
+                        <Button Content="현재 폴더로 이동"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26"
+                                Padding="8,3"
+                                Margin="0,0,6,0"
+                                Click="SetCurrentFolder_Click"/>
+                        <Button Content="외부 터미널"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26"
+                                Padding="8,3"
+                                Margin="0,0,6,0"
+                                Click="ExternalTerminal_Click"/>
+                        <Button Content="지우기"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26"
+                                Padding="8,3"
+                                Margin="0,0,6,0"
+                                Click="Clear_Click"/>
+                        <Button Content="재시작"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26"
+                                Padding="8,3"
+                                Click="Restart_Click"/>
+                    </StackPanel>
+
+                    <TextBlock x:Name="StatusText"
+                               VerticalAlignment="Center"
+                               Foreground="{DynamicResource SecondaryText}"
+                               FontSize="12"
+                               TextTrimming="CharacterEllipsis"/>
+                </DockPanel>
+            </Border>
+
+            <!-- 다중 콘솔 탭 관리 TabControl (현대적인 슬림형 액센트 라인 탭 스타일 주입) -->
+            <TabControl x:Name="ConsoleTabs"
+                        Grid.Row="1"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        ItemTemplate="{StaticResource ConsoleTabHeaderTemplate}"
+                        SelectionChanged="ConsoleTabs_SelectionChanged">
+                <TabControl.Resources>
+                    <Style TargetType="TabItem">
+                        <Setter Property="Header" Value="{Binding}"/>
+                        <Setter Property="Background" Value="Transparent"/>
+                        <Setter Property="BorderBrush" Value="Transparent"/>
+                        <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                        <Setter Property="Padding" Value="14,8"/>
+                        <Setter Property="Template">
+                            <Setter.Value>
+                                <ControlTemplate TargetType="TabItem">
+                                    <Border x:Name="TabBorder"
+                                            Background="{TemplateBinding Background}"
+                                            BorderBrush="{TemplateBinding BorderBrush}"
+                                            BorderThickness="0,0,0,2"
+                                            Padding="{TemplateBinding Padding}"
+                                            Margin="0,0,2,0">
+                                        <ContentPresenter ContentSource="Header"/>
+                                    </Border>
+                                    <ControlTemplate.Triggers>
+                                        <Trigger Property="IsMouseOver" Value="True">
+                                            <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource SurfaceBackground}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                                        </Trigger>
+                                        <Trigger Property="IsSelected" Value="True">
+                                            <Setter TargetName="TabBorder" Property="BorderBrush" Value="{DynamicResource AccentBrush}"/>
+                                            <Setter TargetName="TabBorder" Property="Background" Value="{DynamicResource PanelBackground}"/>
+                                            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                                            <Setter Property="FontWeight" Value="SemiBold"/>
+                                        </Trigger>
+                                    </ControlTemplate.Triggers>
+                                </ControlTemplate>
+                            </Setter.Value>
+                        </Setter>
+                    </Style>
+                </TabControl.Resources>
+                <TabControl.ContentTemplate>
+                    <DataTemplate>
+                        <!-- 각 탭 콘텐츠 바인딩: TerminalControl UI 인스턴스 호스팅 -->
+                        <ContentControl Content="{Binding Terminal}"/>
+                    </DataTemplate>
+                </TabControl.ContentTemplate>
+            </TabControl>
+        </Grid>
+    </Border>
+</UserControl>

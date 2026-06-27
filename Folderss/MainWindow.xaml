@@ -90,6 +90,7 @@
                             <MenuItem Header="보기">
                                 <MenuItem Header="파일 내용 검색" InputGestureText="Ctrl+F" Click="ShowSearch_Click"/>
                                 <MenuItem Header="즐겨찾기 표시" Click="ShowFavorites_Click"/>
+                                <MenuItem Header="콘솔" Click="ShowConsole_Click"/>
                                 <Separator/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
@@ -158,6 +159,7 @@
                                Grid.Row="1"
                                Margin="6"
                                Background="{DynamicResource WindowBackground}"
+                               PreviewMouseLeftButtonDown="DockManager_PreviewMouseLeftButtonDown"
                                PreviewMouseRightButtonDown="DockManager_PreviewMouseRightButtonDown">
             <layout:LayoutRoot>
                 <layout:LayoutPanel Orientation="Vertical">
@@ -181,6 +183,14 @@
                                                        CanClose="False">
                                     <controls:FolderBrowser x:Name="LeftPane" Activated="Pane_Activated"/>
                                 </layout:LayoutDocument>
+                                
+                                <!-- 문서 탭(LayoutDocument) 형태로 완전히 통합된 콘솔 패널 -->
+                                <layout:LayoutDocument Title="콘솔"
+                                                       ContentId="console"
+                                                       CanClose="False">
+                                    <controls:ConsolePanel x:Name="ConsolePanel" />
+                                </layout:LayoutDocument>
+
                                 <layout:LayoutDocument Title="＋ 새 패널"
                                                        ContentId="add-folder-panel"
                                                        CanClose="False"/>

@@ -78,6 +78,9 @@
                     <ListBoxItem Tag="OpenWith">
                         <TextBlock Text="열기 프로그램"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="Console">
+                        <TextBlock Text="콘솔"/>
+                    </ListBoxItem>
                 </ListBox>
             </Border>
 
@@ -462,6 +465,60 @@
                             <Button Content="삭제" Click="OpenWithDelete_Click" Padding="10,4"/>
                         </StackPanel>
                     </Grid>
+                </Grid>
+
+                <!-- Console panel -->
+                <Grid x:Name="ConsolePanel" Margin="24,16" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*"/>
+                    </Grid.RowDefinitions>
+
+                    <TextBlock Grid.Row="0"
+                               Text="콘솔 설정"
+                               FontSize="15"
+                               FontWeight="SemiBold"
+                               Margin="0,0,0,4"/>
+
+                    <TextBlock Grid.Row="1"
+                               Text="콘솔 패널의 출력 보관 범위를 설정합니다. 저장 시 반영됩니다."
+                               FontSize="11"
+                               Margin="0,0,0,16">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+
+                    <StackPanel Grid.Row="2" Orientation="Vertical" MaxWidth="360" HorizontalAlignment="Left">
+                        <TextBlock Text="최대 출력 줄 수" FontSize="11" Margin="0,0,0,4">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                        <TextBox x:Name="ConsoleMaxLinesBox"
+                                 Width="140"
+                                 HorizontalAlignment="Left"
+                                 VerticalContentAlignment="Center"
+                                 BorderBrush="{DynamicResource BorderBrush}"
+                                 Background="{DynamicResource ControlBackground}"
+                                 Foreground="{DynamicResource PrimaryText}"
+                                 Padding="6,4"/>
+                        <TextBlock Text="기본값은 5,000줄입니다. 입력 범위: 100 - 100,000"
+                                   FontSize="11"
+                                   Margin="0,6,0,0">
+                            <TextBlock.Style>
+                                <Style TargetType="TextBlock">
+                                    <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                </Style>
+                            </TextBlock.Style>
+                        </TextBlock>
+                    </StackPanel>
                 </Grid>
 
                 <!-- Shortcuts panel -->

@@ -38,6 +38,7 @@ namespace Folderss
         private readonly ObservableCollection<KeyBindingEntry> _workingBindings;
         private readonly ObservableCollection<ViewerMappingItem> _workingMappings;
         private readonly ObservableCollection<OpenWithEntry> _workingOpenWith;
+        private readonly ConsoleSettings _workingConsoleSettings;
         private string _editingOpenWithId;
         private bool _initializingTheme;
         private readonly AppTheme _originalTheme;
@@ -70,6 +71,7 @@ namespace Folderss
 
             _workingOpenWith = new ObservableCollection<OpenWithEntry>(
                 OpenWithService.GetAll().Select(e => e.Clone()));
+            _workingConsoleSettings = ConsoleSettingsService.Load().Clone();
 
             _originalTheme = ThemeManager.CurrentTheme;
 
@@ -80,6 +82,7 @@ namespace Folderss
             ViewerMappingList.ItemsSource = _workingMappings;
             OpenWithList.ItemsSource = _workingOpenWith;
             NewViewerCombo.SelectedValue = ViewerConfigService.SystemDefaultKey;
+            ConsoleMaxLinesBox.Text = _workingConsoleSettings.MaxOutputLineCount.ToString("N0");
             ClearOpenWithForm();
 
             _initializingTheme = true;
@@ -106,6 +109,7 @@ namespace Folderss
             ThemePanel.Visibility     = tag == "Theme"     ? Visibility.Visible : Visibility.Collapsed;
             ViewersPanel.Visibility   = tag == "Viewers"   ? Visibility.Visible : Visibility.Collapsed;
             OpenWithPanel.Visibility  = tag == "OpenWith"  ? Visibility.Visible : Visibility.Collapsed;
+            ConsolePanel.Visibility   = tag == "Console"   ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void AddViewer_Click(object sender, RoutedEventArgs e)
@@ -208,6 +212,27 @@ namespace Folderss
                 return;
             }
 
+            int maxOutputLineCount;
+            var maxOutputLineText = ConsoleMaxLinesBox.Text.Replace(",", "").Trim();
+            if (!int.TryParse(maxOutputLineText, out maxOutputLineCount) ||
+                maxOutputLineCount < ConsoleSettingsService.MinOutputLineCount ||
+                maxOutputLineCount > ConsoleSettingsService.MaxOutputLineCount)
+            {
+                MessageBox.Show(
+                    string.Format(
+                        "최대 출력 줄 수는 {0:N0}에서 {1:N0} 사이의 숫자로 입력하세요.",
+                        ConsoleSettingsService.MinOutputLineCount,
+                        ConsoleSettingsService.MaxOutputLineCount),
+                    "콘솔 설정 오류",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                TabNav.SelectedIndex = 4;
+                ConsoleMaxLinesBox.Focus();
+                ConsoleMaxLinesBox.SelectAll();
+                return;
+            }
+            _workingConsoleSettings.MaxOutputLineCount = maxOutputLineCount;
+
             _service.Save(_workingBindings);
 
             // Save viewer mappings
@@ -219,6 +244,9 @@ namespace Folderss
 
             // Save open-with entries
             OpenWithService.Save(_workingOpenWith);
+
+            // Save console settings
+            ConsoleSettingsService.Save(_workingConsoleSettings);
 
             DialogResult = true;
         }

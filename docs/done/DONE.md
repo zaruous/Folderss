@@ -1,10 +1,14 @@
 # DONE
 
-완료된 항목은 `docs/todo/TODO.md`에서 체크한 뒤 이 파일로 옮깁니다.
+기존 릴리스 완료 이력입니다. 현재 아이템의 상태와 상세 내용은 GitHub Project #1에서 관리합니다.
 
 ---
 
 ## v1.6.1 (2026-06-27)
+
+### 사용자 확인 완료
+
+- Markdown 컨텍스트 메뉴 본문 영역 처리 — 인쇄·다른 이름으로 저장·공유가 현재 보기 모드의 전체 본문을 사용하도록 수정하고 사용자 확인 완료.
 
 ### Markdown 뷰어 파일 변경 자동 반영
 
@@ -13,6 +17,9 @@
 - `markdown-app.html` — 현재 보기 모드를 유지하면서 내용만 교체하는 `app.reloadContent()` API 추가.
 - `MainWindow.xaml.cs` — 저장된 AvalonDock 레이아웃의 `viewer|...` ContentId를 복원해 프로그램 재실행 후 Markdown 뷰어 탭이 다시 열리도록 처리.
 - `MainWindow.xaml.cs` — 이미 열린 폴더 패널이나 파일 뷰어를 다시 열 때 중복 탭을 만들지 않고 기존 탭으로 포커스 이동.
+- `MainWindow.xaml.cs` — Markdown 뷰어 탭을 F11로 패널 최대화 후 복원할 때 폴더 패널이 잘못 주입되어 흰 화면이 되는 문제 수정.
+- `MainWindow.xaml.cs` — 포커스가 문서 탭 밖으로 이동한 상태에서 F11 패널 최대화/복원을 반복해도 실제 최대화된 콘텐츠를 보존하고 활성 문서 fallback으로 레이아웃을 안정적으로 전환하도록 수정.
+- `MainWindow.xaml.cs` — F11 패널 최대화/복원을 레이아웃 직렬화·역직렬화 방식에서 AvalonDock `LayoutDocument.IsMaximized` 토글 방식으로 전환해 폴더/Markdown 콘텐츠 재부모화 문제를 제거.
 - `ViewerHost.xaml.cs` — 뷰어 교체/닫기 시 `IDisposable` 뷰어를 정리해 파일 감시자가 남지 않도록 처리.
 - `MainWindow.xaml.cs` — Markdown 뷰어 탭 닫기와 실제 앱 종료 시 뷰어 리소스를 정리하도록 처리.
 - `markdown-app.html` — 목차의 하단 항목 클릭 시 미리보기 스크롤 컨테이너 기준으로 이동하고, 마지막 헤딩도 상단 근처까지 스크롤될 수 있도록 하단 여유 공간과 TOC 활성 표시 기준을 보정.
@@ -24,7 +31,7 @@
 
 ### 문서 정리
 
-- 완료된 마크다운 뷰어 구현계획 문서를 `docs/done/마크다운뷰어_구현계획_완료.md`로 이동.
+- 완료된 마크다운 뷰어 구현계획 상세 문서를 `docs/done/마크다운뷰어_구현계획_완료.md`에서 관리.
 - `docs/todo/TODO.md`에서 완료된 항목을 제거하고 현재 미완료 항목 없음 상태로 정리.
 
 ### Open With 컨텍스트 메뉴

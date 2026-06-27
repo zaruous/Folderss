@@ -7,6 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
+│   ├── ConsolePanel.xaml/.cs       — 내장 라인 기반 콘솔 패널
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
 │   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
@@ -24,6 +25,8 @@ Folderss/
 │   ├── FavoritesService.cs         — 즐겨찾기 목록 저장·복원
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
 │   ├── ViewerConfigService.cs      — 확장자 ↔ 뷰어 매핑 (viewer-config.json 저장)
+│   ├── ConsoleSettingsService.cs   — 콘솔 출력 보관 설정 (console-settings.xml 저장)
+│   ├── ConsoleSessionService.cs    — PowerShell/cmd 프로세스 수명 및 스트림 관리
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
 │   └── ThemeManager.cs             — 테마 전환 및 저장
 ├── Themes/
@@ -36,7 +39,7 @@ Folderss/
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
-├── SettingsWindow.xaml/.cs         — 설정 창 (테마 탭 + 단축키 탭)
+├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── AboutWindow.cs                  — 정보 창
 ├── PromptWindow.cs                 — 이름 변경·새 폴더 입력 다이얼로그
@@ -62,6 +65,18 @@ Folderss/
 ### DockLayoutService / SessionStateService
 - 앱 종료 시 자동 저장, 다음 실행 시 자동 복원
 - 저장 위치: `%LOCALAPPDATA%\Folderss\dock-layout.xml`, `session.xml`
+
+### ConsoleSettingsService
+- 콘솔 패널 출력 보관 설정을 `%LOCALAPPDATA%\Folderss\console-settings.xml`에 저장
+- `MaxOutputLineCount` 기본값은 5,000줄
+- 설정 창 `콘솔` 항목에서 100 - 100,000 범위로 저장
+
+### ConsoleSessionService / ConsolePanel
+- `보기 > 콘솔` 메뉴에서 `ContentId="console"`인 하단 `LayoutAnchorable`로 표시
+- Windows PowerShell, PowerShell 7(설치 시), 명령 프롬프트를 표준 입출력 리디렉션으로 실행
+- 출력은 `ConsoleSettingsService.MaxOutputLineCount`에 맞춰 줄 단위로 제한
+- 활성 폴더 기준 시작 및 실행 중 `현재 폴더로 이동` 지원
+- `claude`, `codex`, `gemini`, `vim`, `ssh`처럼 TTY가 필요한 명령은 외부 터미널 실행으로 우회
 
 ---
 
