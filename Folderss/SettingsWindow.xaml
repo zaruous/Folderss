@@ -472,8 +472,8 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0"
@@ -483,7 +483,7 @@
                                Margin="0,0,0,4"/>
 
                     <TextBlock Grid.Row="1"
-                               Text="콘솔 패널의 출력 보관 범위를 설정합니다. 저장 시 반영됩니다."
+                               Text="기본 커맨드라인, 사용자 추가 프로필, 폰트 크기를 설정합니다. 저장 시 새 콘솔 탭부터 반영됩니다."
                                FontSize="11"
                                Margin="0,0,0,16">
                         <TextBlock.Style>
@@ -493,32 +493,181 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <StackPanel Grid.Row="2" Orientation="Vertical" MaxWidth="360" HorizontalAlignment="Left">
-                        <TextBlock Text="최대 출력 줄 수" FontSize="11" Margin="0,0,0,4">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
-                                </Style>
-                            </TextBlock.Style>
-                        </TextBlock>
-                        <TextBox x:Name="ConsoleMaxLinesBox"
-                                 Width="140"
-                                 HorizontalAlignment="Left"
-                                 VerticalContentAlignment="Center"
-                                 BorderBrush="{DynamicResource BorderBrush}"
-                                 Background="{DynamicResource ControlBackground}"
-                                 Foreground="{DynamicResource PrimaryText}"
-                                 Padding="6,4"/>
-                        <TextBlock Text="기본값은 5,000줄입니다. 입력 범위: 100 - 100,000"
+                    <Grid Grid.Row="2" Margin="0,0,0,12">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="280"/>
+                            <ColumnDefinition Width="32"/>
+                            <ColumnDefinition Width="180"/>
+                        </Grid.ColumnDefinitions>
+
+                        <StackPanel Grid.Column="0">
+                            <TextBlock Text="콘솔 디폴트 커맨드라인" FontSize="11" Margin="0,0,0,4">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <ComboBox x:Name="ConsoleDefaultProfileCombo"
+                                      MinWidth="240"
+                                      Padding="6,4"
+                                      BorderBrush="{DynamicResource BorderBrush}"
+                                      Background="{DynamicResource ControlBackground}"
+                                      Foreground="{DynamicResource PrimaryText}"
+                                      DisplayMemberPath="DisplayName"
+                                      SelectedValuePath="Key"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="2">
+                            <TextBlock Text="콘솔 폰트 크기" FontSize="11" Margin="0,0,0,4">
+                                <TextBlock.Style>
+                                    <Style TargetType="TextBlock">
+                                        <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                    </Style>
+                                </TextBlock.Style>
+                            </TextBlock>
+                            <TextBox x:Name="ConsoleFontSizeBox"
+                                     Width="100"
+                                     HorizontalAlignment="Left"
+                                     VerticalContentAlignment="Center"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     Background="{DynamicResource ControlBackground}"
+                                     Foreground="{DynamicResource PrimaryText}"
+                                     Padding="6,4"/>
+                        </StackPanel>
+                    </Grid>
+
+                    <Grid Grid.Row="3">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="Auto"/>
+                        </Grid.RowDefinitions>
+
+                        <TextBlock Grid.Row="0"
+                                   Text="추가 항목 관리"
                                    FontSize="11"
-                                   Margin="0,6,0,0">
+                                   Margin="0,0,0,8">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
                                     <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
                                 </Style>
                             </TextBlock.Style>
                         </TextBlock>
-                    </StackPanel>
+
+                        <ListView x:Name="ConsoleProfileList"
+                                  Grid.Row="1"
+                                  BorderThickness="1"
+                                  BorderBrush="{DynamicResource BorderBrush}"
+                                  SelectionMode="Single"
+                                  SelectionChanged="ConsoleProfileList_SelectionChanged">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="이름" Width="140" DisplayMemberBinding="{Binding DisplayName}"/>
+                                    <GridViewColumn Header="실행 파일" Width="220" DisplayMemberBinding="{Binding FileName}"/>
+                                    <GridViewColumn Header="인수" Width="220" DisplayMemberBinding="{Binding Arguments}"/>
+                                    <GridViewColumn Header="셸 종류" Width="120" DisplayMemberBinding="{Binding ShellKind}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+
+                        <Grid Grid.Row="2" Margin="0,10,0,0">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="Auto"/>
+                            </Grid.RowDefinitions>
+
+                            <Grid Grid.Row="0" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="220"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="180"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="표시 이름" FontSize="11" Margin="0,0,0,3">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBox x:Name="ConsoleProfileNameBox"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             Background="{DynamicResource ControlBackground}"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             Padding="6,4"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="셸 종류" FontSize="11" Margin="0,0,0,3">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <ComboBox x:Name="ConsoleProfileShellKindCombo"
+                                              Padding="6,4"
+                                              BorderBrush="{DynamicResource BorderBrush}"
+                                              Background="{DynamicResource ControlBackground}"
+                                              Foreground="{DynamicResource PrimaryText}">
+                                        <ComboBoxItem Tag="WindowsPowerShell" Content="Windows PowerShell"/>
+                                        <ComboBoxItem Tag="PowerShell7" Content="PowerShell 7"/>
+                                        <ComboBoxItem Tag="CommandPrompt" Content="명령 프롬프트"/>
+                                    </ComboBox>
+                                </StackPanel>
+                            </Grid>
+
+                            <Grid Grid.Row="1" Margin="0,0,0,6">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="*"/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition Width="220"/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="실행 파일 경로" FontSize="11" Margin="0,0,0,3">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <DockPanel>
+                                        <Button Content="찾기"
+                                                DockPanel.Dock="Right"
+                                                Margin="4,0,0,0"
+                                                Padding="8,4"
+                                                Click="ConsoleProfileBrowse_Click"/>
+                                        <TextBox x:Name="ConsoleProfileExeBox"
+                                                 BorderBrush="{DynamicResource BorderBrush}"
+                                                 Background="{DynamicResource ControlBackground}"
+                                                 Foreground="{DynamicResource PrimaryText}"
+                                                 Padding="6,4"/>
+                                    </DockPanel>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="인수" FontSize="11" Margin="0,0,0,3">
+                                        <TextBlock.Style>
+                                            <Style TargetType="TextBlock">
+                                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                                            </Style>
+                                        </TextBlock.Style>
+                                    </TextBlock>
+                                    <TextBox x:Name="ConsoleProfileArgsBox"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             Background="{DynamicResource ControlBackground}"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             Padding="6,4"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <StackPanel Grid.Row="2" Orientation="Horizontal">
+                                <Button Content="새 항목" Click="ConsoleProfileNew_Click" Padding="10,4" Margin="0,0,8,0"/>
+                                <Button Content="저장" Click="ConsoleProfileSave_Click" Padding="10,4" Margin="0,0,8,0"/>
+                                <Button Content="삭제" Click="ConsoleProfileDelete_Click" Padding="10,4"/>
+                            </StackPanel>
+                        </Grid>
+                    </Grid>
                 </Grid>
 
                 <!-- Shortcuts panel -->

@@ -1,8 +1,10 @@
 using Folderss.Services;
 using System;
+using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Linq;
+using System.Reflection;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
@@ -23,7 +25,7 @@ namespace Folderss.Controls
             }
 
             public EasyTerminalControl Terminal { get; set; }
-            public ConsoleShellKind ShellKind { get; set; }
+            public string ProfileKey { get; set; }
             public bool IsAddTab { get; set; }
 
             public event PropertyChangedEventHandler PropertyChanged;
@@ -31,11 +33,16 @@ namespace Folderss.Controls
         }
 
         private ConsoleSettings _settings;
+        private List<ConsoleCommandProfile> _profiles = new List<ConsoleCommandProfile>();
         private bool _updatingShellSelection;
         private bool _disposed;
         private int _tabCounter = 0;
         private ObservableCollection<ConsoleTab> _tabs = new ObservableCollection<ConsoleTab>();
         private ConsoleTab _addTabItem;
+        private static readonly PropertyInfo EasyTerminalThemeGetter =
+            typeof(EasyTerminalControl).GetProperty("Theme", BindingFlags.Instance | BindingFlags.NonPublic);
+        private static readonly MethodInfo EasyTerminalSetThemeMethod =
+            typeof(EasyTerminalControl).GetMethod("SetTheme", BindingFlags.Instance | BindingFlags.NonPublic);
 
         public Func<string> ActiveDirectoryProvider { get; set; }
 
@@ -45,8 +52,7 @@ namespace Folderss.Controls
         {
             InitializeComponent();
 
-            _settings = ConsoleSettingsService.Load();
-            ShellCombo.ItemsSource = ConsoleSessionService.GetAvailableShells();
+            ReloadProfiles();
 
             // '+ 새 콘솔' 역할을 할 가짜 탭(가장 마지막에 항상 상주) 인스턴스 초기화
             _addTabItem = new ConsoleTab
@@ -73,8 +79,8 @@ namespace Folderss.Controls
                     // 1단계. 가짜 탭을 리스트 맨 끝에 추가해 둡니다.
                     _tabs.Add(_addTabItem);
                     // 2단계. 구성에 맞게 첫 번째 실제 셸 탭을 생성 (자동으로 가짜 탭 앞에 안착)
-                    var configured = ConsoleSessionService.ParseShellKind(_settings.PreferredShellKind);
-                    AddConsoleTab(configured, GetActiveDirectory());
+                    var configured = GetPreferredProfile();
+                    AddConsoleTab(configured.Key, GetActiveDirectory());
                 }
             };
         }
@@ -97,17 +103,18 @@ namespace Folderss.Controls
             }
         }
 
-        public ConsoleTab AddConsoleTab(ConsoleShellKind kind, string workingDirectory)
+        public ConsoleTab AddConsoleTab(string profileKey, string workingDirectory)
         {
+            RefreshSettings(profileKey);
             _tabCounter++;
-            var shell = ConsoleSessionService.GetAvailableShells().FirstOrDefault(s => s.Kind == kind)
-                ?? ConsoleSessionService.GetAvailableShells().First();
+            var profile = GetProfile(profileKey) ?? GetPreferredProfile();
 
             var terminal = new EasyTerminalControl
             {
                 Focusable = true,
-                StartupCommandLine = BuildCommandLine(shell)
+                StartupCommandLine = ConsoleSessionService.BuildCommandLine(profile, workingDirectory)
             };
+            ApplyTerminalAppearance(terminal);
 
             // WPF 포커스 탐색기가 Tab 키를 빼앗아 콤보박스 등으로 튀지 않도록 제어 차단
             KeyboardNavigation.SetTabNavigation(terminal, KeyboardNavigationMode.None);
@@ -141,20 +148,11 @@ namespace Folderss.Controls
 
             var tab = new ConsoleTab
             {
-                Title = $"{shell.DisplayName} ({_tabCounter})",
+                Title = $"{profile.DisplayName} ({_tabCounter})",
                 Terminal = terminal,
-                ShellKind = kind,
+                ProfileKey = profile.Key,
                 IsAddTab = false
             };
-
-            if (!string.IsNullOrEmpty(workingDirectory) && System.IO.Directory.Exists(workingDirectory))
-            {
-                try
-                {
-                    System.IO.Directory.SetCurrentDirectory(workingDirectory);
-                }
-                catch { }
-            }
 
             // 고정 추가 탭('+ 새 콘솔') 바로 앞 인덱스에 새 콘솔 탭을 삽입합니다.
             int insertIndex = Math.Max(0, _tabs.Count - 1);
@@ -166,6 +164,7 @@ namespace Folderss.Controls
                 try
                 {
                     await terminal.RestartTerm(null, true);
+                    ApplyTerminalAppearance(terminal);
                     UpdateStatus();
                 }
                 catch (Exception ex)
@@ -208,29 +207,42 @@ namespace Folderss.Controls
             // 실제 콘솔 탭이 모두 삭제되고 가짜 추가 탭(1개)만 남았을 경우, PowerShell 실제 탭을 자동으로 채워 줍니다.
             if (_tabs.Count <= 1)
             {
-                var configured = ConsoleSessionService.ParseShellKind(_settings.PreferredShellKind);
-                AddConsoleTab(configured, GetActiveDirectory());
+                var configured = GetPreferredProfile();
+                AddConsoleTab(configured.Key, GetActiveDirectory());
             }
         }
 
-        private void SelectConfiguredShell(ConsoleShellKind kind)
+        private void ReloadProfiles()
+        {
+            _settings = ConsoleSettingsService.Load();
+            _profiles = ConsoleSessionService.GetAvailableProfiles(_settings).ToList();
+            ShellCombo.ItemsSource = _profiles;
+            ShellCombo.DisplayMemberPath = "DisplayName";
+            ShellCombo.SelectedValuePath = "Key";
+        }
+
+        private void RefreshSettings(string preferredProfileKey = null)
+        {
+            var currentSelection = preferredProfileKey
+                ?? (ShellCombo == null ? null : ShellCombo.SelectedValue as string)
+                ?? (ActiveTab == null ? null : ActiveTab.ProfileKey);
+            ReloadProfiles();
+
+            var resolvedProfile = GetProfile(currentSelection) ?? GetPreferredProfile();
+            SelectConfiguredShell(resolvedProfile.Key);
+        }
+
+        private void SelectConfiguredShell(string profileKey)
         {
             _updatingShellSelection = true;
             try
             {
-                ShellCombo.SelectedValue = kind;
+                ShellCombo.SelectedValue = profileKey;
             }
             finally
             {
                 _updatingShellSelection = false;
             }
-        }
-
-        private ConsoleShellKind GetSelectedShellKind()
-        {
-            if (ShellCombo.SelectedValue is ConsoleShellKind)
-                return (ConsoleShellKind)ShellCombo.SelectedValue;
-            return ConsoleShellKind.WindowsPowerShell;
         }
 
         private string GetActiveDirectory()
@@ -241,14 +253,15 @@ namespace Folderss.Controls
                 : path;
         }
 
-        private string BuildCommandLine(ConsoleShellInfo shell)
+        private ConsoleCommandProfile GetProfile(string profileKey)
         {
-            var cmd = shell.FileName;
-            if (!string.IsNullOrWhiteSpace(shell.Arguments))
-            {
-                cmd += " " + shell.Arguments;
-            }
-            return cmd;
+            return _profiles.FirstOrDefault(profile =>
+                string.Equals(profile.Key, profileKey, StringComparison.OrdinalIgnoreCase));
+        }
+
+        private ConsoleCommandProfile GetPreferredProfile()
+        {
+            return ConsoleSessionService.GetPreferredProfile(_settings);
         }
 
         private void Pty_TermReady(object sender, EventArgs e)
@@ -256,33 +269,51 @@ namespace Folderss.Controls
             // 상속받아 깨끗하게 켜지도록 문자열 명령을 생략합니다.
         }
 
-        private async void StartSelectedShell(ConsoleTab tab, string workingDirectory)
+        private void ApplyTerminalAppearance(EasyTerminalControl terminal)
         {
-            if (tab == null || tab.IsAddTab) return;
+            if (terminal == null)
+                return;
 
-            var shellKind = GetSelectedShellKind();
-            var shell = ConsoleSessionService.GetAvailableShells().FirstOrDefault(s => s.Kind == shellKind)
-                ?? ConsoleSessionService.GetAvailableShells().First();
+            var fontSize = ConsoleSettingsService.ClampFontSize(_settings.FontSize);
+            terminal.FontSize = fontSize;
+            terminal.FontSizeWhenSettingTheme = fontSize;
 
-            var cmd = BuildCommandLine(shell);
-            tab.Terminal.StartupCommandLine = cmd;
-            tab.ShellKind = shellKind;
-            tab.Title = $"{shell.DisplayName} ({_tabCounter})";
+            if (EasyTerminalSetThemeMethod == null)
+                return;
 
             try
             {
-                if (!string.IsNullOrEmpty(workingDirectory) && System.IO.Directory.Exists(workingDirectory))
-                {
-                    try
-                    {
-                        System.IO.Directory.SetCurrentDirectory(workingDirectory);
-                    }
-                    catch { }
-                }
+                var theme = EasyTerminalThemeGetter == null
+                    ? null
+                    : EasyTerminalThemeGetter.GetValue(terminal, null);
+                EasyTerminalSetThemeMethod.Invoke(terminal, new[] { theme });
+            }
+            catch
+            {
+                // 내부 테마 재적용 실패가 콘솔 시작 자체를 막지 않도록 무시한다.
+            }
+        }
 
+        private async void StartSelectedShell(ConsoleTab tab, string workingDirectory, string targetProfileKey = null)
+        {
+            if (tab == null || tab.IsAddTab) return;
+
+            RefreshSettings(targetProfileKey ?? tab.ProfileKey);
+            var profile = GetProfile(targetProfileKey ?? (ShellCombo.SelectedValue as string))
+                ?? GetPreferredProfile();
+
+            var cmd = ConsoleSessionService.BuildCommandLine(profile, workingDirectory);
+            tab.Terminal.StartupCommandLine = cmd;
+            ApplyTerminalAppearance(tab.Terminal);
+            tab.ProfileKey = profile.Key;
+            tab.Title = $"{profile.DisplayName} ({_tabCounter})";
+
+            try
+            {
                 await tab.Terminal.RestartTerm(null, true);
+                ApplyTerminalAppearance(tab.Terminal);
 
-                _settings.PreferredShellKind = shellKind.ToString();
+                _settings.PreferredProfileKey = profile.Key;
                 ConsoleSettingsService.Save(_settings);
                 UpdateStatus();
             }
@@ -305,8 +336,8 @@ namespace Folderss.Controls
                 return;
 
             var active = ActiveTab;
-            var shellKind = GetSelectedShellKind();
-            if (active.ShellKind == shellKind)
+            var profileKey = ShellCombo.SelectedValue as string;
+            if (string.Equals(active.ProfileKey, profileKey, StringComparison.OrdinalIgnoreCase))
                 return;
 
             var result = MessageBox.Show(
@@ -316,11 +347,11 @@ namespace Folderss.Controls
                 MessageBoxImage.Question);
             if (result != MessageBoxResult.OK)
             {
-                SelectConfiguredShell(active.ShellKind);
+                SelectConfiguredShell(active.ProfileKey);
                 return;
             }
 
-            StartSelectedShell(active, GetActiveDirectory());
+            StartSelectedShell(active, GetActiveDirectory(), profileKey);
         }
 
         private void SetCurrentFolder_Click(object sender, RoutedEventArgs e)
@@ -330,7 +361,7 @@ namespace Folderss.Controls
 
             EnsureStarted();
             var directory = GetActiveDirectory();
-            var shellKind = GetSelectedShellKind();
+            var shellKind = ConsoleSessionService.GetShellKind(GetProfile(active.ProfileKey));
             if (shellKind == ConsoleShellKind.CommandPrompt)
             {
                 active.Terminal.ConPTYTerm?.WriteToTerm($"cd /d \"{directory}\"\r\n");
@@ -348,7 +379,7 @@ namespace Folderss.Controls
             try
             {
                 ConsoleSessionService.LaunchExternalTerminal(
-                    GetSelectedShellKind(),
+                    GetProfile(ActiveTab == null ? null : ActiveTab.ProfileKey) ?? GetPreferredProfile(),
                     GetActiveDirectory(),
                     null);
             }
@@ -364,7 +395,7 @@ namespace Folderss.Controls
             var active = ActiveTab;
             if (active == null || active.IsAddTab) return;
 
-            var shellKind = GetSelectedShellKind();
+            var shellKind = ConsoleSessionService.GetShellKind(GetProfile(active.ProfileKey));
             if (shellKind == ConsoleShellKind.CommandPrompt)
             {
                 active.Terminal.ConPTYTerm?.WriteToTerm("cls\r\n");
@@ -381,7 +412,7 @@ namespace Folderss.Controls
             var active = ActiveTab;
             if (active != null && !active.IsAddTab)
             {
-                StartSelectedShell(active, GetActiveDirectory());
+                StartSelectedShell(active, GetActiveDirectory(), active.ProfileKey);
             }
             FocusCommandBox();
         }
@@ -400,12 +431,11 @@ namespace Folderss.Controls
             if (active.IsAddTab)
             {
                 // '+ 새 콘솔' 탭이 활성화된 경우, 즉시 새 실제 탭을 기동하고 탈출합니다.
-                var configured = ConsoleSessionService.ParseShellKind(_settings.PreferredShellKind);
-                AddConsoleTab(configured, GetActiveDirectory());
+                AddConsoleTab(GetPreferredProfile().Key, GetActiveDirectory());
                 return;
             }
 
-            SelectConfiguredShell(active.ShellKind);
+            SelectConfiguredShell(active.ProfileKey);
             UpdateStatus();
             Dispatcher.BeginInvoke(new Action(() =>
             {

@@ -31,6 +31,12 @@ namespace Folderss
         public string DisplayName { get; set; }
     }
 
+    public class ConsoleProfileOption
+    {
+        public string Key { get; set; }
+        public string DisplayName { get; set; }
+    }
+
     public partial class SettingsWindow : Window
     {
         private readonly KeyBindingService _service;
@@ -39,7 +45,10 @@ namespace Folderss
         private readonly ObservableCollection<ViewerMappingItem> _workingMappings;
         private readonly ObservableCollection<OpenWithEntry> _workingOpenWith;
         private readonly ConsoleSettings _workingConsoleSettings;
+        private readonly ObservableCollection<ConsoleCommandProfile> _workingConsoleProfiles;
+        private readonly ObservableCollection<ConsoleProfileOption> _consoleProfileOptions;
         private string _editingOpenWithId;
+        private string _editingConsoleProfileKey;
         private bool _initializingTheme;
         private readonly AppTheme _originalTheme;
         public IReadOnlyList<ViewerOption> ViewerOptions { get; }
@@ -72,6 +81,9 @@ namespace Folderss
             _workingOpenWith = new ObservableCollection<OpenWithEntry>(
                 OpenWithService.GetAll().Select(e => e.Clone()));
             _workingConsoleSettings = ConsoleSettingsService.Load().Clone();
+            _workingConsoleProfiles = new ObservableCollection<ConsoleCommandProfile>(
+                _workingConsoleSettings.CustomProfiles.Select(profile => profile.Clone()));
+            _consoleProfileOptions = new ObservableCollection<ConsoleProfileOption>();
 
             _originalTheme = ThemeManager.CurrentTheme;
 
@@ -82,7 +94,13 @@ namespace Folderss
             ViewerMappingList.ItemsSource = _workingMappings;
             OpenWithList.ItemsSource = _workingOpenWith;
             NewViewerCombo.SelectedValue = ViewerConfigService.SystemDefaultKey;
-            ConsoleMaxLinesBox.Text = _workingConsoleSettings.MaxOutputLineCount.ToString("N0");
+            ConsoleProfileList.ItemsSource = _workingConsoleProfiles;
+            ConsoleDefaultProfileCombo.ItemsSource = _consoleProfileOptions;
+            ConsoleFontSizeBox.Text = _workingConsoleSettings.FontSize.ToString();
+            RefreshConsoleProfileOptions();
+            ConsoleDefaultProfileCombo.SelectedValue = _workingConsoleSettings.PreferredProfileKey;
+            ConsoleProfileShellKindCombo.SelectedIndex = 0;
+            ClearConsoleProfileForm();
             ClearOpenWithForm();
 
             _initializingTheme = true;
@@ -212,26 +230,44 @@ namespace Folderss
                 return;
             }
 
-            int maxOutputLineCount;
-            var maxOutputLineText = ConsoleMaxLinesBox.Text.Replace(",", "").Trim();
-            if (!int.TryParse(maxOutputLineText, out maxOutputLineCount) ||
-                maxOutputLineCount < ConsoleSettingsService.MinOutputLineCount ||
-                maxOutputLineCount > ConsoleSettingsService.MaxOutputLineCount)
+            int fontSize;
+            var fontSizeText = ConsoleFontSizeBox.Text.Trim();
+            if (!int.TryParse(fontSizeText, out fontSize) ||
+                fontSize < ConsoleSettingsService.MinFontSize ||
+                fontSize > ConsoleSettingsService.MaxFontSize)
             {
                 MessageBox.Show(
                     string.Format(
-                        "최대 출력 줄 수는 {0:N0}에서 {1:N0} 사이의 숫자로 입력하세요.",
-                        ConsoleSettingsService.MinOutputLineCount,
-                        ConsoleSettingsService.MaxOutputLineCount),
+                        "콘솔 폰트 크기는 {0}에서 {1} 사이의 숫자로 입력하세요.",
+                        ConsoleSettingsService.MinFontSize,
+                        ConsoleSettingsService.MaxFontSize),
                     "콘솔 설정 오류",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
                 TabNav.SelectedIndex = 4;
-                ConsoleMaxLinesBox.Focus();
-                ConsoleMaxLinesBox.SelectAll();
+                ConsoleFontSizeBox.Focus();
+                ConsoleFontSizeBox.SelectAll();
                 return;
             }
-            _workingConsoleSettings.MaxOutputLineCount = maxOutputLineCount;
+
+            var preferredProfileKey = ConsoleDefaultProfileCombo.SelectedValue as string;
+            if (string.IsNullOrWhiteSpace(preferredProfileKey))
+            {
+                MessageBox.Show(
+                    "콘솔 디폴트 커맨드라인을 선택하세요.",
+                    "콘솔 설정 오류",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+                TabNav.SelectedIndex = 4;
+                ConsoleDefaultProfileCombo.Focus();
+                return;
+            }
+
+            _workingConsoleSettings.FontSize = fontSize;
+            _workingConsoleSettings.PreferredProfileKey = preferredProfileKey;
+            _workingConsoleSettings.CustomProfiles = _workingConsoleProfiles
+                .Select(profile => profile.Clone())
+                .ToList();
 
             _service.Save(_workingBindings);
 
@@ -340,6 +376,143 @@ namespace Folderss
             OpenWithExeBox.Text = "";
             OpenWithArgsBox.Text = "\"{0}\"";
             OpenWithMaskBox.Text = "*";
+        }
+
+        private void RefreshConsoleProfileOptions()
+        {
+            var selectedKey = ConsoleDefaultProfileCombo == null ? null : ConsoleDefaultProfileCombo.SelectedValue as string;
+            var temporarySettings = _workingConsoleSettings.Clone();
+            temporarySettings.CustomProfiles = _workingConsoleProfiles.Select(profile => profile.Clone()).ToList();
+
+            _consoleProfileOptions.Clear();
+            foreach (var profile in ConsoleSessionService.GetAvailableProfiles(temporarySettings))
+            {
+                _consoleProfileOptions.Add(new ConsoleProfileOption
+                {
+                    Key = profile.Key,
+                    DisplayName = profile.DisplayName
+                });
+            }
+
+            if (ConsoleDefaultProfileCombo == null)
+                return;
+
+            var resolvedKey = !string.IsNullOrWhiteSpace(selectedKey)
+                ? selectedKey
+                : _workingConsoleSettings.PreferredProfileKey;
+            if (_consoleProfileOptions.Any(option => option.Key == resolvedKey))
+                ConsoleDefaultProfileCombo.SelectedValue = resolvedKey;
+            else if (_consoleProfileOptions.Count > 0)
+                ConsoleDefaultProfileCombo.SelectedValue = _consoleProfileOptions[0].Key;
+        }
+
+        private void ConsoleProfileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var profile = ConsoleProfileList.SelectedItem as ConsoleCommandProfile;
+            if (profile == null) return;
+
+            _editingConsoleProfileKey = profile.Key;
+            ConsoleProfileNameBox.Text = profile.DisplayName;
+            ConsoleProfileExeBox.Text = profile.FileName;
+            ConsoleProfileArgsBox.Text = profile.Arguments;
+
+            foreach (ComboBoxItem item in ConsoleProfileShellKindCombo.Items)
+            {
+                if ((item.Tag as string) == profile.ShellKind)
+                {
+                    ConsoleProfileShellKindCombo.SelectedItem = item;
+                    return;
+                }
+            }
+
+            ConsoleProfileShellKindCombo.SelectedIndex = 0;
+        }
+
+        private void ConsoleProfileNew_Click(object sender, RoutedEventArgs e)
+        {
+            ConsoleProfileList.SelectedItem = null;
+            ClearConsoleProfileForm();
+        }
+
+        private void ConsoleProfileSave_Click(object sender, RoutedEventArgs e)
+        {
+            var displayName = ConsoleProfileNameBox.Text.Trim();
+            var fileName = ConsoleProfileExeBox.Text.Trim();
+            if (string.IsNullOrWhiteSpace(displayName) || string.IsNullOrWhiteSpace(fileName))
+            {
+                MessageBox.Show("표시 이름과 실행 파일 경로는 필수입니다.", "입력 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var shellKind = (ConsoleProfileShellKindCombo.SelectedItem as ComboBoxItem)?.Tag as string;
+            if (string.IsNullOrWhiteSpace(shellKind))
+                shellKind = ConsoleShellKind.WindowsPowerShell.ToString();
+
+            if (_editingConsoleProfileKey != null)
+            {
+                var existing = _workingConsoleProfiles.FirstOrDefault(profile => profile.Key == _editingConsoleProfileKey);
+                if (existing != null)
+                {
+                    existing.DisplayName = displayName;
+                    existing.FileName = fileName;
+                    existing.Arguments = ConsoleProfileArgsBox.Text;
+                    existing.ShellKind = shellKind;
+
+                    var index = _workingConsoleProfiles.IndexOf(existing);
+                    _workingConsoleProfiles.RemoveAt(index);
+                    _workingConsoleProfiles.Insert(index, existing);
+                    ConsoleProfileList.SelectedItem = existing;
+                    RefreshConsoleProfileOptions();
+                    return;
+                }
+            }
+
+            var profile = new ConsoleCommandProfile
+            {
+                Key = "custom:" + System.Guid.NewGuid().ToString("N"),
+                DisplayName = displayName,
+                FileName = fileName,
+                Arguments = ConsoleProfileArgsBox.Text,
+                ShellKind = shellKind,
+                IsBuiltIn = false
+            };
+            _workingConsoleProfiles.Add(profile);
+            _editingConsoleProfileKey = profile.Key;
+            ConsoleProfileList.SelectedItem = profile;
+            RefreshConsoleProfileOptions();
+        }
+
+        private void ConsoleProfileDelete_Click(object sender, RoutedEventArgs e)
+        {
+            if (_editingConsoleProfileKey == null) return;
+
+            var existing = _workingConsoleProfiles.FirstOrDefault(profile => profile.Key == _editingConsoleProfileKey);
+            if (existing == null) return;
+
+            _workingConsoleProfiles.Remove(existing);
+            RefreshConsoleProfileOptions();
+            ClearConsoleProfileForm();
+        }
+
+        private void ConsoleProfileBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "콘솔 실행 파일 선택",
+                Filter = "실행 파일 (*.exe)|*.exe|모든 파일 (*.*)|*.*",
+                CheckFileExists = true
+            };
+            if (dlg.ShowDialog(this) == true)
+                ConsoleProfileExeBox.Text = dlg.FileName;
+        }
+
+        private void ClearConsoleProfileForm()
+        {
+            _editingConsoleProfileKey = null;
+            ConsoleProfileNameBox.Text = "";
+            ConsoleProfileExeBox.Text = "";
+            ConsoleProfileArgsBox.Text = "";
+            ConsoleProfileShellKindCombo.SelectedIndex = 0;
         }
 
         private static string ToViewerDisplayName(string key)

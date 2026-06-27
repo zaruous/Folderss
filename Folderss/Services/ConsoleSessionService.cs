@@ -16,6 +16,7 @@ namespace Folderss.Services
     public sealed class ConsoleShellInfo
     {
         public ConsoleShellKind Kind { get; set; }
+        public string Key { get; set; }
         public string DisplayName { get; set; }
         public string FileName { get; set; }
         public string Arguments { get; set; }
@@ -56,6 +57,7 @@ namespace Folderss.Services
             {
                 new ConsoleShellInfo
                 {
+                    Key = "builtin:powershell",
                     Kind = ConsoleShellKind.WindowsPowerShell,
                     DisplayName = "Windows PowerShell",
                     FileName = "powershell.exe",
@@ -68,6 +70,7 @@ namespace Folderss.Services
             {
                 shells.Add(new ConsoleShellInfo
                 {
+                    Key = "builtin:pwsh",
                     Kind = ConsoleShellKind.PowerShell7,
                     DisplayName = "PowerShell 7",
                     FileName = pwsh,
@@ -77,6 +80,7 @@ namespace Folderss.Services
 
             shells.Add(new ConsoleShellInfo
             {
+                Key = "builtin:cmd",
                 Kind = ConsoleShellKind.CommandPrompt,
                 DisplayName = "명령 프롬프트",
                 FileName = Environment.GetEnvironmentVariable("COMSPEC") ?? "cmd.exe",
@@ -84,6 +88,79 @@ namespace Folderss.Services
             });
 
             return shells;
+        }
+
+        public static IReadOnlyList<ConsoleCommandProfile> GetAvailableProfiles(ConsoleSettings settings)
+        {
+            var builtIns = GetAvailableShells()
+                .Select(shell => new ConsoleCommandProfile
+                {
+                    Key = shell.Key,
+                    DisplayName = shell.DisplayName,
+                    FileName = shell.FileName,
+                    Arguments = shell.Arguments,
+                    ShellKind = shell.Kind.ToString(),
+                    IsBuiltIn = true
+                })
+                .ToList();
+
+            var customProfiles = (settings == null ? new List<ConsoleCommandProfile>() : settings.CustomProfiles)
+                .Where(profile => profile != null
+                    && !string.IsNullOrWhiteSpace(profile.DisplayName)
+                    && !string.IsNullOrWhiteSpace(profile.FileName))
+                .Select(profile =>
+                {
+                    var cloned = profile.Clone();
+                    cloned.IsBuiltIn = false;
+                    if (string.IsNullOrWhiteSpace(cloned.Key))
+                        cloned.Key = "custom:" + Guid.NewGuid().ToString("N");
+                    return cloned;
+                });
+
+            return builtIns.Concat(customProfiles)
+                .GroupBy(profile => profile.Key, StringComparer.OrdinalIgnoreCase)
+                .Select(group => group.First())
+                .ToList();
+        }
+
+        public static ConsoleCommandProfile GetPreferredProfile(ConsoleSettings settings)
+        {
+            var profiles = GetAvailableProfiles(settings);
+            var preferred = settings == null ? null : settings.PreferredProfileKey;
+            return profiles.FirstOrDefault(profile => string.Equals(profile.Key, preferred, StringComparison.OrdinalIgnoreCase))
+                ?? profiles.First();
+        }
+
+        public static ConsoleShellKind ParseShellKindOrDefault(string value)
+        {
+            ConsoleShellKind kind;
+            return Enum.TryParse(value, true, out kind)
+                ? kind
+                : ConsoleShellKind.WindowsPowerShell;
+        }
+
+        public static ConsoleShellKind GetShellKind(ConsoleCommandProfile profile)
+        {
+            if (profile != null && !string.IsNullOrWhiteSpace(profile.ShellKind))
+                return ParseShellKindOrDefault(profile.ShellKind);
+            return ConsoleShellKind.WindowsPowerShell;
+        }
+
+        public static string BuildCommandLine(ConsoleCommandProfile profile, string workingDirectory = null)
+        {
+            var directory = ResolveWorkingDirectory(workingDirectory);
+            if (profile == null || string.IsNullOrWhiteSpace(profile.FileName))
+                return BuildBuiltInCommandLine(
+                    "powershell.exe",
+                    "-NoLogo -NoProfile -NoExit",
+                    ConsoleShellKind.WindowsPowerShell,
+                    directory);
+
+            return BuildBuiltInCommandLine(
+                profile.FileName.Trim(),
+                profile.Arguments,
+                GetShellKind(profile),
+                directory);
         }
 
         public static void LaunchExternalTerminal(ConsoleShellKind shellKind, string workingDirectory, string command = null)
@@ -113,6 +190,31 @@ namespace Folderss.Services
                         "Set-Location -LiteralPath '" + directory.Replace("'", "''") + "'; " + command);
             }
 
+            Process.Start(startInfo);
+        }
+
+        public static void LaunchExternalTerminal(ConsoleCommandProfile profile, string workingDirectory, string command = null)
+        {
+            if (profile == null)
+            {
+                LaunchExternalTerminal(ConsoleShellKind.WindowsPowerShell, workingDirectory, command);
+                return;
+            }
+
+            var shellKind = GetShellKind(profile);
+            if (profile.IsBuiltIn)
+            {
+                LaunchExternalTerminal(shellKind, workingDirectory, command);
+                return;
+            }
+
+            var startInfo = new ProcessStartInfo
+            {
+                FileName = profile.FileName,
+                Arguments = profile.Arguments ?? "",
+                WorkingDirectory = ResolveWorkingDirectory(workingDirectory),
+                UseShellExecute = true
+            };
             Process.Start(startInfo);
         }
 
@@ -265,6 +367,69 @@ namespace Folderss.Services
         private static string QuoteCmdPath(string value)
         {
             return "\"" + (value ?? "").Replace("\"", "\"\"") + "\"";
+        }
+
+        private static string BuildBuiltInCommandLine(string fileName, string arguments, ConsoleShellKind shellKind, string workingDirectory)
+        {
+            var normalizedFileName = QuoteCommandToken(fileName);
+            var normalizedArguments = (arguments ?? "").Trim();
+            var directory = ResolveWorkingDirectory(workingDirectory);
+
+            string finalArguments;
+            if (shellKind == ConsoleShellKind.CommandPrompt)
+            {
+                finalArguments = BuildCmdArguments(normalizedArguments, directory);
+            }
+            else
+            {
+                finalArguments = BuildPowerShellArguments(normalizedArguments, directory);
+            }
+
+            return string.IsNullOrWhiteSpace(finalArguments)
+                ? normalizedFileName
+                : normalizedFileName + " " + finalArguments;
+        }
+
+        private static string BuildPowerShellArguments(string baseArguments, string workingDirectory)
+        {
+            var normalizedBase = (baseArguments ?? "").Trim();
+            var locationCommand = "Set-Location -LiteralPath '" + workingDirectory.Replace("'", "''") + "'";
+            if (normalizedBase.IndexOf("-Command", StringComparison.OrdinalIgnoreCase) >= 0)
+                return normalizedBase;
+
+            if (normalizedBase.IndexOf("-NoExit", StringComparison.OrdinalIgnoreCase) < 0)
+                normalizedBase = string.IsNullOrWhiteSpace(normalizedBase)
+                    ? "-NoExit"
+                    : normalizedBase + " -NoExit";
+
+            return string.IsNullOrWhiteSpace(normalizedBase)
+                ? "-NoExit -Command " + QuoteProcessArgument(locationCommand)
+                : normalizedBase + " -Command " + QuoteProcessArgument(locationCommand);
+        }
+
+        private static string BuildCmdArguments(string baseArguments, string workingDirectory)
+        {
+            var normalizedBase = (baseArguments ?? "").Trim();
+            var locationCommand = "cd /d " + QuoteCmdPath(workingDirectory);
+            if (normalizedBase.IndexOf("/K", StringComparison.OrdinalIgnoreCase) >= 0)
+                return normalizedBase + " " + QuoteCmdCommand(locationCommand);
+
+            if (normalizedBase.IndexOf("/C", StringComparison.OrdinalIgnoreCase) >= 0)
+                return normalizedBase;
+
+            return string.IsNullOrWhiteSpace(normalizedBase)
+                ? "/K " + QuoteCmdCommand(locationCommand)
+                : normalizedBase + " /K " + QuoteCmdCommand(locationCommand);
+        }
+
+        private static string QuoteCommandToken(string value)
+        {
+            var token = (value ?? "").Trim();
+            if (token.Length == 0)
+                return "\"\"";
+            if (token.StartsWith("\"", StringComparison.Ordinal) && token.EndsWith("\"", StringComparison.Ordinal))
+                return token;
+            return token.IndexOf(' ') >= 0 ? "\"" + token + "\"" : token;
         }
 
         private void Process_OutputDataReceived(object sender, DataReceivedEventArgs e)
