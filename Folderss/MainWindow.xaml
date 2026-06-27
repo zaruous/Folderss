@@ -159,6 +159,7 @@
                                Grid.Row="1"
                                Margin="6"
                                Background="{DynamicResource WindowBackground}"
+                               AllowMixedOrientation="True"
                                PreviewMouseLeftButtonDown="DockManager_PreviewMouseLeftButtonDown"
                                PreviewMouseRightButtonDown="DockManager_PreviewMouseRightButtonDown">
             <layout:LayoutRoot>

@@ -109,6 +109,20 @@ namespace Folderss.Controls
                 StartupCommandLine = BuildCommandLine(shell)
             };
 
+            // WPF 포커스 탐색기가 Tab 키를 빼앗아 콤보박스 등으로 튀지 않도록 제어 차단
+            KeyboardNavigation.SetTabNavigation(terminal, KeyboardNavigationMode.None);
+            KeyboardNavigation.SetDirectionalNavigation(terminal, KeyboardNavigationMode.None);
+
+            // Tab 키 Preview 단계에서 WPF 기본 동작을 억제하고 PTY 파이프로 다이렉트 전송
+            terminal.PreviewKeyDown += (s, args) =>
+            {
+                if (args.Key == Key.Tab)
+                {
+                    args.Handled = true;
+                    terminal.ConPTYTerm?.WriteToTerm("\t");
+                }
+            };
+
             var dpd = DependencyPropertyDescriptor.FromProperty(
                 EasyTerminalControl.ConPTYTermProperty,
                 typeof(EasyTerminalControl));

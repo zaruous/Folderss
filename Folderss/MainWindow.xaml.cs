@@ -362,6 +362,8 @@ namespace Folderss
                 return LeftPane;
             if (contentId == "right-folder")
                 return RightPane;
+            if (contentId == "console")
+                return GetConsolePanel();
             if (contentId == "add-folder-panel")
                 return new System.Windows.Controls.Grid();
             if (string.IsNullOrWhiteSpace(contentId))
