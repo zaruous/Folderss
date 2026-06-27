@@ -1,6 +1,6 @@
 # Folderss
 
-Windows용 듀얼 패널 파일 관리자입니다. WPF와 .NET Framework 4.8로 구현했으며, AvalonDock을 활용한 자유로운 패널 도킹·탭·분리 창을 지원합니다.
+Windows용 듀얼 패널 파일 관리자입니다. WPF와 `net8.0-windows` 기반으로 구현했으며, AvalonDock을 활용한 자유로운 패널 도킹·탭·분리 창을 지원합니다.
 
 현재 버전: **v1.4.5**
 
@@ -18,7 +18,7 @@ Folderss/
 │   ├── FolderBrowser       — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위)
 │   ├── FavoritesPanel      — 즐겨찾기 패널
 │   ├── SearchPanel         — 파일 내용 검색 패널
-│   ├── ConsolePanel        — 내장 라인 기반 콘솔 패널
+│   ├── ConsolePanel        — ConPTY 기반 내장 터미널 패널
 │   └── ViewerHost          — 내장 파일 뷰어 호스트
 ├── Viewers/
 │   ├── MarkdownViewer      — Markdown 미리보기·편집·내보내기
@@ -42,7 +42,7 @@ Folderss/
 │   ├── ViewerConfigService     — 확장자별 내장 뷰어 매핑
 │   ├── OpenWithService         — 사용자 지정 Open With 항목 저장·실행
 │   ├── ConsoleSettingsService  — 콘솔 패널 설정 저장
-│   ├── ConsoleSessionService   — PowerShell/cmd 콘솔 세션 관리
+│   ├── ConsoleSessionService   — 콘솔 프로필/외부 터미널 실행 관리
 │   ├── UpdateService           — GitHub 최신 릴리스 확인·다운로드
 │   ├── ShellContextMenuService — Windows 쉘 우클릭 컨텍스트 메뉴
 │   └── ThemeManager            — 테마 전환 및 저장
@@ -63,7 +63,7 @@ Folderss/
 - **사용자 지정 Open With**: 파일·폴더 확장자 마스크에 맞는 외부 프로그램을 메인 메뉴와 Windows 컨텍스트 메뉴 상단에 노출합니다.
 - **비동기 미리보기**: 파일 미리보기는 `Task.Run`으로 백그라운드에서 읽고, 요청 ID 비교로 레이스 컨디션을 방지합니다.
 - **이동 이력**: 뒤로·앞으로 이동 이력을 패널별 스택으로 관리하며 최대 10개까지 유지합니다.
-- **세션 복원**: 종료 시 열린 폴더 경로·활성 패널(`session.xml`)과 도킹 배치(`dock-layout.xml`)를 `%LOCALAPPDATA%\Folderss\`에 저장하고 다음 실행 시 복원합니다.
+- **세션 복원**: 창을 트레이로 숨기기 직전과 실제 종료 직전에 열린 폴더 경로·활성 패널(`session.xml`)과 도킹 배치(`dock-layout.xml`)를 `%LOCALAPPDATA%\Folderss\`에 저장하고 다음 실행 시 복원합니다.
 - **사용자 설정**: 테마(`theme.txt`), 단축키(`keybindings.xml`), 뷰어 매핑(`viewer-config.json`), 열기 프로그램(`open-with.xml`), 콘솔 설정(`console-settings.xml`)을 사용자별로 저장합니다.
 - **테마**: `ResourceDictionary` 교체 방식으로 런타임에 즉시 전환합니다.
 
@@ -84,8 +84,8 @@ Folderss/
 - Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
 - 설정 창에서 단축키와 확장자별 뷰어 매핑 변경
 - 설정 창에서 사용자 지정 열기 프로그램 등록 및 확장자 마스크 관리
-- 설정 창에서 콘솔 최대 출력 줄 수 변경
-- `보기 > 콘솔` 하단 도킹 패널에서 PowerShell/cmd 명령 실행
+- 설정 창에서 콘솔 디폴트 커맨드라인과 추가 실행 항목 관리
+- `보기 > 콘솔` 하단 터미널 패널에서 PowerShell 7, Windows PowerShell, 명령 프롬프트 실행
 - AvalonDock 기반 패널 도킹, 탭, 분리 창, 자동 숨김
 - `F11`로 현재 폴더 패널 최대화 및 복원
 - 도킹 배치 자동 저장 및 복원
@@ -119,13 +119,13 @@ Folderss/
 
 ## 콘솔
 
-`보기 > 콘솔`에서 하단 도킹 콘솔 패널을 열 수 있습니다. 기본 셸은 Windows PowerShell이며, PowerShell 7이 설치된 경우 선택 목록에 표시되고 명령 프롬프트도 사용할 수 있습니다.
+`보기 > 콘솔`에서 하단 터미널 패널을 열 수 있습니다. 콘솔은 `EasyWindowsTerminalControl`과 ConPTY를 사용하며 기본 항목으로 PowerShell 7, Windows PowerShell, 명령 프롬프트를 제공합니다. 설정 창에서는 기본 커맨드라인과 사용자 정의 실행 항목을 관리할 수 있습니다.
 
 - 콘솔은 현재 활성 폴더를 작업 디렉터리로 시작합니다.
+- 콘솔은 탭 방식으로 여러 세션을 열 수 있고 `+ 새 콘솔` 탭으로 새 세션을 추가합니다.
 - `현재 폴더로 이동`은 실행 중인 셸을 활성 폴더 위치로 이동합니다.
-- 출력은 설정된 최대 줄 수만 보관하며 기본값은 5,000줄입니다.
-- 라인 기반 표준 입출력 콘솔이므로 전체 화면 TTY 프로그램이나 ANSI 커서 제어 앱은 완전한 터미널처럼 동작하지 않을 수 있습니다.
-- `claude`, `codex`, `gemini`, `vim`, `ssh`처럼 TTY가 필요한 명령은 외부 터미널에서 실행하도록 안내합니다.
+- `외부 터미널` 버튼으로 현재 선택한 프로필 기준의 외부 콘솔도 열 수 있습니다.
+- 콘솔 폰트 크기 설정 UI는 있으나 현재 런타임 반영에는 추가 보완이 필요합니다.
 
 ## 파일 미리보기
 
@@ -148,7 +148,7 @@ Folderss/
 - 추가한 폴더 패널도 이동·탭 병합·분리할 수 있으며 다음 실행 시 복원됩니다.
 - 각 폴더 패널의 뒤로·앞으로 이동 내역은 최근 10개까지 유지됩니다.
 - 앱 종료 시 열려 있던 폴더 위치와 활성 폴더를 저장하고 다음 실행 시 복원합니다.
-- 도킹 배치는 앱 종료 시 저장되고 다음 실행 시 복원됩니다.
+- 도킹 배치는 창을 닫아 트레이로 숨길 때 즉시 저장되며, 다음 실행 시 패널의 분할 방향과 크기를 함께 복원합니다.
 
 ## 테마
 
@@ -185,10 +185,11 @@ Folderss\Themes\Controls.xaml
 | `keybindings.xml` | 사용자 단축키 |
 | `viewer-config.json` | 확장자별 뷰어 매핑 |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
-| `console-settings.xml` | 콘솔 설정(기본 최대 출력 5,000줄) |
+| `console-settings.xml` | 콘솔 설정(기본 프로필, 사용자 정의 프로필 등) |
 | `favorites.xml` | 즐겨찾기 그룹과 항목 |
 | `session.xml` | 열린 폴더 패널과 활성 패널 |
 | `dock-layout.xml` | AvalonDock 패널 배치 |
+| `dock-layout.xml.version` | 레이아웃 호환성 버전 |
 
 ## 단축키
 
@@ -232,15 +233,17 @@ Folderss\Themes\Controls.xaml
 ### 요구 사항
 
 - Windows 10 이상
-- [.NET Framework 4.8](https://dotnet.microsoft.com/download/dotnet-framework/net48)
+- [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (내장 뷰어 사용 시 필요)
 - 다음 중 하나
-  - Visual Studio 2019 이상 (워크로드: **.NET 데스크톱 개발**)
+  - Visual Studio 2022 이상 (워크로드: **.NET 데스크톱 개발**)
   - [Visual Studio Build Tools](https://visualstudio.microsoft.com/visual-studio-build-tools/) (구성 요소: **MSBuild**)
 
-NuGet 패키지는 `packages.config` 기준으로 복원됩니다.
+주요 NuGet 패키지는 SDK 스타일 프로젝트 기준으로 복원됩니다.
 
 - `Dirkster.AvalonDock` 4.74.1
+- `EasyWindowsTerminalControl` 1.0.36
+- `CI.Microsoft.Windows.Console.ConPTY` 1.22.250314001
 - `Microsoft.Web.WebView2` 1.0.2739.15
 
 ### Visual Studio에서 빌드
@@ -251,39 +254,34 @@ NuGet 패키지는 `packages.config` 기준으로 복원됩니다.
 
 ### MSBuild(커맨드라인)로 빌드
 
-Visual Studio 또는 Build Tools 설치 경로에 맞는 `MSBuild.exe`를 사용합니다. 아래는 Build Tools 설치 예시입니다.
+`dotnet build`를 기본 빌드 명령으로 사용합니다.
 
 **Debug 빌드**
 
 ```powershell
-& 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Restore,Rebuild /p:Configuration=Debug
+dotnet build .\Folderss.sln -c Debug
 ```
 
 **Release 빌드**
 
-```powershell
-& 'C:\Program Files (x86)\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /t:Restore,Rebuild /p:Configuration=Release
+```
+dotnet build .\Folderss.sln -c Release
 ```
 
-Visual Studio 2022 Community 설치 환경에서는 다음 명령으로 Release 빌드가 성공했습니다.
-
-```powershell
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\Msbuild\Current\Bin\amd64\MSBuild.exe' .\Folderss.sln /p:Configuration=Release /p:Platform='Any CPU' /m
-```
 
 ### 빌드 결과물
 
 | 구성 | 경로 |
 |---|---|
-| Debug | `Folderss\bin\Debug\Folderss.exe` |
-| Release | `Folderss\bin\Release\Folderss.exe` |
+| Debug | `Folderss\bin\Debug\net8.0-windows\Folderss.exe` |
+| Release | `Folderss\bin\Release\net8.0-windows\Folderss.exe` |
 
 ## 실행
 
 빌드 없이 바로 실행하려면 최신 Release 바이너리를 사용합니다.
 
 ```text
-Folderss\bin\Release\Folderss.exe
+Folderss\bin\Release\net8.0-windows\Folderss.exe
 ```
 
 > 기본 삭제는 Windows 휴지통으로 이동합니다. `Shift+Delete`는 휴지통을 거치지 않고 영구 삭제합니다.

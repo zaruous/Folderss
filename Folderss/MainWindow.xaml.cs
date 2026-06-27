@@ -8,6 +8,7 @@ using System.ComponentModel;
 using System.IO;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
@@ -21,7 +22,6 @@ namespace Folderss
     public partial class MainWindow : Window
     {
         private FolderBrowser _activePane;
-        private bool _resetDockLayoutRequested;
         private SessionState _sessionState;
         private bool _openingPanelFromAddTab;
         private Forms.NotifyIcon _trayIcon;
@@ -60,7 +60,7 @@ namespace Folderss
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            // 구버전 레이아웃 XML(LayoutAnchorable 방식) 호환성 체크 및 충돌 삭제 처리
+            // 구버전 콘솔 레이아웃(LayoutAnchorable 방식)만 정리한다.
             var layoutPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
                 "Folderss",
@@ -70,7 +70,7 @@ namespace Folderss
                 try
                 {
                     var xml = File.ReadAllText(layoutPath);
-                    if (xml.Contains("<LayoutAnchorable") && xml.Contains("ContentId=\"console\""))
+                    if (Regex.IsMatch(xml, "<LayoutAnchorable\\b[^>]*\\bContentId=\"console\"[^>]*>"))
                     {
                         File.Delete(layoutPath);
                     }
@@ -94,11 +94,29 @@ namespace Folderss
 
             var restored = DockLayoutService.Restore(DockManager, ResolveDockContent);
             if (!restored)
+            {
+                BuildDefaultDockLayout();
                 RestoreAdditionalPanels(_sessionState.OpenFolderPaths);
+                if (File.Exists(DockLayoutService.RestoreErrorPath))
+                {
+                    try
+                    {
+                        var restoreError = File.ReadAllText(DockLayoutService.RestoreErrorPath);
+                        MessageBox.Show(
+                            "저장된 레이아웃을 복원하지 못해 기본 레이아웃으로 시작했습니다.\n\n" + restoreError,
+                            "레이아웃 복원 실패",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Warning);
+                    }
+                    catch
+                    {
+                    }
+                }
+            }
             else
                 AttachRestoredViewerDocuments();
 
-            // 최종 복원 또는 재생성 완료된 레이아웃 전체에서 console 탭을 찾아 콘솔 패널 인스턴스를 실시간 주입
+            // 저장된 레이아웃에 console 탭이 포함된 경우에만 콘솔 패널 인스턴스를 주입한다.
             var consoleDoc = DockManager.Layout.Descendents()
                 .OfType<LayoutDocument>()
                 .FirstOrDefault(d => d.ContentId == "console");
@@ -106,6 +124,9 @@ namespace Folderss
             {
                 consoleDoc.Content = GetConsolePanel();
             }
+
+            if (restored && DockLayoutService.RequiresLegacyConsoleMigration)
+                MigrateLegacyConsoleTabLayout();
 
             EnsureAddPanelTab();
             DockManager.LayoutChanged += DockManager_LayoutChanged;
@@ -551,18 +572,13 @@ namespace Folderss
             if (addDocument == null || !addDocument.IsActive || _openingPanelFromAddTab)
                 return;
 
-            _openingPanelFromAddTab = true;
             Dispatcher.BeginInvoke(new Action(() =>
             {
-                try
-                {
-                    var defaultPath = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
-                    AddFolderPanel(defaultPath);
-                }
-                finally
-                {
-                    _openingPanelFromAddTab = false;
-                }
+                var fallbackDocument = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocument>()
+                    .FirstOrDefault(d => d.ContentId != "add-folder-panel" && d.Content is FolderBrowser);
+                if (fallbackDocument != null)
+                    fallbackDocument.IsActive = true;
             }), DispatcherPriority.Background);
         }
 
@@ -824,6 +840,7 @@ namespace Folderss
         {
             if (!_reallyClose)
             {
+                SaveCurrentLayoutState();
                 e.Cancel = true;
                 Hide();
                 if (!_shownTrayBalloon)
@@ -838,24 +855,14 @@ namespace Folderss
                 return;
             }
 
+            // If the window is hidden, the visible layout was already saved before Hide().
+            // Serializing the unloaded visual state again can overwrite that last good layout.
+            if (IsVisible)
+                SaveCurrentLayoutState();
             DisposeAllDisposableDocumentContent();
 
             _trayIcon?.Dispose();
             _trayIcon = null;
-
-            SaveSessionState();
-
-            if (!_resetDockLayoutRequested)
-            {
-                try
-                {
-                    DockLayoutService.Save(DockManager);
-                }
-                catch
-                {
-                    // 종료 시 배치 저장 실패는 앱 종료를 막지 않는다.
-                }
-            }
         }
 
         private void SaveSessionState()
@@ -881,6 +888,20 @@ namespace Folderss
             }
         }
 
+        private void SaveCurrentLayoutState()
+        {
+            SaveSessionState();
+
+            try
+            {
+                DockLayoutService.Save(DockManager);
+            }
+            catch
+            {
+                // 배치 저장 실패는 UI 흐름을 막지 않는다.
+            }
+        }
+
         private void FavoritesPanel_AddCurrentRequested(object sender, EventArgs e)
         {
             if (FavoritesPanel.AddFavorite(ActivePane.CurrentPath))
@@ -900,15 +921,18 @@ namespace Folderss
 
         private void ShowFavorites_Click(object sender, RoutedEventArgs e)
         {
-            FindDock("favorites")?.Show();
+            var dock = FindDock("favorites") ?? CreateFavoritesDock();
+            dock?.Show();
         }
 
         private void ResetDockLayout_Click(object sender, RoutedEventArgs e)
         {
             DockLayoutService.Reset();
-            _resetDockLayoutRequested = true;
+            BuildDefaultDockLayout();
+            EnsureAddPanelTab();
+            ActivatePane(LeftPane);
             MessageBox.Show(
-                "도킹 배치가 초기화되었습니다. 다음 실행부터 기본 배치가 적용됩니다.",
+                "도킹 배치가 기본 구성으로 초기화되었습니다.",
                 "Folderss",
                 MessageBoxButton.OK,
                 MessageBoxImage.Information);
@@ -1726,11 +1750,13 @@ namespace Folderss
                 DisposeDocumentContent(doc);
         }
 
-        private static void DisposeDocumentContent(LayoutDocument document)
+        private void DisposeDocumentContent(LayoutDocument document)
         {
             var disposable = document == null ? null : document.Content as IDisposable;
             if (disposable != null)
                 disposable.Dispose();
+            if (document != null && document.ContentId == "console")
+                _consolePanel = null;
         }
 
         private static T FindVisualAncestor<T>(DependencyObject element) where T : DependencyObject
@@ -1753,16 +1779,211 @@ namespace Folderss
             return _consolePanel;
         }
 
+        private void BuildDefaultDockLayout()
+        {
+            var root = new LayoutRoot();
+            var rootPanel = new LayoutPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal
+            };
+            var favoritesPane = new LayoutAnchorablePane
+            {
+                DockWidth = new GridLength(230)
+            };
+            favoritesPane.Children.Add(new LayoutAnchorable
+            {
+                Title = "즐겨찾기",
+                ContentId = "favorites",
+                Content = FavoritesPanel,
+                CanClose = true,
+                CanHide = true,
+                CanAutoHide = true
+            });
+            var leftPane = new LayoutDocumentPane();
+            leftPane.Children.Add(new LayoutDocument
+            {
+                Title = "왼쪽 폴더",
+                ContentId = "left-folder",
+                Content = LeftPane,
+                CanClose = false
+            });
+            leftPane.Children.Add(new LayoutDocument
+            {
+                Title = "＋ 새 패널",
+                ContentId = "add-folder-panel",
+                Content = new System.Windows.Controls.Grid(),
+                CanClose = false
+            });
+
+            var rightPane = new LayoutDocumentPane();
+            rightPane.Children.Add(new LayoutDocument
+            {
+                Title = "오른쪽 폴더",
+                ContentId = "right-folder",
+                Content = RightPane,
+                CanClose = false
+            });
+
+            var consolePane = new LayoutDocumentPane
+            {
+                DockHeight = new GridLength(220)
+            };
+            consolePane.Children.Add(new LayoutDocument
+            {
+                Title = "콘솔",
+                ContentId = "console",
+                Content = GetConsolePanel(),
+                CanClose = true
+            });
+
+            var leftColumn = new LayoutDocumentPaneGroup
+            {
+                Orientation = System.Windows.Controls.Orientation.Vertical
+            };
+            leftColumn.Children.Add(leftPane);
+            leftColumn.Children.Add(consolePane);
+
+            var documents = new LayoutDocumentPaneGroup
+            {
+                Orientation = System.Windows.Controls.Orientation.Horizontal
+            };
+            documents.Children.Add(leftColumn);
+            documents.Children.Add(rightPane);
+
+            rootPanel.Children.Add(favoritesPane);
+            rootPanel.Children.Add(documents);
+            root.RootPanel = rootPanel;
+            DockManager.Layout = root;
+        }
+
+        private LayoutAnchorable CreateFavoritesDock()
+        {
+            var rootPanel = DockManager.Layout == null ? null : DockManager.Layout.RootPanel;
+            if (rootPanel == null)
+                return null;
+            var hostPanel = rootPanel.Children
+                .OfType<LayoutPanel>()
+                .FirstOrDefault(panel => panel.Orientation == System.Windows.Controls.Orientation.Horizontal)
+                ?? rootPanel;
+
+            var pane = new LayoutAnchorablePane
+            {
+                DockWidth = new GridLength(230)
+            };
+            var dock = new LayoutAnchorable
+            {
+                Title = "즐겨찾기",
+                ContentId = "favorites",
+                Content = FavoritesPanel,
+                CanClose = true,
+                CanHide = true,
+                CanAutoHide = true
+            };
+
+            pane.Children.Add(dock);
+            hostPanel.InsertChildAt(0, pane);
+            return dock;
+        }
+
+        private LayoutDocumentPane EnsureConsolePane()
+        {
+            var existingConsolePane = DockManager.Layout.Descendents()
+                .OfType<LayoutDocumentPane>()
+                .FirstOrDefault(pane => pane.Children.OfType<LayoutDocument>()
+                    .Any(child => child.ContentId == "console"));
+            if (existingConsolePane != null)
+                return existingConsolePane;
+
+            var leftPane = DockManager.Layout.Descendents()
+                .OfType<LayoutDocumentPane>()
+                .FirstOrDefault(pane => pane.Children.OfType<LayoutDocument>()
+                    .Any(child => child.ContentId == "left-folder"));
+            if (leftPane == null)
+                return null;
+
+            var consolePane = new LayoutDocumentPane
+            {
+                DockHeight = new GridLength(220)
+            };
+
+            var parentGroup = leftPane.Parent as LayoutDocumentPaneGroup;
+            if (parentGroup != null &&
+                parentGroup.Orientation == System.Windows.Controls.Orientation.Vertical)
+            {
+                parentGroup.Children.Add(consolePane);
+                return consolePane;
+            }
+
+            if (parentGroup == null)
+                return null;
+
+            var leftPaneIndex = parentGroup.IndexOfChild(leftPane);
+            if (leftPaneIndex < 0)
+                return null;
+
+            var leftColumn = new LayoutDocumentPaneGroup
+            {
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+                DockWidth = leftPane.DockWidth
+            };
+            parentGroup.RemoveChild(leftPane);
+            parentGroup.InsertChildAt(leftPaneIndex, leftColumn);
+            leftColumn.Children.Add(leftPane);
+            leftColumn.Children.Add(consolePane);
+            return consolePane;
+        }
+
+        private void MigrateLegacyConsoleTabLayout()
+        {
+            var leftDocument = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(document => document.ContentId == "left-folder");
+            var consoleDocument = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(document => document.ContentId == "console");
+            var sourcePane = leftDocument == null ? null : leftDocument.Parent as LayoutDocumentPane;
+
+            if (sourcePane == null || consoleDocument == null ||
+                !ReferenceEquals(sourcePane, consoleDocument.Parent))
+            {
+                return;
+            }
+
+            sourcePane.RemoveChild(consoleDocument);
+            var targetPane = EnsureConsolePane();
+            if (targetPane == null)
+            {
+                sourcePane.Children.Add(consoleDocument);
+                return;
+            }
+
+            targetPane.Children.Add(consoleDocument);
+        }
+
         private void ShowConsolePanel()
         {
             var doc = DockManager.Layout.Descendents()
                 .OfType<LayoutDocument>()
                 .FirstOrDefault(d => d.ContentId == "console");
 
-            if (doc != null)
+            if (doc == null)
             {
-                doc.IsActive = true;
+                var targetPane = EnsureConsolePane();
+                if (targetPane == null)
+                    return;
+
+                doc = new LayoutDocument
+                {
+                    Title = "콘솔",
+                    ContentId = "console",
+                    Content = GetConsolePanel(),
+                    CanClose = true
+                };
+                doc.Closed += (s, e) => DisposeDocumentContent(doc);
+                targetPane.Children.Add(doc);
             }
+
+            doc.IsActive = true;
 
             var panel = GetConsolePanel();
             if (panel != null)
@@ -1779,6 +2000,25 @@ namespace Folderss
 
         private void DockManager_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
+            var tab = FindVisualAncestor<AvalonDock.Controls.LayoutDocumentTabItem>(
+                e.OriginalSource as DependencyObject);
+            var document = tab == null ? null : tab.Model as LayoutDocument;
+            if (document == null || document.ContentId != "add-folder-panel" || _openingPanelFromAddTab)
+                return;
+
+            e.Handled = true;
+            _openingPanelFromAddTab = true;
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                try
+                {
+                    AddFolderPanel(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+                }
+                finally
+                {
+                    _openingPanelFromAddTab = false;
+                }
+            }), DispatcherPriority.Background);
         }
     }
 }

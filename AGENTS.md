@@ -14,11 +14,11 @@
 
 ## 프로젝트 개요
 
-Windows WPF 듀얼 패널 파일 관리자. .NET Framework 4.8, AvalonDock 4.74.
+Windows WPF 듀얼 패널 파일 관리자. .NET 8 (`net8.0-windows`), AvalonDock 4.74.
 
 **빌드**
 ```powershell
-& 'C:\Program Files\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe' .\Folderss.sln /p:Configuration=Debug /v:minimal
+dotnet build .\Folderss.sln -c Debug
 ```
 
 **테마 저장 경로**: `%LOCALAPPDATA%\Folderss\theme.txt`  

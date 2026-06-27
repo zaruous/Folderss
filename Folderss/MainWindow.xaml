@@ -163,47 +163,46 @@
                                PreviewMouseLeftButtonDown="DockManager_PreviewMouseLeftButtonDown"
                                PreviewMouseRightButtonDown="DockManager_PreviewMouseRightButtonDown">
             <layout:LayoutRoot>
-                <layout:LayoutPanel Orientation="Vertical">
-                    <layout:LayoutPanel Orientation="Horizontal">
-                        <layout:LayoutAnchorablePane DockWidth="230">
-                            <layout:LayoutAnchorable x:Name="FavoritesDock"
-                                                     Title="즐겨찾기"
-                                                     ContentId="favorites"
-                                                     CanClose="True"
-                                                     CanHide="True"
-                                                     CanAutoHide="True">
-                                <controls:FavoritesPanel x:Name="FavoritesPanel"
-                                                         AddCurrentRequested="FavoritesPanel_AddCurrentRequested"
-                                                         NavigateRequested="FavoritesPanel_NavigateRequested"/>
-                            </layout:LayoutAnchorable>
-                        </layout:LayoutAnchorablePane>
-                        <layout:LayoutDocumentPaneGroup>
+                <layout:LayoutPanel Orientation="Horizontal">
+                    <layout:LayoutAnchorablePane DockWidth="230">
+                        <layout:LayoutAnchorable x:Name="FavoritesDock"
+                                                 Title="즐겨찾기"
+                                                 ContentId="favorites"
+                                                 CanClose="True"
+                                                 CanHide="True"
+                                                 CanAutoHide="True">
+                            <controls:FavoritesPanel x:Name="FavoritesPanel"
+                                                     AddCurrentRequested="FavoritesPanel_AddCurrentRequested"
+                                                     NavigateRequested="FavoritesPanel_NavigateRequested"/>
+                        </layout:LayoutAnchorable>
+                    </layout:LayoutAnchorablePane>
+                    <layout:LayoutDocumentPaneGroup Orientation="Horizontal">
+                        <layout:LayoutDocumentPaneGroup Orientation="Vertical">
                             <layout:LayoutDocumentPane>
                                 <layout:LayoutDocument Title="왼쪽 폴더"
                                                        ContentId="left-folder"
                                                        CanClose="False">
                                     <controls:FolderBrowser x:Name="LeftPane" Activated="Pane_Activated"/>
                                 </layout:LayoutDocument>
-                                
-                                <!-- 문서 탭(LayoutDocument) 형태로 완전히 통합된 콘솔 패널 (Content는 코드비하인드에서 동적 결합) -->
-                                <layout:LayoutDocument Title="콘솔"
-                                                       ContentId="console"
-                                                       CanClose="False">
-                                </layout:LayoutDocument>
 
                                 <layout:LayoutDocument Title="＋ 새 패널"
                                                        ContentId="add-folder-panel"
                                                        CanClose="False"/>
                             </layout:LayoutDocumentPane>
-                            <layout:LayoutDocumentPane>
-                                <layout:LayoutDocument Title="오른쪽 폴더"
-                                                       ContentId="right-folder"
-                                                       CanClose="False">
-                                    <controls:FolderBrowser x:Name="RightPane" Activated="Pane_Activated"/>
-                                </layout:LayoutDocument>
+                            <layout:LayoutDocumentPane DockHeight="220">
+                                <layout:LayoutDocument Title="콘솔"
+                                                       ContentId="console"
+                                                       CanClose="True"/>
                             </layout:LayoutDocumentPane>
                         </layout:LayoutDocumentPaneGroup>
-                    </layout:LayoutPanel>
+                        <layout:LayoutDocumentPane>
+                            <layout:LayoutDocument Title="오른쪽 폴더"
+                                                   ContentId="right-folder"
+                                                   CanClose="False">
+                                <controls:FolderBrowser x:Name="RightPane" Activated="Pane_Activated"/>
+                            </layout:LayoutDocument>
+                        </layout:LayoutDocumentPane>
+                    </layout:LayoutDocumentPaneGroup>
                 </layout:LayoutPanel>
             </layout:LayoutRoot>
         </avalon:DockingManager>

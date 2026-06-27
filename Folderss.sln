@@ -6,6 +6,8 @@ Project("{60DC8134-EBA5-43B8-BCC9-BB4BC16C2548}") = "Folderss", "Folderss\Folder
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Folderss.Diagnose", "Folderss.Diagnose\Folderss.Diagnose.csproj", "{A0175506-806D-4623-8CB4-69F3B531894C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Folderss.LayoutTests", "Folderss.LayoutTests\Folderss.LayoutTests.csproj", "{8254F04B-7E08-46AC-B303-5D15CB28BEEB}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -20,5 +22,9 @@ Global
 		{A0175506-806D-4623-8CB4-69F3B531894C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A0175506-806D-4623-8CB4-69F3B531894C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A0175506-806D-4623-8CB4-69F3B531894C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{8254F04B-7E08-46AC-B303-5D15CB28BEEB}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{8254F04B-7E08-46AC-B303-5D15CB28BEEB}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{8254F04B-7E08-46AC-B303-5D15CB28BEEB}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{8254F04B-7E08-46AC-B303-5D15CB28BEEB}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

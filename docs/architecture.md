@@ -7,7 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
-│   ├── ConsolePanel.xaml/.cs       — 내장 라인 기반 콘솔 패널
+│   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
 │   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
@@ -25,8 +25,8 @@ Folderss/
 │   ├── FavoritesService.cs         — 즐겨찾기 목록 저장·복원
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
 │   ├── ViewerConfigService.cs      — 확장자 ↔ 뷰어 매핑 (viewer-config.json 저장)
-│   ├── ConsoleSettingsService.cs   — 콘솔 출력 보관 설정 (console-settings.xml 저장)
-│   ├── ConsoleSessionService.cs    — PowerShell/cmd 프로세스 수명 및 스트림 관리
+│   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
+│   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
 │   └── ThemeManager.cs             — 테마 전환 및 저장
 ├── Themes/
@@ -46,6 +46,8 @@ Folderss/
 └── App.xaml/.cs                    — 앱 진입점, 테마 초기 로드
 ```
 
+`Folderss.LayoutTests/`는 실제 WPF `DockingManager`에 가상 패널을 연결해 레이아웃 저장·복원·재저장을 검증하는 실행형 회귀 테스트다.
+
 ---
 
 ## 서비스 역할 상세
@@ -63,20 +65,26 @@ Folderss/
 - **단축키 추가 시 연관 파일**: KeybindingManager.cs, MainWindow.xaml.cs, SettingsWindow
 
 ### DockLayoutService / SessionStateService
-- 앱 종료 시 자동 저장, 다음 실행 시 자동 복원
-- 저장 위치: `%LOCALAPPDATA%\Folderss\dock-layout.xml`, `session.xml`
+- 창을 트레이로 숨기기 전과 실제 종료 전에 자동 저장하고 다음 실행 시 복원
+- 레이아웃은 임시 파일에 직렬화한 뒤 교체해 저장 중 중단으로 기존 파일이 손상되지 않도록 처리
+- 저장 위치: `%LOCALAPPDATA%\Folderss\dock-layout.xml`, `dock-layout.xml.version`, `session.xml`
+- 버전 정보가 없는 기존 레이아웃에서 콘솔이 왼쪽 폴더 탭에 합쳐진 경우에만 한 번 하단 패널로 이관
+- 회귀 검증: `dotnet run --project Folderss.LayoutTests\Folderss.LayoutTests.csproj -c Debug`
 
 ### ConsoleSettingsService
-- 콘솔 패널 출력 보관 설정을 `%LOCALAPPDATA%\Folderss\console-settings.xml`에 저장
-- `MaxOutputLineCount` 기본값은 5,000줄
-- 설정 창 `콘솔` 항목에서 100 - 100,000 범위로 저장
+- 콘솔 설정을 `%LOCALAPPDATA%\Folderss\console-settings.xml`에 저장
+- 기본 제공 프로필(`PowerShell 7`, `Windows PowerShell`, `명령 프롬프트`)과 사용자 정의 프로필을 함께 관리
+- 기본 프로필 키와 사용자 정의 실행 파일/인수 정보를 저장
+- 레거시 `PreferredShellKind` 값이 있으면 현재 `PreferredProfileKey`로 변환해 로드
 
 ### ConsoleSessionService / ConsolePanel
-- `보기 > 콘솔` 메뉴에서 `ContentId="console"`인 하단 `LayoutAnchorable`로 표시
-- Windows PowerShell, PowerShell 7(설치 시), 명령 프롬프트를 표준 입출력 리디렉션으로 실행
-- 출력은 `ConsoleSettingsService.MaxOutputLineCount`에 맞춰 줄 단위로 제한
+- `보기 > 콘솔` 메뉴와 왼쪽 폴더 아래의 `ContentId="console"` 문서 패널로 표시
+- `EasyWindowsTerminalControl`과 ConPTY를 사용해 실제 터미널 세션을 표시
+- `+ 새 콘솔` 탭으로 여러 세션을 추가할 수 있다
 - 활성 폴더 기준 시작 및 실행 중 `현재 폴더로 이동` 지원
-- `claude`, `codex`, `gemini`, `vim`, `ssh`처럼 TTY가 필요한 명령은 외부 터미널 실행으로 우회
+- 기본 셸 3종과 사용자 정의 프로필을 동일한 선택 UI에서 전환
+- 외부 터미널 버튼은 현재 선택한 프로필 기준으로 별도 콘솔 창을 연다
+- 콘솔 폰트 크기 설정 UI는 존재하지만 현재 런타임 반영에는 추가 보완이 필요하다
 
 ---
 
