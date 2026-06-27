@@ -185,11 +185,10 @@
                                     <controls:FolderBrowser x:Name="LeftPane" Activated="Pane_Activated"/>
                                 </layout:LayoutDocument>
                                 
-                                <!-- 문서 탭(LayoutDocument) 형태로 완전히 통합된 콘솔 패널 -->
+                                <!-- 문서 탭(LayoutDocument) 형태로 완전히 통합된 콘솔 패널 (Content는 코드비하인드에서 동적 결합) -->
                                 <layout:LayoutDocument Title="콘솔"
                                                        ContentId="console"
                                                        CanClose="False">
-                                    <controls:ConsolePanel x:Name="ConsolePanel" />
                                 </layout:LayoutDocument>
 
                                 <layout:LayoutDocument Title="＋ 새 패널"
