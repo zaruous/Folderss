@@ -39,6 +39,8 @@ namespace Folderss.Controls
         private int _tabCounter = 0;
         private ObservableCollection<ConsoleTab> _tabs = new ObservableCollection<ConsoleTab>();
         private ConsoleTab _addTabItem;
+        private bool _allowAddTabActivation;
+        private bool _restoringConsoleTabSelection;
         private static readonly PropertyInfo EasyTerminalThemeGetter =
             typeof(EasyTerminalControl).GetProperty("Theme", BindingFlags.Instance | BindingFlags.NonPublic);
         private static readonly MethodInfo EasyTerminalSetThemeMethod =
@@ -103,6 +105,59 @@ namespace Folderss.Controls
             }
         }
 
+        private static bool IsBareHomeOrEnd(KeyEventArgs e)
+        {
+            return Keyboard.Modifiers == ModifierKeys.None &&
+                   (e.Key == Key.Home || e.Key == Key.End);
+        }
+
+        private static bool IsBareHomeOrEndPressed()
+        {
+            return Keyboard.Modifiers == ModifierKeys.None &&
+                   (Keyboard.IsKeyDown(Key.Home) || Keyboard.IsKeyDown(Key.End));
+        }
+
+        private static string GetTerminalSequence(Key key)
+        {
+            if (key == Key.Home)
+                return "\u001b[H";
+            if (key == Key.End)
+                return "\u001b[F";
+            return null;
+        }
+
+        private void ForwardNavigationKeyToActiveTerminal(Key key)
+        {
+            var active = ActiveTab;
+            if (active == null || active.IsAddTab || active.Terminal == null)
+                return;
+
+            var sequence = GetTerminalSequence(key);
+            if (sequence == null)
+                return;
+
+            active.Terminal.Focus();
+            active.Terminal.ConPTYTerm?.WriteToTerm(sequence);
+        }
+
+        private void RestoreConsoleTabSelection(ConsoleTab target)
+        {
+            if (target == null)
+                return;
+
+            _restoringConsoleTabSelection = true;
+            try
+            {
+                ConsoleTabs.SelectedItem = target;
+            }
+            finally
+            {
+                _restoringConsoleTabSelection = false;
+            }
+
+            Dispatcher.BeginInvoke(new Action(FocusCommandBox), System.Windows.Threading.DispatcherPriority.Input);
+        }
+
         public ConsoleTab AddConsoleTab(string profileKey, string workingDirectory)
         {
             RefreshSettings(profileKey);
@@ -127,6 +182,15 @@ namespace Folderss.Controls
                 {
                     args.Handled = true;
                     terminal.ConPTYTerm?.WriteToTerm("\t");
+                    return;
+                }
+
+                if (IsBareHomeOrEnd(args))
+                {
+                    args.Handled = true;
+                    var sequence = GetTerminalSequence(args.Key);
+                    if (sequence != null)
+                        terminal.ConPTYTerm?.WriteToTerm(sequence);
                 }
             };
 
@@ -423,24 +487,74 @@ namespace Folderss.Controls
                 FocusCommandBox();
         }
 
+        private void ConsoleTabs_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            var source = e.OriginalSource as DependencyObject;
+            var tabItem = FindAncestor<TabItem>(source);
+            var tab = tabItem == null ? null : tabItem.DataContext as ConsoleTab;
+            _allowAddTabActivation = tab != null && tab.IsAddTab;
+        }
+
+        private void ConsoleTabs_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (!IsBareHomeOrEnd(e))
+                return;
+
+            e.Handled = true;
+            ForwardNavigationKeyToActiveTerminal(e.Key);
+        }
+
         private void ConsoleTabs_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            if (_restoringConsoleTabSelection)
+                return;
+
             var active = ActiveTab;
             if (active == null) return;
 
+            var previous = e.RemovedItems.OfType<ConsoleTab>().FirstOrDefault(tab => tab != null && !tab.IsAddTab)
+                ?? _tabs.FirstOrDefault(tab => !tab.IsAddTab && !ReferenceEquals(tab, active));
+
+            if (IsBareHomeOrEndPressed() && previous != null && !ReferenceEquals(active, previous))
+            {
+                RestoreConsoleTabSelection(previous);
+                return;
+            }
+
             if (active.IsAddTab)
             {
-                // '+ 새 콘솔' 탭이 활성화된 경우, 즉시 새 실제 탭을 기동하고 탈출합니다.
+                if (!_allowAddTabActivation)
+                {
+                    RestoreConsoleTabSelection(previous);
+                    return;
+                }
+
+                _allowAddTabActivation = false;
                 AddConsoleTab(GetPreferredProfile().Key, GetActiveDirectory());
                 return;
             }
 
+            _allowAddTabActivation = false;
             SelectConfiguredShell(active.ProfileKey);
             UpdateStatus();
             Dispatcher.BeginInvoke(new Action(() =>
             {
                 FocusCommandBox();
             }), System.Windows.Threading.DispatcherPriority.Input);
+        }
+
+        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
+        {
+            while (current != null)
+            {
+                var match = current as T;
+                if (match != null)
+                    return match;
+
+                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
+            }
+
+            return null;
         }
 
         private void CloseTab_Click(object sender, RoutedEventArgs e)

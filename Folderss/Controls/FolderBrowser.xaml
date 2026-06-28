@@ -6,6 +6,7 @@
              Loaded="FolderBrowser_Loaded"
              Unloaded="FolderBrowser_Unloaded"
              GotKeyboardFocus="Pane_GotKeyboardFocus"
+             PreviewTextInput="FolderBrowser_PreviewTextInput"
              MouseDown="Pane_MouseDown">
     <Border x:Name="PaneBorder"
             Background="{DynamicResource PanelBackground}"
@@ -73,6 +74,7 @@
                              Padding="8,3,28,3"
                              VerticalContentAlignment="Center"
                              ToolTip="현재 폴더에서 이름 필터"
+                             PreviewKeyDown="SearchBox_PreviewKeyDown"
                              TextChanged="SearchBox_TextChanged"/>
                     <TextBlock x:Name="SearchHintText"
                                Text="파일 및 폴더 이름"

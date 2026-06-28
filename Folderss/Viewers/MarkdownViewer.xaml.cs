@@ -5,12 +5,13 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 using WinForms = System.Windows.Forms;
 
 namespace Folderss.Viewers
 {
-    public partial class MarkdownViewer : UserControl, IFileViewer, IFileOpenRequester, IViewerActivationAware, IDisposable
+    public partial class MarkdownViewer : UserControl, IFileViewer, IFileOpenRequester, IViewerActivationAware, IViewerShortcutHandler, IDisposable
     {
         private const long LargeMarkdownBytes = 5L * 1024 * 1024;
 
@@ -164,6 +165,7 @@ namespace Folderss.Viewers
                     if (uri != null || href != null)
                         HandleLinkClick(uri, href);
                     break;
+
             }
         }
 
@@ -292,6 +294,19 @@ namespace Folderss.Viewers
             if (!_webViewReady) return;
             var _ = WebView.CoreWebView2.ExecuteScriptAsync(
                 string.Format("app.setTheme({0})", JsonString(ThemeName(theme))));
+        }
+
+        public bool HandleShortcut(KeyEventArgs e)
+        {
+            if (e.Key != Key.F || (Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+                return false;
+
+            if (!_webViewReady || !_pageReady || WebView.CoreWebView2 == null)
+                return false;
+
+            WebView.Focus();
+            WebView.CoreWebView2.ExecuteScriptAsync("app.openFind()");
+            return true;
         }
 
         public void Export(ExportFormat format, string destPath)
@@ -634,5 +649,6 @@ namespace Folderss.Viewers
             }
             return sb.ToString();
         }
+
     }
 }

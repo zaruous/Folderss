@@ -4,6 +4,7 @@ using System;
 using System.IO;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 
 namespace Folderss.Controls
 {
@@ -63,6 +64,12 @@ namespace Folderss.Controls
         public void ApplyTheme(AppTheme theme)
         {
             _currentViewer?.ApplyTheme(theme);
+        }
+
+        public bool HandleShortcut(KeyEventArgs e)
+        {
+            var shortcutHandler = _currentViewer as IViewerShortcutHandler;
+            return shortcutHandler != null && shortcutHandler.HandleShortcut(e);
         }
 
         private void DetachCurrentViewer()

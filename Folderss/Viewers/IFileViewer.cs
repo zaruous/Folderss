@@ -1,6 +1,7 @@
 using Folderss.Services;
 using System;
 using System.Windows;
+using System.Windows.Input;
 
 namespace Folderss.Viewers
 {
@@ -25,6 +26,11 @@ namespace Folderss.Viewers
     public interface IViewerActivationAware
     {
         void SetActive(bool isActive);
+    }
+
+    public interface IViewerShortcutHandler
+    {
+        bool HandleShortcut(KeyEventArgs e);
     }
 
     [Flags]

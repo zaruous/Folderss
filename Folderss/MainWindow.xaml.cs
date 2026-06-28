@@ -1201,6 +1201,12 @@ namespace Folderss
         {
             var kb = _keyBindingService;
 
+            if (TryHandleActiveViewerShortcut(e))
+            {
+                e.Handled = true;
+                return;
+            }
+
             if (kb.Matches(e, "Rename"))
             {
                 if (FavoritesPanel.IsKeyboardFocusWithin) return;
@@ -1243,28 +1249,13 @@ namespace Folderss
                 AddFolderPanel_Click(sender, e);
                 e.Handled = true;
             }
-            else if (kb.Matches(e, "CopyClipboard"))
+            else if (kb.Matches(e, "CopyClipboard") && FavoritesPanel.IsKeyboardFocusWithin)
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
-                if (FavoritesPanel.IsKeyboardFocusWithin && FavoritesPanel.CopySelectedFavoritePath())
+                if (FavoritesPanel.CopySelectedFavoritePath())
                 {
                     e.Handled = true;
                     return;
                 }
-                CopyToClipboard();
-                e.Handled = true;
-            }
-            else if (kb.Matches(e, "CutClipboard"))
-            {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
-                CutToClipboard();
-                e.Handled = true;
-            }
-            else if (kb.Matches(e, "PasteClipboard"))
-            {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
-                PasteFromClipboard();
-                e.Handled = true;
             }
             else if (kb.Matches(e, "NavigateBack"))
             {
@@ -1301,6 +1292,15 @@ namespace Folderss
                 TogglePanelMaximize();
                 e.Handled = true;
             }
+        }
+
+        private bool TryHandleActiveViewerShortcut(KeyEventArgs e)
+        {
+            var activeDocument = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(document => document.IsActive);
+            var viewerHost = activeDocument?.Content as ViewerHost;
+            return viewerHost != null && viewerHost.HandleShortcut(e);
         }
 
         private void Settings_Click(object sender, RoutedEventArgs e)
@@ -1396,6 +1396,72 @@ namespace Folderss
             Dispatcher.BeginInvoke(new Action(() => nextPane.FocusFileList()), DispatcherPriority.Input);
         }
 
+        public void ClearCutStateFromClipboard()
+        {
+            ClearCutState();
+        }
+
+        public void SetCutStateFromClipboard(IEnumerable<string> paths)
+        {
+            _isCut = true;
+            _cutPaths = new HashSet<string>(paths ?? Enumerable.Empty<string>(), StringComparer.OrdinalIgnoreCase);
+
+            foreach (var pane in GetFolderBrowsers())
+            {
+                pane.CutPaths = _cutPaths;
+                pane.RefreshItems();
+            }
+        }
+
+        public bool TryPasteFromClipboardInto(FolderBrowser targetPane)
+        {
+            if (!Clipboard.ContainsFileDropList())
+                return false;
+
+            var files = Clipboard.GetFileDropList();
+            if (files.Count == 0)
+                return false;
+
+            var targetPath = targetPane?.CurrentPath;
+            if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
+                return false;
+
+            bool isCut = _isCut;
+            var errors = new List<string>();
+            foreach (string source in files)
+            {
+                try
+                {
+                    if (isCut)
+                        FileOperationService.Move(source, targetPath);
+                    else
+                        FileOperationService.Copy(source, targetPath);
+                }
+                catch (Exception exception)
+                {
+                    errors.Add(Path.GetFileName(source) + ": " + exception.Message);
+                }
+            }
+
+            if (isCut)
+            {
+                _isCut = false;
+                _cutPaths.Clear();
+                foreach (var pane in GetFolderBrowsers())
+                {
+                    pane.CutPaths = null;
+                    pane.RefreshItems();
+                }
+            }
+            else
+            {
+                targetPane.RefreshItems();
+            }
+
+            ShowErrorsIfAny("붙여넣기", errors);
+            return true;
+        }
+
         private void CopyToClipboard()
         {
             var selected = ActivePane.SelectedItems.ToList();
@@ -1449,50 +1515,7 @@ namespace Folderss
 
         private void PasteFromClipboard()
         {
-            if (!Clipboard.ContainsFileDropList())
-                return;
-
-            var files = Clipboard.GetFileDropList();
-            if (files.Count == 0)
-                return;
-
-            var targetPath = ActivePane.CurrentPath;
-            if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
-                return;
-
-            bool isCut = _isCut;
-            var errors = new List<string>();
-            foreach (string source in files)
-            {
-                try
-                {
-                    if (isCut)
-                        FileOperationService.Move(source, targetPath);
-                    else
-                        FileOperationService.Copy(source, targetPath);
-                }
-                catch (Exception exception)
-                {
-                    errors.Add(Path.GetFileName(source) + ": " + exception.Message);
-                }
-            }
-
-            if (isCut)
-            {
-                _isCut = false;
-                _cutPaths.Clear();
-                foreach (var pane in GetFolderBrowsers())
-                {
-                    pane.CutPaths = null;
-                    pane.RefreshItems();
-                }
-            }
-            else
-            {
-                ActivePane.RefreshItems();
-            }
-
-            ShowErrorsIfAny("붙여넣기", errors);
+            TryPasteFromClipboardInto(ActivePane);
         }
 
         private async void CheckUpdate_Click(object sender, RoutedEventArgs e)
@@ -2079,3 +2102,4 @@ namespace Folderss
         }
     }
 }
+

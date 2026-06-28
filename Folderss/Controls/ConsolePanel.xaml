@@ -127,6 +127,8 @@
                         Background="Transparent"
                         BorderThickness="0"
                         ItemTemplate="{StaticResource ConsoleTabHeaderTemplate}"
+                        PreviewMouseLeftButtonDown="ConsoleTabs_PreviewMouseLeftButtonDown"
+                        PreviewKeyDown="ConsoleTabs_PreviewKeyDown"
                         SelectionChanged="ConsoleTabs_SelectionChanged">
                 <TabControl.Resources>
                     <Style TargetType="TabItem">

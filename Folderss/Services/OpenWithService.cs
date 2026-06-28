@@ -55,6 +55,25 @@ namespace Folderss.Services
                 .ToList();
         }
 
+        public static OpenWithEntry GetDefaultEntryForPath(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return null;
+
+            var token = Directory.Exists(path)
+                ? "folder"
+                : Path.GetExtension(path);
+
+            if (string.IsNullOrWhiteSpace(token))
+                return null;
+
+            var matches = _entries
+                .Where(entry => MaskHasSpecificToken(entry.ExtensionMask, token))
+                .ToList();
+
+            return matches.Count == 1 ? matches[0] : null;
+        }
+
         public static void Launch(OpenWithEntry entry, IEnumerable<string> paths)
         {
             var pathList = paths.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
@@ -109,6 +128,29 @@ namespace Folderss.Services
                 if (!token.StartsWith(".") && extensions.Contains("." + token))
                     return true;
             }
+            return false;
+        }
+
+        private static bool MaskHasSpecificToken(string mask, string token)
+        {
+            if (string.IsNullOrWhiteSpace(mask) || string.IsNullOrWhiteSpace(token))
+                return false;
+
+            var normalizedToken = token.Trim().ToLowerInvariant();
+            var parts = mask.Split(new[] { ',', ';' }, StringSplitOptions.RemoveEmptyEntries);
+            foreach (var part in parts)
+            {
+                var normalizedMask = part.Trim().ToLowerInvariant();
+                if (normalizedMask == "*" || string.IsNullOrWhiteSpace(normalizedMask))
+                    continue;
+
+                if (normalizedMask == normalizedToken)
+                    return true;
+
+                if (normalizedToken != "folder" && !normalizedMask.StartsWith(".") && "." + normalizedMask == normalizedToken)
+                    return true;
+            }
+
             return false;
         }
 
@@ -188,3 +230,5 @@ namespace Folderss.Services
         }
     }
 }
+
+

@@ -58,6 +58,9 @@ namespace Folderss.Controls
             InitializeComponent();
             FileList.ItemsSource = _items;
             FileList.AddHandler(GridViewColumnHeader.ClickEvent, new RoutedEventHandler(ColumnHeader_Click));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Copy, Copy_Executed, Copy_CanExecute));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Cut, Cut_Executed, Cut_CanExecute));
+            CommandBindings.Add(new CommandBinding(ApplicationCommands.Paste, Paste_Executed, Paste_CanExecute));
             PopulateDrives();
             var view = CollectionViewSource.GetDefaultView(_items);
             view.SortDescriptions.Add(new SortDescription("IsDirectory", ListSortDirection.Descending));
@@ -784,6 +787,98 @@ namespace Folderss.Controls
             FileList.Focus();
         }
 
+        private void FocusFirstVisibleFileItem()
+        {
+            var view = CollectionViewSource.GetDefaultView(FileList.ItemsSource);
+            var firstVisibleItem = view.Cast<object>().OfType<FileSystemItem>().FirstOrDefault();
+            if (firstVisibleItem == null)
+            {
+                FileList.Focus();
+                return;
+            }
+
+            FileList.SelectedItem = firstVisibleItem;
+            FileList.ScrollIntoView(firstVisibleItem);
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                FileList.UpdateLayout();
+                var container = FileList.ItemContainerGenerator.ContainerFromItem(firstVisibleItem) as ListViewItem;
+                if (container != null)
+                {
+                    container.Focus();
+                    return;
+                }
+
+                FileList.Focus();
+            }), DispatcherPriority.Input);
+        }
+
+        private void Copy_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = SelectedItems.Count > 0;
+            e.Handled = true;
+        }
+
+        private void Copy_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            var paths = SelectedItems
+                .Select(item => item.FullPath)
+                .Where(path => File.Exists(path) || Directory.Exists(path))
+                .ToList();
+            if (paths.Count == 0)
+                return;
+
+            var pathsCollection = new System.Collections.Specialized.StringCollection();
+            foreach (var path in paths)
+                pathsCollection.Add(path);
+
+            Clipboard.SetFileDropList(pathsCollection);
+            var window = Window.GetWindow(this) as Folderss.MainWindow;
+            if (window != null)
+                window.ClearCutStateFromClipboard();
+            e.Handled = true;
+        }
+
+        private void Cut_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = SelectedItems.Count > 0;
+            e.Handled = true;
+        }
+
+        private void Cut_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            var selected = SelectedItems
+                .Where(item => File.Exists(item.FullPath) || Directory.Exists(item.FullPath))
+                .ToList();
+            if (selected.Count == 0)
+                return;
+
+            var pathsCollection = new System.Collections.Specialized.StringCollection();
+            foreach (var item in selected)
+                pathsCollection.Add(item.FullPath);
+
+            Clipboard.SetFileDropList(pathsCollection);
+
+            var window = Window.GetWindow(this) as Folderss.MainWindow;
+            if (window != null)
+                window.SetCutStateFromClipboard(selected.Select(item => item.FullPath));
+
+            e.Handled = true;
+        }
+
+        private void Paste_CanExecute(object sender, CanExecuteRoutedEventArgs e)
+        {
+            e.CanExecute = Clipboard.ContainsFileDropList();
+            e.Handled = true;
+        }
+
+        private void Paste_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            var window = Window.GetWindow(this) as MainWindow;
+            if (window != null && window.TryPasteFromClipboardInto(this))
+                e.Handled = true;
+        }
+
         private void Back_Click(object sender, RoutedEventArgs e)
         {
             if (_backHistory.Count == 0)
@@ -819,6 +914,27 @@ namespace Folderss.Controls
             }
         }
 
+        private void FolderBrowser_PreviewTextInput(object sender, TextCompositionEventArgs e)
+        {
+            if (string.IsNullOrEmpty(e.Text))
+                return;
+
+            if (PathBox.IsKeyboardFocusWithin || SearchBox.IsKeyboardFocusWithin)
+                return;
+
+            if ((Keyboard.Modifiers & (ModifierKeys.Control | ModifierKeys.Alt | ModifierKeys.Windows)) != 0)
+                return;
+
+            if (!e.Text.Any(ch => !char.IsControl(ch)))
+                return;
+
+            SearchBox.Focus();
+            SearchBox.CaretIndex = SearchBox.Text.Length;
+            SearchBox.AppendText(e.Text);
+            SearchBox.CaretIndex = SearchBox.Text.Length;
+            e.Handled = true;
+        }
+
         private void SearchBox_TextChanged(object sender, TextChangedEventArgs e)
         {
             if (SearchHintText != null)
@@ -828,6 +944,15 @@ namespace Folderss.Controls
 
             if (FileList != null && FileList.ItemsSource != null)
                 ApplyFilter();
+        }
+
+        private void SearchBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Down)
+                return;
+
+            FocusFirstVisibleFileItem();
+            e.Handled = true;
         }
 
         private void ClearSearch_Click(object sender, RoutedEventArgs e)

@@ -113,6 +113,46 @@ button.tb.active { background: var(--sel); color: var(--accent); }
 }
 #exportMenu button:hover { background: var(--hover); }
 
+/* find bar */
+#findBar {
+  display: none;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+  flex-shrink: 0;
+}
+#findBar.open { display: flex; }
+#findInput {
+  width: 220px;
+  max-width: 40vw;
+  background: var(--bg);
+  color: var(--fg);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  padding: 4px 6px;
+  font: 12px var(--font-sans);
+  outline: none;
+}
+#findInput:focus { border-color: var(--accent); }
+#findCount {
+  min-width: 48px;
+  color: var(--fg2);
+  font-size: 12px;
+  text-align: center;
+}
+mark.md-find-hit {
+  background: #d7a700;
+  color: #1f1f1f;
+  padding: 0 1px;
+  border-radius: 2px;
+}
+mark.md-find-hit.active {
+  background: #ff6a00;
+  color: #fff;
+}
+
 /* main area */
 #main {
   display: flex;
@@ -350,6 +390,8 @@ body.mode-split #split-handle:hover { background: var(--accent); }
     <button class="tb" id="btnSplit"   onclick="setMode('split')"   title="분할 모드">Split</button>
     <button class="tb active" id="btnPreview" onclick="setMode('preview')" title="미리보기 모드">Preview</button>
     <div class="tb-sep"></div>
+    <button class="tb" id="btnFind" onclick="openFindBar()" title="검색">Search</button>
+    <div class="tb-sep"></div>
     <button class="tb" id="btnToc"     onclick="toggleToc()"        title="목차 토글">≡</button>
     <div style="flex:1"></div>
     <div class="tb-dropdown">
@@ -360,7 +402,13 @@ body.mode-split #split-handle:hover { background: var(--accent); }
       </div>
     </div>
   </div>
-
+  <div id="findBar">
+    <input id="findInput" type="text" autocomplete="off" spellcheck="false" aria-label="검색">
+    <span id="findCount">0 / 0</span>
+    <button class="tb" id="findPrev" title="이전" onclick="findPrevious()">↑</button>
+    <button class="tb" id="findNext" title="다음" onclick="findNext()">↓</button>
+    <button class="tb" id="findClose" title="닫기" onclick="closeFindBar()">×</button>
+  </div>
   <!-- main -->
   <div id="main">
     <!-- TOC -->
@@ -396,6 +444,10 @@ var _renderTimer = null;
 var _tocVisible = true;
 var _largeFileMode = false;
 var _tocObserver = null;
+var _findHits = [];
+var _findIndex = -1;
+var _findQuery = '';
+var _findMatches = [];
 
 // ── Init ──────────────────────────────────
 mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
@@ -415,6 +467,7 @@ function setMode(mode) {
     tocPanel.classList.toggle('hidden', !_tocVisible);
     tocHandle.style.display = _tocVisible ? '' : 'none';
   }
+  updateFindHighlights();
 }
 
 function toggleToc() {
@@ -434,6 +487,24 @@ function toggleExportMenu() {
 document.addEventListener('click', function(e) {
   if (!e.target.closest('.tb-dropdown'))
     document.getElementById('exportMenu').classList.remove('open');
+});
+
+document.addEventListener('keydown', function(e) {
+  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
+    e.preventDefault();
+    openFindBar();
+    return;
+  }
+  if (e.key === 'Escape' && document.getElementById('findBar').classList.contains('open')) {
+    e.preventDefault();
+    closeFindBar();
+    return;
+  }
+  if (e.key === 'Enter' && document.activeElement === document.getElementById('findInput')) {
+    e.preventDefault();
+    if (e.shiftKey) findPrevious();
+    else findNext();
+  }
 });
 
 function exportHtml() {
@@ -561,6 +632,7 @@ function renderPreview() {
 
   var preview = document.getElementById('preview-pane');
   preview.innerHTML = html;
+  clearFindHighlights();
 
   // syntax highlight code blocks
   preview.querySelectorAll('pre code').forEach(function(el) {
@@ -606,10 +678,182 @@ function renderPreview() {
   });
 
   buildToc();
+  updateFindHighlights();
 }
 
 function escapeHtml(s) {
   return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ── Find ──────────────────────────────────
+var findInput = document.getElementById('findInput');
+findInput.addEventListener('input', function() {
+  searchMarkdown(findInput.value);
+});
+
+function openFindBar() {
+  document.getElementById('findBar').classList.add('open');
+  document.getElementById('btnFind').classList.add('active');
+  findInput.focus();
+  findInput.select();
+  searchMarkdown(findInput.value);
+}
+
+function closeFindBar() {
+  document.getElementById('findBar').classList.remove('open');
+  document.getElementById('btnFind').classList.remove('active');
+  findInput.value = '';
+  clearSearch();
+}
+
+function clearSearch() {
+  _findQuery = '';
+  _findMatches = [];
+  _findIndex = -1;
+  clearFindHighlights();
+  postFindResult();
+}
+
+function findNext() {
+  if (!_findMatches.length) return;
+  setActiveFindHit((_findIndex + 1) % _findMatches.length, true);
+}
+
+function findPrevious() {
+  if (!_findMatches.length) return;
+  setActiveFindHit((_findIndex + _findMatches.length - 1) % _findMatches.length, true);
+}
+
+function updateFindHighlights() {
+  var query = _findQuery;
+  clearFindHighlights();
+  _findMatches = [];
+  if (!query) {
+    _findIndex = -1;
+    postFindResult();
+    return;
+  }
+
+  _findMatches = findTextMatches(editor.value, query);
+  if (!_findMatches.length) {
+    _findIndex = -1;
+    postFindResult();
+    return;
+  }
+
+  _findIndex = 0;
+  if (_mode === 'preview' || _mode === 'split') {
+    highlightTextNodes(document.getElementById('preview-pane'), query);
+    _findHits = Array.from(document.getElementById('preview-pane').querySelectorAll('mark.md-find-hit'));
+    activatePreviewHit(_findIndex, false);
+  }
+
+  postFindResult();
+}
+
+function findTextMatches(text, query) {
+  var matches = [];
+  var lowerText = text.toLowerCase();
+  var lowerQuery = query.toLowerCase();
+  var pos = lowerText.indexOf(lowerQuery);
+  while (pos >= 0) {
+    matches.push({ start: pos, end: pos + query.length });
+    pos = lowerText.indexOf(lowerQuery, pos + query.length);
+  }
+  return matches;
+}
+
+function selectEditorMatch(index) {
+  var match = _findMatches[index];
+  if (!match) return;
+  editor.setSelectionRange(match.start, match.end);
+  var before = editor.value.substring(0, match.start);
+  var line = before.split(/\r\n|\r|\n/).length - 1;
+  var lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 20;
+  editor.scrollTop = Math.max(0, line * lineHeight - editor.clientHeight / 2);
+}
+
+function activatePreviewHit(index, focusEditor) {
+  _findHits.forEach(function(hit) { hit.classList.remove('active'); });
+  var hit = _findHits[index];
+  if (!hit)
+    return;
+
+  hit.classList.add('active');
+  hit.scrollIntoView({ block: 'center', inline: 'nearest' });
+  if (focusEditor)
+    editor.focus();
+}
+
+function clearFindHighlights() {
+  document.querySelectorAll('mark.md-find-hit').forEach(function(mark) {
+    var text = document.createTextNode(mark.textContent);
+    mark.parentNode.replaceChild(text, mark);
+    text.parentNode.normalize();
+  });
+  _findHits = [];
+}
+
+function highlightTextNodes(root, query) {
+  var lowerQuery = query.toLowerCase();
+  var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
+    acceptNode: function(node) {
+      if (!node.nodeValue || !node.nodeValue.toLowerCase().includes(lowerQuery))
+        return NodeFilter.FILTER_REJECT;
+      var parent = node.parentElement;
+      if (!parent || parent.closest('script,style,textarea,mark'))
+        return NodeFilter.FILTER_REJECT;
+      return NodeFilter.FILTER_ACCEPT;
+    }
+  });
+  var nodes = [];
+  while (walker.nextNode()) nodes.push(walker.currentNode);
+  nodes.forEach(function(node) { wrapMatches(node, query); });
+}
+
+function wrapMatches(node, query) {
+  var text = node.nodeValue;
+  var lowerText = text.toLowerCase();
+  var lowerQuery = query.toLowerCase();
+  var frag = document.createDocumentFragment();
+  var pos = 0;
+  var idx = lowerText.indexOf(lowerQuery);
+  while (idx >= 0) {
+    if (idx > pos)
+      frag.appendChild(document.createTextNode(text.substring(pos, idx)));
+    var mark = document.createElement('mark');
+    mark.className = 'md-find-hit';
+    mark.textContent = text.substring(idx, idx + query.length);
+    frag.appendChild(mark);
+    pos = idx + query.length;
+    idx = lowerText.indexOf(lowerQuery, pos);
+  }
+  if (pos < text.length)
+    frag.appendChild(document.createTextNode(text.substring(pos)));
+  node.parentNode.replaceChild(frag, node);
+}
+
+function setActiveFindHit(index, focusEditor) {
+  _findIndex = index;
+  if (_mode === 'edit' || _mode === 'split')
+    selectEditorMatch(_findIndex);
+  if (_mode === 'preview' || _mode === 'split')
+    activatePreviewHit(_findIndex, false);
+  if (focusEditor && _mode === 'edit')
+    editor.focus();
+  postFindResult();
+}
+
+function searchMarkdown(query) {
+  _findQuery = query || '';
+  updateFindHighlights();
+}
+
+function postFindResult() {
+  document.getElementById('findCount').textContent =
+    _findMatches.length > 0 && _findIndex >= 0
+      ? (_findIndex + 1) + ' / ' + _findMatches.length
+      : '0 / 0';
 }
 
 // ── TOC ───────────────────────────────────
@@ -772,6 +1016,12 @@ var app = {
       theme: (_theme === 'light' || _theme === 'github') ? 'default' : 'dark' });
     renderPreview();
   },
+
+  openFind: openFindBar,
+  search: searchMarkdown,
+  findNext: findNext,
+  findPrevious: findPrevious,
+  clearSearch: clearSearch,
 
   markSaved: function() {
     _modified = false;
