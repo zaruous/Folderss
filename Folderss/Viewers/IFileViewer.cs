@@ -30,7 +30,7 @@ namespace Folderss.Viewers
 
     public interface IViewerShortcutHandler
     {
-        bool HandleShortcut(KeyEventArgs e);
+        bool HandleShortcut(KeyEventArgs e, KeyBindingService kb);
     }
 
     [Flags]

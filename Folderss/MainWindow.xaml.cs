@@ -1209,8 +1209,10 @@ namespace Folderss
 
             if (kb.Matches(e, "Rename"))
             {
-                if (FavoritesPanel.IsKeyboardFocusWithin) return;
-                Rename_Click(sender, e);
+                if (FavoritesPanel.IsKeyboardFocusWithin)
+                    FavoritesPanel.RenameSelected();
+                else
+                    Rename_Click(sender, e);
                 e.Handled = true;
             }
             else if (kb.Matches(e, "Refresh"))
@@ -1239,7 +1241,7 @@ namespace Folderss
                 NewFolder_Click(sender, e);
                 e.Handled = true;
             }
-            else if (e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control)
+            else if (kb.Matches(e, "NewFile"))
             {
                 NewFile_Click(sender, e);
                 e.Handled = true;
@@ -1249,13 +1251,28 @@ namespace Folderss
                 AddFolderPanel_Click(sender, e);
                 e.Handled = true;
             }
-            else if (kb.Matches(e, "CopyClipboard") && FavoritesPanel.IsKeyboardFocusWithin)
+            else if (kb.Matches(e, "CopyClipboard"))
             {
-                if (FavoritesPanel.CopySelectedFavoritePath())
+                if (FavoritesPanel.IsKeyboardFocusWithin)
                 {
-                    e.Handled = true;
-                    return;
+                    FavoritesPanel.CopySelectedFavoritePath();
                 }
+                else if (ActivePane.SelectedItems.Count > 0)
+                {
+                    ActivePane.CopySelectedToClipboard();
+                }
+                e.Handled = true;
+            }
+            else if (kb.Matches(e, "CutClipboard"))
+            {
+                if (ActivePane.SelectedItems.Count > 0)
+                    ActivePane.CutSelectedToClipboard();
+                e.Handled = true;
+            }
+            else if (kb.Matches(e, "PasteClipboard"))
+            {
+                PasteFromClipboard();
+                e.Handled = true;
             }
             else if (kb.Matches(e, "NavigateBack"))
             {
@@ -1300,7 +1317,7 @@ namespace Folderss
                 .OfType<LayoutDocument>()
                 .FirstOrDefault(document => document.IsActive);
             var viewerHost = activeDocument?.Content as ViewerHost;
-            return viewerHost != null && viewerHost.HandleShortcut(e);
+            return viewerHost != null && viewerHost.HandleShortcut(e, _keyBindingService);
         }
 
         private void Settings_Click(object sender, RoutedEventArgs e)

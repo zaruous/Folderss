@@ -819,7 +819,7 @@ namespace Folderss.Controls
             e.Handled = true;
         }
 
-        private void Copy_Executed(object sender, ExecutedRoutedEventArgs e)
+        public void CopySelectedToClipboard()
         {
             var paths = SelectedItems
                 .Select(item => item.FullPath)
@@ -836,6 +836,11 @@ namespace Folderss.Controls
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
                 window.ClearCutStateFromClipboard();
+        }
+
+        private void Copy_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            CopySelectedToClipboard();
             e.Handled = true;
         }
 
@@ -845,7 +850,7 @@ namespace Folderss.Controls
             e.Handled = true;
         }
 
-        private void Cut_Executed(object sender, ExecutedRoutedEventArgs e)
+        public void CutSelectedToClipboard()
         {
             var selected = SelectedItems
                 .Where(item => File.Exists(item.FullPath) || Directory.Exists(item.FullPath))
@@ -862,7 +867,11 @@ namespace Folderss.Controls
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
                 window.SetCutStateFromClipboard(selected.Select(item => item.FullPath));
+        }
 
+        private void Cut_Executed(object sender, ExecutedRoutedEventArgs e)
+        {
+            CutSelectedToClipboard();
             e.Handled = true;
         }
 

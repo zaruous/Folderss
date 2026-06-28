@@ -59,7 +59,6 @@
                   PreviewMouseLeftButtonDown="FavoritesTree_PreviewMouseLeftButtonDown"
                   PreviewMouseMove="FavoritesTree_PreviewMouseMove"
                   PreviewMouseRightButtonDown="FavoritesTree_PreviewMouseRightButtonDown"
-                  PreviewKeyDown="FavoritesTree_PreviewKeyDown"
                   DragOver="FavoritesTree_DragOver"
                   Drop="FavoritesTree_Drop"
                   MouseDoubleClick="FavoritesTree_MouseDoubleClick">

@@ -16,12 +16,13 @@
 
 | CommandId | 표시 이름 | 기본 키 | 처리 위치 | 동작 |
 |-----------|-----------|---------|-----------|------|
-| `Rename` | 이름 변경 | `F2` | MainWindow | 선택된 항목 이름 변경 (즐겨찾기 패널 포커스 시 무시) |
+| `Rename` | 이름 변경 | `F2` | MainWindow | 선택된 항목 이름 변경 (즐겨찾기 패널 포커스 시 즐겨찾기 이름 변경) |
 | `Refresh` | 새로 고침 | `F5` | MainWindow | 양쪽 패널 새로 고침 |
 | `Move` | 이동 | `F6` | MainWindow | 선택 항목을 반대 패널로 이동 |
 | `Delete` | 삭제 | `Delete` | MainWindow | 휴지통 이동 (Shift 누르면 영구 삭제) |
 | `RefreshAlt` | 새로 고침 (대체) | `Ctrl+R` | MainWindow | 양쪽 패널 새로 고침 (대체키) |
 | `NewFolder` | 새 폴더 | `Ctrl+Shift+N` | MainWindow | 활성 패널에 새 폴더 생성 |
+| `NewFile` | 새 파일 | `Ctrl+N` | MainWindow | 활성 패널에 새 파일 생성 |
 | `AddPanel` | 폴더 패널 추가 | `Ctrl+T` | MainWindow | 새 폴더 브라우저 탭 추가 |
 | `CopyClipboard` | 복사 (클립보드) | `Ctrl+C` | MainWindow | 선택 항목 클립보드 복사; 즐겨찾기 패널에서는 경로 복사 |
 | `CutClipboard` | 잘라내기 | `Ctrl+X` | MainWindow | 선택 항목 잘라내기 |
@@ -38,12 +39,6 @@
 
 ## 2. 하드코딩 단축키
 
-### MainWindow
-
-| 키 | 동작 | 비고 |
-|----|------|------|
-| `Ctrl+N` | 새 파일 생성 | KeyBindingService 미등록, 커스텀 불가 |
-
 ### FolderBrowser (파일 목록)
 
 | 키 | 동작 | 비고 |
@@ -53,10 +48,7 @@
 
 ### FavoritesPanel (즐겨찾기 패널)
 
-| 키 | 동작 | 비고 |
-|----|------|------|
-| `F2` | 즐겨찾기 항목 이름 변경 | 하드코딩 (KeyBindingService 미참조) |
-| `Ctrl+C` | 선택된 즐겨찾기 경로 복사 | 하드코딩 (KeyBindingService 미참조) |
+MainWindow에서 `Rename`, `CopyClipboard` KeyBindingService 매핑으로 통합 처리.
 
 ### SearchPanel (검색 패널)
 
@@ -99,7 +91,7 @@ FolderBrowser에서 `ApplicationCommands` CommandBinding으로 등록:
 
 | 키 | 동작 | 비고 |
 |----|------|------|
-| `Ctrl+F` | 마크다운 내 텍스트 검색 (find) | 하드코딩 (KeyBindingService 미참조) |
+| `Ctrl+F` | 마크다운 내 텍스트 검색 (find) | KeyBindingService `ShowSearch` 매핑 사용 |
 
 ### MonacoViewer / TextViewer
 
@@ -107,36 +99,40 @@ FolderBrowser에서 `ApplicationCommands` CommandBinding으로 등록:
 
 ---
 
-## 5. 버그 및 불일치 사항
+## 5. 버그 및 불일치 사항 (리뷰 결과)
 
-### BUG-1: `Ctrl+X` / `Ctrl+V` 커스텀 매핑 미적용
+| # | 제목 | 심각도 | 상태 |
+|---|------|--------|------|
+| BUG-1 | `Ctrl+X`/`Ctrl+V` 커스텀 매핑 미적용 | 중 | **수정 완료** |
+| BUG-2 | `Ctrl+N` (새 파일) KeyBindingService 미등록 | 낮 | **수정 완료** |
+| BUG-3 | MarkdownViewer `Ctrl+F` 하드코딩 | 낮 | **수정 완료** |
+| BUG-4 | FavoritesPanel `F2`/`Ctrl+C` 하드코딩 | 중 | **수정 완료** |
+| BUG-5 | `docs/architecture.md` 문서 불일치 | - | **수정 완료** |
 
-- **증상**: `KeyBindingService`에 `CutClipboard` (`Ctrl+X`), `PasteClipboard` (`Ctrl+V`)가 등록되어 있으나, `MainWindow.Window_PreviewKeyDown`에서 `kb.Matches(e, "CutClipboard")` / `kb.Matches(e, "PasteClipboard")` 호출이 없음
-- **영향**: 사용자가 설정 창에서 잘라내기/붙여넣기 키를 변경해도 실제 동작에 반영되지 않음. FolderBrowser의 WPF `ApplicationCommands`만 처리하므로 항상 `Ctrl+X`/`Ctrl+V`로 고정
-- **심각도**: 중 — 설정 UI에서 변경은 가능하지만 동작하지 않아 사용자 혼란 유발
+### BUG-1: `Ctrl+X` / `Ctrl+V` 커스텀 매핑 미적용 — 수정 완료
 
-### BUG-2: `Ctrl+N` (새 파일) KeyBindingService 미등록
+- **증상**: `KeyBindingService`에 `CutClipboard`, `PasteClipboard`가 등록되어 있으나 `MainWindow.Window_PreviewKeyDown`에서 미사용
+- **수정**: `FolderBrowser`에 `CopySelectedToClipboard()`, `CutSelectedToClipboard()` 공개 메서드 추가. `MainWindow`에서 `kb.Matches(e, "CutClipboard")`, `kb.Matches(e, "PasteClipboard")` 핸들러 추가. `CopyClipboard`도 FavoritesPanel 외 일반 파일 복사까지 처리하도록 확장
 
-- **증상**: `MainWindow.xaml.cs` 1242행에서 `e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control`로 하드코딩
-- **영향**: 사용자가 새 파일 단축키를 커스터마이즈할 수 없음
-- **심각도**: 낮 — 동작 자체는 정상이지만 다른 단축키와 일관성 부족
+### BUG-2: `Ctrl+N` (새 파일) KeyBindingService 미등록 — 수정 완료
 
-### BUG-3: MarkdownViewer `Ctrl+F` 하드코딩
+- **증상**: `MainWindow.xaml.cs`에서 `e.Key == Key.N && Keyboard.Modifiers == ModifierKeys.Control`로 하드코딩
+- **수정**: `KeyBindingService.GetDefaults()`에 `NewFile` (`Ctrl+N`) 항목 추가. `MainWindow`에서 `kb.Matches(e, "NewFile")`로 교체
 
-- **증상**: `MarkdownViewer.HandleShortcut()`에서 `e.Key != Key.F` 직접 비교 (299행)
-- **영향**: 사용자가 `ShowSearch` 키를 다른 키로 변경해도 마크다운 뷰어 내 검색은 여전히 `Ctrl+F`로만 동작
-- **심각도**: 낮 — ShowSearch 키를 변경하는 경우는 드물지만 불일치 존재
+### BUG-3: MarkdownViewer `Ctrl+F` 하드코딩 — 수정 완료
 
-### BUG-4: FavoritesPanel `F2` / `Ctrl+C` 하드코딩
+- **증상**: `MarkdownViewer.HandleShortcut()`에서 `e.Key != Key.F` 직접 비교
+- **수정**: `IViewerShortcutHandler.HandleShortcut` 시그니처에 `KeyBindingService` 파라미터 추가. `MarkdownViewer`에서 `kb.Matches(e, "ShowSearch")`로 교체. `ViewerHost` → `MainWindow` 호출 체인 업데이트
 
-- **증상**: `FavoritesPanel.FavoritesTree_PreviewKeyDown()`에서 `e.Key == Key.F2`, `e.Key == Key.C` 직접 비교 (375-389행)
-- **영향**: 사용자가 `Rename`이나 `CopyClipboard` 키를 변경해도 즐겨찾기 패널에서는 기존 키로만 동작
-- **심각도**: 중 — 같은 기능인데 패널에 따라 다른 키가 적용되는 혼란 유발
+### BUG-4: FavoritesPanel `F2` / `Ctrl+C` 하드코딩 — 수정 완료
 
-### BUG-5: `docs/architecture.md` 문서 불일치 (수정 완료)
+- **증상**: `FavoritesPanel.FavoritesTree_PreviewKeyDown()`에서 키 직접 비교
+- **수정**: `FavoritesPanel`의 `PreviewKeyDown` 핸들러 제거. `MainWindow`의 `Rename` 핸들러가 `FavoritesPanel.IsKeyboardFocusWithin` 시 `FavoritesPanel.RenameSelected()` 호출하도록 변경. `CopyClipboard` 핸들러에서 즐겨찾기/파일 목록 모두 처리
+
+### BUG-5: `docs/architecture.md` 문서 불일치 — 수정 완료
 
 - **증상**: 클래스명 `KeybindingManager` (실제: `KeyBindingService`), 저장 형식 `JSON` (실제: `XML`)
-- **상태**: 이번 리뷰에서 수정 완료
+- **수정**: 올바른 이름과 형식으로 문서 갱신
 
 ---
 
