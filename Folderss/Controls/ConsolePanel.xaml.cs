@@ -46,6 +46,9 @@ namespace Folderss.Controls
         private static readonly MethodInfo EasyTerminalSetThemeMethod =
             typeof(EasyTerminalControl).GetMethod("SetTheme", BindingFlags.Instance | BindingFlags.NonPublic);
 
+        public event EventHandler MaximizeRequested;
+        public event EventHandler MinimizeRequested;
+
         public Func<string> ActiveDirectoryProvider { get; set; }
 
         private ConsoleTab ActiveTab => ConsoleTabs.SelectedItem as ConsoleTab;
@@ -391,7 +394,7 @@ namespace Folderss.Controls
         {
             var active = ActiveTab;
             bool isStarted = active != null && !active.IsAddTab && active.Terminal.ConPTYTerm != null && active.Terminal.ConPTYTerm.TermProcIsStarted;
-            StatusText.Text = isStarted ? "실행 중" : "종료됨";
+            StatusText.Text = isStarted ? "실행 중" : string.Empty;
         }
 
         private void ShellCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -418,67 +421,20 @@ namespace Folderss.Controls
             StartSelectedShell(active, GetActiveDirectory(), profileKey);
         }
 
-        private void SetCurrentFolder_Click(object sender, RoutedEventArgs e)
+        private void Maximize_Click(object sender, RoutedEventArgs e)
         {
-            var active = ActiveTab;
-            if (active == null || active.IsAddTab) return;
-
-            EnsureStarted();
-            var directory = GetActiveDirectory();
-            var shellKind = ConsoleSessionService.GetShellKind(GetProfile(active.ProfileKey));
-            if (shellKind == ConsoleShellKind.CommandPrompt)
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm($"cd /d \"{directory}\"\r\n");
-            }
-            else
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm($"Set-Location -LiteralPath '{directory.Replace("'", "''")}'\r\n");
-            }
-            UpdateStatus();
-            FocusCommandBox();
+            MaximizeRequested?.Invoke(this, EventArgs.Empty);
         }
 
-        private void ExternalTerminal_Click(object sender, RoutedEventArgs e)
+        private void Minimize_Click(object sender, RoutedEventArgs e)
         {
-            try
-            {
-                ConsoleSessionService.LaunchExternalTerminal(
-                    GetProfile(ActiveTab == null ? null : ActiveTab.ProfileKey) ?? GetPreferredProfile(),
-                    GetActiveDirectory(),
-                    null);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("외부 터미널을 열 수 없습니다: " + ex.Message, "에러", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            FocusCommandBox();
+            MinimizeRequested?.Invoke(this, EventArgs.Empty);
         }
 
-        private void Clear_Click(object sender, RoutedEventArgs e)
+        public void UpdateMaximizeButton(bool isMaximized)
         {
-            var active = ActiveTab;
-            if (active == null || active.IsAddTab) return;
-
-            var shellKind = ConsoleSessionService.GetShellKind(GetProfile(active.ProfileKey));
-            if (shellKind == ConsoleShellKind.CommandPrompt)
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm("cls\r\n");
-            }
-            else
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm("Clear-Host\r\n");
-            }
-            FocusCommandBox();
-        }
-
-        private void Restart_Click(object sender, RoutedEventArgs e)
-        {
-            var active = ActiveTab;
-            if (active != null && !active.IsAddTab)
-            {
-                StartSelectedShell(active, GetActiveDirectory(), active.ProfileKey);
-            }
-            FocusCommandBox();
+            MaximizeButton.Content = isMaximized ? "❐" : "□";
+            MaximizeButton.ToolTip = isMaximized ? "이전 크기로 복원" : "최대화";
         }
 
         private void ConsolePanel_PreviewKeyDown(object sender, KeyEventArgs e)

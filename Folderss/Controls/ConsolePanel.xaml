@@ -80,6 +80,26 @@
                     BorderThickness="0,0,0,1">
                 <DockPanel>
                     <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                        <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="0,2,6,2"/>
+                        <Button x:Name="MaximizeButton"
+                                Content="□"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26" Width="26"
+                                FontSize="13"
+                                Padding="0"
+                                Margin="0,0,4,0"
+                                ToolTip="최대화"
+                                Click="Maximize_Click"/>
+                        <Button Content="—"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26" Width="26"
+                                FontSize="13"
+                                Padding="0"
+                                ToolTip="패널 닫기"
+                                Click="Minimize_Click"/>
+                    </StackPanel>
+
+                    <StackPanel DockPanel.Dock="Left" Orientation="Horizontal" VerticalAlignment="Center">
                         <ComboBox x:Name="ShellCombo"
                                   Width="150"
                                   Height="26"
@@ -88,36 +108,13 @@
                                   DisplayMemberPath="DisplayName"
                                   SelectedValuePath="Kind"
                                   SelectionChanged="ShellCombo_SelectionChanged"/>
-                        <Button Content="현재 폴더로 이동"
-                                Style="{StaticResource CompactToolButtonStyle}"
-                                Height="26"
-                                Padding="8,3"
-                                Margin="0,0,6,0"
-                                Click="SetCurrentFolder_Click"/>
-                        <Button Content="외부 터미널"
-                                Style="{StaticResource CompactToolButtonStyle}"
-                                Height="26"
-                                Padding="8,3"
-                                Margin="0,0,6,0"
-                                Click="ExternalTerminal_Click"/>
-                        <Button Content="지우기"
-                                Style="{StaticResource CompactToolButtonStyle}"
-                                Height="26"
-                                Padding="8,3"
-                                Margin="0,0,6,0"
-                                Click="Clear_Click"/>
-                        <Button Content="재시작"
-                                Style="{StaticResource CompactToolButtonStyle}"
-                                Height="26"
-                                Padding="8,3"
-                                Click="Restart_Click"/>
+                        <TextBlock x:Name="StatusText"
+                                   VerticalAlignment="Center"
+                                   Foreground="{DynamicResource SecondaryText}"
+                                   FontSize="12"
+                                   Margin="6,0,0,0"
+                                   TextTrimming="CharacterEllipsis"/>
                     </StackPanel>
-
-                    <TextBlock x:Name="StatusText"
-                               VerticalAlignment="Center"
-                               Foreground="{DynamicResource SecondaryText}"
-                               FontSize="12"
-                               TextTrimming="CharacterEllipsis"/>
                 </DockPanel>
             </Border>
 
