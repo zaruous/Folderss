@@ -394,7 +394,7 @@ namespace Folderss.Controls
         {
             var active = ActiveTab;
             bool isStarted = active != null && !active.IsAddTab && active.Terminal.ConPTYTerm != null && active.Terminal.ConPTYTerm.TermProcIsStarted;
-            StatusText.Text = isStarted ? "실행 중" : "종료됨";
+            StatusText.Text = isStarted ? "실행 중" : string.Empty;
         }
 
         private void ShellCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
