@@ -296,9 +296,9 @@ namespace Folderss.Viewers
                 string.Format("app.setTheme({0})", JsonString(ThemeName(theme))));
         }
 
-        public bool HandleShortcut(KeyEventArgs e)
+        public bool HandleShortcut(KeyEventArgs e, KeyBindingService kb)
         {
-            if (e.Key != Key.F || (Keyboard.Modifiers & ModifierKeys.Control) != ModifierKeys.Control)
+            if (!kb.Matches(e, "ShowSearch"))
                 return false;
 
             if (!_webViewReady || !_pageReady || WebView.CoreWebView2 == null)

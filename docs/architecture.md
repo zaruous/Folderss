@@ -62,11 +62,11 @@ Folderss/
 - `%LOCALAPPDATA%\Folderss\theme.txt`에 마지막 테마 저장
 - **테마 추가 시 연관 파일**: ThemeManager.cs, MainWindow.xaml+cs, SettingsWindow.xaml+cs
 
-### KeybindingManager
+### KeyBindingService
 - 기본 단축키 매핑을 코드에서 정의
-- 사용자 커스터마이징을 JSON으로 `%LOCALAPPDATA%\Folderss\keybindings.json`에 저장
-- `kb.Matches(e, "CommandId")` 패턴으로 MainWindow KeyDown에서 사용
-- **단축키 추가 시 연관 파일**: KeybindingManager.cs, MainWindow.xaml.cs, SettingsWindow
+- 사용자 커스터마이징을 XML로 `%LOCALAPPDATA%\Folderss\keybindings.xml`에 저장
+- `kb.Matches(e, "CommandId")` 패턴으로 MainWindow PreviewKeyDown에서 사용
+- **단축키 추가 시 연관 파일**: KeyBindingService.cs, MainWindow.xaml.cs, SettingsWindow
 
 ### 개발 아이템 문서
 - 현재 개발 아이템은 GitHub Project가 아니라 `docs/items/<항목>.md`에서 관리한다.

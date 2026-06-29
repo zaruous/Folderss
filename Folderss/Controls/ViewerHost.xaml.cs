@@ -66,10 +66,10 @@ namespace Folderss.Controls
             _currentViewer?.ApplyTheme(theme);
         }
 
-        public bool HandleShortcut(KeyEventArgs e)
+        public bool HandleShortcut(KeyEventArgs e, KeyBindingService kb)
         {
             var shortcutHandler = _currentViewer as IViewerShortcutHandler;
-            return shortcutHandler != null && shortcutHandler.HandleShortcut(e);
+            return shortcutHandler != null && shortcutHandler.HandleShortcut(e, kb);
         }
 
         private void DetachCurrentViewer()

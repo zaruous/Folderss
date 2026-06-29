@@ -372,24 +372,17 @@ namespace Folderss.Controls
             }
         }
 
-        private void FavoritesTree_PreviewKeyDown(object sender, KeyEventArgs e)
+        public void RenameSelected()
         {
-            if (e.Key == Key.F2)
-            {
-                Rename_Click(sender, e);
-                e.Handled = true;
-            }
-            else if (e.Key == Key.C &&
-                (Keyboard.Modifiers & ModifierKeys.Control) != 0)
-            {
-                if (CopySelectedFavoritePath())
-                {
-                    e.Handled = true;
-                }
-            }
+            RenameSelectedInternal();
         }
 
         private void Rename_Click(object sender, RoutedEventArgs e)
+        {
+            RenameSelectedInternal();
+        }
+
+        private void RenameSelectedInternal()
         {
             var selected = FavoritesTree.SelectedItem;
             var favorite = selected as FavoriteLocation;
