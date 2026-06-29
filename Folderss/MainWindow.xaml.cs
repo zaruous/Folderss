@@ -1260,14 +1260,7 @@ namespace Folderss
             var kb = _keyBindingService;
 
             if (IsConsoleFocused())
-            {
-                if (kb.Matches(e, "PanelMaximize"))
-                {
-                    TogglePanelMaximize();
-                    e.Handled = true;
-                }
                 return;
-            }
 
             if (TryHandleActiveViewerShortcut(e))
             {
