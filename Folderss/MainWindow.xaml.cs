@@ -40,6 +40,7 @@ namespace Folderss
         private string _savedLayoutXml = null;
         private string _maximizedContentId = null;
         private object _maximizedContent = null;
+        private bool _restoringPanelLayout;
 
         private FolderBrowser ActivePane
         {
@@ -331,7 +332,16 @@ namespace Folderss
                 docPane.Children.Add(doc);
                 panel.Children.Add(docPane);
                 newRoot.RootPanel = panel;
-                DockManager.Layout = newRoot;
+
+                _restoringPanelLayout = true;
+                try
+                {
+                    DockManager.Layout = newRoot;
+                }
+                finally
+                {
+                    _restoringPanelLayout = false;
+                }
                 doc.IsActive = true;
 
                 _isPanelMaximized = true;
@@ -342,23 +352,31 @@ namespace Folderss
                 var maxContentId = _maximizedContentId;
                 var maxContent = _maximizedContent;
 
-                var serializer = new XmlLayoutSerializer(DockManager);
-                serializer.LayoutSerializationCallback += (sender, args) =>
+                _restoringPanelLayout = true;
+                try
                 {
-                    if (maxContentId != null && args.Model.ContentId == maxContentId && maxContent != null)
+                    var serializer = new XmlLayoutSerializer(DockManager);
+                    serializer.LayoutSerializationCallback += (sender, args) =>
                     {
-                        args.Content = maxContent;
-                        return;
+                        if (maxContentId != null && args.Model.ContentId == maxContentId && maxContent != null)
+                        {
+                            args.Content = maxContent;
+                            return;
+                        }
+                        var content = ResolveDockContent(args.Model.ContentId);
+                        if (content != null)
+                            args.Content = content;
+                        else
+                            args.Cancel = true;
+                    };
+                    using (var reader = XmlReader.Create(new StringReader(_savedLayoutXml)))
+                    {
+                        serializer.Deserialize(reader);
                     }
-                    var content = ResolveDockContent(args.Model.ContentId);
-                    if (content != null)
-                        args.Content = content;
-                    else
-                        args.Cancel = true;
-                };
-                using (var reader = XmlReader.Create(new StringReader(_savedLayoutXml)))
+                }
+                finally
                 {
-                    serializer.Deserialize(reader);
+                    _restoringPanelLayout = false;
                 }
 
                 _savedLayoutXml = null;
@@ -370,6 +388,15 @@ namespace Folderss
 
                 if (activeBrowser != null)
                     ActivatePane(activeBrowser);
+
+                if (maxContentId != null)
+                {
+                    var docToActivate = DockManager.Layout.Descendents()
+                        .OfType<LayoutDocument>()
+                        .FirstOrDefault(d => d.ContentId == maxContentId);
+                    if (docToActivate != null)
+                        docToActivate.IsActive = true;
+                }
             }
         }
 
@@ -1008,6 +1035,8 @@ namespace Folderss
 
         private void Pane_Activated(object sender, EventArgs e)
         {
+            if (_restoringPanelLayout)
+                return;
             var pane = sender as FolderBrowser;
             if (pane != null)
                 ActivatePane(pane);
