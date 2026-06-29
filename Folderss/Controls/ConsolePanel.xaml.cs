@@ -421,69 +421,6 @@ namespace Folderss.Controls
             StartSelectedShell(active, GetActiveDirectory(), profileKey);
         }
 
-        private void SetCurrentFolder_Click(object sender, RoutedEventArgs e)
-        {
-            var active = ActiveTab;
-            if (active == null || active.IsAddTab) return;
-
-            EnsureStarted();
-            var directory = GetActiveDirectory();
-            var shellKind = ConsoleSessionService.GetShellKind(GetProfile(active.ProfileKey));
-            if (shellKind == ConsoleShellKind.CommandPrompt)
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm($"cd /d \"{directory}\"\r\n");
-            }
-            else
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm($"Set-Location -LiteralPath '{directory.Replace("'", "''")}'\r\n");
-            }
-            UpdateStatus();
-            FocusCommandBox();
-        }
-
-        private void ExternalTerminal_Click(object sender, RoutedEventArgs e)
-        {
-            try
-            {
-                ConsoleSessionService.LaunchExternalTerminal(
-                    GetProfile(ActiveTab == null ? null : ActiveTab.ProfileKey) ?? GetPreferredProfile(),
-                    GetActiveDirectory(),
-                    null);
-            }
-            catch (Exception ex)
-            {
-                MessageBox.Show("외부 터미널을 열 수 없습니다: " + ex.Message, "에러", MessageBoxButton.OK, MessageBoxImage.Error);
-            }
-            FocusCommandBox();
-        }
-
-        private void Clear_Click(object sender, RoutedEventArgs e)
-        {
-            var active = ActiveTab;
-            if (active == null || active.IsAddTab) return;
-
-            var shellKind = ConsoleSessionService.GetShellKind(GetProfile(active.ProfileKey));
-            if (shellKind == ConsoleShellKind.CommandPrompt)
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm("cls\r\n");
-            }
-            else
-            {
-                active.Terminal.ConPTYTerm?.WriteToTerm("Clear-Host\r\n");
-            }
-            FocusCommandBox();
-        }
-
-        private void Restart_Click(object sender, RoutedEventArgs e)
-        {
-            var active = ActiveTab;
-            if (active != null && !active.IsAddTab)
-            {
-                StartSelectedShell(active, GetActiveDirectory(), active.ProfileKey);
-            }
-            FocusCommandBox();
-        }
-
         private void Maximize_Click(object sender, RoutedEventArgs e)
         {
             MaximizeRequested?.Invoke(this, EventArgs.Empty);
