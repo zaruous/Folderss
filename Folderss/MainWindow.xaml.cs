@@ -373,29 +373,29 @@ namespace Folderss
                     {
                         serializer.Deserialize(reader);
                     }
+
+                    _savedLayoutXml = null;
+                    _maximizedContentId = null;
+                    _maximizedContent = null;
+                    _isPanelMaximized = false;
+
+                    EnsureAddPanelTab();
+
+                    if (activeBrowser != null)
+                        ActivatePane(activeBrowser);
+
+                    if (maxContentId != null)
+                    {
+                        var docToActivate = DockManager.Layout.Descendents()
+                            .OfType<LayoutDocument>()
+                            .FirstOrDefault(d => d.ContentId == maxContentId);
+                        if (docToActivate != null)
+                            docToActivate.IsActive = true;
+                    }
                 }
                 finally
                 {
                     _restoringPanelLayout = false;
-                }
-
-                _savedLayoutXml = null;
-                _maximizedContentId = null;
-                _maximizedContent = null;
-                _isPanelMaximized = false;
-
-                EnsureAddPanelTab();
-
-                if (activeBrowser != null)
-                    ActivatePane(activeBrowser);
-
-                if (maxContentId != null)
-                {
-                    var docToActivate = DockManager.Layout.Descendents()
-                        .OfType<LayoutDocument>()
-                        .FirstOrDefault(d => d.ContentId == maxContentId);
-                    if (docToActivate != null)
-                        docToActivate.IsActive = true;
                 }
             }
         }
@@ -532,7 +532,7 @@ namespace Folderss
 
             // If the add tab is already active after layout restore, IsActiveChanged
             // will not fire on the next click. Move focus back to a folder tab first.
-            if (addDocument.IsActive && !_openingPanelFromAddTab)
+            if (addDocument.IsActive && !_openingPanelFromAddTab && !_restoringPanelLayout)
             {
                 var folderDoc = DockManager.Layout.Descendents()
                     .OfType<LayoutDocument>()
@@ -597,7 +597,7 @@ namespace Folderss
         private void AddPanelDocument_IsActiveChanged(object sender, EventArgs e)
         {
             var addDocument = sender as LayoutDocument;
-            if (addDocument == null || !addDocument.IsActive || _openingPanelFromAddTab)
+            if (addDocument == null || !addDocument.IsActive || _openingPanelFromAddTab || _restoringPanelLayout)
                 return;
 
             Dispatcher.BeginInvoke(new Action(() =>
