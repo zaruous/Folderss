@@ -1241,9 +1241,24 @@ namespace Folderss
             MessageBox.Show(details, operation + " 중 일부 항목 실패", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
+        private bool IsConsoleFocused()
+        {
+            return _consolePanel != null && _consolePanel.IsKeyboardFocusWithin;
+        }
+
         private void Window_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             var kb = _keyBindingService;
+
+            if (IsConsoleFocused())
+            {
+                if (kb.Matches(e, "PanelMaximize"))
+                {
+                    TogglePanelMaximize();
+                    e.Handled = true;
+                }
+                return;
+            }
 
             if (TryHandleActiveViewerShortcut(e))
             {
