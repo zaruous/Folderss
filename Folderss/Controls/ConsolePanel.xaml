@@ -110,7 +110,25 @@
                                 Style="{StaticResource CompactToolButtonStyle}"
                                 Height="26"
                                 Padding="8,3"
+                                Margin="0,0,6,0"
                                 Click="Restart_Click"/>
+                        <Border Width="1" Background="{DynamicResource BorderBrush}" Margin="0,2,6,2"/>
+                        <Button x:Name="MaximizeButton"
+                                Content="□"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26" Width="26"
+                                FontSize="13"
+                                Padding="0"
+                                Margin="0,0,4,0"
+                                ToolTip="최대화"
+                                Click="Maximize_Click"/>
+                        <Button Content="—"
+                                Style="{StaticResource CompactToolButtonStyle}"
+                                Height="26" Width="26"
+                                FontSize="13"
+                                Padding="0"
+                                ToolTip="패널 닫기"
+                                Click="Minimize_Click"/>
                     </StackPanel>
 
                     <TextBlock x:Name="StatusText"

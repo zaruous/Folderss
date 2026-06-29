@@ -46,6 +46,9 @@ namespace Folderss.Controls
         private static readonly MethodInfo EasyTerminalSetThemeMethod =
             typeof(EasyTerminalControl).GetMethod("SetTheme", BindingFlags.Instance | BindingFlags.NonPublic);
 
+        public event EventHandler MaximizeRequested;
+        public event EventHandler MinimizeRequested;
+
         public Func<string> ActiveDirectoryProvider { get; set; }
 
         private ConsoleTab ActiveTab => ConsoleTabs.SelectedItem as ConsoleTab;
@@ -479,6 +482,22 @@ namespace Folderss.Controls
                 StartSelectedShell(active, GetActiveDirectory(), active.ProfileKey);
             }
             FocusCommandBox();
+        }
+
+        private void Maximize_Click(object sender, RoutedEventArgs e)
+        {
+            MaximizeRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        private void Minimize_Click(object sender, RoutedEventArgs e)
+        {
+            MinimizeRequested?.Invoke(this, EventArgs.Empty);
+        }
+
+        public void UpdateMaximizeButton(bool isMaximized)
+        {
+            MaximizeButton.Content = isMaximized ? "❐" : "□";
+            MaximizeButton.ToolTip = isMaximized ? "이전 크기로 복원" : "최대화";
         }
 
         private void ConsolePanel_PreviewKeyDown(object sender, KeyEventArgs e)

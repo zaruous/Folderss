@@ -345,6 +345,7 @@ namespace Folderss
                 doc.IsActive = true;
 
                 _isPanelMaximized = true;
+                UpdateConsolePanelMaximizeButton();
             }
             else
             {
@@ -389,6 +390,8 @@ namespace Folderss
                     _restoringPanelLayout = false;
                 }
 
+                UpdateConsolePanelMaximizeButton();
+
                 var capturedContentId = maxContentId;
                 var capturedBrowser = activeBrowser;
                 Dispatcher.BeginInvoke(new Action(() =>
@@ -413,6 +416,12 @@ namespace Folderss
                     }
                 }), System.Windows.Threading.DispatcherPriority.ContextIdle);
             }
+        }
+
+        private void UpdateConsolePanelMaximizeButton()
+        {
+            if (_consolePanel != null)
+                _consolePanel.UpdateMaximizeButton(_isPanelMaximized);
         }
 
         private void UpdateMaximizeButton()
@@ -1933,6 +1942,8 @@ namespace Folderss
             _consolePanel = new Controls.ConsolePanel();
             _consolePanel.ActiveDirectoryProvider = () => ActivePane.CurrentPath;
             _consolePanel.GotFocus += ConsolePanel_GotFocus;
+            _consolePanel.MaximizeRequested += (s, ev) => TogglePanelMaximize();
+            _consolePanel.MinimizeRequested += (s, ev) => CloseConsoleDocument();
             return _consolePanel;
         }
 
@@ -1946,6 +1957,15 @@ namespace Folderss
                 .FirstOrDefault(d => d.ContentId == "console");
             if (doc != null && !doc.IsActive)
                 doc.IsActive = true;
+        }
+
+        private void CloseConsoleDocument()
+        {
+            var doc = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(d => d.ContentId == "console");
+            if (doc != null)
+                doc.Close();
         }
 
         private void BuildDefaultDockLayout()
