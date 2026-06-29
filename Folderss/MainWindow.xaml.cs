@@ -383,20 +383,35 @@ namespace Folderss
 
                     if (activeBrowser != null)
                         ActivatePane(activeBrowser);
-
-                    if (maxContentId != null)
-                    {
-                        var docToActivate = DockManager.Layout.Descendents()
-                            .OfType<LayoutDocument>()
-                            .FirstOrDefault(d => d.ContentId == maxContentId);
-                        if (docToActivate != null)
-                            docToActivate.IsActive = true;
-                    }
                 }
                 finally
                 {
                     _restoringPanelLayout = false;
                 }
+
+                var capturedContentId = maxContentId;
+                var capturedBrowser = activeBrowser;
+                Dispatcher.BeginInvoke(new Action(() =>
+                {
+                    _restoringPanelLayout = true;
+                    try
+                    {
+                        if (capturedContentId != null)
+                        {
+                            var docToActivate = DockManager.Layout.Descendents()
+                                .OfType<LayoutDocument>()
+                                .FirstOrDefault(d => d.ContentId == capturedContentId);
+                            if (docToActivate != null)
+                                docToActivate.IsActive = true;
+                        }
+                        if (capturedBrowser != null)
+                            ActivatePane(capturedBrowser);
+                    }
+                    finally
+                    {
+                        _restoringPanelLayout = false;
+                    }
+                }), System.Windows.Threading.DispatcherPriority.ContextIdle);
             }
         }
 
