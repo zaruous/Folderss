@@ -218,6 +218,7 @@ Folderss\Themes\Controls.xaml
 | `Ctrl+C` | 선택 항목 클립보드 복사 |
 | `Ctrl+X` | 선택 항목 클립보드 잘라내기 |
 | `Ctrl+V` | 클립보드에서 붙여넣기 |
+| `Ctrl+N` | 새 파일 |
 | `Ctrl+Shift+N` | 새 폴더 |
 
 ### 보기
