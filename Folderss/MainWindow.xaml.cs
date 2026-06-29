@@ -1917,7 +1917,20 @@ namespace Folderss
 
             _consolePanel = new Controls.ConsolePanel();
             _consolePanel.ActiveDirectoryProvider = () => ActivePane.CurrentPath;
+            _consolePanel.GotFocus += ConsolePanel_GotFocus;
             return _consolePanel;
+        }
+
+        private void ConsolePanel_GotFocus(object sender, RoutedEventArgs e)
+        {
+            if (_restoringPanelLayout)
+                return;
+
+            var doc = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(d => d.ContentId == "console");
+            if (doc != null && !doc.IsActive)
+                doc.IsActive = true;
         }
 
         private void BuildDefaultDockLayout()
