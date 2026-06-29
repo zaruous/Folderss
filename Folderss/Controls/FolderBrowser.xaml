@@ -131,6 +131,7 @@
                           SelectionMode="Extended"
                           SelectionChanged="FileList_SelectionChanged"
                           MouseDoubleClick="FileList_MouseDoubleClick"
+                          PreviewKeyDown="FileList_PreviewKeyDown"
                           KeyDown="FileList_KeyDown"
                           PreviewMouseLeftButtonDown="FileList_PreviewMouseLeftButtonDown"
                           PreviewMouseMove="FileList_PreviewMouseMove"

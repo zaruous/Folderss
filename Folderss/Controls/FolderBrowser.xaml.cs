@@ -310,6 +310,23 @@ namespace Folderss.Controls
             }
         }
 
+        private void FileList_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (Keyboard.Modifiers == ModifierKeys.None &&
+                (e.Key == Key.Home || e.Key == Key.End))
+            {
+                e.Handled = true;
+
+                if (FileList.Items.Count == 0)
+                    return;
+
+                var index = e.Key == Key.Home ? 0 : FileList.Items.Count - 1;
+                FileList.SelectedItems.Clear();
+                FileList.SelectedIndex = index;
+                FileList.ScrollIntoView(FileList.Items[index]);
+            }
+        }
+
         private void FileList_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)
