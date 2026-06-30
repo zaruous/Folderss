@@ -52,6 +52,7 @@
                          Margin="5,0,0,0"
                          Padding="8,3"
                          VerticalContentAlignment="Center"
+                         PreviewKeyDown="PathBox_PreviewKeyDown"
                          KeyDown="PathBox_KeyDown"/>
             </Grid>
 
