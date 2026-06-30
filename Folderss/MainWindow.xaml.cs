@@ -1334,6 +1334,7 @@ namespace Folderss
             }
             else if (kb.Matches(e, "CopyClipboard"))
             {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 if (FavoritesPanel.IsKeyboardFocusWithin)
                 {
                     FavoritesPanel.CopySelectedFavoritePath();
@@ -1346,12 +1347,14 @@ namespace Folderss
             }
             else if (kb.Matches(e, "CutClipboard"))
             {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 if (ActivePane.SelectedItems.Count > 0)
                     ActivePane.CutSelectedToClipboard();
                 e.Handled = true;
             }
             else if (kb.Matches(e, "PasteClipboard"))
             {
+                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 PasteFromClipboard();
                 e.Handled = true;
             }
