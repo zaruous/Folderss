@@ -6,10 +6,11 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Threading;
 
 namespace Folderss.Viewers
 {
-    public partial class MonacoViewer : UserControl, IFileViewer
+    public partial class MonacoViewer : UserControl, IFileViewer, IDisposable
     {
         private const long LargeFileBytes = 20L * 1024 * 1024;
         private const long HugeFileBytes = 50L * 1024 * 1024;
@@ -54,6 +55,10 @@ namespace Folderss.Viewers
         private bool _hugeFileMode;
         private string _pendingContent;
         private string _pendingLanguage;
+        private string _lastLoadedContent;
+        private FileSystemWatcher _fileWatcher;
+        private readonly DispatcherTimer _fileReloadTimer;
+        private bool _disposed;
 
         public UIElement View => this;
         public ViewerCapabilities Capabilities => ViewerCapabilities.Edit;
@@ -64,6 +69,11 @@ namespace Folderss.Viewers
         public MonacoViewer()
         {
             InitializeComponent();
+            _fileReloadTimer = new DispatcherTimer
+            {
+                Interval = TimeSpan.FromMilliseconds(300)
+            };
+            _fileReloadTimer.Tick += OnFileReloadTimerTick;
             Loaded += OnLoaded;
         }
 
@@ -151,6 +161,8 @@ namespace Folderss.Viewers
 
         public void Load(string filePath)
         {
+            StopFileWatcher();
+
             _filePath = filePath;
             _encoding = DetectEncoding(filePath);
             _modified = false;
@@ -160,9 +172,11 @@ namespace Folderss.Viewers
             ModifiedChanged?.Invoke(this, false);
 
             var content = File.ReadAllText(filePath, _encoding);
+            _lastLoadedContent = content;
             var language = _hugeFileMode ? "plaintext" : GetLanguage(filePath);
 
             TitleChanged?.Invoke(this, Path.GetFileName(filePath));
+            StartFileWatcher(filePath);
 
             if (!_webViewReady)
             {
@@ -200,6 +214,7 @@ namespace Folderss.Viewers
                 File.WriteAllText(tmp, content, _encoding);
                 File.Delete(_filePath);
                 File.Move(tmp, _filePath);
+                _lastLoadedContent = content;
                 var _ = WebView.CoreWebView2.ExecuteScriptAsync("app.markSaved()");
             }
             catch (Exception ex)
@@ -223,6 +238,123 @@ namespace Folderss.Viewers
         }
 
         public bool IsModified => _modified;
+
+        private void StartFileWatcher(string filePath)
+        {
+            var dir = Path.GetDirectoryName(filePath);
+            var fileName = Path.GetFileName(filePath);
+            if (string.IsNullOrWhiteSpace(dir) || string.IsNullOrWhiteSpace(fileName) || !Directory.Exists(dir))
+                return;
+
+            _fileWatcher = new FileSystemWatcher(dir, fileName)
+            {
+                NotifyFilter = NotifyFilters.FileName |
+                               NotifyFilters.LastWrite |
+                               NotifyFilters.Size |
+                               NotifyFilters.CreationTime
+            };
+            _fileWatcher.Changed += OnWatchedFileChanged;
+            _fileWatcher.Created += OnWatchedFileChanged;
+            _fileWatcher.Renamed += OnWatchedFileChanged;
+            _fileWatcher.EnableRaisingEvents = true;
+        }
+
+        private void StopFileWatcher()
+        {
+            _fileReloadTimer.Stop();
+            if (_fileWatcher == null)
+                return;
+
+            _fileWatcher.EnableRaisingEvents = false;
+            _fileWatcher.Changed -= OnWatchedFileChanged;
+            _fileWatcher.Created -= OnWatchedFileChanged;
+            _fileWatcher.Renamed -= OnWatchedFileChanged;
+            _fileWatcher.Dispose();
+            _fileWatcher = null;
+        }
+
+        private void OnWatchedFileChanged(object sender, FileSystemEventArgs e)
+        {
+            if (_disposed || Dispatcher.HasShutdownStarted || Dispatcher.HasShutdownFinished)
+                return;
+
+            Dispatcher.BeginInvoke(new Action(delegate
+            {
+                if (_disposed)
+                    return;
+                _fileReloadTimer.Stop();
+                _fileReloadTimer.Start();
+            }));
+        }
+
+        private void OnFileReloadTimerTick(object sender, EventArgs e)
+        {
+            _fileReloadTimer.Stop();
+            PromptAndReloadAsync();
+        }
+
+        private async void PromptAndReloadAsync()
+        {
+            if (string.IsNullOrWhiteSpace(_filePath) || !File.Exists(_filePath))
+                return;
+
+            try
+            {
+                var content = ReadAllTextAllowingWriters(_filePath, _encoding);
+                if (string.Equals(content, _lastLoadedContent, StringComparison.Ordinal))
+                    return;
+
+                var message = _modified
+                    ? "파일이 외부에서 변경되었습니다. 다시 읽으면 편집 중인 내용이 사라집니다.\n\n다시 읽으시겠습니까?"
+                    : "파일이 외부에서 변경되었습니다. 다시 읽으시겠습니까?";
+                var answer = MessageBox.Show(
+                    message,
+                    Path.GetFileName(_filePath),
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.Yes);
+
+                if (answer != MessageBoxResult.Yes)
+                    return;
+
+                _lastLoadedContent = content;
+                _modified = false;
+                ModifiedChanged?.Invoke(this, false);
+
+                var language = _hugeFileMode ? "plaintext" : GetLanguage(_filePath);
+                await CallAppOpen(content, language);
+            }
+            catch (IOException)
+            {
+                _fileReloadTimer.Stop();
+                _fileReloadTimer.Start();
+            }
+            catch (UnauthorizedAccessException)
+            {
+                _fileReloadTimer.Stop();
+                _fileReloadTimer.Start();
+            }
+        }
+
+        private static string ReadAllTextAllowingWriters(string filePath, Encoding encoding)
+        {
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete))
+            using (var reader = new StreamReader(fs, encoding, true))
+                return reader.ReadToEnd();
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+            StopFileWatcher();
+            if (WebView.CoreWebView2 != null)
+            {
+                WebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+                WebView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
+                WebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
+            }
+        }
 
         private static Encoding DetectEncoding(string filePath)
         {

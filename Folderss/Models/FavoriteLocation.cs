@@ -25,6 +25,8 @@ namespace Folderss.Models
 
         public string Path { get; set; }
 
+        public bool IsFile { get; set; }
+
         [field: XmlIgnore]
         public event PropertyChangedEventHandler PropertyChanged;
 

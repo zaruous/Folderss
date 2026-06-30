@@ -931,6 +931,34 @@ namespace Folderss.Controls
                 NavigateTo(parent.FullName);
         }
 
+        private void PathBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                if (Clipboard.ContainsFileDropList())
+                {
+                    var files = Clipboard.GetFileDropList();
+                    if (files.Count > 0)
+                    {
+                        var path = files[0];
+                        if (File.Exists(path))
+                            path = Path.GetDirectoryName(path);
+                        PathBox.Text = path;
+                        PathBox.CaretIndex = PathBox.Text.Length;
+                        e.Handled = true;
+                    }
+                }
+                else if (Clipboard.ContainsText())
+                {
+                    var text = Clipboard.GetText().Trim();
+                    PathBox.SelectedText = text;
+                    PathBox.CaretIndex = PathBox.SelectionStart + text.Length;
+                    PathBox.SelectionLength = 0;
+                    e.Handled = true;
+                }
+            }
+        }
+
         private void PathBox_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.Key == Key.Enter)

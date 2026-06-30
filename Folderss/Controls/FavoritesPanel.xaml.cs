@@ -39,25 +39,31 @@ namespace Folderss.Controls
 
         public bool AddFavorite(string path, string displayName = null)
         {
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            if (string.IsNullOrWhiteSpace(path))
+                return false;
+
+            var isFile = File.Exists(path);
+            if (!isFile && !Directory.Exists(path))
                 return false;
 
             var group = GetSelectedGroup() ?? _configuration.Groups.First();
             if (group.Favorites.Any(item => string.Equals(item.Path, path, StringComparison.OrdinalIgnoreCase)))
             {
                 MessageBox.Show(
-                    string.Format("'{0}' 그룹에 이미 등록된 폴더입니다.", group.Name),
+                    string.Format("'{0}' 그룹에 이미 등록된 항목입니다.", group.Name),
                     "Folderss",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
                 return false;
             }
 
-            var name = string.IsNullOrWhiteSpace(displayName) ? new DirectoryInfo(path).Name : displayName.Trim();
+            var name = string.IsNullOrWhiteSpace(displayName)
+                ? (isFile ? System.IO.Path.GetFileName(path) : new DirectoryInfo(path).Name)
+                : displayName.Trim();
             if (string.IsNullOrWhiteSpace(name))
                 name = path;
 
-            var favorite = new FavoriteLocation { Name = name, Path = path };
+            var favorite = new FavoriteLocation { Name = name, Path = path, IsFile = isFile };
             group.Favorites.Add(favorite);
             Save();
             SelectItem(favorite);
@@ -102,15 +108,29 @@ namespace Folderss.Controls
             if (favorite == null)
                 return;
 
+            if (favorite.IsFile)
+            {
+                if (!File.Exists(favorite.Path))
+                {
+                    MessageBox.Show("즐겨찾기 파일이 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var handler = NavigateRequested;
+                if (handler != null)
+                    handler(this, new FavoriteNavigateEventArgs(favorite.Path, true));
+                return;
+            }
+
             if (!Directory.Exists(favorite.Path))
             {
                 MessageBox.Show("즐겨찾기 폴더가 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
-            var handler = NavigateRequested;
-            if (handler != null)
-                handler(this, new FavoriteNavigateEventArgs(favorite.Path));
+            var navHandler = NavigateRequested;
+            if (navHandler != null)
+                navHandler(this, new FavoriteNavigateEventArgs(favorite.Path));
         }
 
         private void FavoritesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
@@ -170,7 +190,7 @@ namespace Folderss.Controls
                 string.Equals(item.Path, favorite.Path, StringComparison.OrdinalIgnoreCase)))
             {
                 MessageBox.Show(
-                    string.Format("'{0}' 그룹에 같은 폴더가 이미 있습니다.", targetGroup.Name),
+                    string.Format("'{0}' 그룹에 이미 등록된 항목입니다.", targetGroup.Name),
                     "Folderss",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -226,13 +246,14 @@ namespace Folderss.Controls
             }
 
             var isFavorite = favorite != null;
-            OpenInExplorerMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
-            OpenTerminalMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+            var isFolderFavorite = isFavorite && !favorite.IsFile;
+            OpenInExplorerMenuItem.Visibility = isFolderFavorite ? Visibility.Visible : Visibility.Collapsed;
+            OpenTerminalMenuItem.Visibility = isFolderFavorite ? Visibility.Visible : Visibility.Collapsed;
             MoveToGroupMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
             FavoriteActionsSeparator.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
-            NewFolderMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
-            NewFileMenuItem.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
-            NewItemSeparator.Visibility = isFavorite ? Visibility.Visible : Visibility.Collapsed;
+            NewFolderMenuItem.Visibility = isFolderFavorite ? Visibility.Visible : Visibility.Collapsed;
+            NewFileMenuItem.Visibility = isFolderFavorite ? Visibility.Visible : Visibility.Collapsed;
+            NewItemSeparator.Visibility = isFolderFavorite ? Visibility.Visible : Visibility.Collapsed;
             RemoveMenuItem.Header = isFavorite ? "즐겨찾기 삭제" : "그룹 삭제";
             MoveToGroupMenuItem.IsEnabled = isFavorite && _configuration.Groups.Count > 1;
 
@@ -527,7 +548,7 @@ namespace Folderss.Controls
             if (targetGroup.Favorites.Any(item => string.Equals(item.Path, favorite.Path, StringComparison.OrdinalIgnoreCase)))
             {
                 MessageBox.Show(
-                    string.Format("'{0}' 그룹에 같은 폴더가 이미 있습니다.", targetGroup.Name),
+                    string.Format("'{0}' 그룹에 이미 등록된 항목입니다.", targetGroup.Name),
                     "Folderss",
                     MessageBoxButton.OK,
                     MessageBoxImage.Information);
@@ -611,10 +632,12 @@ namespace Folderss.Controls
     public sealed class FavoriteNavigateEventArgs : EventArgs
     {
         public string Path { get; private set; }
+        public bool IsFile { get; private set; }
 
-        public FavoriteNavigateEventArgs(string path)
+        public FavoriteNavigateEventArgs(string path, bool isFile = false)
         {
             Path = path;
+            IsFile = isFile;
         }
     }
 }

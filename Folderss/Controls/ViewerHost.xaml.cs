@@ -12,6 +12,7 @@ namespace Folderss.Controls
     {
         private readonly ViewerConfigService _viewerConfig;
         private IFileViewer _currentViewer;
+        private string _currentFilePath;
         private bool _isActive = true;
 
         public event EventHandler<string> TitleChanged;
@@ -39,6 +40,7 @@ namespace Folderss.Controls
             if (viewer == null)
                 return;
 
+            _currentFilePath = filePath;
             _currentViewer = viewer;
             viewer.TitleChanged += Viewer_TitleChanged;
             viewer.ModifiedChanged += Viewer_ModifiedChanged;
@@ -51,6 +53,7 @@ namespace Folderss.Controls
             if (activationAware != null)
                 activationAware.SetActive(_isActive);
             HostContent.Content = viewer.View;
+            FilePathText.Text = filePath;
         }
 
         public void SetActive(bool isActive)
@@ -70,6 +73,20 @@ namespace Folderss.Controls
         {
             var shortcutHandler = _currentViewer as IViewerShortcutHandler;
             return shortcutHandler != null && shortcutHandler.HandleShortcut(e, kb);
+        }
+
+        private void Refresh_Click(object sender, RoutedEventArgs e)
+        {
+            if (_currentViewer == null || string.IsNullOrWhiteSpace(_currentFilePath))
+                return;
+
+            if (!File.Exists(_currentFilePath))
+            {
+                MessageBox.Show("파일이 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            _currentViewer.Load(_currentFilePath);
         }
 
         private void DetachCurrentViewer()
