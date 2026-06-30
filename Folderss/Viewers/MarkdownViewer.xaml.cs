@@ -472,9 +472,6 @@ namespace Folderss.Viewers
             if (string.IsNullOrWhiteSpace(_filePath) || !File.Exists(_filePath))
                 return;
 
-            if (_modified)
-                return;
-
             try
             {
                 _encoding = DetectEncoding(_filePath);
@@ -486,8 +483,21 @@ namespace Folderss.Viewers
                     return;
                 }
 
-                _lastLoadedContent = content;
+                var message = _modified
+                    ? "파일이 외부에서 변경되었습니다. 다시 읽으면 편집 중인 내용이 사라집니다.\n\n다시 읽으시겠습니까?"
+                    : "파일이 외부에서 변경되었습니다. 다시 읽으시겠습니까?";
+                var answer = MessageBox.Show(
+                    message,
+                    Path.GetFileName(_filePath),
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Question,
+                    MessageBoxResult.Yes);
+
                 _pendingExternalReload = false;
+                if (answer != MessageBoxResult.Yes)
+                    return;
+
+                _lastLoadedContent = content;
                 _modified = false;
                 ModifiedChanged?.Invoke(this, false);
                 await CallAppReloadContent(content);
