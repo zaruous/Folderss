@@ -956,6 +956,20 @@ namespace Folderss
 
         private void FavoritesPanel_AddCurrentRequested(object sender, EventArgs e)
         {
+            var selectedItems = ActivePane.SelectedItems;
+            if (selectedItems != null && selectedItems.Count == 1 && !selectedItems[0].IsDirectory)
+            {
+                if (FavoritesPanel.AddFavorite(selectedItems[0].FullPath))
+                {
+                    MessageBox.Show(
+                        "선택한 파일을 즐겨찾기에 추가했습니다.",
+                        "Folderss",
+                        MessageBoxButton.OK,
+                        MessageBoxImage.Information);
+                }
+                return;
+            }
+
             if (FavoritesPanel.AddFavorite(ActivePane.CurrentPath))
             {
                 MessageBox.Show(
@@ -968,6 +982,12 @@ namespace Folderss
 
         private void FavoritesPanel_NavigateRequested(object sender, FavoriteNavigateEventArgs e)
         {
+            if (e.IsFile)
+            {
+                OpenViewerTab(e.Path);
+                return;
+            }
+
             ActivePane.NavigateTo(e.Path);
         }
 
