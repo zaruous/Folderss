@@ -34,6 +34,12 @@ namespace Folderss.Controls
         private DispatcherTimer _refreshDebounce;
         private Point _dragStartPoint;
         private bool _dragPending;
+        private bool _treeViewVisible;
+        private string _treeRootPath;
+        private bool _treeNavigationInProgress;
+        private bool _updatingTreeSelection;
+        private static readonly GridLength VisibleTreeColumnWidth = new GridLength(220);
+        private static readonly GridLength VisibleTreeSplitterWidth = new GridLength(6);
 
         public event EventHandler Activated;
         public event EventHandler PathChanged;
@@ -41,6 +47,7 @@ namespace Folderss.Controls
 
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
+        public bool IsTreeViewVisible { get { return _treeViewVisible; } }
         public HashSet<string> CutPaths { get; set; }
 
         public FileSystemItem SelectedItem
@@ -242,8 +249,9 @@ namespace Folderss.Controls
             }
 
             CurrentPath = fullPath;
-            PathBox.Text = fullPath;
             SearchBox.Text = string.Empty;
+            SyncTreeAfterNavigation(fullPath);
+            UpdatePathBoxText();
             SyncDriveComboBox();
             RefreshItems();
             StartWatcher(fullPath);
@@ -279,6 +287,187 @@ namespace Folderss.Controls
             var handler = Activated;
             if (handler != null)
                 handler(this, EventArgs.Empty);
+        }
+
+        public void ToggleTreeView()
+        {
+            SetTreeViewVisible(!_treeViewVisible);
+        }
+
+        public void SetTreeViewVisible(bool visible)
+        {
+            if (_treeViewVisible == visible)
+                return;
+
+            _treeViewVisible = visible;
+            TreePanel.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            TreeSplitter.Visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            TreeColumn.Width = visible ? VisibleTreeColumnWidth : new GridLength(0);
+            TreeSplitterColumn.Width = visible ? VisibleTreeSplitterWidth : new GridLength(0);
+
+            if (visible)
+            {
+                _treeRootPath = CurrentPath;
+                RebuildFolderTree();
+            }
+            else
+            {
+                _treeRootPath = null;
+                FolderTree.Items.Clear();
+                TreeRootPathText.Text = string.Empty;
+            }
+
+            UpdatePathBoxText();
+        }
+
+        private void SyncTreeAfterNavigation(string fullPath)
+        {
+            if (!_treeViewVisible)
+                return;
+
+            if (_treeNavigationInProgress)
+            {
+                SelectTreePath(fullPath);
+                return;
+            }
+
+            _treeRootPath = fullPath;
+            RebuildFolderTree();
+        }
+
+        private void UpdatePathBoxText()
+        {
+            PathBox.Text = _treeViewVisible && !string.IsNullOrWhiteSpace(_treeRootPath)
+                ? _treeRootPath
+                : CurrentPath ?? string.Empty;
+            PathBox.CaretIndex = PathBox.Text.Length;
+        }
+
+        private void RebuildFolderTree()
+        {
+            FolderTree.Items.Clear();
+            TreeRootPathText.Text = _treeRootPath ?? string.Empty;
+
+            if (string.IsNullOrWhiteSpace(_treeRootPath) || !Directory.Exists(_treeRootPath))
+                return;
+
+            var rootItem = CreateTreeItem(_treeRootPath);
+            FolderTree.Items.Add(rootItem);
+            rootItem.IsExpanded = true;
+            SelectTreePath(CurrentPath);
+        }
+
+        private TreeViewItem CreateTreeItem(string path)
+        {
+            var item = new TreeViewItem
+            {
+                Header = GetTreeItemHeader(path),
+                Tag = path
+            };
+            item.Expanded += TreeItem_Expanded;
+            if (HasChildDirectories(path))
+                item.Items.Add(new TreeViewItem { Header = string.Empty });
+            return item;
+        }
+
+        private static string GetTreeItemHeader(string path)
+        {
+            var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            return string.IsNullOrWhiteSpace(name) ? path : name;
+        }
+
+        private static bool HasChildDirectories(string path)
+        {
+            try
+            {
+                return Directory.EnumerateDirectories(path).Any();
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        private void TreeItem_Expanded(object sender, RoutedEventArgs e)
+        {
+            var item = sender as TreeViewItem;
+            if (item == null)
+                return;
+
+            EnsureTreeChildrenLoaded(item);
+            e.Handled = true;
+        }
+
+        private void EnsureTreeChildrenLoaded(TreeViewItem item)
+        {
+            if (item.Items.Count != 1 || item.Items[0] is TreeViewItem loadedChild && loadedChild.Tag != null)
+                return;
+
+            item.Items.Clear();
+            var path = item.Tag as string;
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            try
+            {
+                foreach (var childPath in Directory.EnumerateDirectories(path).OrderBy(child => child, StringComparer.CurrentCultureIgnoreCase))
+                    item.Items.Add(CreateTreeItem(childPath));
+            }
+            catch
+            {
+            }
+        }
+
+        private void SelectTreePath(string path)
+        {
+            if (!_treeViewVisible || string.IsNullOrWhiteSpace(path))
+                return;
+
+            foreach (var rootObject in FolderTree.Items)
+            {
+                var rootItem = rootObject as TreeViewItem;
+                if (rootItem == null)
+                    continue;
+
+                if (TrySelectTreeItem(rootItem, path))
+                    return;
+            }
+        }
+
+        private bool TrySelectTreeItem(TreeViewItem item, string path)
+        {
+            var itemPath = item.Tag as string;
+            if (string.Equals(itemPath, path, StringComparison.OrdinalIgnoreCase))
+            {
+                _updatingTreeSelection = true;
+                try
+                {
+                    item.IsSelected = true;
+                }
+                finally
+                {
+                    _updatingTreeSelection = false;
+                }
+                item.BringIntoView();
+                return true;
+            }
+
+            if (string.IsNullOrWhiteSpace(itemPath) ||
+                !path.StartsWith(itemPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase))
+            {
+                return false;
+            }
+
+            EnsureTreeChildrenLoaded(item);
+            item.IsExpanded = true;
+            foreach (var childObject in item.Items)
+            {
+                var child = childObject as TreeViewItem;
+                if (child != null && TrySelectTreeItem(child, path))
+                    return true;
+            }
+
+            return false;
         }
 
         private void FileList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
@@ -1102,6 +1291,36 @@ namespace Folderss.Controls
         private void Pane_MouseDown(object sender, MouseButtonEventArgs e)
         {
             Activate();
+        }
+
+        private void FolderTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            if (_updatingTreeSelection)
+                return;
+
+            var selectedItem = e.NewValue as TreeViewItem;
+            var selectedPath = selectedItem == null ? null : selectedItem.Tag as string;
+            if (string.IsNullOrWhiteSpace(selectedPath) ||
+                string.Equals(CurrentPath, selectedPath, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            _treeNavigationInProgress = true;
+            try
+            {
+                NavigateTo(selectedPath);
+            }
+            finally
+            {
+                _treeNavigationInProgress = false;
+                UpdatePathBoxText();
+            }
+        }
+
+        private void CloseTreeView_Click(object sender, RoutedEventArgs e)
+        {
+            SetTreeViewVisible(false);
         }
 
         private static void PushHistory(Stack<string> history, string path)

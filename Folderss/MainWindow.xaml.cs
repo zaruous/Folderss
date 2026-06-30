@@ -198,6 +198,7 @@ namespace Folderss
         private void MainMenuButton_Click(object sender, RoutedEventArgs e)
         {
             PopulateOpenWithMenu();
+            UpdateViewMenuChecks();
             MainContextMenu.PlacementTarget = MainMenuButton;
             MainContextMenu.Placement = PlacementMode.Bottom;
             MainContextMenu.IsOpen = true;
@@ -1070,6 +1071,13 @@ namespace Folderss
             foreach (var folderPane in GetFolderBrowsers())
                 folderPane.SetActive(pane == folderPane);
             UpdateActivePaneText();
+            UpdateViewMenuChecks();
+        }
+
+        private void UpdateViewMenuChecks()
+        {
+            if (ToggleTreeViewMenuItem != null)
+                ToggleTreeViewMenuItem.IsChecked = ActivePane != null && ActivePane.IsTreeViewVisible;
         }
 
         private void UpdateActivePaneText()
@@ -1435,6 +1443,15 @@ namespace Folderss
         private void ShowSearch_Click(object sender, RoutedEventArgs e)
         {
             ShowSearchPanel();
+        }
+
+        private void ToggleTreeView_Click(object sender, RoutedEventArgs e)
+        {
+            if (ActivePane == null)
+                return;
+
+            ActivePane.ToggleTreeView();
+            UpdateViewMenuChecks();
         }
 
         private void ShowSearchPanel()

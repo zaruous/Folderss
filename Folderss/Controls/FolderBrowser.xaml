@@ -117,13 +117,82 @@
             </Grid>
 
             <Grid Grid.Row="2" Margin="8,0">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition x:Name="TreeColumn" Width="0"/>
+                    <ColumnDefinition x:Name="TreeSplitterColumn" Width="0"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
                 <Grid.RowDefinitions>
                     <RowDefinition Height="7*" MinHeight="120"/>
                     <RowDefinition Height="6"/>
                     <RowDefinition Height="3*" MinHeight="120"/>
                 </Grid.RowDefinitions>
 
+                <Border x:Name="TreePanel"
+                        Grid.RowSpan="3"
+                        Visibility="Collapsed"
+                        Background="{DynamicResource PanelBackground}"
+                        BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1"
+                        CornerRadius="3"
+                        Margin="0,0,8,0">
+                    <Grid>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
+                            <RowDefinition Height="*"/>
+                        </Grid.RowDefinitions>
+                        <Border Padding="9,6"
+                                Background="{DynamicResource SurfaceBackground}"
+                                BorderBrush="{DynamicResource BorderBrush}"
+                                BorderThickness="0,0,0,1">
+                            <DockPanel LastChildFill="True">
+                                <Button DockPanel.Dock="Right"
+                                        Width="24"
+                                        Height="24"
+                                        Padding="0"
+                                        Margin="8,0,0,0"
+                                        Style="{StaticResource CompactToolButtonStyle}"
+                                        Content="×"
+                                        ToolTip="트리뷰 닫기"
+                                        Click="CloseTreeView_Click"/>
+                                <TextBlock Text="트리뷰"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                            </DockPanel>
+                        </Border>
+                        <Grid Grid.Row="1">
+                            <Grid.RowDefinitions>
+                                <RowDefinition Height="Auto"/>
+                                <RowDefinition Height="*"/>
+                            </Grid.RowDefinitions>
+                            <TextBlock x:Name="TreeRootPathText"
+                                       Margin="10,8,10,6"
+                                       Foreground="{DynamicResource SecondaryText}"
+                                       TextWrapping="Wrap"/>
+                            <TreeView x:Name="FolderTree"
+                                      Grid.Row="1"
+                                      Margin="6,0,6,6"
+                                      BorderThickness="0"
+                                      Background="{DynamicResource PanelBackground}"
+                                      Foreground="{DynamicResource PrimaryText}"
+                                      SelectedItemChanged="FolderTree_SelectedItemChanged"/>
+                        </Grid>
+                    </Grid>
+                </Border>
+
+                <GridSplitter x:Name="TreeSplitter"
+                              Grid.Column="1"
+                              Grid.RowSpan="3"
+                              Width="6"
+                              Visibility="Collapsed"
+                              HorizontalAlignment="Stretch"
+                              VerticalAlignment="Stretch"
+                              Background="{DynamicResource BorderBrush}"
+                              ResizeDirection="Columns"
+                              ResizeBehavior="PreviousAndNext"/>
+
                 <ListView x:Name="FileList"
+                          Grid.Column="2"
                           Grid.Row="0"
                           Background="{DynamicResource PanelBackground}"
                           Foreground="{DynamicResource PrimaryText}"
@@ -170,7 +239,8 @@
                     </ListView.View>
                 </ListView>
 
-                <GridSplitter Grid.Row="1"
+                <GridSplitter Grid.Column="2"
+                              Grid.Row="1"
                               Height="6"
                               HorizontalAlignment="Stretch"
                               VerticalAlignment="Stretch"
@@ -178,7 +248,7 @@
                               ResizeDirection="Rows"
                               ResizeBehavior="PreviousAndNext"/>
 
-                <Grid Grid.Row="2">
+                <Grid Grid.Column="2" Grid.Row="2">
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="2*"/>
                         <ColumnDefinition Width="6"/>

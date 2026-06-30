@@ -88,6 +88,10 @@
                             <Separator/>
                             <MenuItem Header="새로 고침" InputGestureText="Ctrl+R" Click="Refresh_Click"/>
                             <MenuItem Header="보기">
+                                <MenuItem x:Name="ToggleTreeViewMenuItem"
+                                          Header="트리뷰"
+                                          IsCheckable="True"
+                                          Click="ToggleTreeView_Click"/>
                                 <MenuItem Header="파일 내용 검색" InputGestureText="Ctrl+F" Click="ShowSearch_Click"/>
                                 <MenuItem Header="즐겨찾기 표시" Click="ShowFavorites_Click"/>
                                 <MenuItem Header="콘솔" Click="ShowConsole_Click"/>
