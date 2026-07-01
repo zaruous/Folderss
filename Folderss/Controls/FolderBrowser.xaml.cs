@@ -370,10 +370,24 @@ namespace Folderss.Controls
             return item;
         }
 
-        private static string GetTreeItemHeader(string path)
+        private static object GetTreeItemHeader(string path)
         {
             var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
-            return string.IsNullOrWhiteSpace(name) ? path : name;
+            var displayName = string.IsNullOrWhiteSpace(name) ? path : name;
+
+            var panel = new StackPanel { Orientation = Orientation.Horizontal };
+            panel.Children.Add(new TextBlock
+            {
+                Text = "📁",
+                Margin = new Thickness(0, 0, 6, 0),
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            panel.Children.Add(new TextBlock
+            {
+                Text = displayName,
+                VerticalAlignment = VerticalAlignment.Center
+            });
+            return panel;
         }
 
         private static bool HasChildDirectories(string path)
