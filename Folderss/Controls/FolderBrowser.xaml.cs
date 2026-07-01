@@ -1323,6 +1323,11 @@ namespace Folderss.Controls
             SetTreeViewVisible(false);
         }
 
+        private void RefreshTreeView_Click(object sender, RoutedEventArgs e)
+        {
+            RebuildFolderTree();
+        }
+
         private static void PushHistory(Stack<string> history, string path)
         {
             history.Push(path);
