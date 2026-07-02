@@ -511,6 +511,11 @@ namespace Folderss.Controls
             if (item.Items.Count != 1 || item.Items[0] is TreeViewItem loadedChild && loadedChild.Tag != null)
                 return;
 
+            ReloadTreeChildren(item);
+        }
+
+        private void ReloadTreeChildren(TreeViewItem item)
+        {
             item.Items.Clear();
             var path = item.Tag as string;
             if (string.IsNullOrWhiteSpace(path))
@@ -1460,6 +1465,70 @@ namespace Folderss.Controls
                 _treeNavigationInProgress = false;
                 UpdatePathBoxText();
             }
+        }
+
+        private void FolderTree_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            Activate();
+
+            var container = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+            var path = container == null ? _treeRootPath : container.Tag as string;
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                return;
+
+            var window = Window.GetWindow(this);
+            if (window == null)
+                return;
+
+            var selectedPaths = new List<string> { path };
+            var matchingEntries = OpenWithService.GetMatchingEntries(selectedPaths);
+            var customItems = matchingEntries
+                .Select(entry =>
+                {
+                    var captured = entry;
+                    var capturedPaths = selectedPaths.ToList();
+                    return new ShellContextMenuService.CustomMenuItem
+                    {
+                        Label = "Open with " + entry.Name,
+                        Invoke = () => OpenWithService.Launch(captured, capturedPaths)
+                    };
+                })
+                .ToList();
+
+            var screenPoint = PointToScreen(e.GetPosition(this));
+            try
+            {
+                ShellContextMenuService.Show(
+                    new WindowInteropHelper(window).Handle,
+                    selectedPaths,
+                    (int)screenPoint.X,
+                    (int)screenPoint.Y,
+                    customItems.Count > 0 ? customItems : null);
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, "컨텍스트 메뉴를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+            finally
+            {
+                RefreshItems();
+                RefreshTreeAfterShellAction(container);
+            }
+
+            e.Handled = true;
+        }
+
+        private void RefreshTreeAfterShellAction(TreeViewItem item)
+        {
+            var parent = item == null ? null : ItemsControl.ItemsControlFromItemContainer(item) as TreeViewItem;
+            if (parent == null)
+            {
+                RebuildFolderTree();
+                return;
+            }
+
+            ReloadTreeChildren(parent);
+            SelectTreePath(CurrentPath);
         }
 
         private void CloseTreeView_Click(object sender, RoutedEventArgs e)

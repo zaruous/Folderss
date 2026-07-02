@@ -195,7 +195,8 @@
                                       BorderThickness="0"
                                       Background="{DynamicResource PanelBackground}"
                                       Foreground="{DynamicResource PrimaryText}"
-                                      SelectedItemChanged="FolderTree_SelectedItemChanged"/>
+                                      SelectedItemChanged="FolderTree_SelectedItemChanged"
+                                      MouseRightButtonUp="FolderTree_MouseRightButtonUp"/>
                         </Grid>
                     </Grid>
                 </Border>
