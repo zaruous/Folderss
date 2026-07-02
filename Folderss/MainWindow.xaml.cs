@@ -1218,7 +1218,8 @@ namespace Folderss
                 return;
             }
 
-            if (IsPathPinLocked(item.FullPath))
+            // 파일 이름 변경은 폴더 구조를 바꾸지 않으므로 고정 잠금은 폴더에만 적용
+            if (item.IsDirectory && IsPathPinLocked(item.FullPath))
             {
                 ShowPinLockedMessage();
                 return;
