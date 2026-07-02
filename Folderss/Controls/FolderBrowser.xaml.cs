@@ -313,6 +313,7 @@ namespace Folderss.Controls
             {
                 _treeRootPath = CurrentPath;
                 RebuildFolderTree();
+                SetFolderPinned(true);
             }
             else
             {
