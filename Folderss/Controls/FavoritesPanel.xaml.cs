@@ -286,6 +286,13 @@ namespace Folderss.Controls
                 return;
             }
 
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+            if (mainWindow != null && mainWindow.IsDestinationPinLocked(favorite.Path))
+            {
+                MainWindow.ShowPinLockedMessage();
+                return;
+            }
+
             var prompt = new PromptWindow("새 폴더", "만들 폴더 이름을 입력하세요.", "새 폴더")
             {
                 Owner = Window.GetWindow(this)
@@ -312,6 +319,13 @@ namespace Folderss.Controls
             if (!Directory.Exists(favorite.Path))
             {
                 MessageBox.Show("즐겨찾기 폴더가 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+            if (mainWindow != null && mainWindow.IsDestinationPinLocked(favorite.Path))
+            {
+                MainWindow.ShowPinLockedMessage();
                 return;
             }
 

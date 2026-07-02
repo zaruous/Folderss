@@ -1116,6 +1116,13 @@ namespace Folderss
             if (string.IsNullOrWhiteSpace(TargetPane.CurrentPath) || !Directory.Exists(TargetPane.CurrentPath))
                 return;
 
+            if (IsDestinationPinLocked(TargetPane.CurrentPath) ||
+                (move && selected.Any(item => IsPathPinLocked(item.FullPath))))
+            {
+                ShowPinLockedMessage();
+                return;
+            }
+
             var verb = move ? "이동" : "복사";
             var answer = MessageBox.Show(
                 string.Format("{0}개 항목을 다음 폴더로 {1}하시겠습니까?\n\n{2}", selected.Count, verb, TargetPane.CurrentPath),
@@ -1164,6 +1171,12 @@ namespace Folderss
                 return;
             }
 
+            if (selected.Any(item => IsPathPinLocked(item.FullPath)))
+            {
+                ShowPinLockedMessage();
+                return;
+            }
+
             var message = permanently
                 ? string.Format("{0}개 항목을 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.", selected.Count)
                 : string.Format("{0}개 항목을 휴지통으로 보내시겠습니까?", selected.Count);
@@ -1205,6 +1218,12 @@ namespace Folderss
                 return;
             }
 
+            if (IsPathPinLocked(item.FullPath))
+            {
+                ShowPinLockedMessage();
+                return;
+            }
+
             var prompt = new PromptWindow("이름 변경", "새 이름을 입력하세요.", item.Name) { Owner = this };
             if (prompt.ShowDialog() != true || string.Equals(prompt.Value.Trim(), item.Name, StringComparison.Ordinal))
                 return;
@@ -1222,6 +1241,12 @@ namespace Folderss
 
         private void NewFolder_Click(object sender, RoutedEventArgs e)
         {
+            if (IsDestinationPinLocked(ActivePane.CurrentPath))
+            {
+                ShowPinLockedMessage();
+                return;
+            }
+
             var prompt = new PromptWindow("새 폴더", "폴더 이름을 입력하세요.", "새 폴더") { Owner = this };
             if (prompt.ShowDialog() != true)
                 return;
@@ -1239,6 +1264,12 @@ namespace Folderss
 
         private void NewFile_Click(object sender, RoutedEventArgs e)
         {
+            if (IsDestinationPinLocked(ActivePane.CurrentPath))
+            {
+                ShowPinLockedMessage();
+                return;
+            }
+
             var prompt = new PromptWindow("새 파일", "파일 이름을 입력하세요.", "새 파일.txt") { Owner = this };
             if (prompt.ShowDialog() != true)
                 return;
@@ -1264,6 +1295,25 @@ namespace Folderss
             foreach (var pane in GetFolderBrowsers())
                 pane.RefreshItems();
             UpdateActivePaneText();
+        }
+
+        public bool IsPathPinLocked(string path)
+        {
+            return GetFolderBrowsers().Any(pane => pane.IsPinLockedPath(path));
+        }
+
+        public bool IsDestinationPinLocked(string directory)
+        {
+            return GetFolderBrowsers().Any(pane => pane.IsPinLockedDestination(directory));
+        }
+
+        public static void ShowPinLockedMessage()
+        {
+            MessageBox.Show(
+                "고정된 폴더입니다. 폴더 구조를 변경할 수 없습니다.\n트리뷰의 고정(📌) 버튼을 해제하면 변경할 수 있습니다.",
+                "폴더 고정",
+                MessageBoxButton.OK,
+                MessageBoxImage.Warning);
         }
 
         private static void ShowErrorsIfAny(string operation, IList<string> errors)
@@ -1545,6 +1595,12 @@ namespace Folderss
                 return false;
 
             bool isCut = _isCut;
+            if (IsDestinationPinLocked(targetPath) ||
+                (isCut && files.Cast<string>().Any(IsPathPinLocked)))
+            {
+                ShowPinLockedMessage();
+                return true;
+            }
             var errors = new List<string>();
             foreach (string source in files)
             {

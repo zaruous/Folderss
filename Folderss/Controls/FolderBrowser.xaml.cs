@@ -36,8 +36,10 @@ namespace Folderss.Controls
         private bool _dragPending;
         private bool _treeViewVisible;
         private string _treeRootPath;
+        private string _pinnedPath;
         private bool _treeNavigationInProgress;
         private bool _updatingTreeSelection;
+        private bool _updatingPinButton;
         private static readonly GridLength VisibleTreeColumnWidth = new GridLength(220);
         private static readonly GridLength VisibleTreeSplitterWidth = new GridLength(6);
 
@@ -48,6 +50,8 @@ namespace Folderss.Controls
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
         public bool IsTreeViewVisible { get { return _treeViewVisible; } }
+        public bool IsFolderPinned { get { return !string.IsNullOrWhiteSpace(_pinnedPath); } }
+        public string PinnedPath { get { return _pinnedPath; } }
         public HashSet<string> CutPaths { get; set; }
 
         public FileSystemItem SelectedItem
@@ -312,6 +316,7 @@ namespace Folderss.Controls
             }
             else
             {
+                SetFolderPinned(false);
                 _treeRootPath = null;
                 FolderTree.Items.Clear();
                 TreeRootPathText.Text = string.Empty;
@@ -325,7 +330,7 @@ namespace Folderss.Controls
             if (!_treeViewVisible)
                 return;
 
-            if (_treeNavigationInProgress)
+            if (_treeNavigationInProgress || IsFolderPinned)
             {
                 SelectTreePath(fullPath);
                 return;
@@ -333,6 +338,94 @@ namespace Folderss.Controls
 
             _treeRootPath = fullPath;
             RebuildFolderTree();
+        }
+
+        private void PinFolder_Changed(object sender, RoutedEventArgs e)
+        {
+            if (_updatingPinButton)
+                return;
+
+            SetFolderPinned(PinFolderButton.IsChecked == true);
+        }
+
+        private void SetFolderPinned(bool pinned)
+        {
+            if (pinned && string.IsNullOrWhiteSpace(_treeRootPath))
+                pinned = false;
+
+            _pinnedPath = pinned ? NormalizeDirectoryPath(_treeRootPath) : null;
+
+            _updatingPinButton = true;
+            try
+            {
+                PinFolderButton.IsChecked = pinned;
+            }
+            finally
+            {
+                _updatingPinButton = false;
+            }
+
+            UpdateTreeRootPathText();
+        }
+
+        private void UpdateTreeRootPathText()
+        {
+            var rootPath = _treeRootPath ?? string.Empty;
+            TreeRootPathText.Text = IsFolderPinned ? "📌 " + rootPath : rootPath;
+        }
+
+        /// <summary>
+        /// 고정된 폴더 자신, 그 하위 항목, 또는 고정 폴더를 포함하는 상위 경로인지 판정.
+        /// 이런 경로의 삭제·이름변경·이동은 고정된 폴더 구조를 바꾸므로 차단 대상.
+        /// </summary>
+        public bool IsPinLockedPath(string path)
+        {
+            if (!IsFolderPinned || string.IsNullOrWhiteSpace(path))
+                return false;
+
+            string normalized;
+            try
+            {
+                normalized = NormalizeDirectoryPath(path);
+            }
+            catch
+            {
+                return false;
+            }
+
+            return string.Equals(normalized, _pinnedPath, StringComparison.OrdinalIgnoreCase) ||
+                   IsPathUnder(normalized, _pinnedPath) ||
+                   IsPathUnder(_pinnedPath, normalized);
+        }
+
+        /// <summary>
+        /// 고정된 폴더 자신이거나 그 하위 폴더인지 판정.
+        /// 이런 폴더에 항목을 추가(생성·복사·이동·붙여넣기)하는 작업은 차단 대상.
+        /// </summary>
+        public bool IsPinLockedDestination(string directory)
+        {
+            if (!IsFolderPinned || string.IsNullOrWhiteSpace(directory))
+                return false;
+
+            string normalized;
+            try
+            {
+                normalized = NormalizeDirectoryPath(directory);
+            }
+            catch
+            {
+                return false;
+            }
+
+            return string.Equals(normalized, _pinnedPath, StringComparison.OrdinalIgnoreCase) ||
+                   IsPathUnder(normalized, _pinnedPath);
+        }
+
+        private static bool IsPathUnder(string path, string root)
+        {
+            return path.StartsWith(
+                root.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar) + Path.DirectorySeparatorChar,
+                StringComparison.OrdinalIgnoreCase);
         }
 
         private void UpdatePathBoxText()
@@ -346,7 +439,7 @@ namespace Folderss.Controls
         private void RebuildFolderTree()
         {
             FolderTree.Items.Clear();
-            TreeRootPathText.Text = _treeRootPath ?? string.Empty;
+            UpdateTreeRootPathText();
 
             if (string.IsNullOrWhiteSpace(_treeRootPath) || !Directory.Exists(_treeRootPath))
                 return;
@@ -575,7 +668,11 @@ namespace Folderss.Controls
                 return;
 
             var data = new DataObject(DataFormats.FileDrop, paths);
-            DragDrop.DoDragDrop(FileList, data, DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link);
+            var allowedEffects = DragDropEffects.Copy | DragDropEffects.Move | DragDropEffects.Link;
+            var window = Window.GetWindow(this) as MainWindow;
+            if (window != null && paths.Any(path => window.IsPathPinLocked(path)))
+                allowedEffects &= ~DragDropEffects.Move;
+            DragDrop.DoDragDrop(FileList, data, allowedEffects);
         }
 
         private void FileList_DragOver(object sender, DragEventArgs e)
@@ -589,7 +686,16 @@ namespace Folderss.Controls
                 return;
             }
 
-            e.Effects = GetDropEffect(e, paths, destination);
+            var effect = GetDropEffect(e, paths, destination);
+            if (IsDropBlockedByPin(paths, destination, effect))
+            {
+                e.Effects = DragDropEffects.None;
+                StatusText.Text = "고정된 폴더: 구조를 변경할 수 없습니다.";
+                e.Handled = true;
+                return;
+            }
+
+            e.Effects = effect;
             StatusText.Text = string.Format("{0}: {1}", GetDropEffectLabel(e.Effects), destination);
             e.Handled = true;
         }
@@ -611,6 +717,14 @@ namespace Folderss.Controls
                 string.IsNullOrWhiteSpace(destination) || !Directory.Exists(destination))
             {
                 UpdateStatusText();
+                return;
+            }
+
+            if (IsDropBlockedByPin(paths, destination, effect))
+            {
+                e.Effects = DragDropEffects.None;
+                UpdateStatusText();
+                MainWindow.ShowPinLockedMessage();
                 return;
             }
 
@@ -660,6 +774,21 @@ namespace Folderss.Controls
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
             }
+        }
+
+        private bool IsDropBlockedByPin(string[] paths, string destination, DragDropEffects effect)
+        {
+            if (effect == DragDropEffects.None)
+                return false;
+
+            var window = Window.GetWindow(this) as MainWindow;
+            if (window == null)
+                return false;
+
+            if (window.IsDestinationPinLocked(destination))
+                return true;
+
+            return effect == DragDropEffects.Move && paths.Any(path => window.IsPathPinLocked(path));
         }
 
         private string GetDropDestination(DependencyObject originalSource)

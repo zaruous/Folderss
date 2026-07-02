@@ -164,6 +164,17 @@
                                         Content="↻"
                                         ToolTip="트리 새로고침"
                                         Click="RefreshTreeView_Click"/>
+                                <ToggleButton x:Name="PinFolderButton"
+                                              DockPanel.Dock="Right"
+                                              Width="24"
+                                              Height="24"
+                                              Padding="0"
+                                              Margin="4,0,0,0"
+                                              Style="{StaticResource CompactToggleButtonStyle}"
+                                              Content="📌"
+                                              ToolTip="폴더 고정 — 고정하면 이 폴더의 구조(생성·삭제·이름변경·이동)를 변경할 수 없습니다"
+                                              Checked="PinFolder_Changed"
+                                              Unchecked="PinFolder_Changed"/>
                                 <TextBlock Text="트리뷰"
                                            FontWeight="SemiBold"
                                            VerticalAlignment="Center"/>
