@@ -1346,15 +1346,64 @@ namespace Folderss
                 return;
             }
 
+            // 전역 단축키 — 포커스 위치와 무관하게 동작
+            if (kb.Matches(e, "AddPanel"))
+            {
+                AddFolderPanel_Click(sender, e);
+                e.Handled = true;
+                return;
+            }
+            if (kb.Matches(e, "SwitchPaneLeft"))
+            {
+                SwitchToAdjacentPane(-1);
+                e.Handled = true;
+                return;
+            }
+            if (kb.Matches(e, "SwitchPaneRight"))
+            {
+                SwitchToAdjacentPane(1);
+                e.Handled = true;
+                return;
+            }
+            if (kb.Matches(e, "ShowSearch"))
+            {
+                ShowSearchPanel();
+                e.Handled = true;
+                return;
+            }
+            if (kb.Matches(e, "PanelMaximize"))
+            {
+                TogglePanelMaximize();
+                e.Handled = true;
+                return;
+            }
+
+            // 즐겨찾기 패널 포커스 — 즐겨찾기 전용 단축키만 처리하고 파일 작업으로 넘기지 않음
+            if (FavoritesPanel.IsKeyboardFocusWithin)
+            {
+                if (kb.Matches(e, "Rename"))
+                {
+                    FavoritesPanel.RenameSelected();
+                    e.Handled = true;
+                }
+                else if (kb.Matches(e, "CopyClipboard"))
+                {
+                    FavoritesPanel.CopySelectedFavoritePath();
+                    e.Handled = true;
+                }
+                return;
+            }
+
+            // 파일 관리 단축키 — 뷰어에 포커스가 없고, 키보드 포커스가 폴더 패널 내부일 때만
+            if (IsViewerFocused() || !ShouldHandlePaneShortcut())
+                return;
+
             if (kb.Matches(e, "Rename"))
             {
-                if (FavoritesPanel.IsKeyboardFocusWithin)
-                    FavoritesPanel.RenameSelected();
-                else
-                    Rename_Click(sender, e);
+                Rename_Click(sender, e);
                 e.Handled = true;
             }
-            else if (kb.Matches(e, "Refresh"))
+            else if (kb.Matches(e, "Refresh") || kb.Matches(e, "RefreshAlt"))
             {
                 RefreshBothPanes();
                 e.Handled = true;
@@ -1366,13 +1415,7 @@ namespace Folderss
             }
             else if (kb.Matches(e, "Delete", ModifierKeys.Shift))
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 DeleteSelected((Keyboard.Modifiers & ModifierKeys.Shift) == ModifierKeys.Shift);
-                e.Handled = true;
-            }
-            else if (kb.Matches(e, "RefreshAlt"))
-            {
-                RefreshBothPanes();
                 e.Handled = true;
             }
             else if (kb.Matches(e, "NewFolder"))
@@ -1385,36 +1428,26 @@ namespace Folderss
                 NewFile_Click(sender, e);
                 e.Handled = true;
             }
-            else if (kb.Matches(e, "AddPanel"))
-            {
-                AddFolderPanel_Click(sender, e);
-                e.Handled = true;
-            }
             else if (kb.Matches(e, "CopyClipboard"))
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
-                if (FavoritesPanel.IsKeyboardFocusWithin)
-                {
-                    FavoritesPanel.CopySelectedFavoritePath();
-                }
-                else if (ActivePane.SelectedItems.Count > 0)
+                if (ActivePane.SelectedItems.Count > 0)
                 {
                     ActivePane.CopySelectedToClipboard();
+                    e.Handled = true;
                 }
-                e.Handled = true;
             }
             else if (kb.Matches(e, "CutClipboard"))
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
                 if (ActivePane.SelectedItems.Count > 0)
+                {
                     ActivePane.CutSelectedToClipboard();
-                e.Handled = true;
+                    e.Handled = true;
+                }
             }
             else if (kb.Matches(e, "PasteClipboard"))
             {
-                if (Keyboard.FocusedElement is System.Windows.Controls.TextBox) return;
-                PasteFromClipboard();
-                e.Handled = true;
+                if (TryPasteFromClipboardInto(ActivePane))
+                    e.Handled = true;
             }
             else if (kb.Matches(e, "NavigateBack"))
             {
@@ -1431,34 +1464,51 @@ namespace Folderss
                 ActivePane.NavigateUp();
                 e.Handled = true;
             }
-            else if (kb.Matches(e, "SwitchPaneLeft"))
-            {
-                SwitchToAdjacentPane(-1);
-                e.Handled = true;
-            }
-            else if (kb.Matches(e, "SwitchPaneRight"))
-            {
-                SwitchToAdjacentPane(1);
-                e.Handled = true;
-            }
-            else if (kb.Matches(e, "ShowSearch"))
-            {
-                ShowSearchPanel();
-                e.Handled = true;
-            }
-            else if (kb.Matches(e, "PanelMaximize"))
-            {
-                TogglePanelMaximize();
-                e.Handled = true;
-            }
+        }
+
+        /// <summary>
+        /// 파일 관리 단축키를 처리해도 되는 포커스 상태인지 판정.
+        /// 텍스트 입력 중(경로/필터 입력 포함)이 아니면서 키보드 포커스가 폴더 패널 내부일 때만 허용.
+        /// </summary>
+        private bool ShouldHandlePaneShortcut()
+        {
+            if (Keyboard.FocusedElement is TextBoxBase ||
+                Keyboard.FocusedElement is System.Windows.Controls.PasswordBox)
+                return false;
+
+            return GetFolderBrowsers().Any(pane => pane.IsKeyboardFocusWithin);
+        }
+
+        /// <summary>
+        /// 열린 뷰어 문서에 키보드 포커스가 있는지 판정.
+        /// WebView2 기반 뷰어는 WPF TextBox 가드로 걸러지지 않으므로 별도 차단 필요.
+        /// </summary>
+        private bool IsViewerFocused()
+        {
+            return DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .Select(document => document.Content)
+                .OfType<ViewerHost>()
+                .Any(host => host.IsKeyboardFocusWithin);
         }
 
         private bool TryHandleActiveViewerShortcut(KeyEventArgs e)
         {
-            var activeDocument = DockManager.Layout.Descendents()
+            var viewerDocuments = DockManager.Layout.Descendents()
                 .OfType<LayoutDocument>()
-                .FirstOrDefault(document => document.IsActive);
+                .Where(document => document.Content is ViewerHost)
+                .ToList();
+
+            var activeDocument = viewerDocuments.FirstOrDefault(document => document.IsActive);
             var viewerHost = activeDocument?.Content as ViewerHost;
+
+            // WebView2 등 네이티브 HWND 포커스 상태에서는 LayoutDocument.IsActive가
+            // 어긋날 수 있으므로 키보드 포커스 기준 폴백을 둔다.
+            if (viewerHost == null)
+                viewerHost = viewerDocuments
+                    .Select(document => document.Content as ViewerHost)
+                    .FirstOrDefault(host => host != null && host.IsKeyboardFocusWithin);
+
             return viewerHost != null && viewerHost.HandleShortcut(e, _keyBindingService);
         }
 
@@ -1685,11 +1735,6 @@ namespace Folderss
                 pane.CutPaths = null;
                 pane.RefreshItems();
             }
-        }
-
-        private void PasteFromClipboard()
-        {
-            TryPasteFromClipboardInto(ActivePane);
         }
 
         private async void CheckUpdate_Click(object sender, RoutedEventArgs e)

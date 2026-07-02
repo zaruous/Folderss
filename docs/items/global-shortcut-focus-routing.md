@@ -1,6 +1,6 @@
 # 전역 단축키 포커스 라우팅 버그 수정
 
-- 상태: Todo
+- 상태: Ready for Verification
 
 ## 요구사항
 
@@ -70,18 +70,33 @@
 
 ## 구현 내용
 
-(미착수)
+- `Window_PreviewKeyDown`을 3단 구조로 재구성
+  1. 전역 단축키(AddPanel, SwitchPaneLeft/Right, ShowSearch, PanelMaximize)는 포커스 위치와 무관하게 처리
+  2. 즐겨찾기 패널 포커스 시 즐겨찾기 전용 단축키(Rename, CopyClipboard)만 처리하고 파일 작업 블록으로 넘기지 않음 — 즐겨찾기 포커스 중 Delete가 ActivePane 파일을 삭제하던 잠복 버그도 함께 제거
+  3. 파일 관리 단축키(Rename, Delete, Move, 복사/잘라내기/붙여넣기, 새 폴더/파일, 새로고침, 뒤로/앞으로/상위)는 `IsViewerFocused()`가 아니고 `ShouldHandlePaneShortcut()`을 통과할 때만 처리
+- `ShouldHandlePaneShortcut()` 추가 — 화이트리스트 판정: 포커스 요소가 `TextBoxBase`/`PasswordBox`가 아니고, 키보드 포커스가 폴더 패널(`FolderBrowser`) 내부일 때만 true. 기존 `is TextBox` 블랙리스트 가드 대체 (F2가 PathBox 입력 중 이름변경 다이얼로그를 띄우던 문제도 함께 해결)
+- `IsViewerFocused()` 추가 — 열린 뷰어 문서(`ViewerHost.IsKeyboardFocusWithin`) 포커스 시 파일 단축키 블록 전체 차단 (WebView2 이중 안전망)
+- `TryHandleActiveViewerShortcut`에 키보드 포커스 기준 뷰어 탐색 폴백 추가 — `LayoutDocument.IsActive`가 네이티브 HWND 포커스와 어긋나는 경우 대비
+- `e.Handled`는 실제 동작 수행 시에만 설정 (복사/잘라내기는 선택 항목이 있을 때, 붙여넣기는 파일 붙여넣기가 실제 수행됐을 때)
+- 미사용이 된 `PasteFromClipboard()` 제거
 
 ## 변경 파일
 
-(예정)
-- `Folderss/MainWindow.xaml.cs` — `ShouldHandlePaneShortcut`/`IsViewerFocused` 추가, `Window_PreviewKeyDown` 분기 재구성, `TryHandleActiveViewerShortcut` 폴백
+- `Folderss/MainWindow.xaml.cs` — `Window_PreviewKeyDown` 재구성, `ShouldHandlePaneShortcut`/`IsViewerFocused` 추가, `TryHandleActiveViewerShortcut` 폴백, `PasteFromClipboard` 제거
 - `docs/items/global-shortcut-focus-routing.md`
 
 ## 검증
 
-- [ ] 4단계 검증 항목 참조
+- [ ] `dotnet build .\Folderss.sln -c Debug` 성공 (`Exit: 0`) — 작업 환경(Linux, 네트워크 정책상 SDK 설치 불가)에서 빌드 불가, Windows 개발 환경에서 확인 필요
+- [ ] 마크다운/Monaco/Text 뷰어 편집 중 Ctrl+C/V/X가 텍스트 편집으로만 동작하고 파일 복사·붙여넣기가 실행되지 않음 (고정 폴더 메시지 미표시)
+- [ ] 뷰어 편집 중 Delete/F2/F5가 파일 삭제·이름변경·새로고침을 트리거하지 않음
+- [ ] 폴더 패널(파일 목록) 포커스 시 모든 파일 단축키 정상 동작
+- [ ] PathBox/SearchBox 입력 중 Delete/F2/Ctrl+C가 파일 작업을 트리거하지 않고 텍스트 편집으로 동작
+- [ ] 즐겨찾기 패널 포커스 시 F2(이름변경)·Ctrl+C(경로 복사) 정상, Delete가 파일을 삭제하지 않음
+- [ ] 콘솔 포커스 시 기존 차단 동작 유지
+- [ ] AddPanel·패널 전환·Ctrl+F 검색·F11 최대화는 포커스 위치와 무관하게 동작
 
 ## 변경 이력
 
 - 2026-07-02: 마크다운 패널 Ctrl+C/V 오동작 신고 접수, 원인 분석 및 수정 계획 수립
+- 2026-07-02: 계획 승인, 화이트리스트 방식 포커스 라우팅 구현
