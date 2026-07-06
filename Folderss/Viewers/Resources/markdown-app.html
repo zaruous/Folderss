@@ -215,7 +215,23 @@ mark.md-find-hit.active {
   flex: 1;
   overflow: hidden;
   display: flex;
-  flex-direction: column;
+  flex-direction: row;
+}
+#editor-gutter {
+  flex-shrink: 0;
+  width: 4ch;
+  overflow: hidden;
+  box-sizing: border-box;
+  padding: 16px 8px 16px 0;
+  background: var(--panel);
+  border-right: 1px solid var(--border);
+  color: var(--fg2);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  text-align: right;
+  white-space: pre;
+  user-select: none;
 }
 #editor-textarea {
   flex: 1;
@@ -230,6 +246,8 @@ mark.md-find-hit.active {
   font-size: 13px;
   line-height: 1.6;
   tab-size: 4;
+  white-space: pre;
+  overflow: auto;
 }
 
 /* preview pane */
@@ -418,7 +436,8 @@ body.mode-split #split-handle:hover { background: var(--accent); }
     <!-- content -->
     <div id="content-area">
       <div id="editor-pane">
-        <textarea id="editor-textarea" spellcheck="false"></textarea>
+        <div id="editor-gutter" aria-hidden="true"></div>
+        <textarea id="editor-textarea" spellcheck="false" wrap="off"></textarea>
       </div>
       <div class="resize-handle" id="split-handle"></div>
       <div id="preview-pane"></div>
@@ -920,15 +939,35 @@ function setActiveTocItem(id) {
 
 // ── Editor ────────────────────────────────
 var editor = document.getElementById('editor-textarea');
+var editorGutter = document.getElementById('editor-gutter');
+var _gutterLineCount = 0;
+
+function updateLineNumbers() {
+  var lineCount = editor.value.split('\n').length;
+  if (lineCount !== _gutterLineCount) {
+    var lines = new Array(lineCount);
+    for (var i = 0; i < lineCount; i++) lines[i] = i + 1;
+    editorGutter.textContent = lines.join('\n');
+    editorGutter.style.width = (String(lineCount).length + 2) + 'ch';
+    _gutterLineCount = lineCount;
+  }
+  editorGutter.scrollTop = editor.scrollTop;
+}
+
 editor.addEventListener('input', function() {
   _content = editor.value;
   if (!_modified) {
     _modified = true;
     window.chrome.webview.postMessage({ type: 'modified', value: true });
   }
+  updateLineNumbers();
   clearTimeout(_renderTimer);
   if (!_largeFileMode)
     _renderTimer = setTimeout(renderPreview, 300);
+});
+
+editor.addEventListener('scroll', function() {
+  editorGutter.scrollTop = editor.scrollTop;
 });
 
 editor.addEventListener('keydown', function(e) {
@@ -943,6 +982,7 @@ editor.addEventListener('keydown', function(e) {
     var s = editor.selectionStart, end = editor.selectionEnd;
     editor.value = editor.value.substring(0, s) + '    ' + editor.value.substring(end);
     editor.selectionStart = editor.selectionEnd = s + 4;
+    updateLineNumbers();
   }
 });
 
@@ -999,6 +1039,7 @@ var app = {
     _modified = false;
     document.body.className = _theme + ' mode-' + _mode;
     editor.value = content;
+    updateLineNumbers();
     renderPreview();
     // restore mode buttons
     document.getElementById('btnEdit').classList.toggle('active', _mode === 'edit');
@@ -1033,6 +1074,7 @@ var app = {
     _largeFileMode = largeFileMode === true;
     _modified = false;
     editor.value = content;
+    updateLineNumbers();
     renderPreview();
     window.chrome.webview.postMessage({ type: 'modified', value: false });
   }
