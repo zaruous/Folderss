@@ -87,7 +87,6 @@
                             <MenuItem x:Name="OpenWithMenuItem" Header="다음으로 열기" Visibility="Collapsed"/>
                             <Separator/>
                             <MenuItem Header="새로 고침" InputGestureText="Ctrl+R" Click="Refresh_Click"/>
-                            <MenuItem Header="탐색기로 열기" Click="OpenInExplorer_Click"/>
                             <MenuItem Header="보기">
                                 <MenuItem x:Name="ToggleTreeViewMenuItem"
                                           Header="트리뷰"
@@ -99,6 +98,7 @@
                                 <Separator/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
+                            <MenuItem Header="탐색기로 열기" Click="OpenInExplorer_Click"/>
                             <MenuItem Header="테마">
                                 <MenuItem x:Name="BlackThemeMenuItem"
                                           Header="블랙 테마"

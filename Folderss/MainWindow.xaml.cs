@@ -1301,17 +1301,33 @@ namespace Folderss
         private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
         {
             var selected = ActivePane.SelectedItem;
-            var path = selected != null && selected.IsDirectory ? selected.FullPath : ActivePane.CurrentPath;
+            string arguments;
 
-            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            if (selected != null && !selected.IsDirectory)
             {
-                MessageBox.Show("폴더를 찾을 수 없습니다.", "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
-                return;
+                if (!File.Exists(selected.FullPath))
+                {
+                    MessageBox.Show("파일을 찾을 수 없습니다.", "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                arguments = "/select,\"" + selected.FullPath + "\"";
+            }
+            else
+            {
+                var path = selected != null ? selected.FullPath : ActivePane.CurrentPath;
+                if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+                {
+                    MessageBox.Show("폴더를 찾을 수 없습니다.", "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+                    return;
+                }
+
+                arguments = "\"" + path + "\"";
             }
 
             try
             {
-                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + path + "\"")
+                Process.Start(new ProcessStartInfo("explorer.exe", arguments)
                 {
                     UseShellExecute = true
                 });
