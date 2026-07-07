@@ -1298,6 +1298,30 @@ namespace Folderss
             UpdateActivePaneText();
         }
 
+        private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = ActivePane.SelectedItem;
+            var path = selected != null && selected.IsDirectory ? selected.FullPath : ActivePane.CurrentPath;
+
+            if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
+            {
+                MessageBox.Show("폴더를 찾을 수 없습니다.", "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", "\"" + path + "\"")
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
+        }
+
         public bool IsPathPinLocked(string path)
         {
             return GetFolderBrowsers().Any(pane => pane.IsPinLockedPath(path));
