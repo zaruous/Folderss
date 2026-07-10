@@ -1,5 +1,6 @@
 using Folderss.Services;
 using Folderss.Viewers;
+using Microsoft.Web.WebView2.Wpf;
 using System;
 using System.IO;
 using System.Windows;
@@ -23,6 +24,20 @@ namespace Folderss.Controls
         {
             InitializeComponent();
             _viewerConfig = viewerConfig;
+            AddHandler(KeyDownEvent, new KeyEventHandler(SuppressDocumentTabNavigation));
+        }
+
+        /// <summary>
+        /// WebView2가 WPF로 재발생시킨 Home/End KeyDown이 AvalonDock 문서 탭
+        /// (LayoutDocumentPaneControl = TabControl 파생)까지 버블링되면 첫/마지막 탭으로
+        /// 전환되므로 탭 영역에 닿기 전에 차단한다. Handled=true가 라우팅 종료까지 유지되면
+        /// WebView2 래퍼가 브라우저의 기본 동작(캐럿 이동)까지 막아버리므로,
+        /// MainWindow가 라우팅 마지막 단계에서 Handled를 되돌린다.
+        /// </summary>
+        private void SuppressDocumentTabNavigation(object sender, KeyEventArgs e)
+        {
+            if ((e.Key == Key.Home || e.Key == Key.End) && e.OriginalSource is WebView2)
+                e.Handled = true;
         }
 
         public bool CanOpen(string filePath)
