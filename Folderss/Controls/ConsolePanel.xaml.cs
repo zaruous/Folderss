@@ -46,6 +46,70 @@ namespace Folderss.Controls
         private static readonly MethodInfo EasyTerminalSetThemeMethod =
             typeof(EasyTerminalControl).GetMethod("SetTheme", BindingFlags.Instance | BindingFlags.NonPublic);
 
+        // 공개 API로 노출되지 않은 선택 텍스트 프로퍼티를 리플렉션으로 탐색.
+        // 못 찾으면 null을 반환하고, 호출부에서 "선택 없음"으로 간주해 Ctrl+C를 항상 터미널 인터럽트로 처리한다.
+        private static readonly string[] SelectedTextPropertyCandidates =
+        {
+            "SelectedText", "SelectionText", "CurrentSelectionText", "GetSelectedText"
+        };
+        private static readonly PropertyInfo EasyTerminalSelectedTextProperty =
+            ResolveSelectedTextProperty(typeof(EasyTerminalControl));
+        private static PropertyInfo _conPtyTermSelectedTextProperty;
+        private static bool _conPtyTermSelectedTextResolved;
+
+        private static PropertyInfo ResolveSelectedTextProperty(Type type)
+        {
+            if (type == null)
+                return null;
+
+            foreach (var name in SelectedTextPropertyCandidates)
+            {
+                var prop = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
+                if (prop != null && prop.PropertyType == typeof(string) && prop.GetIndexParameters().Length == 0)
+                    return prop;
+            }
+            return null;
+        }
+
+        private static string TryGetTerminalSelectedText(EasyTerminalControl terminal)
+        {
+            if (terminal == null)
+                return null;
+
+            try
+            {
+                if (EasyTerminalSelectedTextProperty != null)
+                {
+                    var value = EasyTerminalSelectedTextProperty.GetValue(terminal, null) as string;
+                    if (!string.IsNullOrEmpty(value))
+                        return value;
+                }
+
+                var pty = terminal.ConPTYTerm;
+                if (pty != null)
+                {
+                    if (!_conPtyTermSelectedTextResolved)
+                    {
+                        _conPtyTermSelectedTextProperty = ResolveSelectedTextProperty(pty.GetType());
+                        _conPtyTermSelectedTextResolved = true;
+                    }
+
+                    if (_conPtyTermSelectedTextProperty != null)
+                    {
+                        var value = _conPtyTermSelectedTextProperty.GetValue(pty, null) as string;
+                        if (!string.IsNullOrEmpty(value))
+                            return value;
+                    }
+                }
+            }
+            catch
+            {
+                // 리플렉션 실패 시 선택 없음으로 간주 — Ctrl+C는 항상 터미널 인터럽트로 폴백.
+            }
+
+            return null;
+        }
+
         public event EventHandler MaximizeRequested;
         public event EventHandler MinimizeRequested;
 
@@ -185,6 +249,19 @@ namespace Folderss.Controls
                 {
                     args.Handled = true;
                     terminal.ConPTYTerm?.WriteToTerm("\t");
+                    return;
+                }
+
+                // Ctrl+C: 앱의 복사 단축키와 겹치므로 여기서 먼저 처리해 앱으로 넘어가지 않게 한다.
+                // 선택된 텍스트가 있으면 그 텍스트를 복사하고, 없으면 원래 터미널 동작(인터럽트, 0x03)으로 전달한다.
+                if (args.Key == Key.C && Keyboard.Modifiers == ModifierKeys.Control)
+                {
+                    args.Handled = true;
+                    var selectedText = TryGetTerminalSelectedText(terminal);
+                    if (!string.IsNullOrEmpty(selectedText))
+                        Clipboard.SetText(selectedText);
+                    else
+                        terminal.ConPTYTerm?.WriteToTerm("\x03");
                     return;
                 }
 
