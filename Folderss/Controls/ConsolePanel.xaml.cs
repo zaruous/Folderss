@@ -46,31 +46,8 @@ namespace Folderss.Controls
         private static readonly MethodInfo EasyTerminalSetThemeMethod =
             typeof(EasyTerminalControl).GetMethod("SetTheme", BindingFlags.Instance | BindingFlags.NonPublic);
 
-        // 공개 API로 노출되지 않은 선택 텍스트 프로퍼티를 리플렉션으로 탐색.
-        // 못 찾으면 null을 반환하고, 호출부에서 "선택 없음"으로 간주해 Ctrl+C를 항상 터미널 인터럽트로 처리한다.
-        private static readonly string[] SelectedTextPropertyCandidates =
-        {
-            "SelectedText", "SelectionText", "CurrentSelectionText", "GetSelectedText"
-        };
-        private static readonly PropertyInfo EasyTerminalSelectedTextProperty =
-            ResolveSelectedTextProperty(typeof(EasyTerminalControl));
-        private static PropertyInfo _conPtyTermSelectedTextProperty;
-        private static bool _conPtyTermSelectedTextResolved;
-
-        private static PropertyInfo ResolveSelectedTextProperty(Type type)
-        {
-            if (type == null)
-                return null;
-
-            foreach (var name in SelectedTextPropertyCandidates)
-            {
-                var prop = type.GetProperty(name, BindingFlags.Instance | BindingFlags.Public | BindingFlags.NonPublic);
-                if (prop != null && prop.PropertyType == typeof(string) && prop.GetIndexParameters().Length == 0)
-                    return prop;
-            }
-            return null;
-        }
-
+        // 선택 텍스트는 EasyTerminalControl이 감싸고 있는 Microsoft.Terminal.Wpf.TerminalControl의
+        // GetSelectedText()로만 조회 가능 (EasyTerminalControl/TermPTY에는 관련 API 없음 — DLL 확인 완료).
         private static string TryGetTerminalSelectedText(EasyTerminalControl terminal)
         {
             if (terminal == null)
@@ -78,35 +55,35 @@ namespace Folderss.Controls
 
             try
             {
-                if (EasyTerminalSelectedTextProperty != null)
-                {
-                    var value = EasyTerminalSelectedTextProperty.GetValue(terminal, null) as string;
-                    if (!string.IsNullOrEmpty(value))
-                        return value;
-                }
-
-                var pty = terminal.ConPTYTerm;
-                if (pty != null)
-                {
-                    if (!_conPtyTermSelectedTextResolved)
-                    {
-                        _conPtyTermSelectedTextProperty = ResolveSelectedTextProperty(pty.GetType());
-                        _conPtyTermSelectedTextResolved = true;
-                    }
-
-                    if (_conPtyTermSelectedTextProperty != null)
-                    {
-                        var value = _conPtyTermSelectedTextProperty.GetValue(pty, null) as string;
-                        if (!string.IsNullOrEmpty(value))
-                            return value;
-                    }
-                }
+                var inner = FindDescendant<Microsoft.Terminal.Wpf.TerminalControl>(terminal);
+                var value = inner?.GetSelectedText();
+                if (!string.IsNullOrEmpty(value))
+                    return value;
             }
             catch
             {
-                // 리플렉션 실패 시 선택 없음으로 간주 — Ctrl+C는 항상 터미널 인터럽트로 폴백.
+                // 조회 실패 시 선택 없음으로 간주 — Ctrl+C는 항상 터미널 인터럽트로 폴백.
             }
 
+            return null;
+        }
+
+        private static T FindDescendant<T>(DependencyObject root) where T : DependencyObject
+        {
+            if (root == null)
+                return null;
+
+            var count = System.Windows.Media.VisualTreeHelper.GetChildrenCount(root);
+            for (var i = 0; i < count; i++)
+            {
+                var child = System.Windows.Media.VisualTreeHelper.GetChild(root, i);
+                if (child is T match)
+                    return match;
+
+                var result = FindDescendant<T>(child);
+                if (result != null)
+                    return result;
+            }
             return null;
         }
 
