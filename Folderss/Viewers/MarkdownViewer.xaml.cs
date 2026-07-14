@@ -506,23 +506,49 @@ namespace Folderss.Viewers
                     var message = _modified
                         ? "파일이 외부에서 변경되었습니다. 다시 읽으면 편집 중인 내용이 사라집니다.\n\n다시 읽으시겠습니까?"
                         : "파일이 외부에서 변경되었습니다. 다시 읽으시겠습니까?";
-                    var answer = MessageBox.Show(
-                        message,
-                        Path.GetFileName(_filePath),
-                        MessageBoxButton.YesNo,
-                        MessageBoxImage.Question,
-                        MessageBoxResult.Yes);
+                    // owner 없이 띄우면 앱이 백그라운드일 때 확인창이 다른 창 뒤에 숨은 채
+                    // _reloadPromptOpen 가드만 걸려서 이후 확인창이 전혀 안 뜨는 것처럼 보인다.
+                    var owner = Window.GetWindow(this);
+                    var answer = owner != null
+                        ? MessageBox.Show(
+                            owner,
+                            message,
+                            Path.GetFileName(_filePath),
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question,
+                            MessageBoxResult.Yes)
+                        : MessageBox.Show(
+                            message,
+                            Path.GetFileName(_filePath),
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Question,
+                            MessageBoxResult.Yes);
 
                     _pendingExternalReload = false;
                     _lastPromptedContent = content;
                     if (answer != MessageBoxResult.Yes)
                         return;
 
-                    _lastLoadedContent = content;
+                    // 확인창이 떠 있는 동안(모달) 파일이 또 변경됐을 수 있으므로,
+                    // 확인창을 띄우기 전에 읽었던 스냅샷 대신 지금 시점의 최신 내용을 다시 읽는다.
+                    var latestContent = content;
+                    try
+                    {
+                        _encoding = DetectEncoding(_filePath);
+                        latestContent = ReadAllTextAllowingWriters(_filePath, _encoding);
+                    }
+                    catch (IOException)
+                    {
+                    }
+                    catch (UnauthorizedAccessException)
+                    {
+                    }
+
+                    _lastLoadedContent = latestContent;
                     _lastPromptedContent = null;
                     _modified = false;
                     ModifiedChanged?.Invoke(this, false);
-                    await CallAppReloadContent(content);
+                    await CallAppReloadContent(latestContent);
                 }
                 finally
                 {

@@ -719,7 +719,7 @@ namespace Folderss
             pane.InsertChildAt(insertIndex, document);
             MoveAddPanelTabToEnd();
             document.IsActive = true;
-            viewerHost.SetActive(document.IsActive);
+            UpdateViewerActivation(document, viewerHost);
 
             viewerHost.OpenFile(filePath);
         }
@@ -745,8 +745,17 @@ namespace Folderss
 
         private void AttachViewerDocument(LayoutDocument document, ViewerHost viewerHost)
         {
-            document.IsActiveChanged += (s, e) => viewerHost.SetActive(document.IsActive);
+            // IsActive(포커스)만 보면 세션 복원 직후처럼 포커스를 한 번도 받지 않은 탭은
+            // 화면에 보이는데도 비활성으로 남아 외부 변경 확인창이 뜨지 않는다.
+            // 선택되어 보이는 탭(IsSelected)도 활성으로 취급한다.
+            document.IsActiveChanged += (s, e) => UpdateViewerActivation(document, viewerHost);
+            document.IsSelectedChanged += (s, e) => UpdateViewerActivation(document, viewerHost);
             document.Closed += (s, e) => DisposeDocumentContent(document);
+        }
+
+        private static void UpdateViewerActivation(LayoutDocument document, ViewerHost viewerHost)
+        {
+            viewerHost.SetActive(document.IsActive || document.IsSelected);
         }
 
         private void AttachRestoredViewerDocuments()
@@ -758,7 +767,7 @@ namespace Folderss
                     continue;
 
                 AttachViewerDocument(document, viewerHost);
-                viewerHost.SetActive(document.IsActive);
+                UpdateViewerActivation(document, viewerHost);
             }
         }
 
