@@ -1,6 +1,6 @@
 # 콘솔 패널 Ctrl+C 단축키 충돌 해소 (선택 인식 복사)
 
-- 상태: Ready for Verification (선택 복사 부분 재검증 필요 — 아래 추가 수정 참고)
+- 상태: Verified (2026-07-14 사용자 확인 완료)
 
 ## 요구사항
 
@@ -49,7 +49,7 @@ Microsoft.Terminal.Wpf는 EasyWindowsTerminalControl의 전이 의존성이라 �
 
 - [x] **중요**: 리플렉션으로 찾는 프로퍼티 이름이 실제 DLL에 존재하는지 확인 → **존재하지 않음이 확인되어 GetSelectedText() 직접 호출로 교체함**
 - [x] 콘솔에서 텍스트 미선택 상태로 Ctrl+C → 실행 중인 프로그램이 정상적으로 취소(인터럽트)됨 (2026-07-14 사용자 확인)
-- [ ] 콘솔에서 텍스트를 드래그 선택 후 Ctrl+C → 클립보드에 선택 텍스트가 복사되고 프로그램은 취소되지 않음 (**GetSelectedText 교체 후 재검증 필요**)
+- [x] 콘솔에서 텍스트를 드래그 선택 후 Ctrl+C → 클립보드에 선택 텍스트가 복사되고 프로그램은 취소되지 않음 (2026-07-14 GetSelectedText 교체 후 사용자 확인)
 - [x] 콘솔 이외 패널(파일트리/파일목록)에서는 기존 Ctrl+C 복사 동작이 그대로 유지됨 (2026-07-14 사용자 확인)
 - [x] 빌드 성공 확인 (`dotnet build` Debug/Release 모두 오류 0개)
 
@@ -58,4 +58,5 @@ Microsoft.Terminal.Wpf는 EasyWindowsTerminalControl의 전이 의존성이라 �
 - 2026-07-14: 초기 구현 (리플렉션 기반 선택 텍스트 탐색 + Ctrl+C 분기)
 - 2026-07-14: 인터럽트/타 패널 동작 사용자 검증 완료
 - 2026-07-14: DLL 확인 결과 리플렉션 후보 프로퍼티가 전무해 선택 복사가 동작하지 않던 것을
-  `Microsoft.Terminal.Wpf.TerminalControl.GetSelectedText()` 직접 호출로 교체 — 선택 복사 재검증 필요
+  `Microsoft.Terminal.Wpf.TerminalControl.GetSelectedText()` 직접 호출로 교체
+- 2026-07-14: 선택 복사 사용자 검증 완료 — 전 항목 확인 종료
