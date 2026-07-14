@@ -473,12 +473,22 @@ mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' 
 marked.use({ gfm: true, breaks: false, allowDangerousHtml: false });
 
 // ── Toolbar mode buttons ──────────────────
+function resetEditorPaneSizeIfNotSplit(mode) {
+  // split 모드의 드래그 리사이즈로 남은 고정폭을 해제해, split이 아닐 때는 화면 너비에 맞게 채운다
+  if (mode === 'split')
+    return;
+  var editorPane = document.getElementById('editor-pane');
+  editorPane.style.flex = '';
+  editorPane.style.width = '';
+}
+
 function setMode(mode) {
   _mode = mode;
   document.body.className = _theme + ' mode-' + mode;
   document.getElementById('btnEdit').classList.toggle('active', mode === 'edit');
   document.getElementById('btnSplit').classList.toggle('active', mode === 'split');
   document.getElementById('btnPreview').classList.toggle('active', mode === 'preview');
+  resetEditorPaneSizeIfNotSplit(mode);
   // TOC only in preview mode
   var tocPanel = document.getElementById('toc-panel');
   var tocHandle = document.getElementById('toc-handle');
@@ -1038,6 +1048,7 @@ var app = {
     _largeFileMode = largeFileMode === true;
     _modified = false;
     document.body.className = _theme + ' mode-' + _mode;
+    resetEditorPaneSizeIfNotSplit(_mode);
     editor.value = content;
     updateLineNumbers();
     renderPreview();

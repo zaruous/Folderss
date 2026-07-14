@@ -29,6 +29,8 @@ namespace Folderss.Viewers
         private FileSystemWatcher _fileWatcher;
         private readonly DispatcherTimer _fileReloadTimer;
         private string _lastLoadedContent;
+        private string _lastPromptedContent;
+        private bool _reloadPromptOpen;
         private bool _disposed;
         private bool _isActive = true;
         private bool _pendingExternalReload;
@@ -220,6 +222,7 @@ namespace Folderss.Viewers
             _largeFileMode = new FileInfo(filePath).Length > LargeMarkdownBytes;
             var content = File.ReadAllText(filePath, _encoding);
             _lastLoadedContent = content;
+            _lastPromptedContent = null;
             _pendingExternalReload = false;
 
             TitleChanged?.Invoke(this, Path.GetFileName(filePath));
@@ -469,6 +472,11 @@ namespace Folderss.Viewers
 
         private async System.Threading.Tasks.Task ReloadExternalFileAsync()
         {
+            // 모달 확인창이 떠 있는 동안 워처가 다시 트리거되어도(중첩 메시지 펌프) 재진입해
+            // 확인창이 중복으로 뜨지 않도록 가드.
+            if (_reloadPromptOpen)
+                return;
+
             if (string.IsNullOrWhiteSpace(_filePath) || !File.Exists(_filePath))
                 return;
 
@@ -480,27 +488,46 @@ namespace Folderss.Viewers
                 if (string.Equals(content, _lastLoadedContent, StringComparison.Ordinal))
                 {
                     _pendingExternalReload = false;
+                    _lastPromptedContent = null;
                     return;
                 }
 
-                var message = _modified
-                    ? "파일이 외부에서 변경되었습니다. 다시 읽으면 편집 중인 내용이 사라집니다.\n\n다시 읽으시겠습니까?"
-                    : "파일이 외부에서 변경되었습니다. 다시 읽으시겠습니까?";
-                var answer = MessageBox.Show(
-                    message,
-                    Path.GetFileName(_filePath),
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question,
-                    MessageBoxResult.Yes);
-
-                _pendingExternalReload = false;
-                if (answer != MessageBoxResult.Yes)
+                // 이전에 같은 외부 변경 내용을 이미 물어봤고 사용자가 거부한 경우,
+                // 파일이 다시 바뀌기 전까지는 동일한 확인창을 반복해서 띄우지 않는다.
+                if (string.Equals(content, _lastPromptedContent, StringComparison.Ordinal))
+                {
+                    _pendingExternalReload = false;
                     return;
+                }
 
-                _lastLoadedContent = content;
-                _modified = false;
-                ModifiedChanged?.Invoke(this, false);
-                await CallAppReloadContent(content);
+                _reloadPromptOpen = true;
+                try
+                {
+                    var message = _modified
+                        ? "파일이 외부에서 변경되었습니다. 다시 읽으면 편집 중인 내용이 사라집니다.\n\n다시 읽으시겠습니까?"
+                        : "파일이 외부에서 변경되었습니다. 다시 읽으시겠습니까?";
+                    var answer = MessageBox.Show(
+                        message,
+                        Path.GetFileName(_filePath),
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question,
+                        MessageBoxResult.Yes);
+
+                    _pendingExternalReload = false;
+                    _lastPromptedContent = content;
+                    if (answer != MessageBoxResult.Yes)
+                        return;
+
+                    _lastLoadedContent = content;
+                    _lastPromptedContent = null;
+                    _modified = false;
+                    ModifiedChanged?.Invoke(this, false);
+                    await CallAppReloadContent(content);
+                }
+                finally
+                {
+                    _reloadPromptOpen = false;
+                }
             }
             catch (IOException)
             {

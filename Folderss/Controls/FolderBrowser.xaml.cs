@@ -1170,12 +1170,29 @@ namespace Folderss.Controls
 
         private void Copy_CanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
-            e.CanExecute = SelectedItems.Count > 0;
+            e.CanExecute = SelectedItems.Count > 0 || GetFolderTreeCopyPath() != null;
             e.Handled = true;
+        }
+
+        private string GetFolderTreeCopyPath()
+        {
+            if (SelectedItems.Count > 0 || !FolderTree.IsKeyboardFocusWithin)
+                return null;
+
+            var item = FolderTree.SelectedItem as TreeViewItem;
+            var path = item == null ? null : item.Tag as string;
+            return string.IsNullOrWhiteSpace(path) ? null : path;
         }
 
         public void CopySelectedToClipboard()
         {
+            var treePath = GetFolderTreeCopyPath();
+            if (treePath != null)
+            {
+                CopyFolderTreeSelectionToClipboard(treePath);
+                return;
+            }
+
             var paths = SelectedItems
                 .Select(item => item.FullPath)
                 .Where(path => File.Exists(path) || Directory.Exists(path))
@@ -1188,6 +1205,28 @@ namespace Folderss.Controls
                 pathsCollection.Add(path);
 
             Clipboard.SetFileDropList(pathsCollection);
+            var window = Window.GetWindow(this) as Folderss.MainWindow;
+            if (window != null)
+                window.ClearCutStateFromClipboard();
+        }
+
+        private void CopyFolderTreeSelectionToClipboard(string path)
+        {
+            if (!Directory.Exists(path))
+                return;
+
+            var name = Path.GetFileName(path.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar));
+            if (string.IsNullOrEmpty(name))
+                name = path;
+
+            var pathsCollection = new System.Collections.Specialized.StringCollection { path };
+
+            // 폴더 이름은 텍스트로, 실제 경로는 FileDrop 포맷으로 함께 담아 텍스트 붙여넣기와 실제 파일 복사를 모두 지원.
+            var dataObject = new DataObject();
+            dataObject.SetFileDropList(pathsCollection);
+            dataObject.SetText(name, TextDataFormat.UnicodeText);
+            Clipboard.SetDataObject(dataObject, true);
+
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
                 window.ClearCutStateFromClipboard();
