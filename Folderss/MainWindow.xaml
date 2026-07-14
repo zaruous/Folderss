@@ -98,6 +98,7 @@
                                 <Separator/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
+                            <MenuItem Header="탐색기로 열기" Click="OpenInExplorer_Click"/>
                             <MenuItem Header="테마">
                                 <MenuItem x:Name="BlackThemeMenuItem"
                                           Header="블랙 테마"
