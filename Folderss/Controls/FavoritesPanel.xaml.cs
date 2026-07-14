@@ -33,7 +33,21 @@ namespace Folderss.Controls
             if (favorite == null)
                 return false;
 
-            Clipboard.SetText(favorite.Path);
+            var path = favorite.Path;
+            if (File.Exists(path) || Directory.Exists(path))
+            {
+                // 경로 텍스트와 FileDrop을 함께 담아 텍스트 붙여넣기와 실제 파일 복사를 모두 지원.
+                var pathsCollection = new System.Collections.Specialized.StringCollection { path };
+                var dataObject = new DataObject();
+                dataObject.SetFileDropList(pathsCollection);
+                dataObject.SetText(path, TextDataFormat.UnicodeText);
+                Clipboard.SetDataObject(dataObject, true);
+            }
+            else
+            {
+                Clipboard.SetText(path);
+            }
+
             return true;
         }
 
