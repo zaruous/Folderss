@@ -27,6 +27,17 @@
                     <ComboBoxItem Content="하위 폴더 포함" Tag="recursive"/>
                 </ComboBox>
 
+                <!-- 검색 대상 선택 -->
+                <ComboBox x:Name="TargetCombo"
+                          DockPanel.Dock="Right"
+                          Width="100"
+                          Margin="4,0,0,0"
+                          VerticalContentAlignment="Center"
+                          SelectionChanged="ScopeCombo_SelectionChanged">
+                    <ComboBoxItem Content="내용 검색" IsSelected="True" Tag="content"/>
+                    <ComboBoxItem Content="파일명 검색" Tag="filename"/>
+                </ComboBox>
+
                 <!-- 옵션 토글 -->
                 <ToggleButton x:Name="RegexToggle"
                               DockPanel.Dock="Right"
@@ -46,6 +57,32 @@
                               Margin="4,0,0,0"
                               Checked="Option_Changed"
                               Unchecked="Option_Changed"/>
+
+                <!-- 확장자 필터 -->
+                <Grid DockPanel.Dock="Right" Width="100" Margin="4,0,0,0">
+                    <TextBox x:Name="ExtBox"
+                             VerticalContentAlignment="Center"
+                             Padding="4,2"
+                             ToolTip="확장자 필터 (예: cs, txt) — 비우면 전체 확장자"
+                             KeyDown="QueryBox_KeyDown"
+                             TextChanged="ExtBox_TextChanged"/>
+                    <TextBlock Text="확장자: cs,txt"
+                               IsHitTestVisible="False"
+                               Foreground="{DynamicResource SecondaryText}"
+                               VerticalAlignment="Center"
+                               Margin="6,0">
+                        <TextBlock.Style>
+                            <Style TargetType="TextBlock">
+                                <Setter Property="Visibility" Value="Collapsed"/>
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding Text, ElementName=ExtBox}" Value="">
+                                        <Setter Property="Visibility" Value="Visible"/>
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </TextBlock.Style>
+                    </TextBlock>
+                </Grid>
 
                 <!-- 검색어 입력 -->
                 <Grid>
@@ -114,9 +151,20 @@
                     <GridViewColumn Header="줄" Width="50">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
-                                <TextBlock Text="{Binding LineNumber}"
-                                           Foreground="{DynamicResource SecondaryText}"
-                                           HorizontalAlignment="Right"/>
+                                <!-- 파일명 검색 결과는 LineNumber가 0(해당 없음)이라 빈 칸으로 표시 -->
+                                <TextBlock Foreground="{DynamicResource SecondaryText}"
+                                           HorizontalAlignment="Right">
+                                    <TextBlock.Style>
+                                        <Style TargetType="TextBlock">
+                                            <Setter Property="Text" Value="{Binding LineNumber}"/>
+                                            <Style.Triggers>
+                                                <DataTrigger Binding="{Binding LineNumber}" Value="0">
+                                                    <Setter Property="Text" Value=""/>
+                                                </DataTrigger>
+                                            </Style.Triggers>
+                                        </Style>
+                                    </TextBlock.Style>
+                                </TextBlock>
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>

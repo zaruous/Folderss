@@ -17,7 +17,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser       — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위)
 │   ├── FavoritesPanel      — 즐겨찾기 패널
-│   ├── SearchPanel         — 파일 내용 검색 패널
+│   ├── SearchPanel         — 파일 검색 패널 (내용/파일명 대상 선택, 확장자 필터)
 │   ├── ConsolePanel        — ConPTY 기반 내장 터미널 패널
 │   └── ViewerHost          — 내장 파일 뷰어 호스트
 ├── Viewers/
@@ -30,7 +30,7 @@ Folderss/
 │   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델
 │   ├── KeyBindingEntry     — 단축키 설정 모델
 │   ├── OpenWithEntry       — 사용자 지정 열기 프로그램 모델
-│   └── SearchResult        — 내용 검색 결과 모델
+│   └── SearchResult        — 파일 검색 결과 모델
 ├── Services/
 │   ├── FileOperationService    — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService      — 텍스트·이미지 미리보기 + 메타데이터
@@ -38,7 +38,7 @@ Folderss/
 │   ├── SessionStateService     — 열린 폴더 경로 세션 저장·복원 (XML)
 │   ├── FavoritesService        — 즐겨찾기 목록 저장·복원
 │   ├── KeyBindingService       — 단축키 기본값·사용자 설정 저장
-│   ├── SearchService           — 파일 내용 검색
+│   ├── SearchService           — 파일 검색 (내용/파일명 대상, 확장자 필터)
 │   ├── ViewerConfigService     — 확장자별 내장 뷰어 매핑
 │   ├── OpenWithService         — 사용자 지정 Open With 항목 저장·실행
 │   ├── ConsoleSettingsService  — 콘솔 패널 설정 저장
@@ -98,7 +98,7 @@ Folderss/
 - 그룹별 즐겨찾기 구성과 사용자별 저장
 - 즐겨찾기 그룹 간 드래그 앤 드롭 이동
 - 폴더 목록 하단의 선택 파일 미리보기와 메타정보
-- 파일 내용 검색 (대/소문자 구분, 정규식, 하위 폴더 탐색 옵션)
+- 파일 검색 (내용 검색/파일명 검색 대상 선택, 확장자 필터, 대/소문자 구분, 정규식, 하위 폴더 탐색 옵션)
 - 내장 Markdown, Monaco, Text 뷰어 탭
 - GitHub 최신 릴리스 기반 업데이트 확인 및 안전한 설치 파일 적용
 
@@ -232,7 +232,7 @@ Folderss\Themes\Controls.xaml
 | `Ctrl+R` | 양쪽 패널 새로 고침 |
 | `Ctrl+T` | 새 폴더 패널 추가 |
 | `F11` | 현재 폴더 패널 최대화/복원 |
-| `Ctrl+F` | 파일 내용 검색 패널 열기/닫기 |
+| `Ctrl+F` | 파일 검색 패널 열기/닫기 |
 
 기본 단축키는 `설정 > 단축키`에서 변경하거나 기본값으로 초기화할 수 있습니다.
 

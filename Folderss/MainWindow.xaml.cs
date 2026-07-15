@@ -1631,7 +1631,7 @@ namespace Folderss
             {
                 _searchWindow = new Window
                 {
-                    Title = "파일 내용 검색",
+                    Title = "파일 검색",
                     Width = 900,
                     Height = 420,
                     MinWidth = 500,

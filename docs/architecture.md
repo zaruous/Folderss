@@ -7,6 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
+│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (내용/파일명 대상 선택, 확장자 필터, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
@@ -16,10 +17,13 @@ Folderss/
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
-│   └── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델
+│   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델
+│   ├── SearchResult.cs             — 파일 검색 결과 모델
+│   └── SearchTarget.cs             — 검색 대상 enum (Content/FileName)
 ├── Services/
 │   ├── FileOperationService.cs     — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터
+│   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 확장자 필터, 대/소문자, 정규식)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
 │   ├── FavoritesService.cs         — 즐겨찾기 목록 저장·복원
@@ -67,6 +71,14 @@ Folderss/
 - 사용자 커스터마이징을 XML로 `%LOCALAPPDATA%\Folderss\keybindings.xml`에 저장
 - `kb.Matches(e, "CommandId")` 패턴으로 MainWindow PreviewKeyDown에서 사용
 - **단축키 추가 시 연관 파일**: KeyBindingService.cs, MainWindow.xaml.cs, SettingsWindow
+
+### SearchPanel / SearchService
+- `Ctrl+F`(`ShowSearch`)로 여는 별도 팝업 창(`파일 검색`)에서 실행, `MainWindow.ShowSearchPanel()` 참고
+- `TargetCombo`로 검색 대상을 `내용 검색`/`파일명 검색` 중 선택 (`SearchTarget.Content` / `SearchTarget.FileName`)
+- `ExtBox`에 `cs, txt`처럼 콤마/세미콜론/공백으로 구분해 확장자 필터 입력, 비우면 전체 확장자 대상
+- `SearchService.SearchAsync`가 확장자 필터를 정규화(`.` 접두사 보정)한 뒤 대상에 따라 파일 내용 라인 단위 스캔(`ScanFile`) 또는 파일명만 비교(`ScanFileName`)로 분기
+- 결과는 `SearchResult.LineNumber == 0`이면 파일명 검색 결과로 취급해 목록에서 줄 번호 칸을 비움
+- `CaseToggle`(대/소문자), `RegexToggle`(정규식), `ScopeCombo`(현재 폴더만/하위 폴더 포함)는 검색 대상과 무관하게 공통 적용
 
 ### 개발 아이템 문서
 - 현재 개발 아이템은 GitHub Project가 아니라 `docs/items/<항목>.md`에서 관리한다.

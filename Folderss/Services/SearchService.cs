@@ -1,6 +1,8 @@
 using Folderss.Models;
 using System;
+using System.Collections.Generic;
 using System.IO;
+using System.Linq;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -15,6 +17,8 @@ namespace Folderss.Services
             bool recursive,
             bool caseSensitive,
             bool useRegex,
+            SearchTarget target,
+            string extensionFilter,
             IProgress<SearchResult> progress,
             CancellationToken cancellationToken)
         {
@@ -22,6 +26,7 @@ namespace Folderss.Services
             {
                 var option = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
                 var comparisonType = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
+                var extensions = ParseExtensions(extensionFilter);
                 Regex regex = null;
 
                 if (useRegex)
@@ -34,9 +39,15 @@ namespace Folderss.Services
                 {
                     cancellationToken.ThrowIfCancellationRequested();
 
+                    if (extensions != null && !extensions.Contains(Path.GetExtension(filePath)))
+                        continue;
+
                     try
                     {
-                        ScanFile(filePath, query, regex, comparisonType, progress, cancellationToken);
+                        if (target == SearchTarget.FileName)
+                            ScanFileName(filePath, query, regex, comparisonType, progress);
+                        else
+                            ScanFile(filePath, query, regex, comparisonType, progress, cancellationToken);
                     }
                     catch (OperationCanceledException)
                     {
@@ -48,6 +59,49 @@ namespace Folderss.Services
                     }
                 }
             }, cancellationToken);
+        }
+
+        /// <summary>
+        /// "cs, .txt;md" 같은 사용자 입력을 { ".cs", ".txt", ".md" } 집합으로 정규화한다.
+        /// 입력이 비어 있으면 필터 없음을 뜻하는 null을 반환한다.
+        /// </summary>
+        private static HashSet<string> ParseExtensions(string extensionFilter)
+        {
+            if (string.IsNullOrWhiteSpace(extensionFilter))
+                return null;
+
+            var parts = extensionFilter.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(p => p.Trim())
+                .Where(p => p.Length > 0)
+                .Select(p => p.StartsWith(".", StringComparison.Ordinal) ? p : "." + p);
+
+            var extensions = new HashSet<string>(parts, StringComparer.OrdinalIgnoreCase);
+            return extensions.Count > 0 ? extensions : null;
+        }
+
+        private static void ScanFileName(
+            string filePath,
+            string query,
+            Regex regex,
+            StringComparison comparisonType,
+            IProgress<SearchResult> progress)
+        {
+            var fileName = Path.GetFileName(filePath);
+            var matched = regex != null
+                ? regex.IsMatch(fileName)
+                : fileName.IndexOf(query, comparisonType) >= 0;
+
+            if (!matched)
+                return;
+
+            progress.Report(new SearchResult
+            {
+                FilePath = filePath,
+                FileName = fileName,
+                FolderPath = Path.GetDirectoryName(filePath),
+                LineNumber = 0,
+                LineText = "(파일명 일치)"
+            });
         }
 
         private static void ScanFile(
