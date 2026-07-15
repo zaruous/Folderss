@@ -32,7 +32,7 @@
 | `NavigateUp` | 상위 폴더 | `Alt+↑` | MainWindow | 활성 패널 상위 폴더 이동 |
 | `SwitchPaneLeft` | 왼쪽 패널 전환 | `Ctrl+Shift+←` | MainWindow | 이전 폴더 패널로 포커스 전환 |
 | `SwitchPaneRight` | 오른쪽 패널 전환 | `Ctrl+Shift+→` | MainWindow | 다음 폴더 패널로 포커스 전환 |
-| `ShowSearch` | 내용 검색 | `Ctrl+F` | MainWindow | 파일 내용 검색 창 열기 |
+| `ShowSearch` | 파일 검색 | `Ctrl+F` | MainWindow | 파일 검색 창 열기 (내용 검색/파일명 검색 대상 선택, 확장자 필터) |
 | `PanelMaximize` | 패널 최대화 토글 | `F11` | MainWindow | 활성 패널/문서 최대화 토글 |
 
 ---
@@ -93,9 +93,18 @@ FolderBrowser에서 `ApplicationCommands` CommandBinding으로 등록:
 |----|------|------|
 | `Ctrl+F` | 마크다운 내 텍스트 검색 (find) | KeyBindingService `ShowSearch` 매핑 사용 |
 
-### MonacoViewer / TextViewer
+### MonacoViewer
 
-자체 키보드 핸들러 없음. Monaco 에디터 내장 단축키(Ctrl+F 검색 등)는 WebView2 내에서 자체 처리.
+| 키 | 동작 | 비고 |
+|----|------|------|
+| `Ctrl+F` | Monaco 내장 파일 내 검색(`actions.find`) 열기 | KeyBindingService `ShowSearch` 매핑 사용 |
+
+Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)는 WebView2 내에서 자체 처리.
+단, `Ctrl+F`는 전역 `ShowSearch`와 겹치므로 `HandleShortcut`에서 가로채 `app.openFind()`로 전달한다 (MarkdownViewer와 동일한 패턴).
+
+### TextViewer
+
+자체 키보드 핸들러 없음.
 
 ---
 
@@ -108,6 +117,7 @@ FolderBrowser에서 `ApplicationCommands` CommandBinding으로 등록:
 | BUG-3 | MarkdownViewer `Ctrl+F` 하드코딩 | 낮 | **수정 완료** |
 | BUG-4 | FavoritesPanel `F2`/`Ctrl+C` 하드코딩 | 중 | **수정 완료** |
 | BUG-5 | `docs/architecture.md` 문서 불일치 | - | **수정 완료** |
+| BUG-6 | MonacoViewer `Ctrl+F` 전역 검색에 가로채임 | 낮 | **수정 완료** |
 
 ### BUG-1: `Ctrl+X` / `Ctrl+V` 커스텀 매핑 미적용 — 수정 완료
 
@@ -133,6 +143,11 @@ FolderBrowser에서 `ApplicationCommands` CommandBinding으로 등록:
 
 - **증상**: 클래스명 `KeybindingManager` (실제: `KeyBindingService`), 저장 형식 `JSON` (실제: `XML`)
 - **수정**: 올바른 이름과 형식으로 문서 갱신
+
+### BUG-6: MonacoViewer `Ctrl+F` 전역 검색에 가로채임 — 수정 완료
+
+- **증상**: `MonacoViewer`가 `IViewerShortcutHandler`를 구현하지 않아 `TryHandleActiveViewerShortcut`가 항상 실패, 전역 `ShowSearch` 핸들러가 `Ctrl+F`를 처리해 Monaco의 파일 내 검색(`actions.find`)이 열리지 않음
+- **수정**: `MonacoViewer`가 `IViewerShortcutHandler`를 구현하도록 추가. `HandleShortcut`에서 `ShowSearch`를 가로채 WebView에 포커스를 준 뒤 `app.openFind()`를 호출(Monaco `actions.find` 액션 실행). `MarkdownViewer`와 동일한 패턴 (`docs/items/monaco-viewer-ctrl-f-search-conflict.md` 참고)
 
 ---
 

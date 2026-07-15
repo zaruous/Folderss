@@ -7,6 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
+│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (내용/파일명 대상 선택, 확장자 필터, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
@@ -16,10 +17,13 @@ Folderss/
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
-│   └── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델
+│   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델
+│   ├── SearchResult.cs             — 파일 검색 결과 모델
+│   └── SearchTarget.cs             — 검색 대상 enum (Content/FileName)
 ├── Services/
 │   ├── FileOperationService.cs     — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터
+│   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 확장자 필터, 대/소문자, 정규식)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
 │   ├── FavoritesService.cs         — 즐겨찾기 목록 저장·복원
@@ -62,11 +66,33 @@ Folderss/
 - `%LOCALAPPDATA%\Folderss\theme.txt`에 마지막 테마 저장
 - **테마 추가 시 연관 파일**: ThemeManager.cs, MainWindow.xaml+cs, SettingsWindow.xaml+cs
 
+### MarkdownViewer 이미지 리소스 해석
+- 미리보기 HTML은 `https://folderss-viewer/markdown-app.html`(가상 호스트 → `Viewers/Resources`)에서 로드되므로,
+  마크다운 본문의 상대 경로 이미지(`![](img/foo.png)`, `![](../assets/foo.png)` 등)를 그대로 두면
+  현재 파일 기준이 아니라 `Resources` 폴더 기준으로 요청되어 항상 깨진다.
+- `marked.use({ renderer: { image ... } })`로 스킴이 없는 이미지 href를 `https://folderss-doc-asset/resolve?p=<encodeURIComponent(href)>`로 치환한다 (`http(s):`, `data:`, `file:`, `ftp:`, `mailto:`만 원본 유지).
+- `MarkdownViewer.OnWebResourceRequested`가 `folderss-doc-asset` 호스트 요청을 가로채, 쿼리의 원본 경로 문자열을
+  `ResolveLocalLinkPath`(파일 내 링크 클릭과 동일한 해석 로직)에 그대로 넘겨 현재 열려 있는 `.md` 파일 기준
+  절대 경로로 해석한 뒤 `File.ReadAllBytes`로 읽어 응답한다.
+- 쿼리 문자열에 원본 경로를 담아 브라우저의 URL 정규화(가상 호스트 폴더 매핑은 상위 폴더로 못 올라감)를 우회하므로
+  `../`로 상위 폴더의 이미지를 참조해도 정상 동작한다.
+- CSP `img-src`에 `folderss-doc-asset`과 `data:`, `http(s):`을 추가해 로컬 리졸브 이미지·데이터 URI·원격 이미지를 모두 허용한다.
+- 알려진 제약: "HTML로 내보내기"(`exportHtml`)로 저장한 독립 HTML 파일은 앱 밖에서 열리므로 `folderss-doc-asset` 스킴이 동작하지 않아
+  상대 경로 이미지가 다시 깨진다 (미리보기·인쇄/PDF 내보내기는 같은 WebView2 세션 안에서 렌더링되므로 영향 없음).
+
 ### KeyBindingService
 - 기본 단축키 매핑을 코드에서 정의
 - 사용자 커스터마이징을 XML로 `%LOCALAPPDATA%\Folderss\keybindings.xml`에 저장
 - `kb.Matches(e, "CommandId")` 패턴으로 MainWindow PreviewKeyDown에서 사용
 - **단축키 추가 시 연관 파일**: KeyBindingService.cs, MainWindow.xaml.cs, SettingsWindow
+
+### SearchPanel / SearchService
+- `Ctrl+F`(`ShowSearch`)로 여는 별도 팝업 창(`파일 검색`)에서 실행, `MainWindow.ShowSearchPanel()` 참고
+- `TargetCombo`로 검색 대상을 `내용 검색`/`파일명 검색` 중 선택 (`SearchTarget.Content` / `SearchTarget.FileName`)
+- `ExtBox`에 `cs, txt`처럼 콤마/세미콜론/공백으로 구분해 확장자 필터 입력, 비우면 전체 확장자 대상
+- `SearchService.SearchAsync`가 확장자 필터를 정규화(`.` 접두사 보정)한 뒤 대상에 따라 파일 내용 라인 단위 스캔(`ScanFile`) 또는 파일명만 비교(`ScanFileName`)로 분기
+- 결과는 `SearchResult.LineNumber == 0`이면 파일명 검색 결과로 취급해 목록에서 줄 번호 칸을 비움
+- `CaseToggle`(대/소문자), `RegexToggle`(정규식), `ScopeCombo`(현재 폴더만/하위 폴더 포함)는 검색 대상과 무관하게 공통 적용
 
 ### 개발 아이템 문서
 - 현재 개발 아이템은 GitHub Project가 아니라 `docs/items/<항목>.md`에서 관리한다.

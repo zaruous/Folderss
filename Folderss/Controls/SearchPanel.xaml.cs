@@ -90,6 +90,12 @@ namespace Folderss.Controls
             CancelSearch();
         }
 
+        private void ExtBox_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            if (!IsInitialized) return;
+            CancelSearch();
+        }
+
         private void CancelButton_Click(object sender, RoutedEventArgs e)
         {
             CancelSearch();
@@ -166,6 +172,11 @@ namespace Folderss.Controls
             var useRegex = RegexToggle.IsChecked == true;
             var selectedItem = ScopeCombo.SelectedItem as ComboBoxItem;
             var recursive = selectedItem != null && (string)selectedItem.Tag == "recursive";
+            var targetItem = TargetCombo.SelectedItem as ComboBoxItem;
+            var target = targetItem != null && (string)targetItem.Tag == "filename"
+                ? SearchTarget.FileName
+                : SearchTarget.Content;
+            var extensionFilter = ExtBox.Text;
 
             if (useRegex)
             {
@@ -195,7 +206,7 @@ namespace Folderss.Controls
 
             try
             {
-                await SearchService.SearchAsync(_rootPath, query, recursive, caseSensitive, useRegex, progress, token);
+                await SearchService.SearchAsync(_rootPath, query, recursive, caseSensitive, useRegex, target, extensionFilter, progress, token);
                 StatusText.Text = _allResults.Count == 0
                     ? "검색 결과가 없습니다."
                     : FormatStatus();

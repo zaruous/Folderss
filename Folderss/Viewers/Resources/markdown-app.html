@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'self' https://folderss-viewer; script-src 'self' https://folderss-viewer 'unsafe-inline'; style-src 'self' https://folderss-viewer 'unsafe-inline'; font-src 'self' https://folderss-viewer data:;">
+  content="default-src 'self' https://folderss-viewer; script-src 'self' https://folderss-viewer 'unsafe-inline'; style-src 'self' https://folderss-viewer 'unsafe-inline'; font-src 'self' https://folderss-viewer data:; img-src 'self' https://folderss-viewer https://folderss-doc-asset data: http: https:;">
 <title>Markdown Viewer</title>
 <link rel="stylesheet" href="katex.min.css">
 <style>
@@ -471,6 +471,34 @@ var _findMatches = [];
 // ── Init ──────────────────────────────────
 mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
 marked.use({ gfm: true, breaks: false, allowDangerousHtml: false });
+
+// 상대 경로(또는 로컬 절대 경로) 이미지 링크는 브라우저 오리진(folderss-viewer, Resources 폴더)이 아니라
+// 현재 열려 있는 마크다운 파일 기준으로 찾아야 하므로, 스킴이 없는 경로는 전용 가상 호스트로 우회시켜
+// C# 쪽(MarkdownViewer.ResolveLocalLinkPath)에서 실제 파일을 읽어오게 한다.
+marked.use({
+  renderer: {
+    image: function(href, title, text) {
+      var src = resolveImageSrc(href);
+      var html = '<img src="' + escapeHtmlAttr(src) + '" alt="' + escapeHtmlAttr(text || '') + '"';
+      if (title) html += ' title="' + escapeHtmlAttr(title) + '"';
+      html += '>';
+      return html;
+    }
+  }
+});
+
+function resolveImageSrc(href) {
+  if (!href) return href;
+  // data:, http(s):, file: 등 실제 웹/스킴 링크는 그대로 둔다.
+  // (Windows 절대 경로 "C:\..."도 콜론을 포함하지만 스킴이 아니므로 별도로 걸러낸다.)
+  if (/^(https?|data|file|ftp|mailto):/i.test(href))
+    return href;
+  return 'https://folderss-doc-asset/resolve?p=' + encodeURIComponent(href);
+}
+
+function escapeHtmlAttr(s) {
+  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
 
 // ── Toolbar mode buttons ──────────────────
 function resetEditorPaneSizeIfNotSplit(mode) {

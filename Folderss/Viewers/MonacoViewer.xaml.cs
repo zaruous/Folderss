@@ -6,11 +6,12 @@ using System.IO;
 using System.Text;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Input;
 using System.Windows.Threading;
 
 namespace Folderss.Viewers
 {
-    public partial class MonacoViewer : UserControl, IFileViewer, IDisposable
+    public partial class MonacoViewer : UserControl, IFileViewer, IViewerShortcutHandler, IDisposable
     {
         private const long LargeFileBytes = 20L * 1024 * 1024;
         private const long HugeFileBytes = 50L * 1024 * 1024;
@@ -238,6 +239,19 @@ namespace Folderss.Viewers
         }
 
         public bool IsModified => _modified;
+
+        public bool HandleShortcut(KeyEventArgs e, KeyBindingService kb)
+        {
+            if (!kb.Matches(e, "ShowSearch"))
+                return false;
+
+            if (!_webViewReady || WebView.CoreWebView2 == null)
+                return false;
+
+            WebView.Focus();
+            var _ = WebView.CoreWebView2.ExecuteScriptAsync("app.openFind()");
+            return true;
+        }
 
         private void StartFileWatcher(string filePath)
         {

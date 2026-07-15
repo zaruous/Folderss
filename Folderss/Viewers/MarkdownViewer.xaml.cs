@@ -14,6 +14,7 @@ namespace Folderss.Viewers
     public partial class MarkdownViewer : UserControl, IFileViewer, IFileOpenRequester, IViewerActivationAware, IViewerShortcutHandler, IDisposable
     {
         private const long LargeMarkdownBytes = 5L * 1024 * 1024;
+        private const string DocAssetHost = "folderss-doc-asset";
 
         private static readonly string ResourcesPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
@@ -105,8 +106,77 @@ namespace Folderss.Viewers
         private void OnWebResourceRequested(object sender, CoreWebView2WebResourceRequestedEventArgs e)
         {
             var uri = new Uri(e.Request.Uri);
+
+            if (string.Equals(uri.Host, DocAssetHost, StringComparison.OrdinalIgnoreCase))
+            {
+                e.Response = BuildDocAssetResponse(uri);
+                return;
+            }
+
             if (!string.Equals(uri.Host, "folderss-viewer", StringComparison.OrdinalIgnoreCase))
                 e.Response = WebView.CoreWebView2.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+        }
+
+        /// <summary>
+        /// 마크다운 본문의 상대(또는 로컬 절대) 이미지 경로 요청을 처리한다.
+        /// 요청 쿼리의 원본 경로 문자열(p)을 그대로 <see cref="ResolveLocalLinkPath"/>에 넘겨
+        /// 현재 열려 있는 파일 기준으로 해석하므로, 브라우저의 URL 정규화로 "../" 상위 이동이
+        /// 뭉개지는 것을 피할 수 있다 (가상 호스트 폴더 매핑은 상위 폴더로 못 올라감).
+        /// </summary>
+        private CoreWebView2WebResourceResponse BuildDocAssetResponse(Uri requestUri)
+        {
+            var env = WebView.CoreWebView2.Environment;
+            var encodedPath = ExtractQueryValue(requestUri.Query, "p");
+            if (encodedPath == null)
+                return env.CreateWebResourceResponse(null, 400, "Bad Request", "");
+
+            try
+            {
+                var link = Uri.UnescapeDataString(encodedPath);
+                var path = ResolveLocalLinkPath(link);
+                if (path == null || !File.Exists(path))
+                    return env.CreateWebResourceResponse(null, 404, "Not Found", "");
+
+                var bytes = File.ReadAllBytes(path);
+                var stream = new MemoryStream(bytes);
+                return env.CreateWebResourceResponse(stream, 200, "OK",
+                    "Content-Type: " + GetImageContentType(path) + "\r\nCache-Control: no-cache");
+            }
+            catch
+            {
+                return env.CreateWebResourceResponse(null, 404, "Not Found", "");
+            }
+        }
+
+        private static string ExtractQueryValue(string query, string key)
+        {
+            if (string.IsNullOrEmpty(query))
+                return null;
+
+            foreach (var pair in query.TrimStart('?').Split('&'))
+            {
+                var idx = pair.IndexOf('=');
+                if (idx < 0) continue;
+                if (string.Equals(pair.Substring(0, idx), key, StringComparison.Ordinal))
+                    return pair.Substring(idx + 1);
+            }
+            return null;
+        }
+
+        private static string GetImageContentType(string path)
+        {
+            switch (Path.GetExtension(path).ToLowerInvariant())
+            {
+                case ".png":  return "image/png";
+                case ".jpg":
+                case ".jpeg": return "image/jpeg";
+                case ".gif":  return "image/gif";
+                case ".bmp":  return "image/bmp";
+                case ".webp": return "image/webp";
+                case ".svg":  return "image/svg+xml";
+                case ".ico":  return "image/x-icon";
+                default:      return "application/octet-stream";
+            }
         }
 
         private void OnNavigationStarting(object sender, CoreWebView2NavigationStartingEventArgs e)
