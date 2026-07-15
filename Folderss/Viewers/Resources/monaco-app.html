@@ -153,6 +153,13 @@ var app = {
   markSaved: function() {
     modified = false;
     window.chrome.webview.postMessage({ type: 'modified', value: false });
+  },
+
+  openFind: function() {
+    if (!editor) return;
+    editor.focus();
+    var action = editor.getAction('actions.find');
+    if (action) action.run();
   }
 };
 </script>
