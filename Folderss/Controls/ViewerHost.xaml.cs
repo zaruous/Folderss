@@ -16,6 +16,8 @@ namespace Folderss.Controls
         private string _currentFilePath;
         private bool _isActive = true;
 
+        public string CurrentFilePath => _currentFilePath;
+
         public event EventHandler<string> TitleChanged;
         public event EventHandler<bool> ModifiedChanged;
         public event EventHandler<string> FileOpenRequested;
