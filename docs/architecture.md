@@ -66,6 +66,20 @@ Folderss/
 - `%LOCALAPPDATA%\Folderss\theme.txt`에 마지막 테마 저장
 - **테마 추가 시 연관 파일**: ThemeManager.cs, MainWindow.xaml+cs, SettingsWindow.xaml+cs
 
+### MarkdownViewer 이미지 리소스 해석
+- 미리보기 HTML은 `https://folderss-viewer/markdown-app.html`(가상 호스트 → `Viewers/Resources`)에서 로드되므로,
+  마크다운 본문의 상대 경로 이미지(`![](img/foo.png)`, `![](../assets/foo.png)` 등)를 그대로 두면
+  현재 파일 기준이 아니라 `Resources` 폴더 기준으로 요청되어 항상 깨진다.
+- `marked.use({ renderer: { image ... } })`로 스킴이 없는 이미지 href를 `https://folderss-doc-asset/resolve?p=<encodeURIComponent(href)>`로 치환한다 (`http(s):`, `data:`, `file:`, `ftp:`, `mailto:`만 원본 유지).
+- `MarkdownViewer.OnWebResourceRequested`가 `folderss-doc-asset` 호스트 요청을 가로채, 쿼리의 원본 경로 문자열을
+  `ResolveLocalLinkPath`(파일 내 링크 클릭과 동일한 해석 로직)에 그대로 넘겨 현재 열려 있는 `.md` 파일 기준
+  절대 경로로 해석한 뒤 `File.ReadAllBytes`로 읽어 응답한다.
+- 쿼리 문자열에 원본 경로를 담아 브라우저의 URL 정규화(가상 호스트 폴더 매핑은 상위 폴더로 못 올라감)를 우회하므로
+  `../`로 상위 폴더의 이미지를 참조해도 정상 동작한다.
+- CSP `img-src`에 `folderss-doc-asset`과 `data:`, `http(s):`을 추가해 로컬 리졸브 이미지·데이터 URI·원격 이미지를 모두 허용한다.
+- 알려진 제약: "HTML로 내보내기"(`exportHtml`)로 저장한 독립 HTML 파일은 앱 밖에서 열리므로 `folderss-doc-asset` 스킴이 동작하지 않아
+  상대 경로 이미지가 다시 깨진다 (미리보기·인쇄/PDF 내보내기는 같은 WebView2 세션 안에서 렌더링되므로 영향 없음).
+
 ### KeyBindingService
 - 기본 단축키 매핑을 코드에서 정의
 - 사용자 커스터마이징을 XML로 `%LOCALAPPDATA%\Folderss\keybindings.xml`에 저장
