@@ -4,6 +4,23 @@
 
 ---
 
+## v1.6.3 (2026-07-15)
+
+### 문서 탭 컨텍스트 메뉴에 "탐색기로 열기" 추가
+
+- `MainWindow.xaml.cs` — 문서 탭(`DockManager_PreviewMouseRightButtonDown`) 우클릭 메뉴에 "탐색기로 열기" 항목 추가. `GetDocumentPathForExplorer()`가 탭 콘텐츠(`FolderBrowser`/`ViewerHost`)에서 경로를 얻어, `OpenPathInExplorer()`가 `explorer.exe /select,"<경로>"`로 상위 폴더에서 해당 폴더/파일이 선택된 상태로 탐색기를 연다. 폴더 패널 탭은 `CurrentPath`, Markdown 등 파일 뷰어 탭은 `ViewerHost.CurrentFilePath`를 사용하며, `+ 새 패널` 탭처럼 경로가 없는 탭에는 메뉴 항목이 표시되지 않음.
+- `Controls/ViewerHost.xaml.cs` — 현재 열린 파일 경로를 노출하는 `CurrentFilePath` 프로퍼티 추가.
+
+---
+
+## v1.6.2 (2026-07-15)
+
+### Markdown 뷰어 외부 변경 반영 시 스크롤 위치 유지
+
+- `markdown-app.html` — `app.reloadContent()`가 내용을 교체하기 전에 미리보기(`#preview-pane`)와 편집기(`editor-textarea`) 스크롤 위치를 저장해두었다가, 렌더링 이후 복원하도록 수정. 기존에는 `preview.innerHTML` 교체로 미리보기 컨테이너가 잠깐 비워지면서 스크롤이 항상 맨 위로 초기화되는 문제가 있었음(파일 외부 변경 확인창에서 "예"를 눌러 반영할 때마다 발생).
+
+---
+
 ## v1.6.1 (2026-06-27)
 
 ### 사용자 확인 완료

@@ -2072,9 +2072,56 @@ namespace Folderss
             closeRight.Click += (s, _) => CloseTabsToRight(document);
             menu.Items.Add(closeRight);
 
+            var tabPath = GetDocumentPathForExplorer(document);
+            if (tabPath != null)
+            {
+                menu.Items.Add(new System.Windows.Controls.Separator());
+
+                var openInExplorer = new System.Windows.Controls.MenuItem { Header = "탐색기로 열기" };
+                openInExplorer.Click += (s, _) => OpenPathInExplorer(tabPath);
+                menu.Items.Add(openInExplorer);
+            }
+
             menu.PlacementTarget = tab;
             menu.Placement = System.Windows.Controls.Primitives.PlacementMode.MousePoint;
             menu.IsOpen = true;
+        }
+
+        private static string GetDocumentPathForExplorer(LayoutDocument document)
+        {
+            var browser = document.Content as FolderBrowser;
+            if (browser != null)
+                return string.IsNullOrWhiteSpace(browser.CurrentPath) ? null : browser.CurrentPath;
+
+            var viewerHost = document.Content as ViewerHost;
+            if (viewerHost != null)
+                return string.IsNullOrWhiteSpace(viewerHost.CurrentFilePath) ? null : viewerHost.CurrentFilePath;
+
+            return null;
+        }
+
+        private static void OpenPathInExplorer(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+
+            if (!File.Exists(path) && !Directory.Exists(path))
+            {
+                MessageBox.Show("경로를 찾을 수 없습니다.", "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", "/select,\"" + path + "\"")
+                {
+                    UseShellExecute = true
+                });
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(exception.Message, "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
 
         private List<LayoutDocument> GetSiblingDocuments(LayoutDocument target)

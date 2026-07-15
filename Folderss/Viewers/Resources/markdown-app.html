@@ -1109,6 +1109,10 @@ var app = {
   },
 
   reloadContent: function(content, largeFileMode) {
+    var previewPane = document.getElementById('preview-pane');
+    var previewScrollTop = previewPane.scrollTop;
+    var editorScrollTop = editor.scrollTop;
+
     _content = content;
     _largeFileMode = largeFileMode === true;
     _modified = false;
@@ -1116,6 +1120,10 @@ var app = {
     updateLineNumbers();
     renderPreview();
     window.chrome.webview.postMessage({ type: 'modified', value: false });
+
+    previewPane.scrollTop = previewScrollTop;
+    editor.scrollTop = editorScrollTop;
+    editorGutter.scrollTop = editorScrollTop;
   }
 };
 </script>
