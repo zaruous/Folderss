@@ -25,17 +25,15 @@ namespace Folderss.Controls
             InitializeComponent();
             _configuration = FavoritesService.Load();
             FavoritesTree.ItemsSource = _configuration.Groups;
-            PinnedList.ItemsSource = _configuration.Pinned;
-            _configuration.Pinned.CollectionChanged += (s, e) => UpdatePinnedVisibility();
-            UpdatePinnedVisibility();
         }
 
-        private void UpdatePinnedVisibility()
+        /// <summary>즐겨찾기 패널과 별도 레이어(<see cref="PinnedShortcutsPanel"/>)에 표시되는 고정 바로가기 목록.</summary>
+        public System.Collections.ObjectModel.ObservableCollection<FavoriteLocation> PinnedItems
         {
-            PinnedList.Visibility = _configuration.Pinned.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+            get { return _configuration.Pinned; }
         }
 
-        /// <summary>디스크 사용량 보기 바로가기를 즐겨찾기 맨 위(고정 영역)에 추가한다. 이미 있으면 아무 것도 하지 않는다.</summary>
+        /// <summary>디스크 사용량 보기 바로가기를 고정 바로가기 목록 맨 위에 추가한다. 이미 있으면 아무 것도 하지 않는다.</summary>
         public void PinDiskUsageShortcut()
         {
             const string kind = "diskusage";
@@ -49,17 +47,6 @@ namespace Folderss.Controls
                 SpecialKind = kind
             });
             Save();
-        }
-
-        private void PinnedItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
-        {
-            var favorite = (sender as FrameworkElement)?.DataContext as FavoriteLocation;
-            if (favorite == null || !favorite.IsSpecial)
-                return;
-
-            var handler = NavigateRequested;
-            if (handler != null)
-                handler(this, new FavoriteNavigateEventArgs(null, false, favorite.SpecialKind));
         }
 
         public bool CopySelectedFavoritePath()

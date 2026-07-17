@@ -60,6 +60,8 @@ namespace Folderss
         {
             InitializeComponent();
 
+            PinnedShortcutsPanel.SetItemsSource(FavoritesPanel.PinnedItems);
+
             // ViewerHost가 문서 탭 전환 방지를 위해 Handled 처리한 WebView2 발생 Home/End를
             // 라우팅 마지막 단계(Window)에서 되돌려, WebView2 래퍼가 브라우저 기본 동작
             // (편집 캐럿 이동)을 수행하도록 허용한다. ViewerHost.SuppressDocumentTabNavigation 참고.

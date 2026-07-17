@@ -10,6 +10,7 @@ Folderss/
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (내용/파일명 대상 선택, 확장자 필터, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
+│   ├── PinnedShortcutsPanel.xaml/.cs — 즐겨찾기 패널 위쪽의 별도 레이어, 고정 바로가기(디스크 사용량 등) 표시
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
 │   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
@@ -99,10 +100,11 @@ Folderss/
 - 결과는 `SearchResult.LineNumber == 0`이면 파일명 검색 결과로 취급해 목록에서 줄 번호 칸을 비움
 - `CaseToggle`(대/소문자), `RegexToggle`(정규식), `ScopeCombo`(현재 폴더만/하위 폴더 포함)는 검색 대상과 무관하게 공통 적용
 
-### DiskUsagePanel / DiskUsageService / 즐겨찾기 고정 바로가기
-- `보기 > 디스크 사용량 보기` 클릭 시 `MainWindow.ShowDiskUsage_Click`이 `FavoritesPanel.PinDiskUsageShortcut()`으로 즐겨찾기 그룹 트리 위쪽에 `디스크 사용량` 바로가기를 (최초 1회) 고정 추가하고, `ShowDiskUsagePanel()`로 문서 탭을 연다.
+### DiskUsagePanel / DiskUsageService / PinnedShortcutsPanel
+- `보기 > 디스크 사용량 보기` 클릭 시 `MainWindow.ShowDiskUsage_Click`이 `FavoritesPanel.PinDiskUsageShortcut()`으로 고정 바로가기 목록에 `디스크 사용량` 항목을 (최초 1회) 추가하고, `ShowDiskUsagePanel()`로 문서 탭을 연다.
 - 고정 바로가기는 실제 경로가 없으므로 `FavoriteLocation.IsSpecial` + `SpecialKind`("diskusage")로 구분하며, `FavoritesConfiguration.Pinned` 컬렉션(그룹과 별개)에 저장되어 `favorites.xml`에 함께 직렬화된다.
-- `FavoritesPanel`은 `Pinned`를 그룹 트리 위의 별도 `ItemsControl`로 렌더링하고(비어 있으면 숨김), 클릭 시 `NavigateRequested`를 `SpecialKind`와 함께 발생시킨다. `MainWindow.FavoritesPanel_NavigateRequested`는 `SpecialKind == "diskusage"`면 디스크 사용량 탭을 연다.
+- `PinnedShortcutsPanel`은 `FavoritesPanel`과 완전히 별도인 `UserControl`로, `MainWindow.xaml`의 `FavoritesDock` 안에서 `FavoritesPanel`(그 자체의 "즐겨찾기" 헤더 포함) 위쪽 별도 레이어(Grid Row 0)에 배치된다. `MainWindow` 생성자에서 `PinnedShortcutsPanel.SetItemsSource(FavoritesPanel.PinnedItems)`로 같은 `Pinned` 컬렉션 인스턴스를 공유해 실시간으로 동기화하며, 비어 있으면 자동으로 숨겨진다.
+- 두 컨트롤 모두 같은 `FavoritesPanel_NavigateRequested` 핸들러에 연결되어 있고, `SpecialKind == "diskusage"`면 디스크 사용량 탭을 연다.
 - 문서 탭은 `OpenViewerTab`과 동일한 패턴(첫 `LayoutDocumentPane`, `+ 새 패널` 앞에 삽입 후 `MoveAddPanelTabToEnd()`)을 따르며 `ContentId == "disk-usage"`로 단일 인스턴스만 유지한다.
 - `DiskUsageService.GetDriveUsage()`는 `DriveInfo.GetDrives()`에서 `IsReady`인 드라이브만 조회하고, `DiskUsagePanel`은 각 드라이브를 GB 단위 총량/사용량/여유 공간과 사용 비율 기반 가로바(두 개의 Star `ColumnDefinition`, `FractionToStarConverter`)로 표시한다.
 
