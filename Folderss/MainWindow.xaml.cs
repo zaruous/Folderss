@@ -60,8 +60,6 @@ namespace Folderss
         {
             InitializeComponent();
 
-            PinnedShortcutsPanel.SetItemsSource(FavoritesPanel.PinnedItems);
-
             // ViewerHost가 문서 탭 전환 방지를 위해 Handled 처리한 WebView2 발생 Home/End를
             // 라우팅 마지막 단계(Window)에서 되돌려, WebView2 래퍼가 브라우저 기본 동작
             // (편집 캐럿 이동)을 수행하도록 허용한다. ViewerHost.SuppressDocumentTabNavigation 참고.
@@ -133,7 +131,10 @@ namespace Folderss
                 }
             }
             else
+            {
                 AttachRestoredViewerDocuments();
+                EnsureDiskUsageMiniDock();
+            }
 
             // 저장된 레이아웃에 console 탭이 포함된 경우에만 콘솔 패널 인스턴스를 주입한다.
             var consoleDoc = DockManager.Layout.Descendents()
@@ -455,6 +456,8 @@ namespace Folderss
         {
             if (contentId == "favorites")
                 return FavoritesPanel;
+            if (contentId == "disk-usage-mini")
+                return DiskUsageMiniPanel;
             if (contentId == "left-folder")
                 return LeftPane;
             if (contentId == "right-folder")
@@ -1030,9 +1033,18 @@ namespace Folderss
             dock?.Show();
         }
 
+        private void ShowDiskUsageMini_Click(object sender, RoutedEventArgs e)
+        {
+            EnsureDiskUsageMiniDock();
+            var dock = FindDock("disk-usage-mini");
+            if (dock == null)
+                return;
+            dock.Show();
+            DiskUsageMiniPanel.Refresh();
+        }
+
         private void ShowDiskUsage_Click(object sender, RoutedEventArgs e)
         {
-            FavoritesPanel.PinDiskUsageShortcut();
             ShowDiskUsagePanel();
         }
 
@@ -2284,10 +2296,17 @@ namespace Folderss
             {
                 Orientation = System.Windows.Controls.Orientation.Horizontal
             };
-            var favoritesPane = new LayoutAnchorablePane
+            var favoritesColumn = new LayoutPanel
             {
+                Orientation = System.Windows.Controls.Orientation.Vertical,
                 DockWidth = new GridLength(230)
             };
+            var diskUsageMiniPane = new LayoutAnchorablePane
+            {
+                DockHeight = new GridLength(170)
+            };
+            diskUsageMiniPane.Children.Add(CreateDiskUsageMiniAnchorable());
+            var favoritesPane = new LayoutAnchorablePane();
             favoritesPane.Children.Add(new LayoutAnchorable
             {
                 Title = "즐겨찾기",
@@ -2297,6 +2316,8 @@ namespace Folderss
                 CanHide = true,
                 CanAutoHide = true
             });
+            favoritesColumn.Children.Add(diskUsageMiniPane);
+            favoritesColumn.Children.Add(favoritesPane);
             var leftPane = new LayoutDocumentPane();
             leftPane.Children.Add(new LayoutDocument
             {
@@ -2348,10 +2369,62 @@ namespace Folderss
             documents.Children.Add(leftColumn);
             documents.Children.Add(rightPane);
 
-            rootPanel.Children.Add(favoritesPane);
+            rootPanel.Children.Add(favoritesColumn);
             rootPanel.Children.Add(documents);
             root.RootPanel = rootPanel;
             DockManager.Layout = root;
+        }
+
+        private LayoutAnchorable CreateDiskUsageMiniAnchorable()
+        {
+            return new LayoutAnchorable
+            {
+                Title = "디스크 사용량",
+                ContentId = "disk-usage-mini",
+                Content = DiskUsageMiniPanel,
+                CanClose = false,
+                CanHide = true,
+                CanAutoHide = true
+            };
+        }
+
+        // 저장된 레이아웃(구버전)에 disk-usage-mini 앵커러블이 없으면 즐겨찾기 위에 삽입한다.
+        private void EnsureDiskUsageMiniDock()
+        {
+            if (FindDock("disk-usage-mini") != null)
+                return;
+
+            var pane = new LayoutAnchorablePane
+            {
+                DockHeight = new GridLength(170)
+            };
+            pane.Children.Add(CreateDiskUsageMiniAnchorable());
+
+            var favoritesPane = FindDock("favorites")?.Parent as LayoutAnchorablePane;
+            var parentPanel = favoritesPane?.Parent as LayoutPanel;
+            if (favoritesPane == null || parentPanel == null)
+            {
+                var rootPanel = DockManager.Layout == null ? null : DockManager.Layout.RootPanel;
+                rootPanel?.InsertChildAt(0, pane);
+                return;
+            }
+
+            var index = parentPanel.IndexOfChild(favoritesPane);
+            if (parentPanel.Orientation == System.Windows.Controls.Orientation.Vertical)
+            {
+                parentPanel.InsertChildAt(index, pane);
+                return;
+            }
+
+            // 가로 패널 안에 즐겨찾기만 있는 구버전 레이아웃: 세로 컬럼으로 감싼다.
+            var column = new LayoutPanel
+            {
+                Orientation = System.Windows.Controls.Orientation.Vertical,
+                DockWidth = favoritesPane.DockWidth
+            };
+            parentPanel.InsertChildAt(index, column);
+            column.Children.Add(pane);
+            column.Children.Add(favoritesPane);
         }
 
         private LayoutAnchorable CreateFavoritesDock()

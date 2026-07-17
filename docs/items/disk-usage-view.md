@@ -78,3 +78,6 @@
 ## 변경 이력
 
 - 2026-07-17: 작업 항목 생성 및 구현
+- 2026-07-18: 고정 바로가기 레이어(`PinnedShortcutsPanel`) 제거 — 미니 패널과 중복되어 즐겨찾기 도크에서 "디스크 사용량" 바로가기 레이어 삭제. 데이터 모델(`Pinned`)은 호환을 위해 유지.
+- 2026-07-18: 즐겨찾기 위 컴팩트 미니 패널(`DiskUsageMiniPanel`, ContentId `disk-usage-mini`) 추가 — 즐겨찾기 열을 세로 분할해 상단에 독립 도킹 패널로 배치, 스플리터로 높이 조절 가능. 구버전 저장 레이아웃은 `EnsureDiskUsageMiniDock()`이 복원 후 자동 삽입.
+- 2026-07-17: 시작 크래시 수정 — `FavoritesPanel`이 `PinnedShortcutsPanel`과 함께 XAML `Grid`(`FavoritesDockContent`)로 감싸진 뒤에도 `ResolveDockContent`/`BuildDefaultDockLayout`/`CreateFavoritesDock`가 `FavoritesPanel`을 도킹 콘텐츠로 직접 할당해 "지정한 요소가 이미 다른 요소의 논리 자식입니다" `InvalidOperationException`으로 크래시. 세 곳 모두 `FavoritesDockContent`(Grid)를 사용하도록 수정.

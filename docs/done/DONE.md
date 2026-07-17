@@ -4,6 +4,31 @@
 
 ---
 
+## v1.6.5 (2026-07-18)
+
+### 즐겨찾기 도크의 디스크 사용량 고정 바로가기 레이어 제거
+
+- `Controls/PinnedShortcutsPanel.xaml/.cs` 삭제 — `DiskUsageMiniPanel` 도입으로 즐겨찾기 도크 안 "디스크 사용량" 고정 바로가기 레이어가 중복되어 제거. 도크 콘텐츠를 `FavoritesPanel` 단독으로 되돌리고(`ResolveDockContent`/`BuildDefaultDockLayout`/`CreateFavoritesDock` 동기화), `FavoritesPanel.PinnedItems`/`PinDiskUsageShortcut`과 `ShowDiskUsage_Click`의 고정 호출도 삭제.
+- `FavoritesConfiguration.Pinned`, `FavoriteLocation.IsSpecial`/`SpecialKind`는 기존 `favorites.xml` 호환을 위해 모델에만 유지(UI 미사용).
+
+### 즐겨찾기 위 디스크 사용량 미니 패널 추가
+
+- `Controls/DiskUsageMiniPanel.xaml/.cs` (신규) — 드라이브별 얇은 사용량 바 + 남은 용량(GB) + 상세 툴팁의 컴팩트 뷰. `IsVisibleChanged`로 표시될 때 자동 새로 고침, 컨텍스트 메뉴로 수동 새로 고침.
+- `MainWindow.xaml` — 즐겨찾기 열(DockWidth 230)을 세로 `LayoutPanel`로 재구성. 위쪽 `LayoutAnchorablePane`(DockHeight 170)에 `disk-usage-mini` 앵커러블(CanClose=False, CanHide/CanAutoHide=True) 배치. `보기` 메뉴에 `디스크 사용량 미니 패널` 항목 추가.
+- `MainWindow.xaml.cs` — `ResolveDockContent`에 `disk-usage-mini` 등록, `BuildDefaultDockLayout()` 즐겨찾기 열 세로 구성, `EnsureDiskUsageMiniDock()`으로 구버전 저장 레이아웃 복원 후 자동 삽입(가로 패널이면 세로 컬럼으로 감싸기), `ShowDiskUsageMini_Click`으로 숨김 후 재표시.
+- 스크린샷으로 레이아웃 확인 완료(기존 dock-layout.xml에서 자동 마이그레이션 동작 검증).
+
+---
+
+## v1.6.4 (2026-07-17)
+
+### 디스크 사용량 레이어 도입 후 시작 크래시 수정
+
+- `MainWindow.xaml`, `MainWindow.xaml.cs` — 고정 바로가기 분리 커밋(0a93c22)에서 `FavoritesPanel`이 `PinnedShortcutsPanel`과 함께 익명 `Grid`로 감싸져 즐겨찾기 앵커러블의 콘텐츠가 Grid로 바뀌었는데, `ResolveDockContent("favorites")`·`BuildDefaultDockLayout()`·`CreateFavoritesDock()`는 여전히 `FavoritesPanel`을 도킹 콘텐츠로 할당해 `DockManager.Layout` 설정 시 `InvalidOperationException`("지정한 요소가 이미 다른 요소의 논리 자식입니다")으로 시작 즉시 크래시. 저장 레이아웃 복원 실패(조용히 catch) 후 폴백 `BuildDefaultDockLayout()`에서 unhandled로 종료되는 구조였음. Grid에 `x:Name="FavoritesDockContent"`를 부여하고 세 곳 모두 이를 도킹 콘텐츠로 사용하도록 수정.
+- 교훈: 도킹 앵커러블의 XAML 콘텐츠 구조를 바꾸면 `ResolveDockContent`와 레이아웃 재구성 코드(`BuildDefaultDockLayout`, `CreateFavoritesDock`)도 같은 요소를 반환하도록 함께 갱신해야 함.
+
+---
+
 ## v1.6.3 (2026-07-15)
 
 ### 문서 탭 컨텍스트 메뉴에 "탐색기로 열기" 추가

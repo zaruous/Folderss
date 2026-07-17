@@ -90,6 +90,10 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
   `Style.Resources`가 아닌 완전한 `ControlTemplate`으로만 재정의 가능.
 - `+ 새 패널`(`add-folder-panel`) 탭은 폴더 컴포넌트 추가용 고정 탭이므로 항상 같은 문서 탭 영역의 오른쪽 끝에 있어야 함.
   파일/Markdown 링크 클릭으로 뷰어 탭을 추가할 때도 새 탭은 `+ 새 패널` 앞에 삽입하고, 추가 후 `+ 새 패널`을 다시 끝으로 정렬해야 함.
+- `MainWindow.xaml`의 앵커러블/문서 콘텐츠 구조를 바꾸면(예: 패널을 컨테이너로 감싸기)
+  `ResolveDockContent()`, `BuildDefaultDockLayout()`, `CreateFavoritesDock()` 등 코드에서 도킹 콘텐츠를
+  할당하는 곳도 반드시 같은 최상위 요소를 사용하도록 갱신해야 함. 불일치 시 자식 요소가 이미 다른
+  논리 부모를 가진 상태로 도킹에 붙어 시작 시 `InvalidOperationException` 크래시 발생.
 
 ### ContextMenu 스타일
 WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍게 보임.

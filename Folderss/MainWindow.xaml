@@ -96,6 +96,7 @@
                                 <MenuItem Header="즐겨찾기 표시" Click="ShowFavorites_Click"/>
                                 <MenuItem Header="콘솔" Click="ShowConsole_Click"/>
                                 <MenuItem Header="디스크 사용량 보기" Click="ShowDiskUsage_Click"/>
+                                <MenuItem Header="디스크 사용량 미니 패널" Click="ShowDiskUsageMini_Click"/>
                                 <Separator/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
@@ -170,28 +171,30 @@
                                PreviewMouseRightButtonDown="DockManager_PreviewMouseRightButtonDown">
             <layout:LayoutRoot>
                 <layout:LayoutPanel Orientation="Horizontal">
-                    <layout:LayoutAnchorablePane DockWidth="230">
+                    <layout:LayoutPanel Orientation="Vertical" DockWidth="230">
+                        <layout:LayoutAnchorablePane DockHeight="170">
+                            <layout:LayoutAnchorable x:Name="DiskUsageMiniDock"
+                                                     Title="디스크 사용량"
+                                                     ContentId="disk-usage-mini"
+                                                     CanClose="False"
+                                                     CanHide="True"
+                                                     CanAutoHide="True">
+                                <controls:DiskUsageMiniPanel x:Name="DiskUsageMiniPanel"/>
+                            </layout:LayoutAnchorable>
+                        </layout:LayoutAnchorablePane>
+                        <layout:LayoutAnchorablePane>
                         <layout:LayoutAnchorable x:Name="FavoritesDock"
                                                  Title="즐겨찾기"
                                                  ContentId="favorites"
                                                  CanClose="True"
                                                  CanHide="True"
                                                  CanAutoHide="True">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto"/>
-                                    <RowDefinition Height="*"/>
-                                </Grid.RowDefinitions>
-                                <controls:PinnedShortcutsPanel x:Name="PinnedShortcutsPanel"
-                                                               Grid.Row="0"
-                                                               NavigateRequested="FavoritesPanel_NavigateRequested"/>
-                                <controls:FavoritesPanel x:Name="FavoritesPanel"
-                                                         Grid.Row="1"
-                                                         AddCurrentRequested="FavoritesPanel_AddCurrentRequested"
-                                                         NavigateRequested="FavoritesPanel_NavigateRequested"/>
-                            </Grid>
+                            <controls:FavoritesPanel x:Name="FavoritesPanel"
+                                                     AddCurrentRequested="FavoritesPanel_AddCurrentRequested"
+                                                     NavigateRequested="FavoritesPanel_NavigateRequested"/>
                         </layout:LayoutAnchorable>
-                    </layout:LayoutAnchorablePane>
+                        </layout:LayoutAnchorablePane>
+                    </layout:LayoutPanel>
                     <layout:LayoutDocumentPaneGroup Orientation="Horizontal">
                         <layout:LayoutDocumentPaneGroup Orientation="Vertical">
                             <layout:LayoutDocumentPane>
