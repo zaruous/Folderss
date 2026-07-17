@@ -34,6 +34,7 @@ namespace Folderss
         private Window _searchWindow;
         private Controls.SearchPanel _searchPanel;
         private Controls.ConsolePanel _consolePanel;
+        private Controls.DiskUsagePanel _diskUsagePanel;
         private readonly KeyBindingService _keyBindingService = new KeyBindingService();
         private readonly ViewerConfigService _viewerConfigService = new ViewerConfigService();
         private bool _isPanelMaximized = false;
@@ -58,6 +59,8 @@ namespace Folderss
         public MainWindow()
         {
             InitializeComponent();
+
+            PinnedShortcutsPanel.SetItemsSource(FavoritesPanel.PinnedItems);
 
             // ViewerHost가 문서 탭 전환 방지를 위해 Handled 처리한 WebView2 발생 Home/End를
             // 라우팅 마지막 단계(Window)에서 되돌려, WebView2 래퍼가 브라우저 기본 동작
@@ -1006,6 +1009,12 @@ namespace Folderss
 
         private void FavoritesPanel_NavigateRequested(object sender, FavoriteNavigateEventArgs e)
         {
+            if (e.SpecialKind == "diskusage")
+            {
+                ShowDiskUsagePanel();
+                return;
+            }
+
             if (e.IsFile)
             {
                 OpenViewerTab(e.Path);
@@ -1019,6 +1028,59 @@ namespace Folderss
         {
             var dock = FindDock("favorites") ?? CreateFavoritesDock();
             dock?.Show();
+        }
+
+        private void ShowDiskUsage_Click(object sender, RoutedEventArgs e)
+        {
+            FavoritesPanel.PinDiskUsageShortcut();
+            ShowDiskUsagePanel();
+        }
+
+        private Controls.DiskUsagePanel GetDiskUsagePanel()
+        {
+            if (_diskUsagePanel == null)
+                _diskUsagePanel = new Controls.DiskUsagePanel();
+            return _diskUsagePanel;
+        }
+
+        private void ShowDiskUsagePanel()
+        {
+            var doc = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .FirstOrDefault(d => d.ContentId == "disk-usage");
+
+            if (doc == null)
+            {
+                var pane = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocumentPane>().FirstOrDefault();
+                if (pane == null)
+                    return;
+
+                doc = new LayoutDocument
+                {
+                    Title = "디스크 사용량",
+                    ContentId = "disk-usage",
+                    Content = GetDiskUsagePanel(),
+                    CanClose = true
+                };
+                doc.Closed += (s, e) => DisposeDocumentContent(doc);
+
+                var addDocument = GetAddPanelDocument();
+                var insertIndex = addDocument != null && ReferenceEquals(addDocument.Parent, pane)
+                    ? pane.IndexOfChild(addDocument)
+                    : pane.ChildrenCount;
+                if (insertIndex < 0)
+                    insertIndex = pane.ChildrenCount;
+
+                pane.InsertChildAt(insertIndex, doc);
+                MoveAddPanelTabToEnd();
+            }
+            else
+            {
+                GetDiskUsagePanel().Refresh();
+            }
+
+            doc.IsActive = true;
         }
 
         private void ResetDockLayout_Click(object sender, RoutedEventArgs e)
@@ -2167,6 +2229,8 @@ namespace Folderss
                 disposable.Dispose();
             if (document != null && document.ContentId == "console")
                 _consolePanel = null;
+            if (document != null && document.ContentId == "disk-usage")
+                _diskUsagePanel = null;
         }
 
         private static T FindVisualAncestor<T>(DependencyObject element) where T : DependencyObject

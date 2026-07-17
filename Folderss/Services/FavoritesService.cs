@@ -116,6 +116,9 @@ namespace Folderss.Services
             if (configuration.Groups == null)
                 configuration.Groups = new ObservableCollection<FavoriteGroup>();
 
+            if (configuration.Pinned == null)
+                configuration.Pinned = new ObservableCollection<FavoriteLocation>();
+
             foreach (var group in configuration.Groups)
             {
                 if (group.Favorites == null)

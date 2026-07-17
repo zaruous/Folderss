@@ -27,6 +27,28 @@ namespace Folderss.Controls
             FavoritesTree.ItemsSource = _configuration.Groups;
         }
 
+        /// <summary>즐겨찾기 패널과 별도 레이어(<see cref="PinnedShortcutsPanel"/>)에 표시되는 고정 바로가기 목록.</summary>
+        public System.Collections.ObjectModel.ObservableCollection<FavoriteLocation> PinnedItems
+        {
+            get { return _configuration.Pinned; }
+        }
+
+        /// <summary>디스크 사용량 보기 바로가기를 고정 바로가기 목록 맨 위에 추가한다. 이미 있으면 아무 것도 하지 않는다.</summary>
+        public void PinDiskUsageShortcut()
+        {
+            const string kind = "diskusage";
+            if (_configuration.Pinned.Any(item => item.IsSpecial && item.SpecialKind == kind))
+                return;
+
+            _configuration.Pinned.Insert(0, new FavoriteLocation
+            {
+                Name = "디스크 사용량",
+                IsSpecial = true,
+                SpecialKind = kind
+            });
+            Save();
+        }
+
         public bool CopySelectedFavoritePath()
         {
             var favorite = FavoritesTree.SelectedItem as FavoriteLocation;
@@ -661,11 +683,13 @@ namespace Folderss.Controls
     {
         public string Path { get; private set; }
         public bool IsFile { get; private set; }
+        public string SpecialKind { get; private set; }
 
-        public FavoriteNavigateEventArgs(string path, bool isFile = false)
+        public FavoriteNavigateEventArgs(string path, bool isFile = false, string specialKind = null)
         {
             Path = path;
             IsFile = isFile;
+            SpecialKind = specialKind;
         }
     }
 }

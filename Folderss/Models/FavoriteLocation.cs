@@ -27,6 +27,11 @@ namespace Folderss.Models
 
         public bool IsFile { get; set; }
 
+        /// <summary>true면 Path는 실제 경로가 아니라 SpecialKind를 가리키는 식별자다 (예: 디스크 사용량 보기).</summary>
+        public bool IsSpecial { get; set; }
+
+        public string SpecialKind { get; set; }
+
         [field: XmlIgnore]
         public event PropertyChangedEventHandler PropertyChanged;
 
@@ -79,8 +84,12 @@ namespace Folderss.Models
         public FavoritesConfiguration()
         {
             Groups = new ObservableCollection<FavoriteGroup>();
+            Pinned = new ObservableCollection<FavoriteLocation>();
         }
 
         public ObservableCollection<FavoriteGroup> Groups { get; set; }
+
+        /// <summary>그룹 트리 위쪽에 항상 고정 표시되는 특수 바로가기 목록 (예: 디스크 사용량 보기).</summary>
+        public ObservableCollection<FavoriteLocation> Pinned { get; set; }
     }
 }

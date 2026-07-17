@@ -9,6 +9,8 @@ Folderss/
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (내용/파일명 대상 선택, 확장자 필터, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
+│   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
+│   ├── PinnedShortcutsPanel.xaml/.cs — 즐겨찾기 패널 위쪽의 별도 레이어, 고정 바로가기(디스크 사용량 등) 표시
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
 │   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
@@ -17,7 +19,8 @@ Folderss/
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
-│   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델
+│   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델, 그룹 위쪽 고정 바로가기(FavoritesConfiguration.Pinned) 포함
+│   ├── DriveUsageInfo.cs           — 드라이브 총량·사용량·여유 공간(GB, 비율) 모델
 │   ├── SearchResult.cs             — 파일 검색 결과 모델
 │   └── SearchTarget.cs             — 검색 대상 enum (Content/FileName)
 ├── Services/
@@ -27,6 +30,7 @@ Folderss/
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
 │   ├── FavoritesService.cs         — 즐겨찾기 목록 저장·복원
+│   ├── DiskUsageService.cs         — `DriveInfo.GetDrives()` 기반 준비된 드라이브 사용량 조회
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
 │   ├── ViewerConfigService.cs      — 확장자 ↔ 뷰어 매핑 (viewer-config.json 저장)
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
@@ -34,6 +38,8 @@ Folderss/
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
 │   └── ThemeManager.cs             — 테마 전환 및 저장
+├── Converters/
+│   └── FractionToStarConverter.cs  — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
 ├── Themes/
 │   ├── Black.xaml                  — 블랙 테마 색상 팔레트
 │   ├── Light.xaml                  — 라이트 테마 색상 팔레트
@@ -93,6 +99,14 @@ Folderss/
 - `SearchService.SearchAsync`가 확장자 필터를 정규화(`.` 접두사 보정)한 뒤 대상에 따라 파일 내용 라인 단위 스캔(`ScanFile`) 또는 파일명만 비교(`ScanFileName`)로 분기
 - 결과는 `SearchResult.LineNumber == 0`이면 파일명 검색 결과로 취급해 목록에서 줄 번호 칸을 비움
 - `CaseToggle`(대/소문자), `RegexToggle`(정규식), `ScopeCombo`(현재 폴더만/하위 폴더 포함)는 검색 대상과 무관하게 공통 적용
+
+### DiskUsagePanel / DiskUsageService / PinnedShortcutsPanel
+- `보기 > 디스크 사용량 보기` 클릭 시 `MainWindow.ShowDiskUsage_Click`이 `FavoritesPanel.PinDiskUsageShortcut()`으로 고정 바로가기 목록에 `디스크 사용량` 항목을 (최초 1회) 추가하고, `ShowDiskUsagePanel()`로 문서 탭을 연다.
+- 고정 바로가기는 실제 경로가 없으므로 `FavoriteLocation.IsSpecial` + `SpecialKind`("diskusage")로 구분하며, `FavoritesConfiguration.Pinned` 컬렉션(그룹과 별개)에 저장되어 `favorites.xml`에 함께 직렬화된다.
+- `PinnedShortcutsPanel`은 `FavoritesPanel`과 완전히 별도인 `UserControl`로, `MainWindow.xaml`의 `FavoritesDock` 안에서 `FavoritesPanel`(그 자체의 "즐겨찾기" 헤더 포함) 위쪽 별도 레이어(Grid Row 0)에 배치된다. `MainWindow` 생성자에서 `PinnedShortcutsPanel.SetItemsSource(FavoritesPanel.PinnedItems)`로 같은 `Pinned` 컬렉션 인스턴스를 공유해 실시간으로 동기화하며, 비어 있으면 자동으로 숨겨진다.
+- 두 컨트롤 모두 같은 `FavoritesPanel_NavigateRequested` 핸들러에 연결되어 있고, `SpecialKind == "diskusage"`면 디스크 사용량 탭을 연다.
+- 문서 탭은 `OpenViewerTab`과 동일한 패턴(첫 `LayoutDocumentPane`, `+ 새 패널` 앞에 삽입 후 `MoveAddPanelTabToEnd()`)을 따르며 `ContentId == "disk-usage"`로 단일 인스턴스만 유지한다.
+- `DiskUsageService.GetDriveUsage()`는 `DriveInfo.GetDrives()`에서 `IsReady`인 드라이브만 조회하고, `DiskUsagePanel`은 각 드라이브를 GB 단위 총량/사용량/여유 공간과 사용 비율 기반 가로바(두 개의 Star `ColumnDefinition`, `FractionToStarConverter`)로 표시한다.
 
 ### 개발 아이템 문서
 - 현재 개발 아이템은 GitHub Project가 아니라 `docs/items/<항목>.md`에서 관리한다.
