@@ -368,21 +368,24 @@
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
-                                    <TextBlock Grid.Row="0" Text="이름" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
-                                    <TextBlock x:Name="MetadataName" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
-                                    <TextBlock Grid.Row="1" Text="형식" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
-                                    <TextBlock x:Name="MetadataType" Grid.Row="1" Grid.Column="1" Margin="0,2,0,5"/>
-                                    <TextBlock Grid.Row="2" Text="크기" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
-                                    <TextBlock x:Name="MetadataSize" Grid.Row="2" Grid.Column="1" Margin="0,2,0,5"/>
-                                    <TextBlock Grid.Row="3" Text="생성일자" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
-                                    <TextBlock x:Name="MetadataCreated" Grid.Row="3" Grid.Column="1" Margin="0,2,0,5"/>
-                                    <TextBlock Grid.Row="4" Text="수정일자" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
-                                    <TextBlock x:Name="MetadataModified" Grid.Row="4" Grid.Column="1" Margin="0,2,0,5"/>
-                                    <TextBlock Grid.Row="5" Text="권한" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
-                                    <TextBlock x:Name="MetadataPermissions" Grid.Row="5" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
-                                    <TextBlock Grid.Row="6" Text="특성" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
-                                    <TextBlock x:Name="MetadataAttributes" Grid.Row="6" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="0" Text="경로" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataPath" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="1" Text="이름" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataName" Grid.Row="1" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="2" Text="형식" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataType" Grid.Row="2" Grid.Column="1" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="3" Text="크기" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataSize" Grid.Row="3" Grid.Column="1" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="4" Text="생성일자" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataCreated" Grid.Row="4" Grid.Column="1" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="5" Text="수정일자" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataModified" Grid.Row="5" Grid.Column="1" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="6" Text="권한" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataPermissions" Grid.Row="6" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
+                                    <TextBlock Grid.Row="7" Text="특성" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
+                                    <TextBlock x:Name="MetadataAttributes" Grid.Row="7" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
                                 </Grid>
                             </ScrollViewer>
                         </Grid>

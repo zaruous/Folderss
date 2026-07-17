@@ -967,6 +967,7 @@ namespace Folderss.Controls
 
         private void ApplyMetadata(FileMetadata metadata)
         {
+            MetadataPath.Text = metadata.FullPath;
             MetadataName.Text = metadata.Name;
             MetadataType.Text = metadata.Type;
             MetadataSize.Text = metadata.SizeText;
@@ -984,6 +985,7 @@ namespace Folderss.Controls
             TextPreview.Text = string.Empty;
             ImagePreviewContainer.Visibility = Visibility.Collapsed;
             ImagePreview.Source = null;
+            MetadataPath.Text = string.Empty;
             MetadataName.Text = string.Empty;
             MetadataType.Text = string.Empty;
             MetadataSize.Text = string.Empty;

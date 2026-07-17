@@ -6,6 +6,12 @@
 
 ## v1.6.5 (2026-07-18)
 
+### 파일 메타데이터에 경로 표시 추가
+
+- `Controls/FolderBrowser.xaml` — 선택된 항목 메타데이터 목록 맨 위(이름 위)에 `경로` 라벨 행 추가(`MetadataPath`, TextWrapping).
+- `Services/FilePreviewService.cs` — `FileMetadata.FullPath` 프로퍼티 추가, `ReadMetadata()`가 `info.FullName`을 채움.
+- `Controls/FolderBrowser.xaml.cs` — `ApplyMetadata()`에서 경로 표시, 초기화 시 함께 비움.
+
 ### 즐겨찾기 도크의 디스크 사용량 고정 바로가기 레이어 제거
 
 - `Controls/PinnedShortcutsPanel.xaml/.cs` 삭제 — `DiskUsageMiniPanel` 도입으로 즐겨찾기 도크 안 "디스크 사용량" 고정 바로가기 레이어가 중복되어 제거. 도크 콘텐츠를 `FavoritesPanel` 단독으로 되돌리고(`ResolveDockContent`/`BuildDefaultDockLayout`/`CreateFavoritesDock` 동기화), `FavoritesPanel.PinnedItems`/`PinDiskUsageShortcut`과 `ShowDiskUsage_Click`의 고정 호출도 삭제.

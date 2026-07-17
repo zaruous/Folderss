@@ -62,6 +62,7 @@ namespace Folderss.Services
 
             return new FileMetadata
             {
+                FullPath = info.FullName,
                 Name = info.Name,
                 Type = isDirectory ? "폴더" : GetFileType(info.Name),
                 SizeText = isDirectory ? "-" : string.Format("{0:0.00} MB", size / 1024d / 1024d),
@@ -182,6 +183,7 @@ namespace Folderss.Services
 
     public sealed class FileMetadata
     {
+        public string FullPath { get; set; }
         public string Name { get; set; }
         public string Type { get; set; }
         public string SizeText { get; set; }
