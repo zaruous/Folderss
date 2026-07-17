@@ -6,6 +6,7 @@
     <Grid Background="{DynamicResource PanelBackground}">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
@@ -50,8 +51,38 @@
             </Grid>
         </Border>
 
+        <ItemsControl x:Name="PinnedList"
+                      Grid.Row="1"
+                      Visibility="Collapsed"
+                      Margin="0,4,0,4">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Margin="6,2"
+                            Padding="8,6"
+                            Cursor="Hand"
+                            Background="Transparent"
+                            MouseLeftButtonUp="PinnedItem_MouseLeftButtonUp">
+                        <Border.Style>
+                            <Style TargetType="Border">
+                                <Setter Property="Background" Value="Transparent"/>
+                                <Style.Triggers>
+                                    <Trigger Property="IsMouseOver" Value="True">
+                                        <Setter Property="Background" Value="{DynamicResource RowHoverBrush}"/>
+                                    </Trigger>
+                                </Style.Triggers>
+                            </Style>
+                        </Border.Style>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="📊" Margin="0,0,8,0" VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding Name}" FontWeight="SemiBold" VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
         <TreeView x:Name="FavoritesTree"
-                  Grid.Row="1"
+                  Grid.Row="2"
                   Background="{DynamicResource PanelBackground}"
                   BorderThickness="0"
                   AllowDrop="True"

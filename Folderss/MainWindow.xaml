@@ -95,6 +95,7 @@
                                 <MenuItem Header="파일 내용 검색" InputGestureText="Ctrl+F" Click="ShowSearch_Click"/>
                                 <MenuItem Header="즐겨찾기 표시" Click="ShowFavorites_Click"/>
                                 <MenuItem Header="콘솔" Click="ShowConsole_Click"/>
+                                <MenuItem Header="디스크 사용량 보기" Click="ShowDiskUsage_Click"/>
                                 <Separator/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>

@@ -25,6 +25,41 @@ namespace Folderss.Controls
             InitializeComponent();
             _configuration = FavoritesService.Load();
             FavoritesTree.ItemsSource = _configuration.Groups;
+            PinnedList.ItemsSource = _configuration.Pinned;
+            _configuration.Pinned.CollectionChanged += (s, e) => UpdatePinnedVisibility();
+            UpdatePinnedVisibility();
+        }
+
+        private void UpdatePinnedVisibility()
+        {
+            PinnedList.Visibility = _configuration.Pinned.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        /// <summary>디스크 사용량 보기 바로가기를 즐겨찾기 맨 위(고정 영역)에 추가한다. 이미 있으면 아무 것도 하지 않는다.</summary>
+        public void PinDiskUsageShortcut()
+        {
+            const string kind = "diskusage";
+            if (_configuration.Pinned.Any(item => item.IsSpecial && item.SpecialKind == kind))
+                return;
+
+            _configuration.Pinned.Insert(0, new FavoriteLocation
+            {
+                Name = "디스크 사용량",
+                IsSpecial = true,
+                SpecialKind = kind
+            });
+            Save();
+        }
+
+        private void PinnedItem_MouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            var favorite = (sender as FrameworkElement)?.DataContext as FavoriteLocation;
+            if (favorite == null || !favorite.IsSpecial)
+                return;
+
+            var handler = NavigateRequested;
+            if (handler != null)
+                handler(this, new FavoriteNavigateEventArgs(null, false, favorite.SpecialKind));
         }
 
         public bool CopySelectedFavoritePath()
@@ -661,11 +696,13 @@ namespace Folderss.Controls
     {
         public string Path { get; private set; }
         public bool IsFile { get; private set; }
+        public string SpecialKind { get; private set; }
 
-        public FavoriteNavigateEventArgs(string path, bool isFile = false)
+        public FavoriteNavigateEventArgs(string path, bool isFile = false, string specialKind = null)
         {
             Path = path;
             IsFile = isFile;
+            SpecialKind = specialKind;
         }
     }
 }

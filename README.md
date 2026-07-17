@@ -19,6 +19,7 @@ Folderss/
 │   ├── FavoritesPanel      — 즐겨찾기 패널
 │   ├── SearchPanel         — 파일 검색 패널 (내용/파일명 대상 선택, 확장자 필터)
 │   ├── ConsolePanel        — ConPTY 기반 내장 터미널 패널
+│   ├── DiskUsagePanel      — 드라이브별 디스크 사용량 패널 (가로바, GB 단위)
 │   └── ViewerHost          — 내장 파일 뷰어 호스트
 ├── Viewers/
 │   ├── MarkdownViewer      — Markdown 미리보기·편집·내보내기
@@ -27,7 +28,8 @@ Folderss/
 │   └── IFileViewer         — 뷰어 공통 인터페이스
 ├── Models/
 │   ├── FileSystemItem      — 파일·폴더 뷰모델
-│   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델
+│   ├── FavoriteLocation    — 즐겨찾기 그룹·항목·고정 바로가기 모델
+│   ├── DriveUsageInfo      — 드라이브 총량·사용량·여유 공간 모델
 │   ├── KeyBindingEntry     — 단축키 설정 모델
 │   ├── OpenWithEntry       — 사용자 지정 열기 프로그램 모델
 │   └── SearchResult        — 파일 검색 결과 모델
@@ -37,6 +39,7 @@ Folderss/
 │   ├── DockLayoutService       — AvalonDock 레이아웃 저장·복원 (XML)
 │   ├── SessionStateService     — 열린 폴더 경로 세션 저장·복원 (XML)
 │   ├── FavoritesService        — 즐겨찾기 목록 저장·복원
+│   ├── DiskUsageService        — `DriveInfo` 기반 드라이브별 사용량 조회
 │   ├── KeyBindingService       — 단축키 기본값·사용자 설정 저장
 │   ├── SearchService           — 파일 검색 (내용/파일명 대상, 확장자 필터)
 │   ├── ViewerConfigService     — 확장자별 내장 뷰어 매핑
@@ -92,6 +95,7 @@ Folderss/
 - 설정 창에서 사용자 지정 열기 프로그램 등록 및 확장자 마스크 관리
 - 설정 창에서 콘솔 디폴트 커맨드라인과 추가 실행 항목 관리
 - `보기 > 콘솔` 하단 터미널 패널에서 PowerShell 7, Windows PowerShell, 명령 프롬프트 실행
+- `보기 > 디스크 사용량 보기`로 드라이브별 사용량을 가로바와 GB 단위(총량/사용량/여유 공간)로 표시, 최초 실행 시 즐겨찾기 상단에 바로가기 고정
 - AvalonDock 기반 패널 도킹, 탭, 분리 창, 자동 숨김
 - `F11`로 현재 폴더 패널 최대화 및 복원
 - 도킹 배치 자동 저장 및 복원
@@ -133,6 +137,14 @@ Folderss/
 - `외부 터미널` 버튼으로 현재 선택한 프로필 기준의 외부 콘솔도 열 수 있습니다.
 - `Home`/`End` 단독 입력은 콘솔 탭 전환에 사용하지 않고 활성 콘솔 입력으로 전달합니다.
 - 콘솔 폰트 크기 설정 UI는 있으나 현재 런타임 반영에는 추가 보완이 필요합니다.
+
+## 디스크 사용량
+
+`보기 > 디스크 사용량 보기`에서 준비된(마운트된) 모든 드라이브의 사용량을 문서 탭으로 열 수 있습니다.
+
+- 드라이브별로 가로바(사용/여유 비율)와 총량·사용량·여유 공간을 GB 단위로 표시합니다.
+- 패널 상단 `새로 고침` 버튼으로 최신 사용량을 다시 조회합니다.
+- 메뉴 클릭 시 즐겨찾기 패널 그룹 트리 위쪽에 `디스크 사용량` 바로가기가 한 번만 고정 추가되며, 이후에는 이 바로가기를 클릭해도 같은 탭을 엽니다.
 
 ## 파일 미리보기
 
@@ -193,7 +205,7 @@ Folderss\Themes\Controls.xaml
 | `viewer-config.json` | 확장자별 뷰어 매핑 |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
 | `console-settings.xml` | 콘솔 설정(기본 프로필, 사용자 정의 프로필 등) |
-| `favorites.xml` | 즐겨찾기 그룹과 항목 |
+| `favorites.xml` | 즐겨찾기 그룹·항목과 고정 바로가기(디스크 사용량 등) |
 | `session.xml` | 열린 폴더 패널과 활성 패널 |
 | `dock-layout.xml` | AvalonDock 패널 배치 |
 | `dock-layout.xml.version` | 레이아웃 호환성 버전 |
