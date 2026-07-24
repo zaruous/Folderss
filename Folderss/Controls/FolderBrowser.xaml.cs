@@ -1206,10 +1206,20 @@ namespace Folderss.Controls
             foreach (var path in paths)
                 pathsCollection.Add(path);
 
-            Clipboard.SetFileDropList(pathsCollection);
+            // 파일 이름은 텍스트로, 실제 경로는 FileDrop 포맷으로 함께 담아 텍스트 붙여넣기와 실제 파일 복사를 모두 지원.
+            var dataObject = new DataObject();
+            dataObject.SetFileDropList(pathsCollection);
+            dataObject.SetText(BuildNameListText(paths), TextDataFormat.UnicodeText);
+            Clipboard.SetDataObject(dataObject, true);
+
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
                 window.ClearCutStateFromClipboard();
+        }
+
+        private static string BuildNameListText(IEnumerable<string> paths)
+        {
+            return string.Join(Environment.NewLine, paths.Select(Path.GetFileName));
         }
 
         private void CopyFolderTreeSelectionToClipboard(string path)
@@ -1258,7 +1268,10 @@ namespace Folderss.Controls
             foreach (var item in selected)
                 pathsCollection.Add(item.FullPath);
 
-            Clipboard.SetFileDropList(pathsCollection);
+            var dataObject = new DataObject();
+            dataObject.SetFileDropList(pathsCollection);
+            dataObject.SetText(BuildNameListText(selected.Select(item => item.FullPath)), TextDataFormat.UnicodeText);
+            Clipboard.SetDataObject(dataObject, true);
 
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
