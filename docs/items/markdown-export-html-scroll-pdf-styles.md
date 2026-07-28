@@ -1,6 +1,6 @@
 # 마크다운 패널 내보내기 버그 수정 (HTML 스크롤 / PDF 스타일 누락)
 
-- 상태: Ready for Verification
+- 상태: 확인 완료 (2026-07-28, 사용자 검증)
 
 ## 요구사항
 
@@ -107,7 +107,7 @@
 - [x] print 미디어에서 표 테두리와 surface 표시 확인, 실제 PDF 생성 확인
 - [x] `clearOperationSurface()` 후 일반 인쇄(beforeprint)는 기존대로 목차 포함,
       afterprint 후 surface 비워짐
-- [ ] Windows 실빌드에서 수동 확인 (`dotnet build` — 이 환경엔 SDK 없음)
+- [x] Windows 실빌드에서 수동 확인 — 사용자 확인 완료 (2026-07-28)
 
 ## 변경 이력
 
