@@ -77,7 +77,40 @@
 - [ ] 같은 문서를 PDF로 내보내기 → 목차 없이 본문만 출력되는지 확인
 - [ ] 우클릭 `인쇄`는 기존대로 목차가 포함되는지 확인 (요구 범위: PDF만 제거)
 
+## 재수정 (2026-07-28) — PDF에 목차가 여전히 포함되는 버그 / sticky 미동작
+
+### 원인
+
+- **PDF 목차 잔존**: `exportPdf()`가 목차 없는 surface를 만들어도, `PrintToPdfAsync`가 인쇄를
+  시작하며 `beforeprint` 이벤트를 발화시키면 `window.addEventListener('beforeprint',
+  createOperationSurface)` 리스너가 surface를 **목차 포함으로 재빌드**해 덮어썼다.
+- **sticky 미동작**: `operationStyles()`가 `body{overflow:auto}`를 줘서 body가 별도 스크롤
+  컨테이너가 되었고, 실제 스크롤은 뷰포트(html)에서 일어나므로 목차의 `position:sticky`가
+  전혀 걸리지 않았다(스크롤 시 목차가 그대로 밀려 올라감).
+
+### 구현 내용
+
+- `_printSurfaceReady` 플래그 추가 — `exportPdf()`가 surface 구성 후 true로 설정하고,
+  `beforeprint` 리스너는 이 플래그가 서 있으면 재빌드를 건너뛴다.
+- `clearOperationSurface()` 도입 — surface 비우기 + 플래그 초기화를 한 곳으로 통일.
+  `afterprint`, `buildStandaloneHtml()`(HTML 내보내기 후), `shareContent()`에서 호출하고
+  `app.clearOperationSurface`로 노출. C# `ExportPdfAsync`의 finally도 innerHTML 직접 비우기
+  대신 이 API를 호출해 플래그가 반드시 초기화되게 함.
+- 내보낸 HTML 스크롤을 `html{overflow:auto}` + `body{overflow:visible}`로 변경해 sticky가
+  뷰포트 기준으로 동작하도록 수정.
+
+### 검증 (Playwright + Chromium 자동 테스트, 17/17 통과)
+
+- [x] 내보낸 HTML: 문서 스크롤 가능, 목차 `position:sticky` 적용, 중간까지 스크롤 후에도
+      목차가 화면 안에 고정(top:0), 목차 클릭 시 해당 제목으로 이동, 표 테두리 적용
+- [x] exportPdf 직후 surface에 목차 없음 + 본문 있음, **beforeprint 발화 후에도 목차 없음**
+- [x] print 미디어에서 표 테두리와 surface 표시 확인, 실제 PDF 생성 확인
+- [x] `clearOperationSurface()` 후 일반 인쇄(beforeprint)는 기존대로 목차 포함,
+      afterprint 후 surface 비워짐
+- [ ] Windows 실빌드에서 수동 확인 (`dotnet build` — 이 환경엔 SDK 없음)
+
 ## 변경 이력
 
 - 2026-07-28: 초기 구현 (HTML 내보내기 스크롤 복원, print/PDF 프로즈 스타일 추가, PDF 배경 인쇄 활성화)
 - 2026-07-28: HTML 내보내기 목차 유지(sticky + 실제 앵커) / PDF 내보내기 목차 제거
+- 2026-07-28: beforeprint 재빌드로 PDF에 목차가 남던 버그 수정, body overflow로 sticky가 깨지던 문제 수정 (브라우저 자동 테스트 추가 검증)

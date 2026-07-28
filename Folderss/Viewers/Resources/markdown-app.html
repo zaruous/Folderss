@@ -543,6 +543,7 @@ var _findHits = [];
 var _findIndex = -1;
 var _findQuery = '';
 var _findMatches = [];
+var _printSurfaceReady = false;
 
 // ── Init ──────────────────────────────────
 mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
@@ -650,7 +651,15 @@ function exportPdf() {
   document.getElementById('exportMenu').classList.remove('open');
   // PDF에서는 목차가 있어도 제외하고 본문만 내보낸다.
   createOperationSurface({ includeToc: false });
+  // PrintToPdfAsync가 beforeprint를 발화시키면 아래 리스너가 surface를 목차 포함으로
+  // 재빌드해버리므로, 미리 구성한 surface를 그대로 쓰도록 플래그로 보호한다.
+  _printSurfaceReady = true;
   window.chrome.webview.postMessage({ type: 'export-pdf' });
+}
+
+function clearOperationSurface() {
+  _printSurfaceReady = false;
+  document.getElementById('operation-surface').innerHTML = '';
 }
 
 function createOperationSurface(options) {
@@ -693,7 +702,9 @@ function createOperationSurface(options) {
 function operationStyles() {
   // 복제해온 페이지 CSS의 html,body{height:100%;overflow:hidden}을 덮어써
   // 내보낸 HTML 문서가 스크롤되도록 한다 (이 스타일이 뒤에 삽입되므로 우선함).
-  return 'html,body{height:auto;overflow:auto}'
+  // body에 overflow:auto를 주면 body가 별도 스크롤 컨테이너가 되어 목차의
+  // position:sticky가 뷰포트에 걸리지 않으므로, 스크롤은 html에만 준다.
+  return 'html,body{height:auto}html{overflow:auto}body{overflow:visible}'
     + 'html{scroll-behavior:smooth}'
     + '.operation-preview{overflow:visible}'
     + '.operation-preview::after{content:none;height:0}'
@@ -730,10 +741,12 @@ function renderedContentStyles() {
 
 function buildStandaloneHtml() {
   var surface = createOperationSurface();
-  return '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>'
+  var html = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>'
     + escapeHtml(document.title) + '</title><style>' + renderedContentStyles() + '\n'
     + operationStyles() + '</style></head><body class="' + _theme + '">'
     + '<main class="operation-layout">' + surface.innerHTML + '</main></body></html>';
+  clearOperationSurface();
+  return html;
 }
 
 function printContent() {
@@ -744,6 +757,7 @@ function printContent() {
 async function shareContent() {
   var surface = createOperationSurface();
   var text = surface.innerText;
+  clearOperationSurface();
   if (navigator.share) {
     try { await navigator.share({ title: document.title, text: text }); } catch (e) {}
     return;
@@ -752,10 +766,12 @@ async function shareContent() {
     await navigator.clipboard.writeText(text);
 }
 
-window.addEventListener('beforeprint', createOperationSurface);
-window.addEventListener('afterprint', function() {
-  document.getElementById('operation-surface').innerHTML = '';
+window.addEventListener('beforeprint', function() {
+  // exportPdf()가 목차 없는 surface를 이미 준비해둔 경우 덮어쓰지 않는다.
+  if (_printSurfaceReady) return;
+  createOperationSurface();
 });
+window.addEventListener('afterprint', clearOperationSurface);
 
 // ── Rendering ─────────────────────────────
 function renderPreview() {
@@ -1166,6 +1182,7 @@ var app = {
   printContent: printContent,
   saveContentAs: exportHtml,
   shareContent: shareContent,
+  clearOperationSurface: clearOperationSurface,
   open: function(content, theme, mode, largeFileMode) {
     _content = content;
     _theme   = theme || 'dark';

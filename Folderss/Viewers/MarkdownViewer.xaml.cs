@@ -424,8 +424,8 @@ namespace Folderss.Viewers
                 }
                 finally
                 {
-                    await WebView.CoreWebView2.ExecuteScriptAsync(
-                        "document.getElementById('operation-surface').innerHTML = ''");
+                    // innerHTML 직접 비우기 대신 앱 API 사용 — 인쇄 보호 플래그(_printSurfaceReady)도 함께 초기화된다.
+                    await WebView.CoreWebView2.ExecuteScriptAsync("app.clearOperationSurface()");
                 }
             }
         }
