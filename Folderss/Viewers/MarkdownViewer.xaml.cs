@@ -417,7 +417,10 @@ namespace Folderss.Viewers
                 if (dlg.ShowDialog() != WinForms.DialogResult.OK) return;
                 try
                 {
-                    await WebView.CoreWebView2.PrintToPdfAsync(dlg.FileName);
+                    // 기본 설정은 배경을 인쇄하지 않아 표 헤더/코드 블록 배경이 PDF에서 빠진다.
+                    var printSettings = WebView.CoreWebView2.Environment.CreatePrintSettings();
+                    printSettings.ShouldPrintBackgrounds = true;
+                    await WebView.CoreWebView2.PrintToPdfAsync(dlg.FileName, printSettings);
                 }
                 finally
                 {
