@@ -52,6 +52,32 @@
 - [ ] 같은 md를 PDF로 내보내기 → 테이블 테두리, 표 헤더 배경, 코드 블록 배경/테두리, 인용문 좌측 선 표시 확인
 - [ ] 우클릭 `인쇄`(printContent)에서도 동일한 스타일 적용 확인 (같은 print CSS 경로 사용)
 
+## 후속 요구사항 (2026-07-28)
+
+1. HTML 내보내기: 목차가 있으면 마크다운 뷰어처럼 목차를 유지할 것.
+2. PDF 내보내기: 목차가 있어도 제거하고 본문만 내보낼 것.
+
+### 구현 내용
+
+- `createOperationSurface(options)` — `{ includeToc: false }` 옵션 추가. `exportPdf()`가 이 옵션으로
+  호출해 PDF에서는 목차를 제외. `beforeprint`/`printContent()`(우클릭 인쇄)는 옵션 없이 호출되어
+  기존처럼 목차 포함(이벤트 객체가 넘어와도 `includeToc !== false` 판정으로 안전).
+- 목차 클론의 앵커는 JS 핸들러(`data-target`) 기반이라 내보낸 HTML에서 동작하지 않으므로,
+  복제 시 `href="#h-N"` 실제 앵커로 변환(`active` 클래스 제거 포함). 본문 제목 id(`h-N`)는
+  innerHTML 복사로 그대로 유지되므로 네이티브 앵커 이동이 동작.
+- `operationStyles()` — `.operation-toc`를 `position:sticky;top:0;max-height:100vh;overflow-y:auto`
+  사이드바로 스타일링해 스크롤 중에도 뷰어처럼 목차가 화면에 고정. 들여쓰기(toc-h2~h6),
+  말줄임, hover 색상, `html{scroll-behavior:smooth}` 추가.
+
+## 검증 (추가분)
+
+- [ ] 제목이 여러 개인 md를 Preview 모드(목차 표시 상태)에서 HTML로 내보내기 →
+      목차 사이드바가 표시되고, 스크롤해도 화면 왼쪽에 고정되는지 확인
+- [ ] 내보낸 HTML에서 목차 항목 클릭 → 해당 제목으로 이동하는지 확인
+- [ ] 같은 문서를 PDF로 내보내기 → 목차 없이 본문만 출력되는지 확인
+- [ ] 우클릭 `인쇄`는 기존대로 목차가 포함되는지 확인 (요구 범위: PDF만 제거)
+
 ## 변경 이력
 
 - 2026-07-28: 초기 구현 (HTML 내보내기 스크롤 복원, print/PDF 프로즈 스타일 추가, PDF 배경 인쇄 활성화)
+- 2026-07-28: HTML 내보내기 목차 유지(sticky + 실제 앵커) / PDF 내보내기 목차 제거
