@@ -417,12 +417,15 @@ namespace Folderss.Viewers
                 if (dlg.ShowDialog() != WinForms.DialogResult.OK) return;
                 try
                 {
-                    await WebView.CoreWebView2.PrintToPdfAsync(dlg.FileName);
+                    // 기본 설정은 배경을 인쇄하지 않아 표 헤더/코드 블록 배경이 PDF에서 빠진다.
+                    var printSettings = WebView.CoreWebView2.Environment.CreatePrintSettings();
+                    printSettings.ShouldPrintBackgrounds = true;
+                    await WebView.CoreWebView2.PrintToPdfAsync(dlg.FileName, printSettings);
                 }
                 finally
                 {
-                    await WebView.CoreWebView2.ExecuteScriptAsync(
-                        "document.getElementById('operation-surface').innerHTML = ''");
+                    // innerHTML 직접 비우기 대신 앱 API 사용 — 인쇄 보호 플래그(_printSurfaceReady)도 함께 초기화된다.
+                    await WebView.CoreWebView2.ExecuteScriptAsync("app.clearOperationSurface()");
                 }
             }
         }
