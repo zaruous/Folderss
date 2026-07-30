@@ -29,6 +29,7 @@ Folderss/
 │   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 확장자 필터, 대/소문자, 정규식)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
+│   ├── PanelLockService.cs         — 문서 탭(패널) 닫기 잠금 상태 저장·복원
 │   ├── FavoritesService.cs         — 즐겨찾기 목록 저장·복원
 │   ├── DiskUsageService.cs         — `DriveInfo.GetDrives()` 기반 준비된 드라이브 사용량 조회
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
@@ -112,6 +113,25 @@ Folderss/
 - 상태 값은 `Todo`, `In Progress`, `Ready for Verification`, `Done`만 사용한다.
 - 요구사항, 설계 또는 원인 분석, 구현 내용, 변경 파일, 검증, 변경 이력은 항목 파일 본문에 직접 기록한다.
 - `docs/PROJECT.md`가 로컬 아이템 파일의 필수 형식과 상태 전환 규칙을 정의한다.
+
+### PanelLockService / MainWindow 패널 잠금 흐름
+- 문서 탭 우클릭 메뉴의 `패널 잠금`으로 탭 단위 닫기 잠금을 토글한다 (`MainWindow.TogglePanelLock`).
+- 잠금 키는 `MainWindow.GetPanelLockKey(LayoutDocument)`가 `ContentId`에서 만든다.
+  - 폴더 패널: `folder-panel|<패널 ID>` — `ContentId`의 경로 부분을 제외해 패널에서 폴더를 이동해도 잠금이 유지된다.
+  - 뷰어 탭: `viewer|<정규화된 소문자 파일 경로>` — 같은 파일을 다시 열면 잠긴 상태로 열린다.
+  - 그 밖의 탭(`console`, `disk-usage` 등): `ContentId` 그대로. 새로 추가되는 닫기 가능 탭도 별도 등록 없이 잠금 대상이 된다.
+  - `left-folder`, `right-folder`, `add-folder-panel`은 항상 닫을 수 없는 고정 탭이라 `null`을 반환해 메뉴에 나타나지 않는다.
+- 상태는 `%LOCALAPPDATA%\Folderss\panel-locks.xml`에 잠금 키 목록으로 저장되며, 토글할 때마다 즉시 기록한다.
+- `MainWindow.ApplyPanelLockStates()`가 레이아웃 복원 직후, 패널 최대화 복원 후, 도킹 배치 초기화 후에 잠금 상태를
+  `LayoutDocument.CanClose`와 탭 제목의 `🔒 ` 접두사에 반영한다. 저장된 레이아웃 XML에 `CanClose`가 함께 직렬화되더라도
+  잠금 파일이 단일 기준이 되도록 양방향으로 다시 설정한다.
+- 닫기 가능한 문서 탭을 새로 만드는 코드는 `LayoutDocument` 생성 직후 `ApplyPanelLockState(document)`를 호출해야 한다
+  (`OpenViewerTab`, `ShowConsolePanel`, `ShowDiskUsagePanel` 참고).
+- 탭 제목을 갱신하는 코드는 `SetDocumentTitle(content, title)`을 사용해야 잠금 표시가 유지된다 (`FolderBrowser_PathChanged`, `CreateViewerHost`의 `TitleChanged`).
+- `LayoutContent.Close()`는 `CanClose`를 검사하지 않으므로, 코드에서 직접 닫는 경로는 `CanClose`를 먼저 확인해야 한다
+  (`CloseTabsExcept`/`CloseTabsToLeft`/`CloseTabsToRight`, `CloseConsoleDocument`).
+- 잠금 표시가 실시간으로 반영되도록 토글 후 `CommandManager.InvalidateRequerySuggested()`로 탭 닫기 버튼의 `CanExecute`를 다시 평가한다
+  (`Controls.xaml`의 `LayoutDocumentTabItem` 템플릿에서 닫기 버튼 `Visibility`가 `IsEnabled`에 묶여 있다).
 
 ### DockLayoutService / SessionStateService
 - 창을 트레이로 숨기기 전과 실제 종료 전에 자동 저장하고 다음 실행 시 복원

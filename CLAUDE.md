@@ -90,6 +90,10 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
   `Style.Resources`가 아닌 완전한 `ControlTemplate`으로만 재정의 가능.
 - `+ 새 패널`(`add-folder-panel`) 탭은 폴더 컴포넌트 추가용 고정 탭이므로 항상 같은 문서 탭 영역의 오른쪽 끝에 있어야 함.
   파일/Markdown 링크 클릭으로 뷰어 탭을 추가할 때도 새 탭은 `+ 새 패널` 앞에 삽입하고, 추가 후 `+ 새 패널`을 다시 끝으로 정렬해야 함.
+- 닫기 가능한 새 문서 탭(`LayoutDocument`)을 만들면 생성 직후 `ApplyPanelLockState(document)`를 호출해
+  저장된 패널 잠금(`PanelLockService`)을 반영해야 한다. 탭 제목을 갱신할 때는 `SetDocumentTitle()`을 써야
+  잠금 표시(`🔒 `)가 유지된다. `LayoutContent.Close()`는 `CanClose`를 검사하지 않으므로,
+  코드에서 탭을 직접 닫는 경로는 `CanClose`를 먼저 확인해야 잠금이 우회되지 않는다.
 - `MainWindow.xaml`의 앵커러블/문서 콘텐츠 구조를 바꾸면(예: 패널을 컨테이너로 감싸기)
   `ResolveDockContent()`, `BuildDefaultDockLayout()`, `CreateFavoritesDock()` 등 코드에서 도킹 콘텐츠를
   할당하는 곳도 반드시 같은 최상위 요소를 사용하도록 갱신해야 함. 불일치 시 자식 요소가 이미 다른

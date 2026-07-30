@@ -149,6 +149,7 @@ namespace Folderss
                 MigrateLegacyConsoleTabLayout();
 
             EnsureAddPanelTab();
+            ApplyPanelLockStates();
             DockManager.LayoutChanged += DockManager_LayoutChanged;
 
             var previousActive = GetFolderBrowsers().FirstOrDefault(
@@ -400,6 +401,7 @@ namespace Folderss
                     _isPanelMaximized = false;
 
                     EnsureAddPanelTab();
+                    ApplyPanelLockStates();
 
                     if (activeBrowser != null)
                         ActivatePane(activeBrowser);
@@ -714,6 +716,7 @@ namespace Folderss
                 Content = viewerHost,
                 CanClose = true
             };
+            ApplyPanelLockState(document);
             AttachViewerDocument(document, viewerHost);
             var addDocument = GetAddPanelDocument();
             var insertIndex = addDocument != null && ReferenceEquals(addDocument.Parent, pane)
@@ -743,7 +746,7 @@ namespace Folderss
                     .OfType<LayoutDocument>()
                     .FirstOrDefault(d => ReferenceEquals(d.Content, s));
                 if (doc != null)
-                    doc.Title = title;
+                    SetDocumentTitle(doc, title);
             };
             viewerHost.FileOpenRequested += (s, requestedPath) => OpenViewerTab(requestedPath);
             return viewerHost;
@@ -880,7 +883,7 @@ namespace Folderss
                 return;
 
             var title = new DirectoryInfo(browser.CurrentPath).Name;
-            layoutContent.Title = string.IsNullOrWhiteSpace(title) ? browser.CurrentPath : title;
+            SetDocumentTitle(layoutContent, string.IsNullOrWhiteSpace(title) ? browser.CurrentPath : title);
 
             if (layoutContent.ContentId != "left-folder" && layoutContent.ContentId != "right-folder")
             {
@@ -897,15 +900,20 @@ namespace Folderss
 
         private static string ExtractPanelId(string contentId)
         {
-            const string prefix = "folder-panel|";
-            if (!string.IsNullOrWhiteSpace(contentId) && contentId.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                var separator = contentId.IndexOf('|', prefix.Length);
-                if (separator > prefix.Length)
-                    return contentId.Substring(prefix.Length, separator - prefix.Length);
-            }
+            return TryGetFolderPanelId(contentId) ?? Guid.NewGuid().ToString("N");
+        }
 
-            return Guid.NewGuid().ToString("N");
+        // folder-panel|<패널 ID>|<경로> 형태에서 패널 ID만 뽑는다. 형식이 다르면 null.
+        private static string TryGetFolderPanelId(string contentId)
+        {
+            const string prefix = "folder-panel|";
+            if (string.IsNullOrWhiteSpace(contentId) || !contentId.StartsWith(prefix, StringComparison.Ordinal))
+                return null;
+
+            var separator = contentId.IndexOf('|', prefix.Length);
+            return separator > prefix.Length
+                ? contentId.Substring(prefix.Length, separator - prefix.Length)
+                : null;
         }
 
         private IList<FolderBrowser> GetFolderBrowsers()
@@ -1075,6 +1083,7 @@ namespace Folderss
                     Content = GetDiskUsagePanel(),
                     CanClose = true
                 };
+                ApplyPanelLockState(doc);
                 doc.Closed += (s, e) => DisposeDocumentContent(doc);
 
                 var addDocument = GetAddPanelDocument();
@@ -1100,6 +1109,9 @@ namespace Folderss
             DockLayoutService.Reset();
             BuildDefaultDockLayout();
             EnsureAddPanelTab();
+            // 초기화로 사라진 패널의 잠금 기록도 함께 정리한다.
+            PanelLockService.Prune(GetAllLayoutDocuments().Select(GetPanelLockKey));
+            ApplyPanelLockStates();
             ActivatePane(LeftPane);
             MessageBox.Show(
                 "도킹 배치가 기본 구성으로 초기화되었습니다.",
@@ -2134,6 +2146,22 @@ namespace Folderss
 
             menu.Items.Add(new System.Windows.Controls.Separator());
 
+            var lockKey = GetPanelLockKey(document);
+            if (lockKey != null)
+            {
+                var lockItem = new System.Windows.Controls.MenuItem
+                {
+                    Header = "패널 잠금",
+                    IsCheckable = true,
+                    IsChecked = PanelLockService.IsLocked(lockKey),
+                    ToolTip = "잠근 패널은 닫기가 비활성화되고, 프로그램을 다시 시작해도 잠금이 유지됩니다."
+                };
+                lockItem.Click += (s, _) => TogglePanelLock(document);
+                menu.Items.Add(lockItem);
+
+                menu.Items.Add(new System.Windows.Controls.Separator());
+            }
+
             var closeOthers = new System.Windows.Controls.MenuItem { Header = "다른 탭 닫기" };
             closeOthers.Click += (s, _) => CloseTabsExcept(document);
             menu.Items.Add(closeOthers);
@@ -2196,6 +2224,114 @@ namespace Folderss
             {
                 MessageBox.Show(exception.Message, "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        // ── Panel lock ────────────────────────────────────────────────────
+
+        // 잠긴 패널의 탭 제목에 붙는 표시. 제목은 레이아웃 XML에도 함께 저장되므로
+        // 잠금 상태를 반영할 때마다 접두사를 떼고 다시 붙여 중복을 막는다.
+        private const string LockedTitlePrefix = "🔒 ";
+
+        // 항상 닫을 수 없는 고정 탭 — 잠금 대상이 아니다.
+        private static readonly HashSet<string> FixedDocumentContentIds =
+            new HashSet<string>(StringComparer.Ordinal)
+            {
+                "left-folder",
+                "right-folder",
+                "add-folder-panel"
+            };
+
+        // 잠금 상태를 저장할 키. 잠글 수 없는 탭이면 null이다.
+        // 폴더 패널은 폴더를 이동해도 잠금이 유지되도록 패널 ID만, 뷰어 탭은 파일 경로를 키로 쓴다.
+        private static string GetPanelLockKey(LayoutDocument document)
+        {
+            var contentId = document == null ? null : document.ContentId;
+            if (string.IsNullOrWhiteSpace(contentId) || FixedDocumentContentIds.Contains(contentId))
+                return null;
+
+            var panelId = TryGetFolderPanelId(contentId);
+            if (panelId != null)
+                return "folder-panel|" + panelId;
+
+            var viewerPath = GetViewerPathFromContentId(contentId);
+            if (!string.IsNullOrWhiteSpace(viewerPath))
+                return "viewer|" + (NormalizeFilePath(viewerPath) ?? viewerPath).ToLowerInvariant();
+
+            return contentId;
+        }
+
+        private static bool IsPanelLocked(LayoutDocument document)
+        {
+            var lockKey = GetPanelLockKey(document);
+            return lockKey != null && PanelLockService.IsLocked(lockKey);
+        }
+
+        private void TogglePanelLock(LayoutDocument document)
+        {
+            var lockKey = GetPanelLockKey(document);
+            if (lockKey == null)
+                return;
+
+            PanelLockService.SetLocked(lockKey, !PanelLockService.IsLocked(lockKey));
+            ApplyPanelLockState(document);
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        // 저장된 잠금 상태를 모든 문서 탭의 닫기 가능 여부와 제목에 반영한다.
+        private void ApplyPanelLockStates()
+        {
+            foreach (var document in GetAllLayoutDocuments().ToList())
+                ApplyPanelLockState(document);
+            CommandManager.InvalidateRequerySuggested();
+        }
+
+        private void ApplyPanelLockState(LayoutDocument document)
+        {
+            if (document == null)
+                return;
+
+            // 레이아웃 XML에 CanClose가 남아 있어도 고정 탭은 항상 닫을 수 없어야 한다.
+            if (FixedDocumentContentIds.Contains(document.ContentId ?? string.Empty))
+            {
+                document.CanClose = false;
+                return;
+            }
+
+            var lockKey = GetPanelLockKey(document);
+            if (lockKey == null)
+                return;
+
+            var locked = PanelLockService.IsLocked(lockKey);
+            // 패널 최대화 중에는 잠금과 무관하게 닫기가 막혀 있으므로 CanClose를 되돌리지 않는다.
+            if (!_isPanelMaximized)
+                document.CanClose = !locked;
+            document.Title = FormatDocumentTitle(document.Title, locked);
+        }
+
+        // 탭 제목을 갱신하면서 잠금 표시를 유지한다.
+        private static void SetDocumentTitle(LayoutContent content, string title)
+        {
+            if (content == null)
+                return;
+
+            content.Title = FormatDocumentTitle(title, IsPanelLocked(content as LayoutDocument));
+        }
+
+        private static string FormatDocumentTitle(string title, bool locked)
+        {
+            var baseTitle = StripLockedTitlePrefix(title);
+            return locked ? LockedTitlePrefix + baseTitle : baseTitle;
+        }
+
+        private static string StripLockedTitlePrefix(string title)
+        {
+            while (!string.IsNullOrEmpty(title) &&
+                title.StartsWith(LockedTitlePrefix, StringComparison.Ordinal))
+            {
+                title = title.Substring(LockedTitlePrefix.Length);
+            }
+
+            return title;
         }
 
         private List<LayoutDocument> GetSiblingDocuments(LayoutDocument target)
@@ -2285,7 +2421,8 @@ namespace Folderss
             var doc = DockManager.Layout.Descendents()
                 .OfType<LayoutDocument>()
                 .FirstOrDefault(d => d.ContentId == "console");
-            if (doc != null)
+            // 잠긴 콘솔 패널은 패널 안의 닫기 버튼으로도 닫지 않는다.
+            if (doc != null && doc.CanClose)
                 doc.Close();
         }
 
@@ -2550,6 +2687,7 @@ namespace Folderss
                     Content = GetConsolePanel(),
                     CanClose = true
                 };
+                ApplyPanelLockState(doc);
                 doc.Closed += (s, e) => DisposeDocumentContent(doc);
                 targetPane.Children.Add(doc);
             }
