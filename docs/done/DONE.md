@@ -2,9 +2,28 @@
 
 기존 릴리스 완료 이력입니다. 현재 아이템의 상태와 상세 내용은 `docs/items/`에서 관리합니다.
 
+버전 섹션은 실제 git 태그(= `AssemblyInfo.cs` 버전)를 기준으로 합니다.
+과거에 이 문서의 번호가 태그와 별개로 매겨져 `v1.4.0` 이후 구간이 실제 태그보다 앞서 나가 있었으므로,
+v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조해 실제 릴리스 태그 번호로 정정했습니다
+(예: 이전 문서의 `v1.6.5`·`v1.6.4` 항목은 실제로 `v1.5.8`에 포함됨). 항목 내용은 그대로입니다.
+
 ---
 
-## v1.6.5 (2026-07-18)
+## v1.6.0 (2026-07-30)
+
+### 문서 탭 패널 잠금 기능
+
+- `Services/PanelLockService.cs` (신규) — 잠금 키 목록을 `%LOCALAPPDATA%\Folderss\panel-locks.xml`에 저장·복원. 토글 시 즉시 기록하고, 임시 파일 교체 방식으로 저장 중 중단에도 파일이 손상되지 않게 처리.
+- `MainWindow.xaml.cs` — 문서 탭 우클릭 메뉴에 체크 가능한 `패널 잠금` 항목 추가. 잠금 시 `LayoutDocument.CanClose = false`로 탭 X 버튼(템플릿의 `CanExecute` 연동)과 컨텍스트 메뉴 `닫기`를 막고, 탭 제목에 `🔒 ` 접두사를 붙인다.
+- 잠금 키는 `ContentId` 기반(`GetPanelLockKey`) — 폴더 패널은 `folder-panel|<패널 ID>`(폴더 이동에도 유지), 뷰어 탭은 `viewer|<정규화 경로>`(같은 파일 재오픈 시 유지), 그 밖의 닫기 가능 탭은 `ContentId` 그대로라 새 탭 종류가 추가돼도 별도 등록이 필요 없다. 고정 탭(`left-folder`, `right-folder`, `add-folder-panel`)은 대상에서 제외.
+- `ApplyPanelLockStates()`를 레이아웃 복원 직후·`F11` 최대화 복원 후·도킹 배치 초기화 후에 호출. AvalonDock이 `CanClose`를 레이아웃 XML에 함께 직렬화하므로 잠금 파일이 단일 기준이 되도록 잠김/해제를 양방향으로 재설정하고, 고정 탭은 항상 `CanClose = false`로 강제한다.
+- `LayoutContent.Close()`는 `CanClose`를 검사하지 않으므로 코드에서 직접 닫는 경로를 점검 — `CloseConsoleDocument()`에 `CanClose` 확인 추가(콘솔 패널 내부 닫기 버튼 우회 차단), `다른/왼쪽/오른쪽 탭 닫기`는 기존 확인 유지.
+- 탭 제목 갱신 경로(`FolderBrowser_PathChanged`, `CreateViewerHost`의 `TitleChanged`)를 `SetDocumentTitle()`로 통일해 제목이 바뀌어도 잠금 표시가 유지되게 처리.
+- `README.md`, `docs/architecture.md`, `CLAUDE.md`(새 문서 탭 추가 시 `ApplyPanelLockState`/`SetDocumentTitle` 호출 규칙) 반영.
+
+---
+
+## v1.5.8 (2026-07-26)
 
 ### 파일 메타데이터에 경로 표시 추가
 
@@ -24,10 +43,6 @@
 - `MainWindow.xaml.cs` — `ResolveDockContent`에 `disk-usage-mini` 등록, `BuildDefaultDockLayout()` 즐겨찾기 열 세로 구성, `EnsureDiskUsageMiniDock()`으로 구버전 저장 레이아웃 복원 후 자동 삽입(가로 패널이면 세로 컬럼으로 감싸기), `ShowDiskUsageMini_Click`으로 숨김 후 재표시.
 - 스크린샷으로 레이아웃 확인 완료(기존 dock-layout.xml에서 자동 마이그레이션 동작 검증).
 
----
-
-## v1.6.4 (2026-07-17)
-
 ### 디스크 사용량 레이어 도입 후 시작 크래시 수정
 
 - `MainWindow.xaml`, `MainWindow.xaml.cs` — 고정 바로가기 분리 커밋(0a93c22)에서 `FavoritesPanel`이 `PinnedShortcutsPanel`과 함께 익명 `Grid`로 감싸져 즐겨찾기 앵커러블의 콘텐츠가 Grid로 바뀌었는데, `ResolveDockContent("favorites")`·`BuildDefaultDockLayout()`·`CreateFavoritesDock()`는 여전히 `FavoritesPanel`을 도킹 콘텐츠로 할당해 `DockManager.Layout` 설정 시 `InvalidOperationException`("지정한 요소가 이미 다른 요소의 논리 자식입니다")으로 시작 즉시 크래시. 저장 레이아웃 복원 실패(조용히 catch) 후 폴백 `BuildDefaultDockLayout()`에서 unhandled로 종료되는 구조였음. Grid에 `x:Name="FavoritesDockContent"`를 부여하고 세 곳 모두 이를 도킹 콘텐츠로 사용하도록 수정.
@@ -35,16 +50,12 @@
 
 ---
 
-## v1.6.3 (2026-07-15)
+## v1.5.7 (2026-07-15)
 
 ### 문서 탭 컨텍스트 메뉴에 "탐색기로 열기" 추가
 
 - `MainWindow.xaml.cs` — 문서 탭(`DockManager_PreviewMouseRightButtonDown`) 우클릭 메뉴에 "탐색기로 열기" 항목 추가. `GetDocumentPathForExplorer()`가 탭 콘텐츠(`FolderBrowser`/`ViewerHost`)에서 경로를 얻어, `OpenPathInExplorer()`가 `explorer.exe /select,"<경로>"`로 상위 폴더에서 해당 폴더/파일이 선택된 상태로 탐색기를 연다. 폴더 패널 탭은 `CurrentPath`, Markdown 등 파일 뷰어 탭은 `ViewerHost.CurrentFilePath`를 사용하며, `+ 새 패널` 탭처럼 경로가 없는 탭에는 메뉴 항목이 표시되지 않음.
 - `Controls/ViewerHost.xaml.cs` — 현재 열린 파일 경로를 노출하는 `CurrentFilePath` 프로퍼티 추가.
-
----
-
-## v1.6.2 (2026-07-15)
 
 ### Markdown 뷰어 외부 변경 반영 시 스크롤 위치 유지
 
@@ -52,7 +63,7 @@
 
 ---
 
-## v1.6.1 (2026-06-27)
+## v1.5.3 (2026-06-30)
 
 ### 사용자 확인 완료
 
@@ -75,7 +86,27 @@
 
 ---
 
-## v1.6.0 (2026-06-24)
+## v1.5.2 (2026-06-30)
+
+### "+" 새 패널 탭 클릭 시 빈 화면 버그 수정
+
+- `MainWindow.xaml.cs` — `TogglePanelMaximize()` F11 복원 경로에 `EnsureAddPanelTab()` 호출 추가. `XmlLayoutSerializer.Deserialize()` 이후 "+" 탭 이벤트 핸들러가 소실될 수 있는 상태를 보정.
+- `MainWindow.xaml.cs` — `EnsureAddPanelTab()` 내부에서 "+" 탭이 이미 `IsActive=true`인 경우 인접 폴더 패널로 포커스를 전환. 다음 "+" 클릭 시 `IsActiveChanged`가 정상 발화하도록 초기화.
+- 재현 경로: F11 최대화 후 복원 또는 "+" 탭이 활성화된 상태의 세션 복원 이후 "+" 클릭 시 빈 화면이 나올 수 있는 케이스.
+
+### F11 폴더 패널 최대화 토글
+
+- `KeyBindingService.cs` — `PanelMaximize` (F11) 기본 바인딩 추가.
+- `MainWindow.xaml.cs` — `TogglePanelMaximize()` 메서드 추가.
+  - 최대화 시: 현재 레이아웃 XML을 메모리에 저장 후 활성 패널만 남긴 최소 레이아웃으로 교체.
+  - 복원 시: 저장된 XML을 `XmlLayoutSerializer`로 역직렬화, 최대화됐던 FolderBrowser 인스턴스를 그대로 재연결(`_activePane` 참조 보존).
+  - `Window_PreviewKeyDown`에 `PanelMaximize` 분기 추가.
+- `MainWindow.xaml` — 상태바 힌트 텍스트에 "F11 패널최대화" 추가.
+- 사용: F11 → 현재 활성 폴더 패널이 DockManager 전체 영역을 점유. 다시 F11 → 원래 레이아웃 복원.
+
+---
+
+## v1.4.5 (2026-06-26)
 
 ### 문서 정리
 
@@ -103,27 +134,7 @@
 
 ---
 
-## v1.5.1 (2026-06-24)
-
-### "+" 새 패널 탭 클릭 시 빈 화면 버그 수정
-
-- `MainWindow.xaml.cs` — `TogglePanelMaximize()` F11 복원 경로에 `EnsureAddPanelTab()` 호출 추가. `XmlLayoutSerializer.Deserialize()` 이후 "+" 탭 이벤트 핸들러가 소실될 수 있는 상태를 보정.
-- `MainWindow.xaml.cs` — `EnsureAddPanelTab()` 내부에서 "+" 탭이 이미 `IsActive=true`인 경우 인접 폴더 패널로 포커스를 전환. 다음 "+" 클릭 시 `IsActiveChanged`가 정상 발화하도록 초기화.
-- 재현 경로: F11 최대화 후 복원 또는 "+" 탭이 활성화된 상태의 세션 복원 이후 "+" 클릭 시 빈 화면이 나올 수 있는 케이스.
-
-### F11 폴더 패널 최대화 토글
-
-- `KeyBindingService.cs` — `PanelMaximize` (F11) 기본 바인딩 추가.
-- `MainWindow.xaml.cs` — `TogglePanelMaximize()` 메서드 추가.
-  - 최대화 시: 현재 레이아웃 XML을 메모리에 저장 후 활성 패널만 남긴 최소 레이아웃으로 교체.
-  - 복원 시: 저장된 XML을 `XmlLayoutSerializer`로 역직렬화, 최대화됐던 FolderBrowser 인스턴스를 그대로 재연결(`_activePane` 참조 보존).
-  - `Window_PreviewKeyDown`에 `PanelMaximize` 분기 추가.
-- `MainWindow.xaml` — 상태바 힌트 텍스트에 "F11 패널최대화" 추가.
-- 사용: F11 → 현재 활성 폴더 패널이 DockManager 전체 영역을 점유. 다시 F11 → 원래 레이아웃 복원.
-
----
-
-## v1.5.0 (2026-06-23)
+## v1.4.1 (2026-06-23)
 
 ### 마크다운 뷰어 Phase 01–04 — 전체 구현
 
@@ -203,7 +214,7 @@
 
 ---
 
-## v1.1.0
+## v1.1.0 (2026-06-21)
 
 ### 폴더 컴포넌트 드래그앤드롭
 
