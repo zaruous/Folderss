@@ -51,7 +51,7 @@ namespace Folderss.Models
             get
             {
                 if (IsDirectory)
-                    return "📁";
+                    return "📂";
 
                 var extension = Path.GetExtension(Name).ToLowerInvariant();
                 switch (extension)
