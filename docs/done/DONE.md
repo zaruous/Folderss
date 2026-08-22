@@ -9,6 +9,17 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## v1.6.1 (2026-08-22)
+
+### 폴더 패널 그리드의 폴더 아이콘 구분 개선
+
+- `Models/FileSystemItem.cs` — `Icon`의 디렉터리 분기 반환값을 `📁`에서 `📂`로 변경. 닫힌 폴더 이모지는 목록의 파일 아이콘(`📄`, `🖼`, `📦`)과 글리프 실루엣이 비슷해 아이콘 열(폭 38)에서 폴더와 파일이 한눈에 구분되지 않았다.
+- `Controls/FolderBrowser.xaml`의 첫 번째 `GridViewColumn`(`DisplayMemberBinding="{Binding Icon}"`)이 이 프로퍼티를 유일하게 바인딩하므로 파일 목록 그리드 전체에 한 번에 반영된다.
+- 폴더 트리(`FolderBrowser.GetTreeItemHeader`)와 즐겨찾기 패널(`FavoritesPanel.xaml`)은 항목이 모두 폴더라 파일과 혼동될 여지가 없어 기존 `📁`를 유지했다.
+- `Properties/AssemblyInfo.cs` — `AssemblyVersion`/`AssemblyFileVersion`을 `1.6.1.0`으로 갱신.
+
+---
+
 ## v1.6.0 (2026-07-30)
 
 ### 문서 탭 패널 잠금 기능
