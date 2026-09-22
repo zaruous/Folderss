@@ -1711,6 +1711,7 @@ namespace Folderss
                 _searchPanel = new Controls.SearchPanel();
                 _searchPanel.NavigateRequested += (s, e) => ActivePane.SelectAndScrollTo(e.Path);
                 _searchPanel.HideRequested += (s, e) => _searchWindow?.Hide();
+                _searchPanel.ActivePaneRootRequested += (s, e) => _searchPanel.FollowActivePaneRoot(ActivePaneCurrentPath);
             }
 
             if (_searchWindow == null || !_searchWindow.IsLoaded)
@@ -1728,6 +1729,11 @@ namespace Folderss
                     WindowStyle = WindowStyle.ToolWindow
                 };
                 _searchWindow.Closing += (s, e) => { e.Cancel = true; _searchWindow.Hide(); };
+
+                // 검색 창은 모달이 아니라 계속 떠 있는 도구 창이라, 창을 열어둔 채 트리뷰나 경로 이동으로
+                // 활성 패널의 폴더가 바뀔 수 있다. 창이 다시 포커스를 받을 때마다 대상 폴더를 갱신하지
+                // 않으면 창을 처음 열었던 폴더를 계속 검색해 오류 없이 결과 0건이 된다.
+                _searchWindow.Activated += (s, e) => UpdateSearchRoot();
             }
 
             if (_searchWindow.IsVisible)
@@ -1736,9 +1742,27 @@ namespace Folderss
                 return;
             }
 
-            _searchPanel.SetRootPath(ActivePane.CurrentPath);
+            UpdateSearchRoot();
             _searchWindow.Show();
             Dispatcher.BeginInvoke(new Action(() => _searchPanel.FocusSearchBox()), DispatcherPriority.Input);
+        }
+
+        /// <summary>
+        /// 검색 대상 폴더를 현재 활성 패널에 맞춰 갱신한다.
+        /// 사용자가 검색 창에서 폴더를 직접 고른 상태면 SearchPanel 쪽에서 무시한다.
+        /// 경로 자체는 검색 창의 '대상 폴더' 칸이 표시하므로 창 제목에는 넣지 않는다(표시처 이원화 방지).
+        /// </summary>
+        private void UpdateSearchRoot()
+        {
+            if (_searchPanel == null)
+                return;
+
+            _searchPanel.SetRootPath(ActivePaneCurrentPath);
+        }
+
+        private string ActivePaneCurrentPath
+        {
+            get { return ActivePane == null ? null : ActivePane.CurrentPath; }
         }
 
         private void SwitchToAdjacentPane(int direction)

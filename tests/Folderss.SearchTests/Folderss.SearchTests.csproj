@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Folderss 본체는 net8.0-windows(WPF)라 CI/리눅스에서 실행할 수 없다.
+    검색 로직은 순수 System.IO 코드이므로 소스 링크로 끌어와 net8.0에서 단독 테스트한다.
+    (Folderss.sln에는 포함하지 않는다 — 앱 빌드에 xunit 복원을 강제하지 않기 위함)
+    실행: dotnet test tests/Folderss.SearchTests
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <Nullable>disable</Nullable>
+    <IsPackable>false</IsPackable>
+    <RootNamespace>Folderss.SearchTests</RootNamespace>
+    <NoWarn>$(NoWarn);CA1416</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="..\..\Folderss\Models\SearchResult.cs" Link="Linked\SearchResult.cs" />
+    <Compile Include="..\..\Folderss\Models\SearchTarget.cs" Link="Linked\SearchTarget.cs" />
+    <Compile Include="..\..\Folderss\Services\SearchService.cs" Link="Linked\SearchService.cs" />
+    <Compile Include="..\..\Folderss\Services\FilePreviewService.cs" Link="Linked\FilePreviewService.cs" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
+    <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
+    <PackageReference Include="xunit" Version="2.9.2" />
+    <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />
+    <PackageReference Include="xunit.runner.visualstudio" Version="2.8.2" />
+  </ItemGroup>
+
+</Project>

@@ -32,7 +32,7 @@
 | `NavigateUp` | 상위 폴더 | `Alt+↑` | MainWindow | 활성 패널 상위 폴더 이동 |
 | `SwitchPaneLeft` | 왼쪽 패널 전환 | `Ctrl+Shift+←` | MainWindow | 이전 폴더 패널로 포커스 전환 |
 | `SwitchPaneRight` | 오른쪽 패널 전환 | `Ctrl+Shift+→` | MainWindow | 다음 폴더 패널로 포커스 전환 |
-| `ShowSearch` | 파일 검색 | `Ctrl+F` | MainWindow | 파일 검색 창 열기 (내용 검색/파일명 검색 대상 선택, 확장자 필터) |
+| `ShowSearch` | 파일 검색 | `Ctrl+F` | MainWindow | 파일 검색 창 열기 (내용 검색/파일명 검색 대상 선택, 와일드카드 패턴) |
 | `PanelMaximize` | 패널 최대화 토글 | `F11` | MainWindow | 활성 패널/문서 최대화 토글 |
 
 ---

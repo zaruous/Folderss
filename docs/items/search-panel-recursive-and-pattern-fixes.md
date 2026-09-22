@@ -1,0 +1,175 @@
+# 검색 패널 하위 폴더 검색 버그 및 패턴 검색·내용 컬럼 토글
+
+- 상태: Ready for Verification (Windows 실제 앱 동작은 사용자 환경에서 확인 필요)
+
+## 요구사항
+
+`Ctrl+F` 파일 검색 팝업(`SearchPanel`)에 대한 요청 3건.
+
+1. 파일명 검색에서 `하위 폴더 포함`을 선택하면 검색 결과가 나오지 않는 버그 수정
+2. 파일 내용(일치한 줄)이 결과 목록에 표시되는지를 옵션으로 켜고 끌 수 있게 할 것
+3. 확장자 전용 입력란을 없애고, 검색어 입력란 하나로 패턴 검색을 지원할 것
+
+## 원인 분석 또는 설계
+
+### 1. 하위 폴더 포함 검색이 결과를 내지 못하던 원인
+
+`SearchService.SearchAsync`는 `Directory.EnumerateFiles(rootPath, "*", SearchOption.AllDirectories)`로 순회했다.
+이 오버로드는 내부적으로 `EnumerationOptions.CompatibleRecursive`(= `IgnoreInaccessible = false`)를 쓰기 때문에
+하위 폴더 중 하나라도 접근 권한이 없으면 열거자의 `MoveNext()` 단계에서 `UnauthorizedAccessException`이 난다.
+기존 `try/catch`는 `foreach` **본문** 안에만 있어 열거자 자체의 예외를 막지 못했고, 예외가 `Task.Run` 밖으로
+전파되어 `StartSearch`의 `catch (Exception)`에 걸려 결과 없이 `검색 오류: …`로 끝났다.
+
+Windows 사용자 폴더에는 `%LOCALAPPDATA%\Application Data`처럼 자기 자신을 가리키면서 ACL로 접근이 막힌 정션이
+기본 존재하므로, 사용자 폴더 아래에서 하위 폴더 검색을 하면 사실상 항상 이 경로를 탔다.
+
+접근 거부만 무시하도록 `EnumerationOptions { IgnoreInaccessible = true }`로 바꾸면 이번엔 위와 같은 정션을
+따라 들어가 순환에 빠질 수 있다(결과가 무한히 쌓여 메모리까지 위험). 접근 거부 차단이 지금까지 순환을 우연히
+막아주고 있었기 때문에, 두 문제를 함께 처리해야 한다.
+
+그래서 폴더 단위 스택 순회(`EnumerateFiles`)를 직접 구현했다.
+- 폴더마다 `GetFiles`/`GetDirectories`를 각각 `try/catch`로 감싸 한 폴더의 실패가 순회 전체를 끊지 않게 한다.
+- `FileAttributes.ReparsePoint`인 하위 폴더에는 들어가지 않아 정션·심볼릭 링크 순환을 차단한다.
+- `yield return`은 `catch`가 있는 `try` 안에 둘 수 없으므로, 폴더 목록을 배열로 먼저 확정한 뒤 바깥에서 넘긴다.
+
+### 1-2. 검색 대상 폴더가 갱신되지 않던 원인 (에러 없이 결과 0건)
+
+사용자 확인 결과 "에러 문구는 없었고 결과만 없었다"였다. 접근 거부 경로는 상태 바에 `검색 오류: …`를 띄우므로
+증상이 다르다. 상태 텍스트를 바꾸지 않고 끝나는 경로를 역추적해 두 번째 원인을 찾았다.
+
+`MainWindow.ShowSearchPanel()`에서 `SetRootPath` 호출이 `IsVisible` 조기 반환 **뒤에** 있었다.
+
+```csharp
+if (_searchWindow.IsVisible) { _searchWindow.Hide(); return; }  // 창이 떠 있으면 여기서 끝
+_searchPanel.SetRootPath(ActivePane.CurrentPath);               // 창을 '열 때'만 갱신
+```
+
+검색 창은 모달이 아니라 계속 떠 있는 도구 창(`WindowStyle.ToolWindow`)이다. 창을 열어둔 채 트리뷰에서 폴더를
+선택하면 `FolderTree_SelectedItemChanged` → `NavigateTo` → `CurrentPath`는 갱신되지만, 검색 대상 `_rootPath`는
+창을 처음 열었을 때의 폴더에 고정된 채 남는다. 결과적으로 **엉뚱한 폴더를 정상 검색**해서 오류 없이 0건이 된다.
+`SetRootPath` 호출부는 프로젝트 전체에서 이 한 곳뿐이었다.
+
+창이 포커스를 받을 때마다(`Activated`) 대상 폴더를 갱신하도록 바꾸고, 어떤 폴더를 검색 중인지 창 제목에
+표시해(`파일 검색 — <경로>`) 같은 혼동이 다시 생기지 않게 했다.
+
+함께 정리한, 아무 반응 없이 끝나던 나머지 경로 두 가지.
+
+- `_rootPath`가 비면 `StartSearch`가 상태 텍스트조차 건드리지 않고 `return`했다 → 이유를 표시하도록 변경.
+- 범위/대상 콤보를 바꿔도 재검색이 걸리지 않고 이전 결과가 그대로 남았다. 게다가 그 시점에 포커스가 콤보박스라
+  그 자리에서 Enter를 눌러도 `QueryBox_KeyDown`이 동작하지 않는다 → 재검색이 필요하다는 안내를 상태 바에 표시.
+  자동 재검색은 넣지 않았다(대상 폴더가 크면 비용이 크고, 사용자가 의도하지 않은 전체 스캔이 시작될 수 있다).
+
+### 1-3. 대상 폴더 표시와 직접 선택
+
+위 수정으로 대상 폴더가 활성 패널을 따라가게 됐지만, **어떤 폴더를 검색 중인지 여전히 보이지 않는다**는
+지적에 따라 검색 창 상단에 `대상 폴더` 칸을 두어 경로를 상시 표시하고, `폴더 선택…` 버튼으로 활성 패널과
+무관한 폴더를 직접 고를 수 있게 했다(`Forms.FolderBrowserDialog` — `MainWindow.AddFolderPanel_Click`과 같은 패턴).
+
+여기서 **직전 수정과 정면으로 충돌하는 지점**이 생긴다. `Activated`마다 활성 패널 폴더로 갱신하면,
+사용자가 직접 고른 폴더가 메인 창을 한 번 클릭했다 돌아오는 것만으로 덮어써진다. 사용자 결정에 따라
+**수동 선택 시 자동 동기화를 끄는** 방식으로 처리했다.
+
+- `SearchPanel._rootPinned` — `폴더 선택…`으로 고른 상태. `SetRootPath`(호스트의 자동 동기화용)는 이때 아무것도 하지 않는다.
+- `현재 폴더` 버튼으로 고정을 푼다. `ActivePaneRootRequested` 이벤트 → `MainWindow`가 `FollowActivePaneRoot()`로 되돌린다.
+- 고정 상태는 `현재 폴더` 버튼의 활성화 여부로 드러낸다(따라가는 중이면 비활성).
+- 고정은 창을 닫았다 다시 열어도 유지된다. 경로가 상시 보이고 해제가 한 번의 클릭이라 혼동 위험보다
+  "고른 폴더가 유지된다"는 기대를 지키는 쪽이 낫다고 판단했다.
+
+직전 커밋에서 창 제목에 넣었던 경로는 제거했다. `대상 폴더` 칸이 더 잘 보이는 데다, 고정 상태에서는
+제목만 활성 패널을 따라가 **두 표시가 어긋날 수 있기 때문이다**(표시처 이원화 제거).
+
+### 2. 내용 컬럼 표시 토글
+
+`GridViewColumn`에는 `Visibility`가 없어 스타일로 숨길 수 없다. `GridView.Columns`에서 컬럼을 제거하고
+다시 삽입하는 방식으로 구현했다. 다시 넣을 때는 `줄 / 내용 / 경로` 순서가 유지되도록 원래 인덱스(1)에 삽입한다.
+
+### 3. 확장자 필터 → 검색어 입력란의 와일드카드 패턴
+
+`ExtBox`와 `ParseExtensions`를 제거하고, 검색어 자체가 `*`/`?`를 포함하면 와일드카드 패턴으로 해석한다.
+적용 범위는 **파일명 검색 + 정규식 옵션 꺼짐**일 때로 한정했다.
+- 확장자 필터를 대체하는 용도라 `*.cs`가 `a.cs.bak`에 걸리면 안 되므로 패턴은 양끝을 고정(`^…$`)한다.
+- 와일드카드가 없으면 기존처럼 부분 일치를 유지한다(`report` → `monthly-report.txt`).
+- 내용 검색에서 줄 텍스트에 와일드카드를 적용하는 것은 부자연스럽고 기존 동작을 깨므로 제외했다.
+
+알려진 트레이드오프: 확장자 필터가 사라지면서 **내용 검색의 대상 파일을 좁힐 수단이 없어졌다.**
+내용 검색은 이제 폴더 안 모든 파일의 앞 4KB를 읽어 바이너리 판별을 하므로 대용량 폴더에서 이전보다 느리다.
+(요청에 따른 의도된 변경이며, 필요해지면 파일명 패턴을 내용 검색의 사전 필터로 함께 적용하는 방식으로 확장 가능)
+
+## 구현 내용
+
+- `Folderss/Services/SearchService.cs`
+  - `SearchAsync`에서 `extensionFilter` 파라미터와 `ParseExtensions` 제거.
+  - 접근 거부·순환 링크에 내성이 있는 폴더 단위 스택 순회 `EnumerateFiles` 추가. `IsReparsePoint`로 링크 폴더 제외.
+  - `BuildRegex`/`HasWildcard`/`BuildWildcardPattern` 추가 — 파일명 검색의 와일드카드 패턴을 양끝 고정 정규식으로 변환.
+- `Folderss/Controls/SearchPanel.xaml`
+  - 확장자 필터 `ExtBox` 제거, `내용` 컬럼 표시 토글 `ContentColumnToggle` 추가(기본 켜짐).
+  - 검색어 입력란 워터마크·툴팁을 패턴 안내로 변경, `내용` 컬럼에 `x:Name="ContentColumn"` 부여.
+- `Folderss/Controls/SearchPanel.xaml.cs`
+  - `ExtBox_TextChanged` 제거, `SearchAsync` 호출에서 확장자 인자 제거.
+  - `ContentColumnToggle_Changed` / `UpdateContentColumnVisibility` 추가.
+- `Folderss/Controls/SearchPanel.xaml`
+  - `대상 폴더` 경로 칸(`RootPathBox`, 읽기 전용), `폴더 선택…`(`BrowseRootButton`), `현재 폴더`(`UseActivePaneButton`) 추가.
+- `Folderss/MainWindow.xaml.cs`
+  - `UpdateSearchRoot()` 추가. `_searchWindow.Activated`에서 호출해 활성 패널의 폴더를 계속 따라가게 하고,
+    창 제목에 대상 경로를 표시한다.
+- `Folderss/Controls/SearchPanel.xaml.cs`
+  - `_rootPath`가 없을 때 상태 바에 이유 표시(조용한 `return` 제거).
+  - `NotifyResearchRequired()` 추가 — 옵션 변경 후 재검색이 필요함을 안내.
+- `tests/Folderss.SearchTests` 신규 — 검색 로직 회귀 테스트(아래 검증 참고).
+
+## 변경 파일
+
+- `Folderss/Services/SearchService.cs`
+- `Folderss/Controls/SearchPanel.xaml`
+- `Folderss/Controls/SearchPanel.xaml.cs`
+- `Folderss/MainWindow.xaml.cs`
+- `tests/Folderss.SearchTests/Folderss.SearchTests.csproj`
+- `tests/Folderss.SearchTests/SearchServiceTests.cs`
+- `README.md`
+- `docs/architecture.md`
+- `docs/keyboard-shortcuts.md`
+- `docs/items/search-panel-recursive-and-pattern-fixes.md`
+
+## 검증
+
+검색 로직은 순수 `System.IO` 코드라 WPF 없이 검증할 수 있다. 본체(`net8.0-windows`)는 리눅스에서 실행할 수 없으므로
+관련 소스만 링크한 `net8.0` 테스트 프로젝트를 추가했다. `Folderss.sln`에는 포함하지 않아 앱 빌드 절차는 그대로다.
+
+```
+dotnet test tests/Folderss.SearchTests
+```
+
+14개 테스트 통과. 수정 전 코드에 대해서는 아래 3개가 실패하는 것을 먼저 확인했다(재현 테스트).
+
+| 테스트 | 수정 전 |
+| --- | --- |
+| `Recursive_WithInaccessibleSubdirectory_StillReturnsAccessibleMatches` | `UnauthorizedAccessException` — 접근 가능한 파일까지 포함해 결과 0건 |
+| `Recursive_WithSymlinkLoop_TerminatesAndReportsEachFileOnce` | 같은 파일이 수십 번 중복 보고됨 |
+| `Search_OnMissingRoot_Completes_WithoutResults` | `DirectoryNotFoundException` |
+
+접근 거부 재현은 POSIX 권한에 의존하므로, 권한 검사를 우회하는 계정(root)이나 `chmod`가 없는 플랫폼에서는
+해당 테스트가 자동으로 Skip된다(`TryDenyDirectoryListing`이 실제로 거부가 되는지 먼저 확인).
+리눅스 컨테이너에서는 `capsh --drop=cap_dac_override,cap_dac_read_search`로 실제 실행해 확인했다.
+
+빌드는 리눅스에서 `dotnet build Folderss.sln -c Debug -p:EnableWindowsTargeting=true`로 확인했다.
+XAML 마크업 컴파일(`SearchPanel.g.cs`에 `ContentColumn`/`ContentColumnToggle` 필드 생성)까지 통과하며,
+남는 오류는 `ConsolePanel.xaml.cs`의 `Microsoft.Terminal`(EasyWindowsTerminalControl의 Windows 전용 어셈블리)
+하나뿐으로 **수정 전 트리에서도 동일하게 발생하는 환경 제약**이다.
+
+Windows 개발 환경에서 아래를 추가로 확인 필요.
+- `dotnet build .\Folderss.sln -c Debug` (Exit: 0)
+- 사용자 폴더 등에서 `하위 폴더 포함` + `파일명 검색` → 결과가 나오는지 (기존 버그 재현 경로)
+- `*.cs` 입력 시 `.cs` 파일만, `report?.txt` 입력 시 한 글자만 매칭되는지
+- 와일드카드 없는 검색어가 기존처럼 부분 일치로 동작하는지 (회귀)
+- `내용` 토글을 껐다 켰을 때 컬럼이 `줄 / 내용 / 경로` 순서로 복원되는지
+- **(핵심 재현 경로)** `Ctrl+F`로 검색 창을 연 뒤 창을 닫지 말고, 트리뷰에서 다른 폴더를 선택한 다음
+  검색 창으로 돌아와 검색 → 창 제목의 경로가 새 폴더로 바뀌고 그 폴더에서 결과가 나오는지
+
+## 변경 이력
+
+- 2026-09-22: 검색 창에 `대상 폴더` 표시와 `폴더 선택…` 추가. 수동 선택 시 활성 패널 자동 동기화를 끄고
+  `현재 폴더` 버튼으로 되돌리게 함. 창 제목의 경로 표시는 이원화 방지를 위해 제거.
+- 2026-09-22: 검색 창이 열린 채 폴더를 이동하면 대상 폴더가 갱신되지 않던 문제 수정(창 제목에 대상 경로 표시),
+  아무 반응 없이 끝나던 경로 2건에 상태 표시 추가.
+- 2026-09-22: 하위 폴더 포함 검색 중단 버그 수정, 와일드카드 패턴 검색 도입(확장자 필터 제거),
+  내용 컬럼 표시 토글 추가, 검색 로직 회귀 테스트 프로젝트 신규 추가.
