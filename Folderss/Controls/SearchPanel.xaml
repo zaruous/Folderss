@@ -15,7 +15,39 @@
                 Background="{DynamicResource SurfaceBackground}"
                 BorderBrush="{DynamicResource BorderBrush}"
                 BorderThickness="0,0,0,1">
-            <DockPanel>
+            <StackPanel>
+                <!-- 대상 폴더: 어떤 폴더를 검색 중인지 항상 보이게 한다 -->
+                <DockPanel Margin="0,0,0,5">
+                    <TextBlock DockPanel.Dock="Left"
+                               Text="대상 폴더"
+                               VerticalAlignment="Center"
+                               Margin="0,0,6,0"
+                               Foreground="{DynamicResource SecondaryText}"/>
+                    <Button x:Name="BrowseRootButton"
+                            DockPanel.Dock="Right"
+                            Style="{StaticResource CompactToolButtonStyle}"
+                            Content="폴더 선택…"
+                            ToolTip="검색할 폴더를 직접 고릅니다. 고른 뒤에는 활성 패널을 따라가지 않습니다."
+                            Width="84"
+                            Margin="4,0,0,0"
+                            Click="BrowseRootButton_Click"/>
+                    <Button x:Name="UseActivePaneButton"
+                            DockPanel.Dock="Right"
+                            Style="{StaticResource CompactToolButtonStyle}"
+                            Content="현재 폴더"
+                            ToolTip="고정을 풀고 활성 폴더 패널을 다시 따라갑니다."
+                            Width="72"
+                            Margin="4,0,0,0"
+                            IsEnabled="False"
+                            Click="UseActivePaneButton_Click"/>
+                    <TextBox x:Name="RootPathBox"
+                             IsReadOnly="True"
+                             VerticalContentAlignment="Center"
+                             Padding="4,2"
+                             ToolTip="현재 검색 대상 폴더"/>
+                </DockPanel>
+
+                <DockPanel>
                 <!-- 범위 선택 -->
                 <ComboBox x:Name="ScopeCombo"
                           DockPanel.Dock="Right"
@@ -95,7 +127,8 @@
                         </TextBlock.Style>
                     </TextBlock>
                 </Grid>
-            </DockPanel>
+                </DockPanel>
+            </StackPanel>
         </Border>
 
         <!-- 결과 목록 -->

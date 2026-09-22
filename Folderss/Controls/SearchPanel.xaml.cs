@@ -3,6 +3,7 @@ using Folderss.Services;
 using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -11,6 +12,7 @@ using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Interop;
 using System.Windows.Media;
+using Forms = System.Windows.Forms;
 
 namespace Folderss.Controls
 {
@@ -18,6 +20,9 @@ namespace Folderss.Controls
     {
         public event EventHandler<SearchNavigateEventArgs> NavigateRequested;
         public event EventHandler HideRequested;
+
+        /// <summary>'현재 폴더' 버튼 — 고정을 풀고 활성 패널 폴더를 다시 받아오도록 호스트에 요청한다.</summary>
+        public event EventHandler ActivePaneRootRequested;
 
         private readonly List<SearchResult> _allResults = new List<SearchResult>();
         private readonly ObservableCollection<SearchResult> _results = new ObservableCollection<SearchResult>();
@@ -27,6 +32,9 @@ namespace Folderss.Controls
         private CancellationTokenSource _cts;
         private string _rootPath;
 
+        // 사용자가 '폴더 선택…'으로 대상 폴더를 직접 고른 상태. 이때는 활성 패널 변경을 따라가지 않는다.
+        private bool _rootPinned;
+
         public SearchPanel()
         {
             InitializeComponent();
@@ -35,9 +43,56 @@ namespace Folderss.Controls
             ResultList.ItemsSource = view;
         }
 
+        /// <summary>
+        /// 활성 폴더 패널을 따라가기 위한 경로 갱신. 사용자가 폴더를 직접 고른 뒤에는 무시한다
+        /// — 그렇지 않으면 검색 창이 포커스를 받을 때마다 사용자가 고른 폴더가 덮어써진다.
+        /// </summary>
         public void SetRootPath(string path)
         {
+            if (_rootPinned)
+                return;
+
+            ApplyRootPath(path);
+        }
+
+        /// <summary>고정을 풀고 활성 패널 폴더로 되돌린다.</summary>
+        public void FollowActivePaneRoot(string path)
+        {
+            _rootPinned = false;
+            ApplyRootPath(path);
+        }
+
+        private void ApplyRootPath(string path)
+        {
             _rootPath = path;
+            RootPathBox.Text = path ?? string.Empty;
+            UseActivePaneButton.IsEnabled = _rootPinned;
+        }
+
+        private void BrowseRootButton_Click(object sender, RoutedEventArgs e)
+        {
+            using (var dialog = new Forms.FolderBrowserDialog())
+            {
+                dialog.Description = "검색할 폴더를 선택하세요.";
+                dialog.ShowNewFolderButton = false;
+                if (!string.IsNullOrWhiteSpace(_rootPath) && Directory.Exists(_rootPath))
+                    dialog.SelectedPath = _rootPath;
+
+                if (dialog.ShowDialog() != Forms.DialogResult.OK)
+                    return;
+
+                CancelSearch();
+                _rootPinned = true;
+                ApplyRootPath(dialog.SelectedPath);
+                NotifyResearchRequired();
+            }
+        }
+
+        private void UseActivePaneButton_Click(object sender, RoutedEventArgs e)
+        {
+            CancelSearch();
+            ActivePaneRootRequested?.Invoke(this, EventArgs.Empty);
+            NotifyResearchRequired();
         }
 
         public void FocusSearchBox()
@@ -103,7 +158,7 @@ namespace Folderss.Controls
             if (_allResults.Count == 0)
                 return;
 
-            StatusText.Text = "옵션이 바뀌었습니다 — 검색어 입력란을 클릭하고 Enter를 눌러 다시 검색하세요.";
+            StatusText.Text = "검색 조건이 바뀌었습니다 — 검색어 입력란을 클릭하고 Enter를 눌러 다시 검색하세요.";
         }
 
         private void ContentColumnToggle_Changed(object sender, RoutedEventArgs e)

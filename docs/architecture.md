@@ -7,7 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
-│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
+│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
 │   ├── DiskUsageMiniPanel.xaml/.cs — 즐겨찾기 열 상단 도킹용 컴팩트 디스크 사용량 뷰 (얇은 바, 남은 용량, 툴팁 상세)
@@ -97,7 +97,11 @@ Folderss/
 - `Ctrl+F`(`ShowSearch`)로 여는 별도 팝업 창(`파일 검색`)에서 실행, `MainWindow.ShowSearchPanel()` 참고
 - 검색 창은 모달이 아니라 계속 떠 있는 도구 창이다. 대상 폴더는 `MainWindow.UpdateSearchRoot()`가
   `_searchWindow.Activated`마다 활성 패널 기준으로 갱신한다 — 창을 열 때만 갱신하면 창을 열어둔 채
-  트리뷰 등으로 폴더를 옮겼을 때 옛 폴더를 계속 검색해 오류 없이 0건이 된다. 대상 경로는 창 제목에 표시한다
+  트리뷰 등으로 폴더를 옮겼을 때 옛 폴더를 계속 검색해 오류 없이 0건이 된다
+- 대상 폴더 경로는 패널 상단 `RootPathBox`가 상시 표시한다. `폴더 선택…`(`BrowseRootButton`)으로 직접 고르면
+  `_rootPinned`가 서고 `SetRootPath`(자동 동기화)가 무시된다 — 그러지 않으면 창이 포커스를 받을 때마다
+  사용자가 고른 폴더가 덮어써진다. `현재 폴더`(`UseActivePaneButton`)가 `ActivePaneRootRequested`를 올려
+  `MainWindow`가 `FollowActivePaneRoot()`로 고정을 푼다. 고정 여부는 그 버튼의 활성화 상태로 드러낸다
 - `TargetCombo`로 검색 대상을 `내용 검색`/`파일명 검색` 중 선택 (`SearchTarget.Content` / `SearchTarget.FileName`)
 - 검색어 입력란 하나로 처리한다. 파일명 검색이고 정규식 옵션이 꺼져 있을 때 `*`/`?`가 들어 있으면
   와일드카드 패턴(`*.cs`, `report?.txt`)으로 해석하고, 파일명 전체가 일치해야 한다. 와일드카드가 없으면 기존처럼 부분 일치.

@@ -59,6 +59,25 @@ _searchPanel.SetRootPath(ActivePane.CurrentPath);               // 창을 '열 �
   그 자리에서 Enter를 눌러도 `QueryBox_KeyDown`이 동작하지 않는다 → 재검색이 필요하다는 안내를 상태 바에 표시.
   자동 재검색은 넣지 않았다(대상 폴더가 크면 비용이 크고, 사용자가 의도하지 않은 전체 스캔이 시작될 수 있다).
 
+### 1-3. 대상 폴더 표시와 직접 선택
+
+위 수정으로 대상 폴더가 활성 패널을 따라가게 됐지만, **어떤 폴더를 검색 중인지 여전히 보이지 않는다**는
+지적에 따라 검색 창 상단에 `대상 폴더` 칸을 두어 경로를 상시 표시하고, `폴더 선택…` 버튼으로 활성 패널과
+무관한 폴더를 직접 고를 수 있게 했다(`Forms.FolderBrowserDialog` — `MainWindow.AddFolderPanel_Click`과 같은 패턴).
+
+여기서 **직전 수정과 정면으로 충돌하는 지점**이 생긴다. `Activated`마다 활성 패널 폴더로 갱신하면,
+사용자가 직접 고른 폴더가 메인 창을 한 번 클릭했다 돌아오는 것만으로 덮어써진다. 사용자 결정에 따라
+**수동 선택 시 자동 동기화를 끄는** 방식으로 처리했다.
+
+- `SearchPanel._rootPinned` — `폴더 선택…`으로 고른 상태. `SetRootPath`(호스트의 자동 동기화용)는 이때 아무것도 하지 않는다.
+- `현재 폴더` 버튼으로 고정을 푼다. `ActivePaneRootRequested` 이벤트 → `MainWindow`가 `FollowActivePaneRoot()`로 되돌린다.
+- 고정 상태는 `현재 폴더` 버튼의 활성화 여부로 드러낸다(따라가는 중이면 비활성).
+- 고정은 창을 닫았다 다시 열어도 유지된다. 경로가 상시 보이고 해제가 한 번의 클릭이라 혼동 위험보다
+  "고른 폴더가 유지된다"는 기대를 지키는 쪽이 낫다고 판단했다.
+
+직전 커밋에서 창 제목에 넣었던 경로는 제거했다. `대상 폴더` 칸이 더 잘 보이는 데다, 고정 상태에서는
+제목만 활성 패널을 따라가 **두 표시가 어긋날 수 있기 때문이다**(표시처 이원화 제거).
+
 ### 2. 내용 컬럼 표시 토글
 
 `GridViewColumn`에는 `Visibility`가 없어 스타일로 숨길 수 없다. `GridView.Columns`에서 컬럼을 제거하고
@@ -88,6 +107,8 @@ _searchPanel.SetRootPath(ActivePane.CurrentPath);               // 창을 '열 �
 - `Folderss/Controls/SearchPanel.xaml.cs`
   - `ExtBox_TextChanged` 제거, `SearchAsync` 호출에서 확장자 인자 제거.
   - `ContentColumnToggle_Changed` / `UpdateContentColumnVisibility` 추가.
+- `Folderss/Controls/SearchPanel.xaml`
+  - `대상 폴더` 경로 칸(`RootPathBox`, 읽기 전용), `폴더 선택…`(`BrowseRootButton`), `현재 폴더`(`UseActivePaneButton`) 추가.
 - `Folderss/MainWindow.xaml.cs`
   - `UpdateSearchRoot()` 추가. `_searchWindow.Activated`에서 호출해 활성 패널의 폴더를 계속 따라가게 하고,
     창 제목에 대상 경로를 표시한다.
@@ -146,6 +167,8 @@ Windows 개발 환경에서 아래를 추가로 확인 필요.
 
 ## 변경 이력
 
+- 2026-09-22: 검색 창에 `대상 폴더` 표시와 `폴더 선택…` 추가. 수동 선택 시 활성 패널 자동 동기화를 끄고
+  `현재 폴더` 버튼으로 되돌리게 함. 창 제목의 경로 표시는 이원화 방지를 위해 제거.
 - 2026-09-22: 검색 창이 열린 채 폴더를 이동하면 대상 폴더가 갱신되지 않던 문제 수정(창 제목에 대상 경로 표시),
   아무 반응 없이 끝나던 경로 2건에 상태 표시 추가.
 - 2026-09-22: 하위 폴더 포함 검색 중단 버그 수정, 와일드카드 패턴 검색 도입(확장자 필터 제거),

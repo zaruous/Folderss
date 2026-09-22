@@ -1711,6 +1711,7 @@ namespace Folderss
                 _searchPanel = new Controls.SearchPanel();
                 _searchPanel.NavigateRequested += (s, e) => ActivePane.SelectAndScrollTo(e.Path);
                 _searchPanel.HideRequested += (s, e) => _searchWindow?.Hide();
+                _searchPanel.ActivePaneRootRequested += (s, e) => _searchPanel.FollowActivePaneRoot(ActivePaneCurrentPath);
             }
 
             if (_searchWindow == null || !_searchWindow.IsLoaded)
@@ -1747,18 +1748,21 @@ namespace Folderss
         }
 
         /// <summary>
-        /// 검색 대상 폴더를 현재 활성 패널에 맞춰 갱신하고, 어떤 폴더를 검색하는지 창 제목에 드러낸다.
+        /// 검색 대상 폴더를 현재 활성 패널에 맞춰 갱신한다.
+        /// 사용자가 검색 창에서 폴더를 직접 고른 상태면 SearchPanel 쪽에서 무시한다.
+        /// 경로 자체는 검색 창의 '대상 폴더' 칸이 표시하므로 창 제목에는 넣지 않는다(표시처 이원화 방지).
         /// </summary>
         private void UpdateSearchRoot()
         {
-            if (_searchPanel == null || _searchWindow == null)
+            if (_searchPanel == null)
                 return;
 
-            var path = ActivePane == null ? null : ActivePane.CurrentPath;
-            _searchPanel.SetRootPath(path);
-            _searchWindow.Title = string.IsNullOrWhiteSpace(path)
-                ? "파일 검색"
-                : "파일 검색 — " + path;
+            _searchPanel.SetRootPath(ActivePaneCurrentPath);
+        }
+
+        private string ActivePaneCurrentPath
+        {
+            get { return ActivePane == null ? null : ActivePane.CurrentPath; }
         }
 
         private void SwitchToAdjacentPane(int direction)
