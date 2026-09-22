@@ -162,7 +162,7 @@
                                         Margin="4,0,0,0"
                                         Style="{StaticResource CompactToolButtonStyle}"
                                         Content="↻"
-                                        ToolTip="트리 새로고침"
+                                        ToolTip="트리 새로고침 — 선택한 폴더의 하위 트리만 갱신"
                                         Click="RefreshTreeView_Click"/>
                                 <ToggleButton x:Name="PinFolderButton"
                                               DockPanel.Dock="Right"
