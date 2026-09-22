@@ -22,6 +22,7 @@ namespace Folderss.Controls
         private readonly List<SearchResult> _allResults = new List<SearchResult>();
         private readonly ObservableCollection<SearchResult> _results = new ObservableCollection<SearchResult>();
         private const int PageSize = 100;
+        private const int ContentColumnIndex = 1;
         private int _currentPage;
         private CancellationTokenSource _cts;
         private string _rootPath;
@@ -90,10 +91,29 @@ namespace Folderss.Controls
             CancelSearch();
         }
 
-        private void ExtBox_TextChanged(object sender, TextChangedEventArgs e)
+        private void ContentColumnToggle_Changed(object sender, RoutedEventArgs e)
         {
             if (!IsInitialized) return;
-            CancelSearch();
+            UpdateContentColumnVisibility();
+        }
+
+        /// <summary>
+        /// <see cref="GridViewColumn"/>에는 Visibility가 없어서, 컬럼을 컬렉션에서 빼고 넣는 방식으로 표시를 전환한다.
+        /// 다시 넣을 때는 원래 자리(줄 / 내용 / 경로의 가운데)로 복원한다.
+        /// </summary>
+        private void UpdateContentColumnVisibility()
+        {
+            var gridView = ResultList.View as GridView;
+            if (gridView == null || ContentColumn == null)
+                return;
+
+            var show = ContentColumnToggle.IsChecked == true;
+            var index = gridView.Columns.IndexOf(ContentColumn);
+
+            if (show && index < 0)
+                gridView.Columns.Insert(Math.Min(ContentColumnIndex, gridView.Columns.Count), ContentColumn);
+            else if (!show && index >= 0)
+                gridView.Columns.Remove(ContentColumn);
         }
 
         private void CancelButton_Click(object sender, RoutedEventArgs e)
@@ -176,7 +196,6 @@ namespace Folderss.Controls
             var target = targetItem != null && (string)targetItem.Tag == "filename"
                 ? SearchTarget.FileName
                 : SearchTarget.Content;
-            var extensionFilter = ExtBox.Text;
 
             if (useRegex)
             {
@@ -206,7 +225,7 @@ namespace Folderss.Controls
 
             try
             {
-                await SearchService.SearchAsync(_rootPath, query, recursive, caseSensitive, useRegex, target, extensionFilter, progress, token);
+                await SearchService.SearchAsync(_rootPath, query, recursive, caseSensitive, useRegex, target, progress, token);
                 StatusText.Text = _allResults.Count == 0
                     ? "검색 결과가 없습니다."
                     : FormatStatus();

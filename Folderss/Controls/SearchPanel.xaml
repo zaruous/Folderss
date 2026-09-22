@@ -58,40 +58,27 @@
                               Checked="Option_Changed"
                               Unchecked="Option_Changed"/>
 
-                <!-- 확장자 필터 -->
-                <Grid DockPanel.Dock="Right" Width="100" Margin="4,0,0,0">
-                    <TextBox x:Name="ExtBox"
-                             VerticalContentAlignment="Center"
-                             Padding="4,2"
-                             ToolTip="확장자 필터 (예: cs, txt) — 비우면 전체 확장자"
-                             KeyDown="QueryBox_KeyDown"
-                             TextChanged="ExtBox_TextChanged"/>
-                    <TextBlock Text="확장자: cs,txt"
-                               IsHitTestVisible="False"
-                               Foreground="{DynamicResource SecondaryText}"
-                               VerticalAlignment="Center"
-                               Margin="6,0">
-                        <TextBlock.Style>
-                            <Style TargetType="TextBlock">
-                                <Setter Property="Visibility" Value="Collapsed"/>
-                                <Style.Triggers>
-                                    <DataTrigger Binding="{Binding Text, ElementName=ExtBox}" Value="">
-                                        <Setter Property="Visibility" Value="Visible"/>
-                                    </DataTrigger>
-                                </Style.Triggers>
-                            </Style>
-                        </TextBlock.Style>
-                    </TextBlock>
-                </Grid>
+                <!-- 결과 목록의 '내용' 컬럼 표시 여부 -->
+                <ToggleButton x:Name="ContentColumnToggle"
+                              DockPanel.Dock="Right"
+                              Style="{StaticResource CompactToggleButtonStyle}"
+                              Content="내용"
+                              ToolTip="결과 목록에 일치한 줄 내용 표시"
+                              IsChecked="True"
+                              Width="40"
+                              Margin="4,0,0,0"
+                              Checked="ContentColumnToggle_Changed"
+                              Unchecked="ContentColumnToggle_Changed"/>
 
                 <!-- 검색어 입력 -->
                 <Grid>
                     <TextBox x:Name="QueryBox"
                              VerticalContentAlignment="Center"
                              Padding="4,2"
+                             ToolTip="검색어 입력. 파일명 검색에서는 *, ? 와일드카드 패턴을 쓸 수 있습니다 (예: *.cs, report?.txt)"
                              KeyDown="QueryBox_KeyDown"
                              TextChanged="QueryBox_TextChanged"/>
-                    <TextBlock Text="검색어를 입력하세요 (Enter)"
+                    <TextBlock Text="검색어 또는 패턴을 입력하세요 (예: *.cs) — Enter"
                                IsHitTestVisible="False"
                                Foreground="{DynamicResource SecondaryText}"
                                VerticalAlignment="Center"
@@ -168,7 +155,7 @@
                             </DataTemplate>
                         </GridViewColumn.CellTemplate>
                     </GridViewColumn>
-                    <GridViewColumn Header="내용" Width="500">
+                    <GridViewColumn x:Name="ContentColumn" Header="내용" Width="500">
                         <GridViewColumn.CellTemplate>
                             <DataTemplate>
                                 <TextBlock Text="{Binding LineText}"

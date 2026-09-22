@@ -2,7 +2,7 @@ using Folderss.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
-using System.Linq;
+using System.Text;
 using System.Text.RegularExpressions;
 using System.Threading;
 using System.Threading.Tasks;
@@ -18,29 +18,17 @@ namespace Folderss.Services
             bool caseSensitive,
             bool useRegex,
             SearchTarget target,
-            string extensionFilter,
             IProgress<SearchResult> progress,
             CancellationToken cancellationToken)
         {
             return Task.Run(() =>
             {
-                var option = recursive ? SearchOption.AllDirectories : SearchOption.TopDirectoryOnly;
                 var comparisonType = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-                var extensions = ParseExtensions(extensionFilter);
-                Regex regex = null;
+                var regex = BuildRegex(query, caseSensitive, useRegex, target);
 
-                if (useRegex)
-                {
-                    var flags = caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
-                    regex = new Regex(query, flags | RegexOptions.Compiled);
-                }
-
-                foreach (var filePath in Directory.EnumerateFiles(rootPath, "*", option))
+                foreach (var filePath in EnumerateFiles(rootPath, recursive, cancellationToken))
                 {
                     cancellationToken.ThrowIfCancellationRequested();
-
-                    if (extensions != null && !extensions.Contains(Path.GetExtension(filePath)))
-                        continue;
 
                     try
                     {
@@ -62,21 +50,109 @@ namespace Folderss.Services
         }
 
         /// <summary>
-        /// "cs, .txt;md" 같은 사용자 입력을 { ".cs", ".txt", ".md" } 집합으로 정규화한다.
-        /// 입력이 비어 있으면 필터 없음을 뜻하는 null을 반환한다.
+        /// 검색어를 실제 매칭에 쓸 <see cref="Regex"/>로 변환한다. 단순 부분 일치로 처리해야 하면 null을 반환한다.
+        /// 정규식 옵션이 꺼져 있어도 파일명 검색이면 <c>*.cs</c> 같은 와일드카드 패턴을 지원한다.
+        /// 내용 검색은 줄 텍스트에 와일드카드를 적용하는 것이 부자연스러우므로 기존대로 부분 일치를 유지한다.
         /// </summary>
-        private static HashSet<string> ParseExtensions(string extensionFilter)
+        private static Regex BuildRegex(string query, bool caseSensitive, bool useRegex, SearchTarget target)
         {
-            if (string.IsNullOrWhiteSpace(extensionFilter))
-                return null;
+            var flags = caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
 
-            var parts = extensionFilter.Split(new[] { ',', ';', ' ' }, StringSplitOptions.RemoveEmptyEntries)
-                .Select(p => p.Trim())
-                .Where(p => p.Length > 0)
-                .Select(p => p.StartsWith(".", StringComparison.Ordinal) ? p : "." + p);
+            if (useRegex)
+                return new Regex(query, flags | RegexOptions.Compiled);
 
-            var extensions = new HashSet<string>(parts, StringComparer.OrdinalIgnoreCase);
-            return extensions.Count > 0 ? extensions : null;
+            if (target == SearchTarget.FileName && HasWildcard(query))
+                return new Regex(BuildWildcardPattern(query), flags | RegexOptions.Compiled);
+
+            return null;
+        }
+
+        private static bool HasWildcard(string query)
+        {
+            return !string.IsNullOrEmpty(query) && (query.IndexOf('*') >= 0 || query.IndexOf('?') >= 0);
+        }
+
+        /// <summary>
+        /// <c>*.cs</c>, <c>report?.txt</c> 같은 와일드카드 패턴을 정규식으로 바꾼다.
+        /// 확장자 필터를 대체하는 용도이므로 파일명 전체가 일치해야 한다(양끝 고정).
+        /// </summary>
+        private static string BuildWildcardPattern(string query)
+        {
+            var builder = new StringBuilder("^");
+            foreach (var character in query)
+            {
+                if (character == '*')
+                    builder.Append(".*");
+                else if (character == '?')
+                    builder.Append('.');
+                else
+                    builder.Append(Regex.Escape(character.ToString()));
+            }
+            return builder.Append('$').ToString();
+        }
+
+        /// <summary>
+        /// 폴더 단위로 파일 목록을 확정하면서 순회한다.
+        /// <see cref="Directory.EnumerateFiles(string, string, SearchOption)"/>는 하위 폴더 하나에서
+        /// 접근 거부가 나면 열거 자체가 예외로 끊겨 검색 결과가 통째로 사라진다. 여기서는 폴더마다
+        /// try/catch로 막아 나머지 폴더를 계속 훑고, 순환을 만드는 정션·심볼릭 링크는 들어가지 않는다.
+        /// </summary>
+        private static IEnumerable<string> EnumerateFiles(string rootPath, bool recursive, CancellationToken cancellationToken)
+        {
+            var pending = new Stack<string>();
+            pending.Push(rootPath);
+
+            while (pending.Count > 0)
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                var directory = pending.Pop();
+
+                string[] files;
+                try
+                {
+                    files = Directory.GetFiles(directory);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var file in files)
+                    yield return file;
+
+                if (!recursive)
+                    continue;
+
+                string[] subdirectories;
+                try
+                {
+                    subdirectories = Directory.GetDirectories(directory);
+                }
+                catch
+                {
+                    continue;
+                }
+
+                foreach (var subdirectory in subdirectories)
+                {
+                    if (IsReparsePoint(subdirectory))
+                        continue;
+                    pending.Push(subdirectory);
+                }
+            }
+        }
+
+        private static bool IsReparsePoint(string directory)
+        {
+            try
+            {
+                return (new DirectoryInfo(directory).Attributes & FileAttributes.ReparsePoint) != 0;
+            }
+            catch
+            {
+                // 속성을 못 읽는 폴더는 들어가지 않는다.
+                return true;
+            }
         }
 
         private static void ScanFileName(

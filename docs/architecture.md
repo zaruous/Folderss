@@ -7,7 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
-│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (내용/파일명 대상 선택, 확장자 필터, 대/소문자·정규식·범위 옵션)
+│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
 │   ├── DiskUsageMiniPanel.xaml/.cs — 즐겨찾기 열 상단 도킹용 컴팩트 디스크 사용량 뷰 (얇은 바, 남은 용량, 툴팁 상세)
@@ -26,7 +26,7 @@ Folderss/
 ├── Services/
 │   ├── FileOperationService.cs     — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터
-│   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 확장자 필터, 대/소문자, 정규식)
+│   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
 │   ├── PanelLockService.cs         — 문서 탭(패널) 닫기 잠금 상태 저장·복원
@@ -96,10 +96,21 @@ Folderss/
 ### SearchPanel / SearchService
 - `Ctrl+F`(`ShowSearch`)로 여는 별도 팝업 창(`파일 검색`)에서 실행, `MainWindow.ShowSearchPanel()` 참고
 - `TargetCombo`로 검색 대상을 `내용 검색`/`파일명 검색` 중 선택 (`SearchTarget.Content` / `SearchTarget.FileName`)
-- `ExtBox`에 `cs, txt`처럼 콤마/세미콜론/공백으로 구분해 확장자 필터 입력, 비우면 전체 확장자 대상
-- `SearchService.SearchAsync`가 확장자 필터를 정규화(`.` 접두사 보정)한 뒤 대상에 따라 파일 내용 라인 단위 스캔(`ScanFile`) 또는 파일명만 비교(`ScanFileName`)로 분기
+- 검색어 입력란 하나로 처리한다. 파일명 검색이고 정규식 옵션이 꺼져 있을 때 `*`/`?`가 들어 있으면
+  와일드카드 패턴(`*.cs`, `report?.txt`)으로 해석하고, 파일명 전체가 일치해야 한다. 와일드카드가 없으면 기존처럼 부분 일치.
+  (과거의 별도 확장자 필터 `ExtBox`는 이 패턴 검색으로 대체되어 제거됨)
+- 내용 검색은 줄 텍스트에 와일드카드를 적용하지 않는다 — `*`는 문자 그대로 찾는다
+- `SearchService.SearchAsync`가 대상에 따라 파일 내용 라인 단위 스캔(`ScanFile`) 또는 파일명만 비교(`ScanFileName`)로 분기
+- `SearchService.EnumerateFiles`는 `Directory.EnumerateFiles(..., AllDirectories)`를 쓰지 않는다. 그 API는 하위 폴더 하나에서
+  접근 거부가 나면 열거 자체가 예외로 끊겨 하위 폴더 검색 결과가 통째로 사라진다. 대신 폴더 단위 스택 순회로 폴더마다
+  try/catch하고, 순환을 만드는 정션·심볼릭 링크(`FileAttributes.ReparsePoint`)에는 들어가지 않는다
 - 결과는 `SearchResult.LineNumber == 0`이면 파일명 검색 결과로 취급해 목록에서 줄 번호 칸을 비움
+- `ContentColumnToggle`로 결과 목록의 `내용` 컬럼을 넣고 뺀다. `GridViewColumn`에는 Visibility가 없어
+  `GridView.Columns`에서 제거·재삽입하는 방식을 쓴다 (`SearchPanel.UpdateContentColumnVisibility`)
 - `CaseToggle`(대/소문자), `RegexToggle`(정규식), `ScopeCombo`(현재 폴더만/하위 폴더 포함)는 검색 대상과 무관하게 공통 적용
+- 검색 로직 회귀 테스트: `tests/Folderss.SearchTests` (`dotnet test tests/Folderss.SearchTests`).
+  본체는 `net8.0-windows`라 CI/리눅스에서 못 돌리므로 검색 관련 소스만 링크해 `net8.0`으로 단독 실행한다.
+  `Folderss.sln`에는 넣지 않아 앱 빌드에 영향이 없다
 
 ### DiskUsagePanel / DiskUsageService / DiskUsageMiniPanel
 - `보기 > 디스크 사용량 보기` 클릭 시 `MainWindow.ShowDiskUsage_Click`이 `ShowDiskUsagePanel()`로 문서 탭을 연다.
