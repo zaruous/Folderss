@@ -1592,7 +1592,15 @@ namespace Folderss.Controls
 
         private void RefreshTreeView_Click(object sender, RoutedEventArgs e)
         {
-            RebuildFolderTree();
+            var selected = FolderTree.SelectedItem as TreeViewItem;
+            var selectedPath = selected == null ? null : selected.Tag as string;
+            if (string.IsNullOrWhiteSpace(selectedPath) || !Directory.Exists(selectedPath))
+            {
+                RebuildFolderTree();
+                return;
+            }
+
+            ReloadTreeChildren(selected);
         }
 
         private static void PushHistory(Stack<string> history, string path)
