@@ -83,12 +83,27 @@ namespace Folderss.Controls
         {
             if (!IsInitialized) return;
             CancelSearch();
+            NotifyResearchRequired();
         }
 
         private void ScopeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!IsInitialized) return;
             CancelSearch();
+            NotifyResearchRequired();
+        }
+
+        /// <summary>
+        /// 옵션·범위를 바꿔도 자동 재검색은 하지 않는다(대상 폴더가 크면 비용이 크다).
+        /// 다만 이전 결과가 그대로 남아 새 옵션의 결과로 오해되기 쉽고, 이때 포커스가 콤보박스에 있어
+        /// 그 자리에서 Enter를 눌러도 검색이 시작되지 않으므로 무엇을 해야 하는지 명시한다.
+        /// </summary>
+        private void NotifyResearchRequired()
+        {
+            if (_allResults.Count == 0)
+                return;
+
+            StatusText.Text = "옵션이 바뀌었습니다 — 검색어 입력란을 클릭하고 Enter를 눌러 다시 검색하세요.";
         }
 
         private void ContentColumnToggle_Changed(object sender, RoutedEventArgs e)
@@ -179,8 +194,15 @@ namespace Folderss.Controls
         private async void StartSearch()
         {
             var query = QueryBox.Text;
-            if (string.IsNullOrEmpty(query) || string.IsNullOrWhiteSpace(_rootPath))
+            if (string.IsNullOrEmpty(query))
                 return;
+
+            // 대상 폴더가 없으면 조용히 끝내지 않는다. 아무 반응이 없으면 사용자가 원인을 알 수 없다.
+            if (string.IsNullOrWhiteSpace(_rootPath))
+            {
+                StatusText.Text = "검색할 폴더가 없습니다. 폴더 패널에서 폴더를 연 뒤 다시 시도하세요.";
+                return;
+            }
 
             CancelSearch();
             _results.Clear();

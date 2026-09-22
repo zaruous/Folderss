@@ -95,6 +95,9 @@ Folderss/
 
 ### SearchPanel / SearchService
 - `Ctrl+F`(`ShowSearch`)로 여는 별도 팝업 창(`파일 검색`)에서 실행, `MainWindow.ShowSearchPanel()` 참고
+- 검색 창은 모달이 아니라 계속 떠 있는 도구 창이다. 대상 폴더는 `MainWindow.UpdateSearchRoot()`가
+  `_searchWindow.Activated`마다 활성 패널 기준으로 갱신한다 — 창을 열 때만 갱신하면 창을 열어둔 채
+  트리뷰 등으로 폴더를 옮겼을 때 옛 폴더를 계속 검색해 오류 없이 0건이 된다. 대상 경로는 창 제목에 표시한다
 - `TargetCombo`로 검색 대상을 `내용 검색`/`파일명 검색` 중 선택 (`SearchTarget.Content` / `SearchTarget.FileName`)
 - 검색어 입력란 하나로 처리한다. 파일명 검색이고 정규식 옵션이 꺼져 있을 때 `*`/`?`가 들어 있으면
   와일드카드 패턴(`*.cs`, `report?.txt`)으로 해석하고, 파일명 전체가 일치해야 한다. 와일드카드가 없으면 기존처럼 부분 일치.

@@ -32,6 +32,33 @@ Windows 사용자 폴더에는 `%LOCALAPPDATA%\Application Data`처럼 자기 �
 - `FileAttributes.ReparsePoint`인 하위 폴더에는 들어가지 않아 정션·심볼릭 링크 순환을 차단한다.
 - `yield return`은 `catch`가 있는 `try` 안에 둘 수 없으므로, 폴더 목록을 배열로 먼저 확정한 뒤 바깥에서 넘긴다.
 
+### 1-2. 검색 대상 폴더가 갱신되지 않던 원인 (에러 없이 결과 0건)
+
+사용자 확인 결과 "에러 문구는 없었고 결과만 없었다"였다. 접근 거부 경로는 상태 바에 `검색 오류: …`를 띄우므로
+증상이 다르다. 상태 텍스트를 바꾸지 않고 끝나는 경로를 역추적해 두 번째 원인을 찾았다.
+
+`MainWindow.ShowSearchPanel()`에서 `SetRootPath` 호출이 `IsVisible` 조기 반환 **뒤에** 있었다.
+
+```csharp
+if (_searchWindow.IsVisible) { _searchWindow.Hide(); return; }  // 창이 떠 있으면 여기서 끝
+_searchPanel.SetRootPath(ActivePane.CurrentPath);               // 창을 '열 때'만 갱신
+```
+
+검색 창은 모달이 아니라 계속 떠 있는 도구 창(`WindowStyle.ToolWindow`)이다. 창을 열어둔 채 트리뷰에서 폴더를
+선택하면 `FolderTree_SelectedItemChanged` → `NavigateTo` → `CurrentPath`는 갱신되지만, 검색 대상 `_rootPath`는
+창을 처음 열었을 때의 폴더에 고정된 채 남는다. 결과적으로 **엉뚱한 폴더를 정상 검색**해서 오류 없이 0건이 된다.
+`SetRootPath` 호출부는 프로젝트 전체에서 이 한 곳뿐이었다.
+
+창이 포커스를 받을 때마다(`Activated`) 대상 폴더를 갱신하도록 바꾸고, 어떤 폴더를 검색 중인지 창 제목에
+표시해(`파일 검색 — <경로>`) 같은 혼동이 다시 생기지 않게 했다.
+
+함께 정리한, 아무 반응 없이 끝나던 나머지 경로 두 가지.
+
+- `_rootPath`가 비면 `StartSearch`가 상태 텍스트조차 건드리지 않고 `return`했다 → 이유를 표시하도록 변경.
+- 범위/대상 콤보를 바꿔도 재검색이 걸리지 않고 이전 결과가 그대로 남았다. 게다가 그 시점에 포커스가 콤보박스라
+  그 자리에서 Enter를 눌러도 `QueryBox_KeyDown`이 동작하지 않는다 → 재검색이 필요하다는 안내를 상태 바에 표시.
+  자동 재검색은 넣지 않았다(대상 폴더가 크면 비용이 크고, 사용자가 의도하지 않은 전체 스캔이 시작될 수 있다).
+
 ### 2. 내용 컬럼 표시 토글
 
 `GridViewColumn`에는 `Visibility`가 없어 스타일로 숨길 수 없다. `GridView.Columns`에서 컬럼을 제거하고
@@ -61,6 +88,12 @@ Windows 사용자 폴더에는 `%LOCALAPPDATA%\Application Data`처럼 자기 �
 - `Folderss/Controls/SearchPanel.xaml.cs`
   - `ExtBox_TextChanged` 제거, `SearchAsync` 호출에서 확장자 인자 제거.
   - `ContentColumnToggle_Changed` / `UpdateContentColumnVisibility` 추가.
+- `Folderss/MainWindow.xaml.cs`
+  - `UpdateSearchRoot()` 추가. `_searchWindow.Activated`에서 호출해 활성 패널의 폴더를 계속 따라가게 하고,
+    창 제목에 대상 경로를 표시한다.
+- `Folderss/Controls/SearchPanel.xaml.cs`
+  - `_rootPath`가 없을 때 상태 바에 이유 표시(조용한 `return` 제거).
+  - `NotifyResearchRequired()` 추가 — 옵션 변경 후 재검색이 필요함을 안내.
 - `tests/Folderss.SearchTests` 신규 — 검색 로직 회귀 테스트(아래 검증 참고).
 
 ## 변경 파일
@@ -68,6 +101,7 @@ Windows 사용자 폴더에는 `%LOCALAPPDATA%\Application Data`처럼 자기 �
 - `Folderss/Services/SearchService.cs`
 - `Folderss/Controls/SearchPanel.xaml`
 - `Folderss/Controls/SearchPanel.xaml.cs`
+- `Folderss/MainWindow.xaml.cs`
 - `tests/Folderss.SearchTests/Folderss.SearchTests.csproj`
 - `tests/Folderss.SearchTests/SearchServiceTests.cs`
 - `README.md`
@@ -107,8 +141,12 @@ Windows 개발 환경에서 아래를 추가로 확인 필요.
 - `*.cs` 입력 시 `.cs` 파일만, `report?.txt` 입력 시 한 글자만 매칭되는지
 - 와일드카드 없는 검색어가 기존처럼 부분 일치로 동작하는지 (회귀)
 - `내용` 토글을 껐다 켰을 때 컬럼이 `줄 / 내용 / 경로` 순서로 복원되는지
+- **(핵심 재현 경로)** `Ctrl+F`로 검색 창을 연 뒤 창을 닫지 말고, 트리뷰에서 다른 폴더를 선택한 다음
+  검색 창으로 돌아와 검색 → 창 제목의 경로가 새 폴더로 바뀌고 그 폴더에서 결과가 나오는지
 
 ## 변경 이력
 
+- 2026-09-22: 검색 창이 열린 채 폴더를 이동하면 대상 폴더가 갱신되지 않던 문제 수정(창 제목에 대상 경로 표시),
+  아무 반응 없이 끝나던 경로 2건에 상태 표시 추가.
 - 2026-09-22: 하위 폴더 포함 검색 중단 버그 수정, 와일드카드 패턴 검색 도입(확장자 필터 제거),
   내용 컬럼 표시 토글 추가, 검색 로직 회귀 테스트 프로젝트 신규 추가.

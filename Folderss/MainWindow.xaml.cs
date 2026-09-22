@@ -1728,6 +1728,11 @@ namespace Folderss
                     WindowStyle = WindowStyle.ToolWindow
                 };
                 _searchWindow.Closing += (s, e) => { e.Cancel = true; _searchWindow.Hide(); };
+
+                // 검색 창은 모달이 아니라 계속 떠 있는 도구 창이라, 창을 열어둔 채 트리뷰나 경로 이동으로
+                // 활성 패널의 폴더가 바뀔 수 있다. 창이 다시 포커스를 받을 때마다 대상 폴더를 갱신하지
+                // 않으면 창을 처음 열었던 폴더를 계속 검색해 오류 없이 결과 0건이 된다.
+                _searchWindow.Activated += (s, e) => UpdateSearchRoot();
             }
 
             if (_searchWindow.IsVisible)
@@ -1736,9 +1741,24 @@ namespace Folderss
                 return;
             }
 
-            _searchPanel.SetRootPath(ActivePane.CurrentPath);
+            UpdateSearchRoot();
             _searchWindow.Show();
             Dispatcher.BeginInvoke(new Action(() => _searchPanel.FocusSearchBox()), DispatcherPriority.Input);
+        }
+
+        /// <summary>
+        /// 검색 대상 폴더를 현재 활성 패널에 맞춰 갱신하고, 어떤 폴더를 검색하는지 창 제목에 드러낸다.
+        /// </summary>
+        private void UpdateSearchRoot()
+        {
+            if (_searchPanel == null || _searchWindow == null)
+                return;
+
+            var path = ActivePane == null ? null : ActivePane.CurrentPath;
+            _searchPanel.SetRootPath(path);
+            _searchWindow.Title = string.IsNullOrWhiteSpace(path)
+                ? "파일 검색"
+                : "파일 검색 — " + path;
         }
 
         private void SwitchToAdjacentPane(int direction)
