@@ -62,6 +62,77 @@ namespace Folderss.Services
             }
         }
 
+        /// <summary>
+        /// <paramref name="destinationDirectory"/>에 <paramref name="source"/>를 가리키는 링크를 만들고 만든 경로를 돌려준다.
+        /// 심볼릭 링크를 먼저 시도한다(파일·폴더 모두). Windows에서 심볼릭 링크 생성은 관리자 권한이나 개발자 모드가 필요해
+        /// 권한 오류(ERROR_PRIVILEGE_NOT_HELD)가 나면 폴더는 권한이 필요 없는 junction으로 대신 만든다. 파일은 대안이 없어 안내와 함께 실패한다.
+        /// 이름이 겹치면 복사·이동과 같은 규칙으로 <c>이름 (2)</c>처럼 번호를 붙인다.
+        /// </summary>
+        public static string CreateLink(string source, string destinationDirectory)
+        {
+            var isDirectory = Directory.Exists(source);
+            if (!isDirectory && !File.Exists(source))
+                throw new FileNotFoundException("링크를 만들 원본이 존재하지 않습니다.", source);
+
+            var sourceFullPath = NormalizePath(source);
+            var linkPath = GetUniquePath(Path.Combine(destinationDirectory, Path.GetFileName(sourceFullPath)), isDirectory);
+
+            try
+            {
+                if (isDirectory)
+                    Directory.CreateSymbolicLink(linkPath, sourceFullPath);
+                else
+                    File.CreateSymbolicLink(linkPath, sourceFullPath);
+                return linkPath;
+            }
+            catch (Exception exception) when (isDirectory && IsPrivilegeNotHeld(exception))
+            {
+                CreateJunction(linkPath, sourceFullPath);
+                return linkPath;
+            }
+            catch (Exception exception) when (!isDirectory && IsPrivilegeNotHeld(exception))
+            {
+                throw new UnauthorizedAccessException(
+                    "파일 심볼릭 링크를 만들 권한이 없습니다. 관리자 권한으로 실행하거나 Windows 설정에서 개발자 모드를 켜세요.",
+                    exception);
+            }
+        }
+
+        private static bool IsPrivilegeNotHeld(Exception exception)
+        {
+            // CreateSymbolicLink가 SeCreateSymbolicLinkPrivilege 없이 호출되면 ERROR_PRIVILEGE_NOT_HELD(1314)가 IOException으로,
+            // 정책에 따라서는 UnauthorizedAccessException으로 온다.
+            const int ErrorPrivilegeNotHeld = 1314;
+            return exception is UnauthorizedAccessException ||
+                   (exception is IOException && (exception.HResult & 0xFFFF) == ErrorPrivilegeNotHeld);
+        }
+
+        /// <summary>.NET에는 junction API가 없어 mklink /J로 만든다. junction은 로컬 폴더만 가리킬 수 있고 권한이 필요 없다.</summary>
+        private static void CreateJunction(string linkPath, string targetDirectory)
+        {
+            var startInfo = new System.Diagnostics.ProcessStartInfo("cmd.exe",
+                string.Format("/c mklink /J \"{0}\" \"{1}\"", linkPath, targetDirectory))
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true
+            };
+
+            using (var process = System.Diagnostics.Process.Start(startInfo))
+            {
+                if (process == null)
+                    throw new IOException("junction을 만들 cmd.exe를 시작할 수 없습니다.");
+
+                process.StandardOutput.ReadToEnd();
+                var error = process.StandardError.ReadToEnd();
+                process.WaitForExit();
+
+                if (process.ExitCode != 0 || !Directory.Exists(linkPath))
+                    throw new IOException("junction을 만들 수 없습니다. " + error.Trim());
+            }
+        }
+
         public static void MoveToRecycleBin(string path)
         {
             if (Directory.Exists(path))

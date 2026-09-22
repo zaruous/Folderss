@@ -80,6 +80,8 @@
                             <MenuItem Header="폴더 패널 추가..." InputGestureText="Ctrl+T" Click="AddFolderPanel_Click"/>
                             <MenuItem Header="새 폴더" InputGestureText="Ctrl+Shift+N" Click="NewFolder_Click"/>
                             <MenuItem Header="새 파일" InputGestureText="Ctrl+N" Click="NewFile_Click"/>
+                            <MenuItem Header="반대편 패널에 링크 만들기" Click="CreateLink_Click"
+                                      ToolTip="선택한 항목을 가리키는 심볼릭 링크를 반대편 패널 폴더에 만듭니다. 권한이 없으면 폴더는 junction으로 만듭니다."/>
                             <Separator/>
                             <MenuItem Header="이름 변경" InputGestureText="F2" Click="Rename_Click"/>
                             <MenuItem Header="휴지통으로 이동" InputGestureText="Delete" Click="Delete_Click"/>

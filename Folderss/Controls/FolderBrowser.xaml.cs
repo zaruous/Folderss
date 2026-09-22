@@ -40,6 +40,12 @@ namespace Folderss.Controls
         private bool _treeNavigationInProgress;
         private bool _updatingTreeSelection;
         private bool _updatingPinButton;
+        private bool _applyIgnoreRules;
+        private int _ignoredCount;
+        // 검색 창에서 넘어온 결과 파일 집합. 폴더는 결과를 품고 있는 것만 보인다. null이면 필터 없음.
+        private HashSet<string> _resultFilterFiles;
+        private HashSet<string> _resultFilterFolders;
+        private string _resultFilterRoot;
         private static readonly GridLength VisibleTreeColumnWidth = new GridLength(220);
         private static readonly GridLength VisibleTreeSplitterWidth = new GridLength(6);
 
@@ -176,18 +182,30 @@ namespace Folderss.Controls
             {
                 var entries = new List<FileSystemItem>();
                 var directory = new DirectoryInfo(CurrentPath);
+                // ignore 규칙은 새로 고침마다 다시 읽는다. 규칙 파일은 몇 개 안 되고 사용자가 .gitignore를 고친 직후에도 맞아야 한다.
+                var ignoreRules = _applyIgnoreRules ? IgnoreRuleSet.LoadFor(CurrentPath) : null;
+                var ignoredCount = 0;
 
                 foreach (var childDirectory in directory.EnumerateDirectories())
                 {
                     if (!_showHidden && (childDirectory.Attributes & FileAttributes.Hidden) != 0)
                         continue;
+                    if (ignoreRules != null && ignoreRules.IsIgnored(childDirectory.FullName, true))
+                    {
+                        ignoredCount++;
+                        continue;
+                    }
+
+                    var directoryLinkTarget = FilePreviewService.GetLinkTarget(childDirectory);
                     entries.Add(new FileSystemItem
                     {
                         Name = childDirectory.Name,
                         FullPath = childDirectory.FullName,
                         IsDirectory = true,
                         ModifiedAt = childDirectory.LastWriteTime,
-                        IsCut = CutPaths != null && CutPaths.Contains(childDirectory.FullName)
+                        IsCut = CutPaths != null && CutPaths.Contains(childDirectory.FullName),
+                        IsLink = directoryLinkTarget != null,
+                        LinkTarget = directoryLinkTarget
                     });
                 }
 
@@ -195,6 +213,13 @@ namespace Folderss.Controls
                 {
                     if (!_showHidden && (file.Attributes & FileAttributes.Hidden) != 0)
                         continue;
+                    if (ignoreRules != null && ignoreRules.IsIgnored(file.FullName, false))
+                    {
+                        ignoredCount++;
+                        continue;
+                    }
+
+                    var fileLinkTarget = FilePreviewService.GetLinkTarget(file);
                     entries.Add(new FileSystemItem
                     {
                         Name = file.Name,
@@ -202,9 +227,14 @@ namespace Folderss.Controls
                         IsDirectory = false,
                         Size = file.Length,
                         ModifiedAt = file.LastWriteTime,
-                        IsCut = CutPaths != null && CutPaths.Contains(file.FullName)
+                        IsCut = CutPaths != null && CutPaths.Contains(file.FullName),
+                        IsLink = fileLinkTarget != null,
+                        LinkTarget = fileLinkTarget
                     });
                 }
+
+                _ignoredCount = ignoredCount;
+                UpdateIgnoreRulesToolTip(ignoreRules);
 
                 _items.Clear();
                 foreach (var item in entries)
@@ -252,6 +282,10 @@ namespace Folderss.Controls
                 _forwardHistory.Clear();
             }
 
+            // 검색 결과 필터는 검색 대상 폴더 아래에서만 의미가 있다. 밖으로 나가면 조용히 풀어 빈 목록이 보이지 않게 한다.
+            if (_resultFilterFiles != null && !IsUnderResultFilterRoot(fullPath))
+                ClearSearchResultFilter();
+
             CurrentPath = fullPath;
             SearchBox.Text = string.Empty;
             SyncTreeAfterNavigation(fullPath);
@@ -269,21 +303,142 @@ namespace Folderss.Controls
         {
             var view = CollectionViewSource.GetDefaultView(FileList.ItemsSource);
             var query = SearchBox.Text.Trim();
+            var resultFiles = _resultFilterFiles;
+            var resultFolders = _resultFilterFolders;
             view.Filter = item =>
             {
                 var fileItem = item as FileSystemItem;
-                return fileItem != null &&
-                       (query.Length == 0 || fileItem.Name.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) >= 0);
+                if (fileItem == null)
+                    return false;
+                if (query.Length > 0 && fileItem.Name.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) < 0)
+                    return false;
+                if (resultFiles == null)
+                    return true;
+                return fileItem.IsDirectory
+                    ? resultFolders.Contains(fileItem.FullPath)
+                    : resultFiles.Contains(fileItem.FullPath);
             };
             view.Refresh();
-            FilteredCountText.Text = query.Length == 0
+            var filtering = query.Length > 0 || resultFiles != null;
+            FilteredCountText.Text = !filtering
                 ? string.Format("{0:N0}개", _items.Count)
                 : string.Format("{0:N0}/{1:N0}개", view.Cast<object>().Count(), _items.Count);
         }
 
         private void UpdateStatusText()
         {
-            StatusText.Text = string.Format("{0:N0}개 항목", _items.Count);
+            StatusText.Text = _ignoredCount > 0
+                ? string.Format("{0:N0}개 항목 · ignore 규칙으로 {1:N0}개 숨김", _items.Count, _ignoredCount)
+                : string.Format("{0:N0}개 항목", _items.Count);
+        }
+
+        private void UpdateIgnoreRulesToolTip(IgnoreRuleSet rules)
+        {
+            const string baseText = ".gitignore / .folderssignore 규칙에 직접 해당하는 항목 숨기기";
+            if (rules == null)
+            {
+                IgnoreRulesButton.ToolTip = baseText;
+                return;
+            }
+
+            IgnoreRulesButton.ToolTip = rules.SourceFiles.Count == 0
+                ? baseText + "\n적용 중인 규칙 파일 없음 (저장소 루트의 .git이 있는 곳부터 .gitignore를 읽습니다)"
+                : baseText + "\n적용 중인 규칙 파일:\n" + string.Join("\n", rules.SourceFiles);
+        }
+
+        public bool HasSearchResultFilter
+        {
+            get { return _resultFilterFiles != null; }
+        }
+
+        /// <summary>
+        /// 검색 창의 결과 파일들만 보이도록 목록을 걸러 낸다. 폴더는 결과를 하나라도 품고 있는 것만 남아 결과가 있는 하위 폴더로
+        /// 내려갈 수 있고, 필터는 <paramref name="rootPath"/> 아래를 벗어나 이동하거나 배너의 해제 버튼을 누를 때까지 유지된다.
+        /// </summary>
+        public void ApplySearchResultFilter(string rootPath, IEnumerable<string> filePaths, string description)
+        {
+            var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var folders = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            var root = NormalizeFilterRoot(rootPath);
+
+            foreach (var path in filePaths ?? Enumerable.Empty<string>())
+            {
+                if (string.IsNullOrWhiteSpace(path))
+                    continue;
+
+                string fullPath;
+                try { fullPath = Path.GetFullPath(path); }
+                catch (Exception) { continue; }
+
+                files.Add(fullPath);
+                var parent = Path.GetDirectoryName(fullPath);
+                while (!string.IsNullOrEmpty(parent) && folders.Add(parent))
+                {
+                    if (root != null && string.Equals(parent.TrimEnd('\\', '/'), root, StringComparison.OrdinalIgnoreCase))
+                        break;
+                    parent = Path.GetDirectoryName(parent);
+                }
+            }
+
+            _resultFilterFiles = files;
+            _resultFilterFolders = folders;
+            _resultFilterRoot = root;
+            ResultFilterText.Text = string.Format(
+                "검색 결과만 표시 — \"{0}\" ({1:N0}개 파일)",
+                string.IsNullOrWhiteSpace(description) ? "(검색어 없음)" : description,
+                files.Count);
+            ResultFilterBanner.Visibility = Visibility.Visible;
+
+            if (FileList.ItemsSource != null)
+                ApplyFilter();
+        }
+
+        public void ClearSearchResultFilter()
+        {
+            if (_resultFilterFiles == null)
+                return;
+
+            _resultFilterFiles = null;
+            _resultFilterFolders = null;
+            _resultFilterRoot = null;
+            ResultFilterBanner.Visibility = Visibility.Collapsed;
+
+            if (FileList.ItemsSource != null)
+                ApplyFilter();
+        }
+
+        private bool IsUnderResultFilterRoot(string fullPath)
+        {
+            if (_resultFilterRoot == null)
+                return true;
+
+            var normalized = fullPath.TrimEnd('\\', '/');
+            return string.Equals(normalized, _resultFilterRoot, StringComparison.OrdinalIgnoreCase) ||
+                   normalized.StartsWith(_resultFilterRoot + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        }
+
+        private static string NormalizeFilterRoot(string rootPath)
+        {
+            if (string.IsNullOrWhiteSpace(rootPath))
+                return null;
+
+            try
+            {
+                var full = Path.GetFullPath(rootPath);
+                var root = Path.GetPathRoot(full);
+                return string.Equals(full, root, StringComparison.OrdinalIgnoreCase)
+                    ? full.TrimEnd('\\', '/')
+                    : full.TrimEnd('\\', '/');
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private void ClearResultFilter_Click(object sender, RoutedEventArgs e)
+        {
+            ClearSearchResultFilter();
         }
 
         private void Activate()
@@ -975,6 +1130,11 @@ namespace Folderss.Controls
             MetadataModified.Text = metadata.ModifiedAt.ToString("yyyy-MM-dd HH:mm:ss");
             MetadataPermissions.Text = metadata.Permissions;
             MetadataAttributes.Text = metadata.Attributes;
+
+            var hasLinkTarget = !string.IsNullOrEmpty(metadata.LinkTarget);
+            MetadataLinkTarget.Text = metadata.LinkTarget ?? string.Empty;
+            MetadataLinkTargetLabel.Visibility = hasLinkTarget ? Visibility.Visible : Visibility.Collapsed;
+            MetadataLinkTarget.Visibility = hasLinkTarget ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ResetPreview()
@@ -993,6 +1153,9 @@ namespace Folderss.Controls
             MetadataModified.Text = string.Empty;
             MetadataPermissions.Text = string.Empty;
             MetadataAttributes.Text = string.Empty;
+            MetadataLinkTarget.Text = string.Empty;
+            MetadataLinkTargetLabel.Visibility = Visibility.Collapsed;
+            MetadataLinkTarget.Visibility = Visibility.Collapsed;
         }
 
         private void ShowPreviewMessage(string message)
@@ -1429,6 +1592,14 @@ namespace Folderss.Controls
         private void ToggleHidden_Changed(object sender, RoutedEventArgs e)
         {
             _showHidden = ShowHiddenButton.IsChecked == true;
+            RefreshItems();
+        }
+
+        private void ToggleIgnoreRules_Changed(object sender, RoutedEventArgs e)
+        {
+            _applyIgnoreRules = IgnoreRulesButton.IsChecked == true;
+            if (!_applyIgnoreRules)
+                UpdateIgnoreRulesToolTip(null);
             RefreshItems();
         }
 

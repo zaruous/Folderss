@@ -22,6 +22,7 @@
     <Compile Include="..\..\Folderss\Services\FilePreviewService.cs" Link="Linked\FilePreviewService.cs" />
     <Compile Include="..\..\Folderss\Services\ViewerConfigService.cs" Link="Linked\ViewerConfigService.cs" />
     <Compile Include="..\..\Folderss\Services\SettingsFile.cs" Link="Linked\SettingsFile.cs" />
+    <Compile Include="..\..\Folderss\Services\IgnoreRuleSet.cs" Link="Linked\IgnoreRuleSet.cs" />
   </ItemGroup>
 
   <ItemGroup>

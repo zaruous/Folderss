@@ -749,7 +749,51 @@ namespace Folderss
                     SetDocumentTitle(doc, title);
             };
             viewerHost.FileOpenRequested += (s, requestedPath) => OpenViewerTab(requestedPath);
+            viewerHost.ModifiedChanged += (s, modified) =>
+            {
+                // 탭 제목의 ' *' 표시는 SetDocumentTitle이 호스트의 IsModified를 보고 붙이므로 제목을 다시 쓰기만 하면 된다.
+                var doc = DockManager.Layout.Descendents()
+                    .OfType<LayoutDocument>()
+                    .FirstOrDefault(d => ReferenceEquals(d.Content, s));
+                if (doc != null)
+                    SetDocumentTitle(doc, doc.Title);
+            };
             return viewerHost;
+        }
+
+        /// <summary>
+        /// 검색 창의 결과 집합을 활성 폴더 패널의 목록 필터로 건다. 패널이 검색 대상 폴더와 다른 곳을 보고 있으면
+        /// 먼저 그 폴더로 이동한다 — 그렇지 않으면 필터에 걸리는 항목이 없어 빈 목록만 보인다.
+        /// </summary>
+        private void ApplySearchResultFilterToActivePane(SearchFilterEventArgs e)
+        {
+            var pane = ActivePane;
+            if (!string.IsNullOrWhiteSpace(e.RootPath) && Directory.Exists(e.RootPath) &&
+                !string.Equals(NormalizeDirectoryPath(pane.CurrentPath), NormalizeDirectoryPath(e.RootPath), StringComparison.OrdinalIgnoreCase))
+                pane.NavigateTo(e.RootPath);
+
+            pane.ApplySearchResultFilter(e.RootPath, e.FilePaths, e.Description);
+            ActivatePane(pane);
+        }
+
+        /// <summary>저장하지 않은 변경이 있는 뷰어를 닫기 전에 확인한다. 닫아도 되면 true.</summary>
+        private bool ConfirmDiscardViewerChanges(ViewerHost viewerHost)
+        {
+            if (viewerHost == null || !viewerHost.IsModified)
+                return true;
+
+            var name = Path.GetFileName(viewerHost.CurrentFilePath ?? string.Empty);
+            var answer = MessageBox.Show(
+                this,
+                string.Format(
+                    "'{0}'에 저장하지 않은 변경이 있습니다.\n닫으면 변경 내용이 사라집니다. 그래도 닫을까요?\n\n" +
+                    "저장하려면 '아니요'를 누른 뒤 뷰어에서 Ctrl+S를 누르세요.",
+                    name),
+                "저장하지 않은 변경",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Warning,
+                MessageBoxResult.No);
+            return answer == MessageBoxResult.Yes;
         }
 
         private void AttachViewerDocument(LayoutDocument document, ViewerHost viewerHost)
@@ -759,6 +803,12 @@ namespace Folderss
             // 선택되어 보이는 탭(IsSelected)도 활성으로 취급한다.
             document.IsActiveChanged += (s, e) => UpdateViewerActivation(document, viewerHost);
             document.IsSelectedChanged += (s, e) => UpdateViewerActivation(document, viewerHost);
+            // X 버튼·탭 메뉴·코드의 Close() 모두 DockingManager를 거쳐 Closing을 올리므로 여기 한 곳에서 저장 확인을 건다.
+            document.Closing += (s, e) =>
+            {
+                if (!ConfirmDiscardViewerChanges(viewerHost))
+                    e.Cancel = true;
+            };
             document.Closed += (s, e) => DisposeDocumentContent(document);
         }
 
@@ -943,6 +993,27 @@ namespace Folderss
                         Forms.ToolTipIcon.Info);
                 }
                 return;
+            }
+
+            // 저장하지 않은 뷰어가 있으면 종료 전에 한 번 묻는다. 탭 닫기 확인(Closing)은 종료 시 거치지 않으므로 여기서 따로 본다.
+            var modifiedCount = DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .Select(d => d.Content as ViewerHost)
+                .Count(host => host != null && host.IsModified);
+            if (modifiedCount > 0)
+            {
+                var answer = MessageBox.Show(
+                    string.Format("저장하지 않은 변경이 있는 문서가 {0}개 있습니다.\n종료하면 변경 내용이 사라집니다. 그래도 종료할까요?", modifiedCount),
+                    "저장하지 않은 변경",
+                    MessageBoxButton.YesNo,
+                    MessageBoxImage.Warning,
+                    MessageBoxResult.No);
+                if (answer != MessageBoxResult.Yes)
+                {
+                    e.Cancel = true;
+                    _reallyClose = false;
+                    return;
+                }
             }
 
             // If the window is hidden, the visible layout was already saved before Hide().
@@ -1264,6 +1335,54 @@ namespace Folderss
 
             RefreshBothPanes();
             ShowErrorsIfAny(verb, errors);
+        }
+
+        private void CreateLink_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = ActivePane.SelectedItems.ToList();
+            if (selected.Count == 0)
+            {
+                MessageBox.Show("링크를 만들 항목을 선택하세요.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(TargetPane.CurrentPath) || !Directory.Exists(TargetPane.CurrentPath))
+                return;
+
+            if (IsDestinationPinLocked(TargetPane.CurrentPath))
+            {
+                ShowPinLockedMessage();
+                return;
+            }
+
+            var answer = MessageBox.Show(
+                string.Format(
+                    "{0}개 항목을 가리키는 링크를 다음 폴더에 만들까요?\n\n{1}\n\n" +
+                    "심볼릭 링크를 먼저 시도하고, 권한이 없으면 폴더는 junction으로 만듭니다.\n" +
+                    "파일 링크는 관리자 권한 또는 Windows 개발자 모드가 필요합니다.",
+                    selected.Count, TargetPane.CurrentPath),
+                "링크 만들기",
+                MessageBoxButton.YesNo,
+                MessageBoxImage.Question);
+
+            if (answer != MessageBoxResult.Yes)
+                return;
+
+            var errors = new List<string>();
+            foreach (var item in selected)
+            {
+                try
+                {
+                    FileOperationService.CreateLink(item.FullPath, TargetPane.CurrentPath);
+                }
+                catch (Exception exception)
+                {
+                    errors.Add(item.Name + ": " + exception.Message);
+                }
+            }
+
+            RefreshBothPanes();
+            ShowErrorsIfAny("링크 만들기", errors);
         }
 
         private void Delete_Click(object sender, RoutedEventArgs e)
@@ -1665,7 +1784,11 @@ namespace Folderss
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
             var win = new SettingsWindow(_keyBindingService, _viewerConfigService) { Owner = this };
-            win.ShowDialog();
+            if (win.ShowDialog() == true)
+            {
+                // 콘솔 패널은 설정을 자체 캐시하므로 저장 직후 다시 읽혀 열린 탭의 폰트 크기를 바로 바꾼다.
+                _consolePanel?.ApplySettings();
+            }
         }
 
         private LayoutAnchorable FindDock(string contentId)
@@ -1712,6 +1835,7 @@ namespace Folderss
                 _searchPanel.NavigateRequested += (s, e) => ActivePane.SelectAndScrollTo(e.Path);
                 _searchPanel.HideRequested += (s, e) => _searchWindow?.Hide();
                 _searchPanel.ActivePaneRootRequested += (s, e) => _searchPanel.FollowActivePaneRoot(ActivePaneCurrentPath);
+                _searchPanel.ApplyFilterRequested += (s, e) => ApplySearchResultFilterToActivePane(e);
             }
 
             if (_searchWindow == null || !_searchWindow.IsLoaded)
@@ -2333,12 +2457,34 @@ namespace Folderss
         }
 
         // 탭 제목을 갱신하면서 잠금 표시를 유지한다.
+        private const string ModifiedTitleSuffix = " *";
+
+        /// <summary>
+        /// 탭 제목을 쓴다. 잠금 접두사(🔒)와 미저장 표시(' *')는 여기서 상태를 보고 다시 붙이므로,
+        /// 호출자는 기본 제목이든 현재 제목이든 그대로 넘겨도 된다.
+        /// </summary>
         private static void SetDocumentTitle(LayoutContent content, string title)
         {
             if (content == null)
                 return;
 
-            content.Title = FormatDocumentTitle(title, IsPanelLocked(content as LayoutDocument));
+            var baseTitle = StripModifiedTitleSuffix(title);
+            var viewerHost = content.Content as ViewerHost;
+            if (viewerHost != null && viewerHost.IsModified)
+                baseTitle = StripLockedTitlePrefix(baseTitle) + ModifiedTitleSuffix;
+
+            content.Title = FormatDocumentTitle(baseTitle, IsPanelLocked(content as LayoutDocument));
+        }
+
+        private static string StripModifiedTitleSuffix(string title)
+        {
+            while (!string.IsNullOrEmpty(title) &&
+                title.EndsWith(ModifiedTitleSuffix, StringComparison.Ordinal))
+            {
+                title = title.Substring(0, title.Length - ModifiedTitleSuffix.Length);
+            }
+
+            return title;
         }
 
         private static string FormatDocumentTitle(string title, bool locked)

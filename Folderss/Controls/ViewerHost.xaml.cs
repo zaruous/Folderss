@@ -15,8 +15,12 @@ namespace Folderss.Controls
         private IFileViewer _currentViewer;
         private string _currentFilePath;
         private bool _isActive = true;
+        private bool _isModified;
 
         public string CurrentFilePath => _currentFilePath;
+
+        /// <summary>현재 뷰어에 저장하지 않은 변경이 있는지. 뷰어의 ModifiedChanged를 따라가며, 탭 제목 표시와 닫기 확인에 쓴다.</summary>
+        public bool IsModified => _isModified;
 
         public event EventHandler<string> TitleChanged;
         public event EventHandler<bool> ModifiedChanged;
@@ -121,6 +125,7 @@ namespace Folderss.Controls
                 disposable.Dispose();
             HostContent.Content = null;
             _currentViewer = null;
+            _isModified = false;
         }
 
         public void Dispose()
@@ -137,6 +142,7 @@ namespace Folderss.Controls
 
         private void Viewer_ModifiedChanged(object sender, bool modified)
         {
+            _isModified = modified;
             var handler = ModifiedChanged;
             if (handler != null)
                 handler(this, modified);

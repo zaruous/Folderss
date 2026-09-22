@@ -239,6 +239,15 @@
                         Margin="4,0,0,0"
                         Visibility="Collapsed"
                         Click="PrevButton_Click"/>
+                <Button x:Name="ApplyFilterButton"
+                        DockPanel.Dock="Right"
+                        Style="{StaticResource CompactToolButtonStyle}"
+                        Content="패널에 필터 적용"
+                        Padding="8,0"
+                        Margin="4,0,0,0"
+                        Visibility="Collapsed"
+                        ToolTip="활성 폴더 패널에 이 검색 결과만 보이도록 필터를 적용합니다. 결과가 있는 하위 폴더로는 내려갈 수 있고, 패널 상단의 '해제' 버튼으로 풉니다."
+                        Click="ApplyFilterButton_Click"/>
                 <TextBlock x:Name="StatusText"
                            VerticalAlignment="Center"
                            Foreground="{DynamicResource SecondaryText}"

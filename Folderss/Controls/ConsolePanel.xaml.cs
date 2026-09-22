@@ -131,6 +131,21 @@ namespace Folderss.Controls
             };
         }
 
+        /// <summary>
+        /// 설정 창에서 저장한 뒤 호출된다. 프로필 목록을 다시 읽고 열려 있는 모든 콘솔 탭에 폰트 크기를 즉시 반영한다.
+        /// 예전에는 새 탭을 열거나 셸을 다시 시작할 때만 설정을 읽어서, 이미 열린 콘솔은 재시작 전까지 옛 폰트 크기로 남았다.
+        /// </summary>
+        public void ApplySettings()
+        {
+            RefreshSettings();
+            foreach (var tab in _tabs)
+            {
+                if (tab.IsAddTab || tab.Terminal == null)
+                    continue;
+                ApplyTerminalAppearance(tab.Terminal);
+            }
+        }
+
         public void EnsureStarted()
         {
             var active = ActiveTab;

@@ -17,6 +17,7 @@
             <Grid.RowDefinitions>
                 <RowDefinition Height="Auto"/>
                 <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
                 <RowDefinition Height="*"/>
                 <RowDefinition Height="Auto"/>
             </Grid.RowDefinitions>
@@ -60,6 +61,7 @@
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
@@ -114,9 +116,46 @@
                               ToolTip="숨김 파일 표시/숨기기"
                               Checked="ToggleHidden_Changed"
                               Unchecked="ToggleHidden_Changed"/>
+                <ToggleButton x:Name="IgnoreRulesButton"
+                              Grid.Column="4"
+                              Style="{StaticResource CompactToggleButtonStyle}"
+                              Width="54"
+                              Height="28"
+                              Margin="4,0,0,0"
+                              Content="ignore"
+                              FontSize="11"
+                              ToolTip=".gitignore / .folderssignore 규칙에 직접 해당하는 항목 숨기기"
+                              Checked="ToggleIgnoreRules_Changed"
+                              Unchecked="ToggleIgnoreRules_Changed"/>
             </Grid>
 
-            <Grid Grid.Row="2" Margin="8,0">
+            <!-- 검색 창에서 '패널에 필터 적용'을 눌렀을 때만 보이는 배너 -->
+            <Border x:Name="ResultFilterBanner"
+                    Grid.Row="2"
+                    Margin="8,0,8,5"
+                    Padding="8,3"
+                    Background="{DynamicResource SurfaceBackground}"
+                    BorderBrush="{DynamicResource AccentBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Visibility="Collapsed">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource CompactToolButtonStyle}"
+                            Content="해제"
+                            Width="44"
+                            Height="24"
+                            ToolTip="검색 결과 필터 해제"
+                            Click="ClearResultFilter_Click"/>
+                    <TextBlock x:Name="ResultFilterText"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               TextTrimming="CharacterEllipsis"
+                               FontSize="12"/>
+                </DockPanel>
+            </Border>
+
+            <Grid Grid.Row="3" Margin="8,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="TreeColumn" Width="0"/>
                     <ColumnDefinition x:Name="TreeSplitterColumn" Width="0"/>
@@ -234,6 +273,8 @@
                           GotKeyboardFocus="Pane_GotKeyboardFocus">
                     <ListView.ItemContainerStyle>
                         <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                            <!-- 링크(심볼릭 링크·junction) 행에만 대상 경로 툴팁이 붙는다. 값이 null이면 툴팁이 만들어지지 않는다. -->
+                            <Setter Property="ToolTip" Value="{Binding LinkToolTip}"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsCut}" Value="True">
                                     <Setter Property="Opacity" Value="0.4"/>
@@ -369,6 +410,7 @@
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
                                         <RowDefinition Height="Auto"/>
+                                        <RowDefinition Height="Auto"/>
                                     </Grid.RowDefinitions>
                                     <TextBlock Grid.Row="0" Text="경로" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
                                     <TextBlock x:Name="MetadataPath" Grid.Row="0" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
@@ -386,6 +428,8 @@
                                     <TextBlock x:Name="MetadataPermissions" Grid.Row="6" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
                                     <TextBlock Grid.Row="7" Text="특성" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5"/>
                                     <TextBlock x:Name="MetadataAttributes" Grid.Row="7" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5"/>
+                                    <TextBlock x:Name="MetadataLinkTargetLabel" Grid.Row="8" Text="링크 대상" Foreground="{DynamicResource SecondaryText}" Margin="0,2,8,5" Visibility="Collapsed"/>
+                                    <TextBlock x:Name="MetadataLinkTarget" Grid.Row="8" Grid.Column="1" TextWrapping="Wrap" Margin="0,2,0,5" Visibility="Collapsed"/>
                                 </Grid>
                             </ScrollViewer>
                         </Grid>
@@ -393,7 +437,7 @@
                 </Grid>
             </Grid>
 
-            <Border Grid.Row="3"
+            <Border Grid.Row="4"
                     Margin="8"
                     Padding="8,5"
                     Background="{DynamicResource ControlBackground}"

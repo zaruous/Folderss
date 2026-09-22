@@ -5,7 +5,7 @@
 ```
 Folderss/
 ├── Controls/
-│   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
+│   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
@@ -25,7 +25,8 @@ Folderss/
 │   └── SearchTarget.cs             — 검색 대상 enum (Content/FileName)
 ├── Services/
 │   ├── FileOperationService.cs     — 복사·이동·삭제·이름변경·새 폴더
-│   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터
+│   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터 (`GetLinkTarget`로 링크 대상 판별)
+│   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
 │   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
@@ -200,7 +201,35 @@ Folderss/
 - 활성 폴더 기준 시작 및 실행 중 `현재 폴더로 이동` 지원
 - 기본 셸 3종과 사용자 정의 프로필을 동일한 선택 UI에서 전환
 - 외부 터미널 버튼은 현재 선택한 프로필 기준으로 별도 콘솔 창을 연다
-- 콘솔 폰트 크기 설정 UI는 존재하지만 현재 런타임 반영에는 추가 보완이 필요하다
+- 폰트 크기는 `ConsolePanel`이 캐시한 `_settings`에서 읽어 `ApplyTerminalAppearance`로 적용한다. 설정 창에서 저장하면
+  `MainWindow.Settings_Click`이 `ConsolePanel.ApplySettings()`를 불러 프로필을 다시 읽고 열린 모든 탭에 즉시 반영한다
+  (과거에는 새 탭·재시작 때만 읽어 열린 탭은 옛 크기로 남았다)
+
+### FolderBrowser 목록 필터 (ignore · 검색 결과) / 링크 표시
+- `RefreshItems`가 항목을 만들 때 두 가지를 함께 처리한다: `ignore` 토글이 켜져 있으면 `IgnoreRuleSet.LoadFor(CurrentPath)`로
+  규칙을 새로 읽어 걸리는 항목을 빼고(`_ignoredCount` → 상태바, 토글 툴팁에 규칙 파일 목록), 각 항목의
+  `FilePreviewService.GetLinkTarget`로 심볼릭 링크·junction을 판별해 `FileSystemItem.IsLink`/`LinkTarget`을 채운다.
+- `IgnoreRuleSet`은 항목 자신만 판정한다(상위 폴더가 무시 대상이어도 그 안 목록은 규칙에 직접 걸리는 것만 숨김).
+  `.gitignore`는 가장 가까운 `.git`이 있을 때만 저장소 루트→현재 폴더 순으로 읽어 깊은 규칙이 우선하고, `.folderssignore`는
+  드라이브 루트부터 읽는다. 회귀 테스트: `tests/Folderss.SearchTests/IgnoreRuleSetTests.cs`.
+- 검색 결과 필터는 `ApplySearchResultFilter(root, files, description)`이 결과 파일 집합과 "결과를 품은 폴더" 집합(루트까지의 조상)을
+  만들어 `ApplyFilter`의 조건에 AND로 건다. 폴더는 결과가 있는 것만 보이므로 하위로 내려가며 볼 수 있고, `NavigateTo`가
+  루트 밖으로 나가면 `ClearSearchResultFilter()`로 조용히 푼다. 배너(`ResultFilterBanner`, Grid.Row 2)는 필터가 있을 때만 보인다.
+  진입점은 `SearchPanel.ApplyFilterRequested` → `MainWindow.ApplySearchResultFilterToActivePane`(패널이 검색 루트와 다른 곳이면 먼저 이동).
+- 링크 행은 `ItemContainerStyle`의 `ToolTip` Setter가 `LinkToolTip`(null이면 툴팁 없음)을 보이고, 아이콘 🔗·유형 "폴더 링크",
+  메타정보 "링크 대상" 행(링크일 때만 표시)으로 드러난다. OneDrive 자리표시자처럼 `LinkTarget`이 없는 reparse point는 링크로 보지 않는다.
+- 링크 생성은 `FileOperationService.CreateLink` — 심볼릭 링크 우선, 권한 오류(1314/UnauthorizedAccess)면 폴더는 `mklink /J`
+  junction으로 대체, 파일은 안내와 함께 실패. `MainWindow.CreateLink_Click`은 `ExecuteTransfer`와 같은 대상 패널·핀 잠금·오류 모음 규칙.
+
+### 뷰어 미저장 표시 · 닫기 확인
+- `ViewerHost.IsModified`가 뷰어의 `ModifiedChanged`를 따라간다. `MainWindow.SetDocumentTitle`은 잠금 접두사(🔒)와 별개로
+  호스트가 미저장이면 제목 끝에 ` *`(`ModifiedTitleSuffix`)를 붙이고, 아니면 뗀다 — 호출자는 기본 제목이든 현재 제목이든 넘겨도 된다.
+  `ApplyPanelLockState`가 쓰는 `FormatDocumentTitle`(2인자)은 접미사를 그대로 두므로 두 표시가 서로를 지우지 않는다.
+- `AttachViewerDocument`가 `LayoutDocument.Closing`을 구독해 미저장이면 "닫을까요?"(기본 아니요)를 묻는다. X 버튼·탭 메뉴·
+  코드의 `Close()`가 모두 `DockingManager._ExecuteCloseCommand` → `TestCanClose` → `Closing`을 거치므로 한 곳으로 충분하다.
+  실제 종료(`Window_Closing`, `_reallyClose`)는 `Closing`을 거치지 않아 미저장 문서 개수를 세어 한 번 묻고, 거부하면 `_reallyClose`를 되돌린다.
+- 저장은 뷰어 안 `Ctrl+S`(JS `save-request`)만 있다. 닫기 확인에 "저장" 버튼을 넣으려면 WebView2에서 내용을 비동기로 받아야 해
+  동기 취소 흐름과 맞지 않는다 — `docs/아이디어.md` 후속 후보.
 
 ---
 

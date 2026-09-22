@@ -69,8 +69,25 @@ namespace Folderss.Services
                 CreatedAt = info.CreationTime,
                 ModifiedAt = info.LastWriteTime,
                 Permissions = GetPermissions(path, isDirectory),
-                Attributes = info.Attributes.ToString()
+                Attributes = info.Attributes.ToString(),
+                LinkTarget = GetLinkTarget(info)
             };
+        }
+
+        /// <summary>심볼릭 링크·junction의 대상 경로. 링크가 아니거나 대상을 읽을 수 없으면 null.</summary>
+        public static string GetLinkTarget(FileSystemInfo info)
+        {
+            if (info == null || (info.Attributes & FileAttributes.ReparsePoint) == 0)
+                return null;
+
+            try
+            {
+                return info.LinkTarget;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
         }
 
         private static string GetFileType(string name)
@@ -191,5 +208,7 @@ namespace Folderss.Services
         public DateTime ModifiedAt { get; set; }
         public string Permissions { get; set; }
         public string Attributes { get; set; }
+        /// <summary>심볼릭 링크·junction이면 대상 경로, 아니면 null.</summary>
+        public string LinkTarget { get; set; }
     }
 }

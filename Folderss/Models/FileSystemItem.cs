@@ -12,12 +12,22 @@ namespace Folderss.Models
         public DateTime ModifiedAt { get; set; }
         public bool IsCut { get; set; }
 
+        /// <summary>심볼릭 링크·junction처럼 대상 경로를 알 수 있는 reparse point. OneDrive 자리표시자 같은 다른 reparse point는 링크로 보지 않는다.</summary>
+        public bool IsLink { get; set; }
+        public string LinkTarget { get; set; }
+
+        /// <summary>링크 항목에만 붙는 행 툴팁. null이면 WPF가 툴팁을 만들지 않는다.</summary>
+        public string LinkToolTip
+        {
+            get { return IsLink ? "링크 대상: " + (LinkTarget ?? "(알 수 없음)") : null; }
+        }
+
         public string Kind
         {
             get
             {
                 if (IsDirectory)
-                    return "폴더";
+                    return IsLink ? "폴더 링크" : "폴더";
 
                 var extension = Path.GetExtension(Name);
                 return string.IsNullOrWhiteSpace(extension)
@@ -50,6 +60,8 @@ namespace Folderss.Models
         {
             get
             {
+                if (IsLink)
+                    return "🔗";
                 if (IsDirectory)
                     return "📂";
 

@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
+using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
@@ -23,6 +24,9 @@ namespace Folderss.Controls
 
         /// <summary>'현재 폴더' 버튼 — 고정을 풀고 활성 패널 폴더를 다시 받아오도록 호스트에 요청한다.</summary>
         public event EventHandler ActivePaneRootRequested;
+
+        /// <summary>'패널에 필터 적용' 버튼 — 현재 결과 파일 집합을 활성 폴더 패널의 목록 필터로 쓰도록 호스트에 요청한다.</summary>
+        public event EventHandler<SearchFilterEventArgs> ApplyFilterRequested;
 
         private readonly List<SearchResult> _allResults = new List<SearchResult>();
         private readonly ObservableCollection<SearchResult> _results = new ObservableCollection<SearchResult>();
@@ -264,6 +268,7 @@ namespace Folderss.Controls
             _allResults.Clear();
             _currentPage = 0;
             UpdatePaginationControls();
+            ApplyFilterButton.Visibility = Visibility.Collapsed;
 
             var caseSensitive = CaseToggle.IsChecked == true;
             var useRegex = RegexToggle.IsChecked == true;
@@ -321,6 +326,8 @@ namespace Folderss.Controls
             {
                 if (CancelButton != null)
                     CancelButton.Visibility = Visibility.Collapsed;
+                if (ApplyFilterButton != null)
+                    ApplyFilterButton.Visibility = _allResults.Count > 0 ? Visibility.Visible : Visibility.Collapsed;
                 UpdatePaginationControls();
                 if (ReferenceEquals(_cts, cts))
                 {
@@ -334,6 +341,22 @@ namespace Folderss.Controls
         {
             if (_currentPage > 0)
                 ShowPage(_currentPage - 1);
+        }
+
+        private void ApplyFilterButton_Click(object sender, RoutedEventArgs e)
+        {
+            if (_allResults.Count == 0)
+                return;
+
+            var files = _allResults
+                .Select(result => result.FilePath)
+                .Where(path => !string.IsNullOrWhiteSpace(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var handler = ApplyFilterRequested;
+            if (handler != null)
+                handler(this, new SearchFilterEventArgs(_rootPath, files, QueryBox.Text.Trim()));
         }
 
         private void NextButton_Click(object sender, RoutedEventArgs e)
@@ -393,6 +416,23 @@ namespace Folderss.Controls
                 dep = VisualTreeHelper.GetParent(dep);
             }
             return null;
+        }
+    }
+
+    public sealed class SearchFilterEventArgs : EventArgs
+    {
+        /// <summary>검색 대상 폴더. 활성 패널이 다른 폴더를 보고 있으면 호스트가 이 폴더로 이동한 뒤 필터를 건다.</summary>
+        public string RootPath { get; }
+        /// <summary>결과 파일 전체 경로(중복 제거).</summary>
+        public IReadOnlyList<string> FilePaths { get; }
+        /// <summary>패널 배너에 보여 줄 설명(검색어).</summary>
+        public string Description { get; }
+
+        public SearchFilterEventArgs(string rootPath, IReadOnlyList<string> filePaths, string description)
+        {
+            RootPath = rootPath;
+            FilePaths = filePaths;
+            Description = description;
         }
     }
 
