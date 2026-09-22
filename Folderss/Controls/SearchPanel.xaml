@@ -55,8 +55,8 @@
                           Margin="4,0,0,0"
                           VerticalContentAlignment="Center"
                           SelectionChanged="ScopeCombo_SelectionChanged">
-                    <ComboBoxItem Content="현재 폴더만" IsSelected="True" Tag="current"/>
-                    <ComboBoxItem Content="하위 폴더 포함" Tag="recursive"/>
+                    <ComboBoxItem Content="현재 폴더만" Tag="current"/>
+                    <ComboBoxItem Content="하위 폴더 포함" IsSelected="True" Tag="recursive"/>
                 </ComboBox>
 
                 <!-- 검색 대상 선택 -->
@@ -66,8 +66,8 @@
                           Margin="4,0,0,0"
                           VerticalContentAlignment="Center"
                           SelectionChanged="ScopeCombo_SelectionChanged">
-                    <ComboBoxItem Content="내용 검색" IsSelected="True" Tag="content"/>
-                    <ComboBoxItem Content="파일명 검색" Tag="filename"/>
+                    <ComboBoxItem Content="내용 검색" Tag="content"/>
+                    <ComboBoxItem Content="파일명 검색" IsSelected="True" Tag="filename"/>
                 </ComboBox>
 
                 <!-- 옵션 토글 -->
