@@ -185,36 +185,33 @@ namespace Folderss.Services
             catch { }
         }
 
+        /// <summary>
+        /// 항목 목록을 파일에 쓴다. 임시 파일에 쓴 뒤 교체하고(<see cref="SettingsFile"/>), 실패는 삼키지 않고
+        /// 예외로 알린다 — 설정 창이 모아서 사용자에게 보여준다.
+        /// <see cref="Save"/>가 메모리 목록을 먼저 갱신하므로 쓰기가 실패해도 이번 실행 중에는 새 목록이 적용된다.
+        /// </summary>
         private static void Persist()
         {
-            try
+            var doc = new XmlDocument();
+            var declaration = doc.CreateXmlDeclaration("1.0", "utf-8", null);
+            doc.AppendChild(declaration);
+
+            var root = doc.CreateElement("OpenWithEntries");
+            doc.AppendChild(root);
+
+            foreach (var e in _entries)
             {
-                var dir = Path.GetDirectoryName(ConfigPath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
-
-                var doc = new XmlDocument();
-                var declaration = doc.CreateXmlDeclaration("1.0", "utf-8", null);
-                doc.AppendChild(declaration);
-
-                var root = doc.CreateElement("OpenWithEntries");
-                doc.AppendChild(root);
-
-                foreach (var e in _entries)
-                {
-                    var node = doc.CreateElement("Entry");
-                    AppendChild(doc, node, "Id", e.Id);
-                    AppendChild(doc, node, "Name", e.Name);
-                    AppendChild(doc, node, "Description", e.Description);
-                    AppendChild(doc, node, "ExecutablePath", e.ExecutablePath);
-                    AppendChild(doc, node, "Arguments", e.Arguments);
-                    AppendChild(doc, node, "ExtensionMask", e.ExtensionMask);
-                    root.AppendChild(node);
-                }
-
-                doc.Save(ConfigPath);
+                var node = doc.CreateElement("Entry");
+                AppendChild(doc, node, "Id", e.Id);
+                AppendChild(doc, node, "Name", e.Name);
+                AppendChild(doc, node, "Description", e.Description);
+                AppendChild(doc, node, "ExecutablePath", e.ExecutablePath);
+                AppendChild(doc, node, "Arguments", e.Arguments);
+                AppendChild(doc, node, "ExtensionMask", e.ExtensionMask);
+                root.AppendChild(node);
             }
-            catch { }
+
+            SettingsFile.Write(ConfigPath, doc.Save);
         }
 
         private static string ReadNode(XmlNode parent, string name)

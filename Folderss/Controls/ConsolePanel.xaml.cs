@@ -435,7 +435,15 @@ namespace Folderss.Controls
                 ApplyTerminalAppearance(tab.Terminal);
 
                 _settings.PreferredProfileKey = profile.Key;
-                ConsoleSettingsService.Save(_settings);
+                try
+                {
+                    ConsoleSettingsService.Save(_settings);
+                }
+                catch
+                {
+                    // 마지막 사용 프로필 기억은 부수 기능이라 터미널 시작 자체는 성공으로 둔다.
+                    // 저장 실패의 진단은 설정 창의 저장에서 함께 보고된다.
+                }
                 UpdateStatus();
             }
             catch (Exception ex)

@@ -82,19 +82,29 @@ namespace Folderss.Services
                        .Any(name => source.EndsWith(name + ".xaml", StringComparison.OrdinalIgnoreCase));
         }
 
+        /// <summary>
+        /// 현재 테마를 파일에 기록한다. 실패는 예외로 알린다 — 설정 창의 저장에서 다른 설정과 함께 실패를 보고하는 용도.
+        /// </summary>
+        public static void SaveCurrentTheme()
+        {
+            WriteTheme(CurrentTheme);
+        }
+
+        private static void WriteTheme(AppTheme theme)
+        {
+            SettingsFile.WriteAllText(SettingsPath, theme.ToString());
+        }
+
         private static void SaveTheme(AppTheme theme)
         {
             try
             {
-                var directory = Path.GetDirectoryName(SettingsPath);
-                if (!Directory.Exists(directory))
-                    Directory.CreateDirectory(directory);
-
-                File.WriteAllText(SettingsPath, theme.ToString());
+                WriteTheme(theme);
             }
             catch
             {
-                // 테마 전환은 유지하고 설정 저장 실패만 무시한다.
+                // 메뉴·라디오 버튼으로 바꾼 테마 전환은 유지하고 저장 실패만 무시한다.
+                // 설정 창의 저장에서는 SaveCurrentTheme로 다시 써서 실패를 사용자에게 알린다.
             }
         }
     }

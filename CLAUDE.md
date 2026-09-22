@@ -50,8 +50,8 @@ dotnet build .\Folderss.sln -c Debug
 
 ### 설정 항목 추가 시
 - [ ] `SettingsWindow.xaml` — UI 컨트롤 추가
-- [ ] `SettingsWindow.xaml.cs` — 초기화 및 저장 로직 추가
-- [ ] 설정 저장 서비스(해당 서비스) 업데이트
+- [ ] `SettingsWindow.xaml.cs` — 초기화 및 저장 로직 추가. 저장은 `Save_Click`의 `TrySave(...)` 목록에 등록해 실패가 `설정 저장 실패` 메시지에 모이게 함
+- [ ] 설정 저장 서비스(해당 서비스) 업데이트. 파일 쓰기는 `SettingsFile.Write`/`WriteAllText`(임시 파일 후 교체)를 쓰고, 예외를 빈 `catch { }`로 삼키지 말고 던져야 함 (다른 PC에서 권한·보안 프로그램 문제로 저장이 안 될 때 원인 파악 불가)
 
 ### 뷰어 추가 시
 - [ ] `Viewers/<Name>Viewer.xaml/.cs` — `IFileViewer` 구현 (WebView2 기반은 `TextViewer` 참고)

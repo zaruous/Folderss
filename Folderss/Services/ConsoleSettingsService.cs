@@ -118,59 +118,54 @@ namespace Folderss.Services
             return settings;
         }
 
+        /// <summary>
+        /// 콘솔 설정을 파일에 쓴다. 임시 파일에 쓴 뒤 교체하고(<see cref="SettingsFile"/>), 실패는 삼키지 않고
+        /// 예외로 알린다 — 설정 창은 각 저장을 독립적으로 시도해 실패를 모아 보여주므로 여기서 삼킬 필요가 없고,
+        /// 삼키면 다른 PC에서 저장이 안 될 때 원인을 알 수 없다.
+        /// 설정 창 밖의 부수 저장(콘솔 탭 시작 시 마지막 프로필 기억)은 호출처에서 처리한다.
+        /// </summary>
         public static void Save(ConsoleSettings settings)
         {
             if (settings == null)
                 settings = new ConsoleSettings();
 
-            try
+            var doc = new XmlDocument();
+            var declaration = doc.CreateXmlDeclaration("1.0", "utf-8", null);
+            doc.AppendChild(declaration);
+
+            var root = doc.CreateElement("ConsoleSettings");
+            doc.AppendChild(root);
+
+            AppendChild(doc, root, "PreferredProfileKey",
+                string.IsNullOrWhiteSpace(settings.PreferredProfileKey)
+                    ? DefaultProfileKey
+                    : settings.PreferredProfileKey.Trim());
+            AppendChild(doc, root, "FontSize", ClampFontSize(settings.FontSize).ToString());
+
+            var customProfiles = doc.CreateElement("CustomProfiles");
+            root.AppendChild(customProfiles);
+
+            foreach (var profile in settings.CustomProfiles.Where(profile => profile != null))
             {
-                var dir = Path.GetDirectoryName(ConfigPath);
-                if (!string.IsNullOrEmpty(dir) && !Directory.Exists(dir))
-                    Directory.CreateDirectory(dir);
+                if (string.IsNullOrWhiteSpace(profile.DisplayName) || string.IsNullOrWhiteSpace(profile.FileName))
+                    continue;
 
-                var doc = new XmlDocument();
-                var declaration = doc.CreateXmlDeclaration("1.0", "utf-8", null);
-                doc.AppendChild(declaration);
+                var profileElement = doc.CreateElement("Profile");
+                var key = string.IsNullOrWhiteSpace(profile.Key)
+                    ? "custom:" + Guid.NewGuid().ToString("N")
+                    : profile.Key.Trim();
+                var keyAttribute = doc.CreateAttribute("Key");
+                keyAttribute.Value = key;
+                profileElement.Attributes.Append(keyAttribute);
 
-                var root = doc.CreateElement("ConsoleSettings");
-                doc.AppendChild(root);
-
-                AppendChild(doc, root, "PreferredProfileKey",
-                    string.IsNullOrWhiteSpace(settings.PreferredProfileKey)
-                        ? DefaultProfileKey
-                        : settings.PreferredProfileKey.Trim());
-                AppendChild(doc, root, "FontSize", ClampFontSize(settings.FontSize).ToString());
-
-                var customProfiles = doc.CreateElement("CustomProfiles");
-                root.AppendChild(customProfiles);
-
-                foreach (var profile in settings.CustomProfiles.Where(profile => profile != null))
-                {
-                    if (string.IsNullOrWhiteSpace(profile.DisplayName) || string.IsNullOrWhiteSpace(profile.FileName))
-                        continue;
-
-                    var profileElement = doc.CreateElement("Profile");
-                    var key = string.IsNullOrWhiteSpace(profile.Key)
-                        ? "custom:" + Guid.NewGuid().ToString("N")
-                        : profile.Key.Trim();
-                    var keyAttribute = doc.CreateAttribute("Key");
-                    keyAttribute.Value = key;
-                    profileElement.Attributes.Append(keyAttribute);
-
-                    AppendChild(doc, profileElement, "DisplayName", profile.DisplayName.Trim());
-                    AppendChild(doc, profileElement, "FileName", profile.FileName.Trim());
-                    AppendChild(doc, profileElement, "Arguments", profile.Arguments ?? "");
-                    AppendChild(doc, profileElement, "ShellKind", profile.ShellKind ?? "");
-                    customProfiles.AppendChild(profileElement);
-                }
-
-                doc.Save(ConfigPath);
+                AppendChild(doc, profileElement, "DisplayName", profile.DisplayName.Trim());
+                AppendChild(doc, profileElement, "FileName", profile.FileName.Trim());
+                AppendChild(doc, profileElement, "Arguments", profile.Arguments ?? "");
+                AppendChild(doc, profileElement, "ShellKind", profile.ShellKind ?? "");
+                customProfiles.AppendChild(profileElement);
             }
-            catch
-            {
-                // 설정 저장 실패가 설정 창 전체 저장 흐름을 중단하지 않도록 한다.
-            }
+
+            SettingsFile.Write(ConfigPath, doc.Save);
         }
 
         public static int ClampFontSize(int value)

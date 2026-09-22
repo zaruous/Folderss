@@ -81,25 +81,23 @@ namespace Folderss.Services
             }
         }
 
+        /// <summary>
+        /// 메모리 목록을 먼저 갱신한 뒤 파일에 쓴다. 임시 파일에 쓴 뒤 교체하므로(<see cref="SettingsFile"/>) 쓰기 도중
+        /// 프로세스가 종료돼도 keybindings.xml이 깨지지 않는다. 실패는 예외로 알린다 — 설정 창이 모아서 보여준다.
+        /// (과거의 File.Replace는 대상 파일을 백신·인덱서가 잡고 있거나 비NTFS 프로필에서 실패해 앱이 종료되는 경로였다.)
+        /// </summary>
         public void Save(IEnumerable<KeyBindingEntry> bindings)
         {
             _bindings = bindings.ToList();
-            var dir = Path.GetDirectoryName(SettingsPath);
-            if (!Directory.Exists(dir)) Directory.CreateDirectory(dir);
 
-            // Write to a temp file first, then atomically replace — prevents corrupt
-            // keybindings.xml if the process is killed mid-write.
-            var tempPath = SettingsPath + ".tmp";
             var ser = new XmlSerializer(typeof(List<KeyBindingEntry>));
-            using (var stream = File.Create(tempPath))
+            SettingsFile.Write(SettingsPath, temporaryPath =>
             {
-                ser.Serialize(stream, _bindings);
-            }
-
-            if (File.Exists(SettingsPath))
-                File.Replace(tempPath, SettingsPath, null);
-            else
-                File.Move(tempPath, SettingsPath);
+                using (var stream = File.Create(temporaryPath))
+                {
+                    ser.Serialize(stream, _bindings);
+                }
+            });
         }
 
         public KeyBindingEntry GetBinding(string commandId)

@@ -1,7 +1,9 @@
 using Folderss.Models;
 using Folderss.Services;
+using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
+using System.IO;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -269,22 +271,52 @@ namespace Folderss
                 .Select(profile => profile.Clone())
                 .ToList();
 
-            _service.Save(_workingBindings);
+            // 각 저장을 독립적으로 시도하고 실패를 모아 한 번에 알린다. 서비스 인스턴스는 메인 창과 공유되므로
+            // 파일 쓰기가 실패해도 이번 실행 중에는 변경이 적용되어 있고, 다음 실행 때 복원되지 않는다는 점만 알리면 된다.
+            // 저장 서비스는 예외를 삼키지 않아야 한다 — 삼키면 다른 PC에서 권한·보안 프로그램 문제로 저장이 안 될 때 원인을 알 수 없다.
+            var failures = new List<string>();
+            TrySave(failures, "단축키", "keybindings.xml", () => _service.Save(_workingBindings));
+            TrySave(failures, "뷰어 매핑", "viewer-config.json", () => _viewerConfig.ReplaceMappings(
+                _workingMappings.Select(item => new KeyValuePair<string, string>(item.Extension, item.ViewerKey))));
+            TrySave(failures, "열기 프로그램", "open-with.xml", () => OpenWithService.Save(_workingOpenWith));
+            TrySave(failures, "콘솔", "console-settings.xml", () => ConsoleSettingsService.Save(_workingConsoleSettings));
+            TrySave(failures, "테마", "theme.txt", ThemeManager.SaveCurrentTheme);
 
-            // Save viewer mappings
-            var currentMappings = _viewerConfig.GetAllMappings();
-            foreach (var key in currentMappings.Keys.ToList())
-                _viewerConfig.RemoveMapping(key);
-            foreach (var item in _workingMappings)
-                _viewerConfig.SetMapping(item.Extension, item.ViewerKey);
-
-            // Save open-with entries
-            OpenWithService.Save(_workingOpenWith);
-
-            // Save console settings
-            ConsoleSettingsService.Save(_workingConsoleSettings);
+            if (failures.Count > 0)
+            {
+                MessageBox.Show(
+                    "다음 설정을 파일에 저장하지 못했습니다.\n\n" + string.Join("\n", failures) +
+                    "\n\n저장 위치: " + SettingsDirectory +
+                    "\n\n변경 내용은 이번 실행 중에는 적용되지만 다음 실행 시 복원되지 않을 수 있습니다." +
+                    "\n위 폴더의 쓰기 권한과 백신·보안 프로그램의 차단 여부를 확인하세요.",
+                    "설정 저장 실패",
+                    MessageBoxButton.OK,
+                    MessageBoxImage.Warning);
+            }
 
             DialogResult = true;
+        }
+
+        private static string SettingsDirectory
+        {
+            get
+            {
+                return Path.Combine(
+                    Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                    "Folderss");
+            }
+        }
+
+        private static void TrySave(List<string> failures, string label, string fileName, Action save)
+        {
+            try
+            {
+                save();
+            }
+            catch (Exception ex)
+            {
+                failures.Add(string.Format("- {0} ({1}): {2}", label, fileName, ex.Message));
+            }
         }
 
         private void OpenWithList_SelectionChanged(object sender, SelectionChangedEventArgs e)

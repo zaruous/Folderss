@@ -38,6 +38,7 @@ Folderss/
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
+│   ├── SettingsFile.cs             — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 → File.Move 교체, 실패는 예외)
 │   └── ThemeManager.cs             — 테마 전환 및 저장
 ├── Converters/
 │   └── FractionToStarConverter.cs  — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
@@ -115,9 +116,32 @@ Folderss/
 - `ContentColumnToggle`로 결과 목록의 `내용` 컬럼을 넣고 뺀다. `GridViewColumn`에는 Visibility가 없어
   `GridView.Columns`에서 제거·재삽입하는 방식을 쓴다 (`SearchPanel.UpdateContentColumnVisibility`)
 - `CaseToggle`(대/소문자), `RegexToggle`(정규식), `ScopeCombo`(현재 폴더만/하위 폴더 포함)는 검색 대상과 무관하게 공통 적용
+- 기본 선택은 `TargetCombo` = `파일명 검색`, `ScopeCombo` = `하위 폴더 포함`이며 XAML `ComboBoxItem`의 `IsSelected="True"`로만 정해진다
+  (코드 비하인드는 `SelectedItem.Tag`를 읽기만 함). 기본값을 바꿀 때는 이 두 속성만 옮기면 된다
 - 검색 로직 회귀 테스트: `tests/Folderss.SearchTests` (`dotnet test tests/Folderss.SearchTests`).
   본체는 `net8.0-windows`라 CI/리눅스에서 못 돌리므로 검색 관련 소스만 링크해 `net8.0`으로 단독 실행한다.
   `Folderss.sln`에는 넣지 않아 앱 빌드에 영향이 없다
+
+### SettingsWindow 저장 흐름 / ViewerConfigService
+- `SettingsWindow.Save_Click`은 단축키 → 뷰어 매핑 → 열기 프로그램 → 콘솔 → 테마 순으로 저장하며, 각 저장을 `TrySave`로
+  독립 실행해 실패를 모아 `설정 저장 실패` 메시지 하나로 알린다(항목·파일명·예외 메시지·저장 폴더 포함).
+  서비스 인스턴스는 메인 창과 공유되므로 파일 쓰기가 실패해도 이번 실행 중에는 변경이 적용되고, 다음 실행 때 복원되지 않을 뿐이다.
+- 저장 서비스(`KeyBindingService.Save`, `ViewerConfigService.ReplaceMappings`, `OpenWithService.Save`,
+  `ConsoleSettingsService.Save`, `ThemeManager.SaveCurrentTheme`)는 예외를 삼키지 않고 던진다. 빈 `catch { }`로 삼키면
+  다른 PC에서 권한·보안 프로그램 문제로 저장이 안 될 때 원인을 알 수 없다. 설정 창 밖의 부수 저장
+  (메뉴 테마 전환의 `SaveTheme`, 콘솔 탭 시작 시 마지막 프로필 기억)만 호출처에서 조용히 넘어간다.
+- 새 설정 항목을 추가하면 저장 메서드를 던지는 형태로 만들고 `Save_Click`의 `TrySave` 목록에 등록한다.
+- 설정 파일 쓰기는 모두 `SettingsFile.Write`/`WriteAllText`를 거친다. 임시 파일(`<경로>.tmp`)에 쓴 뒤 `File.Move(temp, target, true)`로
+  교체해 쓰기 도중 종료돼도 파일이 반쪽으로 남지 않는다. `File.Replace`는 쓰지 않는다 — 대상 파일을 백신·인덱서가 잡고 있거나
+  비NTFS·네트워크 프로필에서 더 자주 실패한다(과거 `KeyBindingService`가 이 경로로 앱 종료를 일으켰다).
+- `viewer-config.json`은 `{"version":2,"mappings":{...}}` 형식이며 기본 매핑(`DefaultMappings`)과 다른 재정의만 담는다.
+  `Load()`는 `IsLegacyFullDump`가 참일 때만 `LegacyDefaultMappings`와 같은 항목을 잔여물로 버린다. 판별 기준은
+  "버전 표기가 없고 현재 기본 매핑과 같은 항목(예: `.md → markdown`)이 있다"이다 — Monaco 도입 전 파일은 기본 매핑 전체를
+  덤프했고, 재정의만 저장하는 코드는 기본값과 같은 항목을 절대 쓰지 않기 때문이다. 버전 표기만 없는 재정의 파일은
+  모든 항목을 사용자의 선택으로 유지한다. 과거에는 이 구분 없이 legacy 표와 같은 값을 모두 버려서 `.sql → Monaco`,
+  `.txt → Text` 같은 매핑이 저장은 되지만 다음 실행 때 사라졌다(버그).
+- 뷰어 매핑은 `ReplaceMappings`로 전체를 한 번에 교체하고 파일을 한 번만 쓴다
+  (과거에는 행마다 `RemoveMapping`/`SetMapping`이 각각 파일을 다시 써 저장 한 번에 수십 번 덮어썼다).
 
 ### DiskUsagePanel / DiskUsageService / DiskUsageMiniPanel
 - `보기 > 디스크 사용량 보기` 클릭 시 `MainWindow.ShowDiskUsage_Click`이 `ShowDiskUsagePanel()`로 문서 탭을 연다.

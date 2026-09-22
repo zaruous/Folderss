@@ -2,7 +2,8 @@
 
   <!--
     Folderss 본체는 net8.0-windows(WPF)라 CI/리눅스에서 실행할 수 없다.
-    검색 로직은 순수 System.IO 코드이므로 소스 링크로 끌어와 net8.0에서 단독 테스트한다.
+    검색 로직과 뷰어 매핑 설정은 순수 System.IO 코드이므로 소스 링크로 끌어와 net8.0에서 단독 테스트한다.
+    ViewerConfigService가 참조하는 WPF 뷰어 타입은 ViewerStubs.cs의 빈 스텁으로 대체한다.
     (Folderss.sln에는 포함하지 않는다 — 앱 빌드에 xunit 복원을 강제하지 않기 위함)
     실행: dotnet test tests/Folderss.SearchTests
   -->
@@ -19,6 +20,8 @@
     <Compile Include="..\..\Folderss\Models\SearchTarget.cs" Link="Linked\SearchTarget.cs" />
     <Compile Include="..\..\Folderss\Services\SearchService.cs" Link="Linked\SearchService.cs" />
     <Compile Include="..\..\Folderss\Services\FilePreviewService.cs" Link="Linked\FilePreviewService.cs" />
+    <Compile Include="..\..\Folderss\Services\ViewerConfigService.cs" Link="Linked\ViewerConfigService.cs" />
+    <Compile Include="..\..\Folderss\Services\SettingsFile.cs" Link="Linked\SettingsFile.cs" />
   </ItemGroup>
 
   <ItemGroup>
