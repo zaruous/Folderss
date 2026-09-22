@@ -9,6 +9,42 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## v1.7.0 (2026-09-23)
+
+### 설정 저장 안정성 개선 (`docs/items/settings-save-reliability.md`)
+
+- `Services/ViewerConfigService.cs` — 저장된 뷰어 매핑이 `LegacyDefaultMappings`와 같으면 무조건 버려 `.txt → Text`, `.sql → Monaco` 같은 사용자 선택이 재시작 후 사라지던 버그 수정. `viewer-config.json`에 `version: 2`를 기록하고, 버전 표기가 없으면서 현재 기본값과 같은 항목이 있는 파일(Monaco 도입 전 전체 덤프)에만 legacy 정리를 적용(`IsLegacyFullDump`). 뷰어 매핑은 `ReplaceMappings`로 한 번에 교체해 파일을 한 번만 쓴다. 테스트용 경로 주입 생성자 추가.
+- `Services/SettingsFile.cs` (신규) — 설정 파일 원자적 쓰기 헬퍼(임시 파일 → `File.Move(temp, target, true)`). 단축키·뷰어·열기 프로그램·콘솔·테마 저장 5곳 통일. `KeyBindingService`의 `File.Replace`(백신·비NTFS에서 실패해 앱 종료) 제거.
+- `SettingsWindow.xaml.cs` — 저장 서비스가 예외를 던지고 `Save_Click`이 항목별 `TrySave`로 독립 시도한 뒤 실패 목록(항목·파일명·예외·저장 폴더)을 `설정 저장 실패` 메시지 하나로 보고. 빈 `catch { }`로 삼키던 뷰어·열기 프로그램·콘솔·테마 저장 실패가 드러남.
+- `tests/Folderss.SearchTests/ViewerConfigServiceTests.cs` (신규, 11건) + WPF 뷰어 스텁. Cursor(composer-2.5) 코드 리뷰 반영.
+
+### Cursor 제안 소규모 기능 5건 (`docs/items/cursor-small-features.md`)
+
+- `Services/IgnoreRuleSet.cs` (신규) — gitignore 문법 부분집합 매처. `FolderBrowser` 필터 바 `ignore` 토글로 `.gitignore`/`.folderssignore` 규칙에 직접 걸리는 항목 숨김(저장소 안에서는 `.git`도). 테스트 12건.
+- 심볼릭 링크·junction 표시(🔗 아이콘, 행 툴팁, 메타정보 "링크 대상") — `FileSystemItem.IsLink/LinkTarget`, `FilePreviewService.GetLinkTarget`. 메인 메뉴 `반대편 패널에 링크 만들기` — `FileOperationService.CreateLink`(심볼릭 링크 우선, 권한 없으면 폴더는 junction).
+- 검색 창 `패널에 필터 적용` — `FolderBrowser.ApplySearchResultFilter`로 결과 파일과 결과를 품은 폴더만 표시, 배너 `해제`·검색 루트 밖 이동으로 해제.
+- 뷰어 미저장 표시 — `ViewerHost.IsModified`, 탭 제목 ` *`, `LayoutDocument.Closing`과 앱 종료 시 확인.
+- 콘솔 폰트 크기 — 설정 저장 시 `ConsolePanel.ApplySettings()`로 열린 탭에 즉시 반영 (프로필별 작업 폴더 기억은 보류, `docs/아이디어.md`).
+
+### 그 밖
+
+- `Controls/SearchPanel.xaml` — 검색 창 기본 선택을 `파일명 검색`·`하위 폴더 포함`으로 변경 (`docs/items/search-panel-default-options.md`).
+- `Controls/FolderBrowser.xaml.cs` — 트리뷰 새로고침(↻)이 선택한 폴더의 하위 트리만 갱신 (`docs/items/tree-view-selective-refresh.md`, v1.6.2 이후 커밋).
+- `README.md` — v1.6.2 기준 전체 최신화 (`docs/items/readme-refresh-v1.6.2.md`). `docs/items/directory-compare.md` 상세설계서, `docs/아이디어.md` 추가.
+- `Properties/AssemblyInfo.cs` — `1.7.0.0`.
+
+---
+
+## v1.6.2 (2026-09-22)
+
+### 검색 창 개선 (`docs/items/search-panel-recursive-and-pattern-fixes.md`)
+
+- `Services/SearchService.cs` — 하위 폴더 포함 검색이 접근 거부 폴더 하나로 통째로 끊기던 버그 수정(폴더 단위 순회, reparse point 순환 회피). 파일명 검색에 `*.cs`, `report?.txt` 와일드카드 패턴(별도 확장자 필터 대체).
+- `Controls/SearchPanel.xaml/.cs` — 결과 목록 `내용` 컬럼 토글, 대상 폴더 상시 표시와 `폴더 선택…`/`현재 폴더`, 검색 창이 열린 채 폴더를 옮기면 옛 폴더를 검색하던 문제 수정(`Activated`마다 루트 갱신).
+- `tests/Folderss.SearchTests` (신규) — 검색 로직 xUnit 회귀 테스트, `net8.0` 단독 실행.
+
+---
+
 ## v1.6.1 (2026-08-22)
 
 ### 폴더 패널 그리드의 폴더 아이콘 구분 개선
