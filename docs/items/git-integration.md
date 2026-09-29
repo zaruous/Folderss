@@ -1,6 +1,6 @@
 # Git 연동 (선택 폴더 하위 다중 저장소) — 상세설계서
 
-- 상태: Todo
+- 상태: Ready for Verification
 
 ## 요구사항
 
@@ -9,6 +9,13 @@
 - 메뉴에서 실행하면 **활성 패널에서 선택한 디렉터리**를 기준으로 Git 기능을 쓴다.
 - 실사용에서는 선택한 폴더의 **하위 트리에 `.git`이 여러 개** 있다고 가정해야 한다.
 - 1차 후보 기능: **상태 확인, 스테이지, 커밋, 푸시, 풀, 브랜치, 로그, 브랜치 그래프**.
+
+### 추가 요구사항 (2026-09-29)
+
+- git은 **필수 설치**로 한다(Q7 확정). 없거나 2.26 미만이면 창을 열 때 안내하고 닫는다.
+- 설계서의 선택지(미결 사항)를 **대화상자(팝업)** 로 구현해 사용자가 직접 고른다.
+  - Git 기능 자체도 별도 팝업 창(`GitWindow`, 비모달)으로 연다(Q2 → 별도 창).
+  - `옵션…` 대화상자(`GitOptionsWindow`)에서 기준 폴더 규칙(Q1), pull 방식(Q4), 탐색 깊이·제외 폴더(Q5), 로그 개수·범위를 고른다.
 
 ### 기능 (제안)
 
@@ -162,7 +169,7 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
 
 | # | 리스크 | 영향 | 대응 |
 |---|---|---|---|
-| R1 | Git for Windows 미설치·구버전(`switch`/`restore`는 2.23+) | 기능 전체 불가 | 시작 시 `git --version` 확인, 2.23 미만이면 안내 |
+| R1 | Git for Windows 미설치·구버전(`switch`/`restore`는 2.23+, `--pathspec-from-file`은 2.26+) | 기능 전체 불가 | 창을 열 때 `git --version` 확인, 2.26 미만이면 안내 |
 | R2 | 인증 대기로 프로세스가 끝나지 않음(SSH 키 암호, GCM 창이 뒤에 숨음) | 버튼이 영원히 "진행 중" | `GIT_TERMINAL_PROMPT=0`, 타임아웃, 취소 버튼. SSH는 agent 사용 전제로 문서화 |
 | R3 | 탐색 대상이 드라이브 루트·네트워크 드라이브·거대한 트리 | 탐색 수 분, I/O 부하 | 깊이 제한·제외 목록·취소, 기준 폴더가 드라이브 루트면 확인 창 |
 | R4 | 다중 저장소 **일괄 pull/push/commit** | 한 번 클릭으로 여러 저장소 상태를 바꿈, 부분 실패 시 복구 어려움 | 1차는 일괄 동작을 status/fetch로 제한 |
@@ -184,6 +191,54 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
 - **Q6** 다중 저장소 일괄 pull/push가 실제로 필요한가(R4). 필요하면 확인 창 + 저장소별 결과 요약 방식으로.
 - **Q7** git CLI 의존(Git for Windows 필수)을 받아들일 수 있는가.
 
+## 결정 사항 (미결 사항 처리)
+
+| 항목 | 결정 |
+|---|---|
+| Q1 기준 폴더 | 옵션으로 선택 — 기본 "선택한 폴더 우선", 대안 "항상 현재 폴더" |
+| Q2 UI 형태 | 별도 비모달 창(`GitWindow`). 도킹 탭이 아니므로 `ApplyPanelLockState`·세션 복원 대상이 아니다 |
+| Q3 그래프 | **이번 구현에 없음**(로그 목록만). 레인 계산·그리기는 후속 |
+| Q4 pull 방식 | 옵션으로 선택 — 기본 `--ff-only`, 대안 `--no-rebase` / `--rebase` / git 설정 따름 |
+| Q5 탐색 깊이·제외 | 옵션으로 선택 — 기본 깊이 6, 제외 `node_modules bin obj .vs packages` |
+| Q6 일괄 pull/push | 제공 안 함(일괄은 상태 조회·fetch만). 옵션으로도 열지 않음 — 리스크 R4 |
+| Q7 git 의존 | 필수 설치로 확정 |
+
+## 구현 내용
+
+- `⋯ 메뉴 > Git 저장소…` → `MainWindow.ShowGit_Click`: 옵션의 기준 폴더 규칙으로 폴더를 정하고(드라이브 루트면 확인), `GitWindow`를 비모달로 연다.
+- `GitWindow`
+  - 열 때 git 존재·버전(2.26+) 확인 → 저장소 탐색(백그라운드, 찾는 즉시 행 추가) → 저장소별 `status --porcelain=v2 --branch -z` (동시 4개).
+  - 툴바: 다시 찾기, 전체 fetch(`fetch --prune`), 선택 저장소 pull(옵션 방식)/push(upstream 없으면 확인 후 `push -u <origin|첫 원격> <branch>`), 옵션, 취소.
+  - 변경 사항: 변경됨(충돌→수정→추적 안 됨 순)/스테이지됨 목록, 선택·전체 스테이지(`add --pathspec-from-file` / `add -A`),
+    언스테이지(`restore --staged`, 최초 커밋 전은 `rm --cached`), 커밋(`commit -F <UTF-8 임시 파일>`, `Ctrl+Enter`). 빈 메시지·스테이지 없음·충돌 남음은 실행 전 차단.
+  - 브랜치: `for-each-ref` 목록, 전환(`switch` / 원격은 `switch --track`), 새 브랜치(`switch -c`, `-`로 시작 금지), 삭제(`branch -d --`, 현재·원격 브랜치 차단).
+  - 로그: `log --topo-order -z -n <개수> [--all]`.
+  - 브랜치 전환·pull 전에 그 저장소 파일을 연 미저장 뷰어 탭 수를 세어 경고(R6).
+  - 모든 명령·stdout·stderr·종료 코드를 출력 영역에 남김. 창을 닫으면 진행 중인 git 프로세스 트리를 종료.
+- `GitOptionsWindow`: 위 옵션을 고르는 모달 대화상자(기본값 버튼, 숫자 범위·제외 폴더 이름 검증). 저장은 `GitSettingsService.Save` →
+  `SettingsFile.Write`(원자적 쓰기). 저장 실패는 "설정 저장 실패" 메시지로 알리고 이번 창에만 적용. 탐색 옵션이 바뀌면 다시 탐색.
+- `GitCommandRunner`: `ArgumentList` 전달, `-c core.quotepath=false -c color.ui=false`, UTF-8 출력, `GIT_TERMINAL_PROMPT=0`,
+  `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`, 타임아웃(조회 30초 / 네트워크·커밋 5분) 시 프로세스 트리 종료 후 안내 문구.
+
+## 변경 파일
+
+- 신규: `Folderss/Models/GitModels.cs`, `Folderss/Services/GitRepositoryScanner.cs`, `Folderss/Services/GitCommandRunner.cs`,
+  `Folderss/Services/GitOutputParser.cs`, `Folderss/Services/GitSettingsService.cs`, `Folderss/GitWindow.xaml(.cs)`, `Folderss/GitOptionsWindow.cs`,
+  `tests/Folderss.SearchTests/GitTests.cs`
+- 수정: `Folderss/MainWindow.xaml`(메뉴), `Folderss/MainWindow.xaml.cs`(`ShowGit_Click`, `CountModifiedDocumentsUnder`),
+  `tests/Folderss.SearchTests/Folderss.SearchTests.csproj`(소스 링크), `README.md`, `docs/architecture.md`
+
+## 검증
+
+- `dotnet test tests/Folderss.SearchTests` (Linux, git 2.43): 전체 48개 중 통과 47, 건너뜀 1(기존 권한 테스트). 신규 `GitTests` 11개 통과 —
+  탐색(중첩·`.git` 파일·제외·깊이·상위 저장소·취소), porcelain v2(한글·공백 경로, rename, 충돌, untracked, initial, detached), log, for-each-ref, 버전 파싱,
+  실제 git으로 init→add(pathspec stdin)→commit(-F)→status/branch/log 왕복, 저장소 아닌 폴더에서 실패가 예외 아닌 stderr로 오는지.
+- 앱 빌드: Linux에서 `-p:EnableWindowsTargeting=true`로 XAML 마크업 컴파일·C# 컴파일 확인. 신규 파일 오류·경고 없음
+  (고의 오류 삽입으로 신규 파일이 실제 컴파일 대상임을 확인). 기존 `ConsolePanel.xaml.cs(58)` 터미널 컨트롤 참조 오류 1건은 Linux 환경 한계로 기존에도 발생.
+- **미검증 (Windows 수동 확인 필요)**: 창 레이아웃·테마 색, 실제 조작 흐름, GCM HTTPS push, SSH(agent 없음) push가 멈추지 않고 타임아웃/오류로 끝나는지,
+  드라이브 루트 확인 창, 미저장 탭 경고.
+
 ## 변경 이력
 
 - 2026-09-29: 요청 접수, 설계서 초안 작성(상태 Todo). 구현 전 미결 사항 확인 필요.
+- 2026-09-29: git 필수 설치 확정, 선택지를 옵션 대화상자로 구현. `GitWindow`·`GitOptionsWindow`·서비스 4종·테스트 추가(그래프 제외). 상태 Ready for Verification.

@@ -23,6 +23,10 @@
     <Compile Include="..\..\Folderss\Services\ViewerConfigService.cs" Link="Linked\ViewerConfigService.cs" />
     <Compile Include="..\..\Folderss\Services\SettingsFile.cs" Link="Linked\SettingsFile.cs" />
     <Compile Include="..\..\Folderss\Services\IgnoreRuleSet.cs" Link="Linked\IgnoreRuleSet.cs" />
+    <Compile Include="..\..\Folderss\Models\GitModels.cs" Link="Linked\GitModels.cs" />
+    <Compile Include="..\..\Folderss\Services\GitRepositoryScanner.cs" Link="Linked\GitRepositoryScanner.cs" />
+    <Compile Include="..\..\Folderss\Services\GitOutputParser.cs" Link="Linked\GitOutputParser.cs" />
+    <Compile Include="..\..\Folderss\Services\GitCommandRunner.cs" Link="Linked\GitCommandRunner.cs" />
   </ItemGroup>
 
   <ItemGroup>

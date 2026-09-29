@@ -1,0 +1,215 @@
+<Window x:Class="Folderss.GitWindow"
+        xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        Title="Git"
+        Width="1100"
+        Height="720"
+        MinWidth="760"
+        MinHeight="480"
+        WindowStartupLocation="CenterOwner"
+        ResizeMode="CanResizeWithGrip"
+        Background="{DynamicResource WindowBackground}"
+        Foreground="{DynamicResource PrimaryText}"
+        FontFamily="{DynamicResource AppFontFamily}"
+        FontSize="13"
+        Loaded="Window_Loaded"
+        Closed="Window_Closed">
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+            <RowDefinition Height="5"/>
+            <RowDefinition Height="130" MinHeight="50"/>
+        </Grid.RowDefinitions>
+
+        <!-- 툴바 -->
+        <Border Grid.Row="0"
+                Background="{DynamicResource SurfaceBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1"
+                Padding="6,4">
+            <DockPanel LastChildFill="True">
+                <StackPanel Orientation="Horizontal" DockPanel.Dock="Left">
+                    <Button x:Name="RescanButton" Content="⟳ 다시 찾기" Click="Rescan_Click"
+                            ToolTip="기준 폴더 아래 저장소를 다시 찾고 상태를 읽습니다"/>
+                    <Button x:Name="FetchAllButton" Content="⇣ 전체 fetch" Click="FetchAll_Click"
+                            ToolTip="목록의 모든 저장소에서 git fetch --prune을 실행합니다 (작업 트리는 바뀌지 않음)"/>
+                    <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
+                    <Button x:Name="PullButton" Content="⇣ pull" Click="Pull_Click"
+                            ToolTip="선택한 저장소만 pull (방식은 옵션에서 선택)"/>
+                    <Button x:Name="PushButton" Content="⇡ push" Click="Push_Click"
+                            ToolTip="선택한 저장소만 push (강제 푸시 없음)"/>
+                    <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
+                    <Button x:Name="OptionsButton" Content="옵션…" Click="Options_Click"/>
+                    <Button x:Name="CancelButton" Content="취소" Click="Cancel_Click" IsEnabled="False"
+                            ToolTip="진행 중인 탐색·git 명령을 중단합니다"/>
+                </StackPanel>
+                <TextBlock x:Name="StatusText"
+                           Margin="12,0,6,0"
+                           VerticalAlignment="Center"
+                           HorizontalAlignment="Right"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource SecondaryText}"/>
+            </DockPanel>
+        </Border>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="300" MinWidth="180"/>
+                <ColumnDefinition Width="5"/>
+                <ColumnDefinition Width="*"/>
+            </Grid.ColumnDefinitions>
+
+            <!-- 저장소 목록 -->
+            <DockPanel Grid.Column="0">
+                <TextBlock x:Name="BasePathText"
+                           DockPanel.Dock="Top"
+                           Margin="8,6"
+                           TextTrimming="CharacterEllipsis"
+                           Foreground="{DynamicResource SecondaryText}"/>
+                <ListBox x:Name="RepoList"
+                         BorderThickness="0,1,0,0"
+                         SelectionChanged="RepoList_SelectionChanged"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <StackPanel ToolTip="{Binding RootPath}">
+                                <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis"/>
+                                <TextBlock Text="{Binding Summary}" FontSize="12" TextTrimming="CharacterEllipsis"
+                                           Foreground="{DynamicResource SecondaryText}"/>
+                            </StackPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </DockPanel>
+
+            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
+
+            <Grid Grid.Column="2" x:Name="DetailRoot" IsEnabled="False">
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="*"/>
+                </Grid.RowDefinitions>
+
+                <ListBox x:Name="SectionNav"
+                         Grid.Row="0"
+                         BorderThickness="0,0,0,1"
+                         Background="{DynamicResource SurfaceBackground}"
+                         SelectionChanged="SectionNav_SelectionChanged">
+                    <ListBox.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ListBox.ItemsPanel>
+                    <ListBoxItem Tag="Changes" Padding="14,6">변경 사항</ListBoxItem>
+                    <ListBoxItem Tag="Branches" Padding="14,6">브랜치</ListBoxItem>
+                    <ListBoxItem Tag="Log" Padding="14,6">로그</ListBoxItem>
+                </ListBox>
+
+                <!-- 변경 사항 -->
+                <Grid x:Name="ChangesSection" Grid.Row="1" Margin="6">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="*"/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="8"/>
+                        <ColumnDefinition Width="*"/>
+                    </Grid.ColumnDefinitions>
+
+                    <DockPanel Grid.Column="0">
+                        <DockPanel DockPanel.Dock="Top">
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                <Button x:Name="StageButton" Content="스테이지 ↓" Click="Stage_Click"/>
+                                <Button x:Name="StageAllButton" Content="전체" Click="StageAll_Click"
+                                        ToolTip="git add -A"/>
+                            </StackPanel>
+                            <TextBlock x:Name="UnstagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="변경됨"/>
+                        </DockPanel>
+                        <ListBox x:Name="UnstagedList"
+                                 SelectionMode="Extended"
+                                 FontFamily="Consolas"
+                                 DisplayMemberPath="DisplayText"
+                                 MouseDoubleClick="ChangeList_MouseDoubleClick"/>
+                    </DockPanel>
+
+                    <DockPanel Grid.Column="2">
+                        <DockPanel DockPanel.Dock="Top">
+                            <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                <Button x:Name="UnstageButton" Content="↑ 언스테이지" Click="Unstage_Click"/>
+                                <Button x:Name="UnstageAllButton" Content="전체" Click="UnstageAll_Click"/>
+                            </StackPanel>
+                            <TextBlock x:Name="StagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="스테이지됨"/>
+                        </DockPanel>
+                        <ListBox x:Name="StagedList"
+                                 SelectionMode="Extended"
+                                 FontFamily="Consolas"
+                                 DisplayMemberPath="DisplayText"
+                                 MouseDoubleClick="ChangeList_MouseDoubleClick"/>
+                    </DockPanel>
+
+                    <DockPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                        <Button x:Name="CommitButton"
+                                DockPanel.Dock="Right"
+                                VerticalAlignment="Bottom"
+                                Content="커밋"
+                                MinWidth="80"
+                                Click="Commit_Click"
+                                ToolTip="스테이지된 변경을 커밋합니다 (Ctrl+Enter)"/>
+                        <TextBox x:Name="CommitMessageBox"
+                                 Height="70"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 VerticalScrollBarVisibility="Auto"
+                                 PreviewKeyDown="CommitMessageBox_PreviewKeyDown"
+                                 ToolTip="커밋 메시지 — 첫 줄은 제목, 빈 줄 뒤는 본문"/>
+                    </DockPanel>
+                </Grid>
+
+                <!-- 브랜치 -->
+                <DockPanel x:Name="BranchesSection" Grid.Row="1" Margin="6" Visibility="Collapsed">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <Button x:Name="SwitchBranchButton" Content="전환" Click="SwitchBranch_Click"
+                                ToolTip="선택한 브랜치로 전환 (원격 브랜치는 추적하는 로컬 브랜치를 만듭니다)"/>
+                        <Button x:Name="NewBranchButton" Content="새 브랜치…" Click="NewBranch_Click"
+                                ToolTip="현재 커밋에서 새 브랜치를 만들고 전환합니다"/>
+                        <Button x:Name="DeleteBranchButton" Content="삭제" Click="DeleteBranch_Click"
+                                ToolTip="병합된 로컬 브랜치만 삭제합니다 (git branch -d)"/>
+                    </StackPanel>
+                    <ListBox x:Name="BranchList"
+                             FontFamily="Consolas"
+                             DisplayMemberPath="DisplayText"
+                             MouseDoubleClick="BranchList_MouseDoubleClick"/>
+                </DockPanel>
+
+                <!-- 로그 -->
+                <ListView x:Name="LogList" Grid.Row="1" Margin="6" Visibility="Collapsed"
+                          VirtualizingPanel.IsVirtualizing="True">
+                    <ListView.View>
+                        <GridView>
+                            <GridViewColumn Header="해시" Width="80" DisplayMemberBinding="{Binding ShortHash}"/>
+                            <GridViewColumn Header="제목" Width="380" DisplayMemberBinding="{Binding Subject}"/>
+                            <GridViewColumn Header="참조" Width="170" DisplayMemberBinding="{Binding Refs}"/>
+                            <GridViewColumn Header="작성자" Width="110" DisplayMemberBinding="{Binding Author}"/>
+                            <GridViewColumn Header="날짜" Width="130" DisplayMemberBinding="{Binding TimeText}"/>
+                        </GridView>
+                    </ListView.View>
+                </ListView>
+            </Grid>
+        </Grid>
+
+        <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" Background="{DynamicResource BorderBrush}"/>
+
+        <TextBox x:Name="OutputBox"
+                 Grid.Row="3"
+                 IsReadOnly="True"
+                 FontFamily="Consolas"
+                 FontSize="12"
+                 TextWrapping="NoWrap"
+                 HorizontalScrollBarVisibility="Auto"
+                 VerticalScrollBarVisibility="Auto"
+                 BorderThickness="0"
+                 Background="{DynamicResource PanelBackground}"/>
+    </Grid>
+</Window>

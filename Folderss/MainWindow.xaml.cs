@@ -1526,6 +1526,48 @@ namespace Folderss
             UpdateActivePaneText();
         }
 
+        private void ShowGit_Click(object sender, RoutedEventArgs e)
+        {
+            var pane = ActivePane;
+            if (pane == null)
+                return;
+
+            // 기준 폴더: 옵션이 "선택한 폴더 우선"이고 폴더 하나만 골랐으면 그 폴더, 아니면 패널의 현재 폴더.
+            var settings = GitSettingsService.Load();
+            var selected = pane.SelectedItems;
+            var basePath = settings.BaseFolderMode == GitBaseFolderMode.SelectedFolderFirst
+                           && selected.Count == 1 && selected[0].IsDirectory
+                ? selected[0].FullPath
+                : pane.CurrentPath;
+
+            if (string.IsNullOrWhiteSpace(basePath) || !Directory.Exists(basePath))
+            {
+                MessageBox.Show("폴더를 찾을 수 없습니다.", "Git", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // 드라이브 루트 전체 탐색은 수 분 걸릴 수 있어 한 번 묻는다.
+            var fullPath = Path.GetFullPath(basePath);
+            if (string.Equals(fullPath.TrimEnd('\\'), (Path.GetPathRoot(fullPath) ?? string.Empty).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)
+                && MessageBox.Show(string.Format("드라이브 루트({0}) 전체에서 저장소를 찾습니다. 오래 걸릴 수 있습니다. 계속할까요?", fullPath),
+                    "Git", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+
+            new GitWindow(fullPath, CountModifiedDocumentsUnder, OpenViewerTab) { Owner = this }.Show();
+        }
+
+        /// <summary>폴더 아래 파일을 열어 둔 채 저장하지 않은 뷰어 탭 수. Git 브랜치 전환·pull 전 경고에 쓴다.</summary>
+        private int CountModifiedDocumentsUnder(string folder)
+        {
+            var prefix = Path.GetFullPath(folder).TrimEnd('\\') + "\\";
+            return DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .Select(d => d.Content as ViewerHost)
+                .Count(host => host != null && host.IsModified
+                    && !string.IsNullOrEmpty(host.CurrentFilePath)
+                    && Path.GetFullPath(host.CurrentFilePath).StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+
         private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
         {
             var selected = ActivePane.SelectedItem;

@@ -31,6 +31,7 @@ Folderss/
 ├── Models/
 │   ├── FileSystemItem      — 파일·폴더 뷰모델
 │   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델 (폴더/파일 구분)
+│   ├── GitModels           — Git 저장소·상태·커밋·브랜치 모델
 │   ├── DriveUsageInfo      — 드라이브 총량·사용량·여유 공간 모델
 │   ├── KeyBindingEntry     — 단축키 설정 모델
 │   ├── OpenWithEntry       — 사용자 지정 열기 프로그램 모델
@@ -39,6 +40,10 @@ Folderss/
 ├── Services/
 │   ├── FileOperationService    — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService      — 텍스트·이미지 미리보기 + 메타데이터 (링크 대상 포함)
+│   ├── GitRepositoryScanner    — 기준 폴더 아래(와 위) Git 저장소 탐색 (중첩·워크트리·서브모듈)
+│   ├── GitCommandRunner        — git CLI 실행 (인수 목록 전달, 타임아웃·취소, UTF-8)
+│   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref` 기계용 출력 파서
+│   ├── GitSettingsService      — Git 창 옵션 저장 (pull 방식, 탐색 깊이·제외 폴더 등)
 │   ├── IgnoreRuleSet           — .gitignore/.folderssignore 규칙 매처 (목록 ignore 필터)
 │   ├── DockLayoutService       — AvalonDock 레이아웃 저장·복원 (XML)
 │   ├── SessionStateService     — 열린 폴더 경로 세션 저장·복원 (XML)
@@ -62,6 +67,8 @@ Folderss/
 │   └── Controls.xaml           — 공통 컨트롤 스타일
 ├── MainWindow                  — 메인 창, AvalonDock 호스트, 전역 단축키, 문서 탭 컨텍스트 메뉴
 ├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔 설정
+├── GitWindow                   — 다중 저장소 Git 창 (상태·스테이지·커밋·브랜치·로그·fetch/pull/push)
+├── GitOptionsWindow            — Git 옵션 대화상자
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
@@ -136,6 +143,7 @@ tests/
 - 뷰어에서 편집 후 저장하지 않은 변경은 탭 제목 끝의 ` *`로 표시되고, 탭을 닫거나 앱을 종료할 때 확인함
 - Markdown·Monaco 뷰어 안에서 `Ctrl+F`는 전역 파일 검색 대신 문서 내 검색을 엶
 - `보기 > 콘솔` 하단 터미널 패널에서 PowerShell 7, Windows PowerShell, 명령 프롬프트 실행
+- `⋯ 메뉴 > Git 저장소…`로 선택한 폴더 아래의 여러 Git 저장소를 한 창에서 관리 (아래 [Git](#git) 참고)
 - `보기 > 디스크 사용량 보기`로 드라이브별 사용량을 가로바와 GB 단위(총량/사용량/여유 공간)로 표시, 즐겨찾기 위 미니 패널로 상시 확인 가능
 - Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
 - 설정 창에서 단축키와 확장자별 뷰어 매핑 변경
@@ -179,6 +187,23 @@ tests/
 - `Ctrl+C`는 터미널에 선택한 텍스트가 있으면 복사하고, 없으면 실행 중인 명령에 인터럽트를 보냅니다.
 - `Home`/`End` 단독 입력은 콘솔 탭 전환에 사용하지 않고 활성 콘솔 입력으로 전달합니다.
 - 폰트 크기는 `설정 > 콘솔`에서 바꿔 저장하면 열려 있는 콘솔 탭에도 즉시 반영됩니다.
+
+## Git
+
+`⋯ 메뉴 > Git 저장소…`는 활성 패널에서 고른 폴더(선택이 없으면 현재 폴더) 아래의 Git 저장소를 모두 찾아 별도 창에 보여 줍니다. [Git for Windows](https://git-scm.com/download/win) 2.26 이상이 필요합니다(PATH 또는 기본 설치 위치).
+
+- 왼쪽 목록: 저장소별 상대 경로, 브랜치, upstream 대비 ↑ahead/↓behind, 변경·충돌 수. 기준 폴더를 품은 상위 저장소는 `▲`로 맨 위에 표시.
+- 탐색은 중첩 저장소·워크트리·서브모듈(`.git` 파일)까지 찾고, 링크 폴더와 제외 폴더(`node_modules`, `bin`, `obj` 등)에는 들어가지 않습니다.
+- 선택한 저장소 하나에 대해:
+  - **변경 사항**: 변경됨/스테이지됨 목록, 개별·전체 스테이지/언스테이지, 커밋(`Ctrl+Enter`). 더블클릭하면 내장 뷰어로 열기.
+  - **브랜치**: 로컬·원격 브랜치 목록, 전환(원격은 추적 브랜치 생성), 새 브랜치, 병합된 브랜치 삭제(`-d`만).
+  - **로그**: 최근 커밋(해시·제목·참조·작성자·날짜).
+  - 툴바 `pull`/`push`: upstream이 없으면 확인 후 `push -u`. 강제 푸시는 없습니다.
+- 여러 저장소에 한꺼번에 하는 동작은 `다시 찾기`(상태 조회)와 `전체 fetch`뿐입니다.
+- 브랜치 전환·pull 전에 그 저장소 파일을 저장하지 않은 문서 탭이 있으면 경고합니다.
+- 모든 git 명령과 오류 메시지는 창 아래 출력 영역에 남습니다. 인증은 사용자의 git 설정(Git Credential Manager, ssh-agent)을 그대로 쓰며, 응답이 없으면 5분 뒤 중단됩니다.
+- `옵션…` 대화상자: 기준 폴더 규칙, pull 방식(fast-forward만 / 병합 / rebase / git 설정 따름), 탐색 깊이·제외 폴더, 로그 개수·전체 브랜치 포함.
+- 범위 밖: 충돌 해결, merge/rebase/stash 명령, diff 보기, 브랜치 그래프 — 필요하면 `콘솔`에서 처리합니다.
 
 ## 디스크 사용량
 
@@ -278,6 +303,7 @@ Folderss\Themes\Controls.xaml
 | `viewer-config.json` | 확장자별 뷰어 매핑 (`version` 2 형식, 기본값과 다른 재정의만 저장) |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
 | `console-settings.xml` | 콘솔 설정(기본 프로필, 사용자 정의 프로필 등) |
+| `git-settings.xml` | Git 창 옵션(기준 폴더 규칙, pull 방식, 탐색 깊이·제외 폴더, 로그) |
 | `favorites.xml` | 즐겨찾기 그룹·항목 |
 | `session.xml` | 열린 폴더 패널과 활성 패널 |
 | `panel-locks.xml` | 닫기를 잠근 패널 목록 |
@@ -343,6 +369,7 @@ Folderss\Themes\Controls.xaml
 - Windows 10 이상
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (내장 뷰어 사용 시 필요)
+- [Git for Windows](https://git-scm.com/download/win) 2.26 이상 (Git 창 사용 시 필요)
 - 선택: Visual Studio 2022 이상 (워크로드: **.NET 데스크톱 개발**) — IDE에서 편집·디버깅할 때만 필요하며, 커맨드라인 빌드는 .NET SDK만으로 충분합니다.
 
 주요 NuGet 패키지는 SDK 스타일 프로젝트 기준으로 복원됩니다.

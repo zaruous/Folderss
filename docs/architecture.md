@@ -19,6 +19,7 @@ Folderss/
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
+│   ├── GitModels.cs                — Git 저장소·상태 항목·커밋·브랜치 모델
 │   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델, 그룹 위쪽 고정 바로가기(FavoritesConfiguration.Pinned) 포함
 │   ├── DriveUsageInfo.cs           — 드라이브 총량·사용량·여유 공간(GB, 비율) 모델
 │   ├── SearchResult.cs             — 파일 검색 결과 모델
@@ -26,6 +27,10 @@ Folderss/
 ├── Services/
 │   ├── FileOperationService.cs     — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터 (`GetLinkTarget`로 링크 대상 판별)
+│   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
+│   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
+│   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref 파서
+│   ├── GitSettingsService.cs       — Git 창 옵션 저장 (git-settings.xml)
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
 │   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
@@ -53,6 +58,8 @@ Folderss/
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
+├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
+├── GitOptionsWindow.cs             — Git 옵션 대화상자 (코드로 구성)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── AboutWindow.cs                  — 정보 창
@@ -220,6 +227,19 @@ Folderss/
   메타정보 "링크 대상" 행(링크일 때만 표시)으로 드러난다. OneDrive 자리표시자처럼 `LinkTarget`이 없는 reparse point는 링크로 보지 않는다.
 - 링크 생성은 `FileOperationService.CreateLink` — 심볼릭 링크 우선, 권한 오류(1314/UnauthorizedAccess)면 폴더는 `mklink /J`
   junction으로 대체, 파일은 안내와 함께 실패. `MainWindow.CreateLink_Click`은 `ExecuteTransfer`와 같은 대상 패널·핀 잠금·오류 모음 규칙.
+
+### Git 창 (GitWindow)
+- 진입: `MainWindow.ShowGit_Click` — 기준 폴더는 `GitSettings.BaseFolderMode`(기본: 폴더 하나 선택 시 그 폴더, 아니면 `CurrentPath`).
+  드라이브 루트면 한 번 확인. 창은 비모달(`Show`)이고 여러 개 열 수 있다.
+- 탐색: `GitRepositoryScanner.Scan`이 `.git` 폴더/파일을 저장소로 보고, 찾아도 안으로 계속 내려간다(중첩 저장소).
+  reparse point·제외 폴더·`.git`은 들어가지 않는다. 상위 저장소(`IsAncestor`)는 맨 앞. 찾는 즉시 행을 추가하고 status를 읽는다.
+- 실행: 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
+  표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
+- 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.
+- 동시성: 창 안의 쓰기 작업은 `RunBusyAsync`로 한 번에 하나(버튼 잠금 + 취소 버튼). 여러 저장소 동작은 status·fetch만.
+  창을 닫으면 `_lifetime` 토큰이 진행 중 프로세스를 모두 끝낸다.
+- 브랜치 전환·pull 전 `MainWindow.CountModifiedDocumentsUnder(repo)`로 그 저장소 파일의 미저장 뷰어 탭을 세어 경고한다.
+- 회귀 테스트: `tests/Folderss.SearchTests/GitTests.cs`(탐색, 파서, 실제 git 왕복 — git 없으면 건너뜀).
 
 ### 뷰어 미저장 표시 · 닫기 확인
 - `ViewerHost.IsModified`가 뷰어의 `ModifiedChanged`를 따라간다. `MainWindow.SetDocumentTitle`은 잠금 접두사(🔒)와 별개로
