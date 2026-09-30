@@ -99,6 +99,15 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
   할당하는 곳도 반드시 같은 최상위 요소를 사용하도록 갱신해야 함. 불일치 시 자식 요소가 이미 다른
   논리 부모를 가진 상태로 도킹에 붙어 시작 시 `InvalidOperationException` 크래시 발생.
 
+### 선택지가 여러 개인 기능은 대화상자로
+- 한 기능에 여러 방식·옵션이 있으면(예: reset soft/mixed/hard, 브랜치 시작점·전환 여부, 체크아웃 방식) 임의로 하나를 고정하지 말고
+  **선택 대화상자**로 고르게 한다. 기본값은 가장 안전한 선택으로 두고, 되돌릴 수 없는 선택(데이터 삭제 등)은 경고 문구와 확인 체크를 거치게 한다.
+- 자주 쓰는 기능은 기본값을 설정 창에 두고 대화상자에서 그 값으로 시작한다(매번 같은 선택을 반복하지 않게).
+- **버튼은 기본 옵션으로 바로 실행하고, 옵션 대화상자는 버튼 옆 `▾`(GitWindow의 `OptionArrowButton` 스타일)를 누를 때만 연다.**
+  매번 대화상자를 띄우지 않는다. 처음부터 고를 것이 본질인 기능(reset 모드 등)만 버튼이 곧바로 대화상자를 연다.
+- 강제 옵션(`-D`, `--force` 등)은 ▾ 대화상자에서 기본 꺼짐 + 경고 + 확인 체크(`GitForceConfirmDialog`). 원격의 남의 작업을 덮을 수 있는 강제 푸시는 두지 않는다.
+- Git 대화상자는 `GitDialogs.cs`의 `GitDialogBase`(테마 색, 버튼, 닫기 전 비동기 검사 `ValidateAsync`)를 상속해 만든다.
+
 ### ContextMenu 스타일
 WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍게 보임.
 `Controls.xaml`에 `ControlTemplate` 재정의가 있으므로 새 ContextMenu 추가 시 별도 스타일 불필요.

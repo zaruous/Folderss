@@ -17,6 +17,8 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser       — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
 │   ├── FavoritesPanel      — 즐겨찾기 패널 (그룹, 폴더·파일 즐겨찾기)
+│   ├── GitDiffView         — Git 창의 읽기 전용 diff 뷰 (줄 번호, 추가·삭제 색)
+│   ├── GitGraphCell        — 로그 목록 한 행의 브랜치 그래프 그리기
 │   ├── SearchPanel         — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 토글)
 │   ├── ConsolePanel        — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel      — 드라이브별 디스크 사용량 패널 (가로바, GB 단위)
@@ -31,6 +33,7 @@ Folderss/
 ├── Models/
 │   ├── FileSystemItem      — 파일·폴더 뷰모델
 │   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델 (폴더/파일 구분)
+│   ├── GitModels           — Git 저장소·상태·커밋·브랜치 모델
 │   ├── DriveUsageInfo      — 드라이브 총량·사용량·여유 공간 모델
 │   ├── KeyBindingEntry     — 단축키 설정 모델
 │   ├── OpenWithEntry       — 사용자 지정 열기 프로그램 모델
@@ -39,6 +42,19 @@ Folderss/
 ├── Services/
 │   ├── FileOperationService    — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService      — 텍스트·이미지 미리보기 + 메타데이터 (링크 대상 포함)
+│   ├── GitRepositoryScanner    — 기준 폴더 아래(와 위) Git 저장소 탐색 (중첩·워크트리·서브모듈)
+│   ├── GitCommandRunner        — git CLI 실행 (인수 목록 전달, 타임아웃·취소, UTF-8)
+│   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref`·unified diff 출력 파서
+│   ├── GitDiffCommands         — diff·upstream 비교 명령 인수 (UI·테스트 공용)
+│   ├── GitGraphLayout          — 부모 해시로 브랜치 그래프 레인 계산
+│   ├── GitChangeTree           — 변경 파일 목록을 폴더 트리로 묶기
+│   ├── GitRefCommands          — reset·브랜치·체크아웃·워킹트리 명령 인수
+│   ├── GitRestoreCommands      — 파일 되돌리기(git restore) 명령 인수와 제외 규칙
+│   ├── GitWindowStateService   — Git 창 보기 상태(트리 보기·분할선 위치) 저장
+│   ├── GitStashCommands        — stash 저장·적용·삭제 옵션과 명령 인수
+│   ├── GitSyncCommands         — pull·push·fetch·커밋·브랜치 삭제 옵션과 명령 인수
+│   ├── GitEncodingDiff         — UTF-16/32(BOM) 파일을 텍스트로 다시 비교
+│   ├── GitSettingsService      — Git 창 옵션 저장 (pull 방식, 탐색 깊이·제외 폴더 등)
 │   ├── IgnoreRuleSet           — .gitignore/.folderssignore 규칙 매처 (목록 ignore 필터)
 │   ├── DockLayoutService       — AvalonDock 레이아웃 저장·복원 (XML)
 │   ├── SessionStateService     — 열린 폴더 경로 세션 저장·복원 (XML)
@@ -61,7 +77,9 @@ Folderss/
 │   ├── Black / Light / Nord / Catppuccin / Solarized / Dracula / GitHub
 │   └── Controls.xaml           — 공통 컨트롤 스타일
 ├── MainWindow                  — 메인 창, AvalonDock 호스트, 전역 단축키, 문서 탭 컨텍스트 메뉴
-├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔 설정
+├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔·Git 설정
+├── GitDialogs                  — Git reset·새 브랜치·체크아웃·워킹트리 선택 대화상자
+├── GitWindow                   — 다중 저장소 Git 창 (상태·스테이지·커밋·브랜치·로그·fetch/pull/push)
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
@@ -136,6 +154,7 @@ tests/
 - 뷰어에서 편집 후 저장하지 않은 변경은 탭 제목 끝의 ` *`로 표시되고, 탭을 닫거나 앱을 종료할 때 확인함
 - Markdown·Monaco 뷰어 안에서 `Ctrl+F`는 전역 파일 검색 대신 문서 내 검색을 엶
 - `보기 > 콘솔` 하단 터미널 패널에서 PowerShell 7, Windows PowerShell, 명령 프롬프트 실행
+- `⋯ 메뉴 > Git 저장소…`로 선택한 폴더 아래의 여러 Git 저장소를 한 창에서 관리 (아래 [Git](#git) 참고)
 - `보기 > 디스크 사용량 보기`로 드라이브별 사용량을 가로바와 GB 단위(총량/사용량/여유 공간)로 표시, 즐겨찾기 위 미니 패널로 상시 확인 가능
 - Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
 - 설정 창에서 단축키와 확장자별 뷰어 매핑 변경
@@ -179,6 +198,48 @@ tests/
 - `Ctrl+C`는 터미널에 선택한 텍스트가 있으면 복사하고, 없으면 실행 중인 명령에 인터럽트를 보냅니다.
 - `Home`/`End` 단독 입력은 콘솔 탭 전환에 사용하지 않고 활성 콘솔 입력으로 전달합니다.
 - 폰트 크기는 `설정 > 콘솔`에서 바꿔 저장하면 열려 있는 콘솔 탭에도 즉시 반영됩니다.
+
+## Git
+
+`⋯ 메뉴 > Git 저장소…`는 활성 패널에서 고른 폴더(선택이 없으면 현재 폴더) 아래의 Git 저장소를 모두 찾아 별도 창에 보여 줍니다. [Git for Windows](https://git-scm.com/download/win) 2.26 이상이 필요합니다(PATH 또는 기본 설치 위치).
+
+- 왼쪽 목록: 저장소별 상대 경로, 브랜치, upstream 대비 ↑ahead/↓behind, 변경·충돌 수. 기준 폴더를 품은 상위 저장소는 `▲`로 맨 위에 표시.
+- 탐색은 중첩 저장소·워크트리·서브모듈(`.git` 파일)까지 찾고, 링크 폴더와 제외 폴더(`node_modules`, `bin`, `obj` 등)에는 들어가지 않습니다.
+- 선택한 저장소 하나에 대해:
+  - **변경 사항**: 변경됨/스테이지됨 목록, 개별·전체 스테이지/언스테이지(버튼 또는 선택한 파일을 반대쪽 목록으로 끌어 놓기 — 변경됨 → 스테이지됨은 `git add`, 스테이지됨 → 변경됨은 `git restore --staged`, 놓을 수 있는 목록은 강조 표시), 커밋(`Ctrl+Enter`). 더블클릭하면 내장 뷰어로 열기. 수정된 파일과 새 파일은 한 목록에 경로순으로 함께 보이고(충돌만 맨 위), 각 줄 앞의 상태 아이콘(수정 ✎ 주황, 새 파일 ⊕·추가 + 초록, 삭제 − 빨강, 이름 변경 → 파랑, 충돌 ⚠ 빨강, 변경 없음 ✓ 회색 — 마우스를 올리면 상태 이름)으로 상태를 표시합니다. 목록 제목에 종류별 개수가 나옵니다. 새 폴더(아직 커밋 안 됨) 안의 파일도 하나씩 보여 골라서 add할 수 있습니다(.gitignore에 걸린 파일은 제외). `변경 없는 파일 보기`를 켜면 추적 중이고 바뀌지 않은 파일이 세 번째 목록에 나오고, 선택하면 현재 내용을 봅니다. `트리로 보기`로 평면 목록 ↔ 폴더 트리 전환(한 자식 폴더 체인은 `src/app`처럼 합침, 폴더를 골라 스테이지/언스테이지하면 그 아래 전체). 트리 보기 여부와 목록 너비·변경됨/스테이지됨 높이 비율은 다음에 창을 열 때도 유지됩니다. `되돌리기…`는 선택한 파일의 변경을 버립니다(`git restore` — 작업 트리만 / 스테이지까지 HEAD로 선택, 되돌릴 수 없어 확인 체크 필요). 새 파일·`add -N` 파일과, 모드에 따라 충돌·HEAD에 없는 파일은 지워지거나 비워지지 않게 대상에서 빠집니다.
+  - **브랜치**: 로컬·원격 브랜치 목록, 전환(원격은 추적 브랜치 생성), 새 브랜치(대화상자: 이름·시작점·만든 뒤 전환 여부, 이름은 git 규칙으로 검사), 병합된 브랜치 삭제(`-d`만).
+  - **로그에서 커밋 작업**(버튼·우클릭): `이 커밋으로 reset…`(soft / mixed / hard 선택 — hard는 경고와 확인 체크 필요, reflog 안내), `여기서 브랜치…`, `체크아웃…`(새 브랜치로 전환 권장 / detached 선택), 해시 복사.
+  - **stash**: 변경 사항 탭·stash 탭의 `stash 저장`(▾: 메시지, 새 파일 포함 `-u`, 스테이지 유지 `--keep-index`, 고른 파일만), stash 탭 목록과 선택한 stash의 diff(새 파일 포함 시 목록 표시), `적용`(▾: 적용 후 삭제 pop, 새 브랜치로 꺼내기, 스테이지 상태 복원 `--index`), `삭제`(▾: 모두 삭제 — 경고·확인 필요).
+  - **워킹트리**: 목록(주 작업 트리·잠김·폴더 없음 표시), `새 워킹트리…`(새 브랜치 또는 다른 곳에서 안 쓰는 기존 브랜치, 폴더 제안), 저장소 목록에서 보기, 제거(변경 있으면 git이 거부, 강제 없음), prune.
+  - **원격 비교**: 현재 브랜치 ↔ upstream의 보낼 커밋(push)·받을 커밋(pull) 목록, 방향별 전체 diff, 커밋 안 한 수정까지 포함한 작업 트리 ↔ upstream diff. 원격 상태는 마지막 fetch 기준이며 `fetch 후 비교`로 갱신.
+  - **로그**: 브랜치 그래프(레인별 색, 병합 커밋은 속이 빈 점)와 최근 커밋(해시·제목·참조·작성자·날짜), 선택한 커밋의 diff(병합 커밋은 첫 부모 기준).
+  - diff 창 제목 줄에서 보기 모드를 고릅니다: **변경점만**(git 기본 문맥, 보통 3줄) / **문맥 10줄** / **전체 파일**(파일 전체에서 바뀐 줄만 색으로 표시). 기본값은 설정 > Git.
+  - diff는 변경 전/후 줄 번호와 추가(초록)·삭제(빨강) 배경으로 표시하며, `Ctrl+C`로 선택한 줄을 복사합니다. 변경 사항 목록에서 파일을 고르면 작업 트리 ↔ 인덱스, 스테이지됨은 인덱스 ↔ HEAD, 추적 안 되는 파일은 전체 내용을 추가로 보입니다.
+  - 툴바 `pull`/`push`: upstream이 없으면 확인 후 `push -u`. 강제 푸시는 없습니다.
+  - **버튼 옆 `▾`를 누르면 옵션 대화상자**가 열립니다(버튼 자체는 기본 옵션으로 바로 실행): pull(fast-forward만/병합/rebase/git 설정, `--autostash`), push(원격, upstream 설정, `--follow-tags`), fetch(`--prune`, `--all`, `--tags`), 커밋(`--amend` — 메시지 비우면 직전 메시지 유지·push된 커밋이면 경고, `-s`, `--allow-empty`), 브랜치 삭제(강제 `-D`), 워킹트리 제거(강제 `--force`). 강제 옵션은 경고와 확인 체크를 거쳐야 실행됩니다.
+- 여러 저장소에 한꺼번에 하는 동작은 `다시 찾기`(상태 조회)와 `전체 fetch`뿐입니다.
+- 브랜치 전환·pull 전에 그 저장소 파일을 저장하지 않은 문서 탭이 있으면 경고합니다.
+- 모든 git 명령과 오류 메시지는 창 아래 출력 영역에 남습니다. 인증은 사용자의 git 설정(Git Credential Manager, ssh-agent)을 그대로 쓰며, 응답이 없으면 5분 뒤 중단됩니다.
+- diff 창의 `외부 도구로 비교`는 같은 비교를 WinMerge·Beyond Compare·VS Code 등으로 엽니다(`git difftool`). 파일은 파일끼리, 커밋·원격 비교는 폴더 비교로 한 번에 엽니다. 추적 안 되는 파일과 최초 커밋은 지원하지 않습니다.
+- 인코딩: 파일에 BOM(매직넘버)이 있으면 그 인코딩(UTF-8/UTF-16/UTF-32), 없으면 **UTF-8**로 읽습니다. UTF-16/32 파일은 git이 바이너리로 보므로 양쪽을 BOM으로 읽어 텍스트로 다시 비교해 보여 줍니다(10MB 이하). 설정에서 대체 인코딩(CP949 등)을 켜면 BOM 없는 파일 중 UTF-8로 읽히지 않는 줄만 그 인코딩으로 다시 읽습니다. 20,000줄을 넘으면 뒤는 생략합니다.
+
+### Git 설정 (`설정 > Git`, Git 창의 `설정…` 버튼)
+
+| 항목 | 기본값 | 설명 |
+|---|---|---|
+| git 실행 파일 | 자동 | 비우면 PATH → Git for Windows 기본 위치에서 찾음. 지정한 파일이 없으면 다른 git으로 대신 실행하지 않고 알림 |
+| 기준 폴더 | 선택한 폴더 우선 | 또는 항상 패널의 현재 폴더 |
+| pull 방식 | fast-forward만 | 병합 / rebase / git 설정 따름 |
+| 탐색 깊이·제외 폴더 | 6, `node_modules bin obj .vs packages` | 폴더 이름 기준, 대/소문자 무시 |
+| 로그 | 300개, 전체 브랜치 | 10~5000개 |
+| diff 기본 보기 | 변경점만 | 문맥 10줄 / 전체 파일 (각 diff 창에서 바로 전환) |
+| 공백 무시 | 끔 | 내장 diff에 `-w` |
+| 대체 인코딩 | 사용 안 함 (BOM 없으면 UTF-8) | CP949 / 시스템 코드 페이지 |
+| 외부 비교 도구 | 사용 안 함 | git 설정의 difftool / 직접 지정(실행 파일 + 인수, 프리셋: WinMerge·Beyond Compare·VS Code·KDiff3·Meld) |
+
+- 직접 지정 인수의 `{left}`·`{right}`는 비교할 두 파일(또는 폴더)로 바뀝니다. 도구는 **창을 닫을 때까지 종료되지 않아야** 합니다 — git이 도구 종료 뒤 임시 파일을 지웁니다(VS Code는 `--wait`, WinMerge는 단일 인스턴스 옵션을 끄세요).
+- 사용자 `.gitconfig`는 바꾸지 않습니다. 직접 지정 도구는 실행할 때만 `-c difftool.folderss.cmd=…`로 등록합니다.
+- 범위 밖: 충돌 해결, merge/rebase 명령, 좌우 나란히(side-by-side) diff — 필요하면 `콘솔`에서 처리합니다.
 
 ## 디스크 사용량
 
@@ -278,6 +339,7 @@ Folderss\Themes\Controls.xaml
 | `viewer-config.json` | 확장자별 뷰어 매핑 (`version` 2 형식, 기본값과 다른 재정의만 저장) |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
 | `console-settings.xml` | 콘솔 설정(기본 프로필, 사용자 정의 프로필 등) |
+| `git-settings.xml` | Git 설정(git 경로, 기준 폴더 규칙, pull 방식, 탐색, 로그, diff·외부 비교 도구) |
 | `favorites.xml` | 즐겨찾기 그룹·항목 |
 | `session.xml` | 열린 폴더 패널과 활성 패널 |
 | `panel-locks.xml` | 닫기를 잠근 패널 목록 |
@@ -343,6 +405,7 @@ Folderss\Themes\Controls.xaml
 - Windows 10 이상
 - [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0)
 - [Microsoft Edge WebView2 Runtime](https://developer.microsoft.com/microsoft-edge/webview2/) (내장 뷰어 사용 시 필요)
+- [Git for Windows](https://git-scm.com/download/win) 2.26 이상 (Git 창 사용 시 필요)
 - 선택: Visual Studio 2022 이상 (워크로드: **.NET 데스크톱 개발**) — IDE에서 편집·디버깅할 때만 필요하며, 커맨드라인 빌드는 .NET SDK만으로 충분합니다.
 
 주요 NuGet 패키지는 SDK 스타일 프로젝트 기준으로 복원됩니다.
@@ -393,6 +456,14 @@ dotnet test tests\Folderss.SearchTests
 ### 릴리스
 
 `v*.*.*` 형식의 태그를 푸시하면 GitHub Actions(`.github/workflows/release.yml`)가 태그 버전으로 `AssemblyInfo.cs`를 갱신한 뒤 `dotnet publish`로 빌드하고, `Folderss-<태그>.zip`을 GitHub Release에 첨부합니다. 앱의 `업데이트 확인` 메뉴가 이 릴리스를 조회합니다.
+
+### 프리뷰 빌드
+
+`master` 대상 PR을 열거나 커밋을 푸시하면 GitHub Actions(`.github/workflows/preview.yml`)가 Windows에서 `dotnet publish`로 빌드해 `Folderss-preview-pr<번호>-<커밋>` 아티팩트(14일 보관)로 올립니다. 문서만 바뀐 PR은 건너뜁니다. Actions 탭의 **Preview Build**에서 수동 실행(`Run workflow`)으로 다른 브랜치도 빌드할 수 있습니다.
+
+- 받는 곳: 해당 실행의 Summary에 있는 링크(또는 Artifacts 목록). GitHub에 로그인해야 받을 수 있습니다.
+- 버전은 `<현재 버전>.<실행 번호>`(예: `1.7.0.42`)이고, 폴더 안 `PREVIEW.txt`에 커밋·PR·빌드 시각이 적혀 있습니다. 정식 릴리스가 아니며 GitHub Release는 만들지 않습니다.
+- 테스트(`tests/Folderss.SearchTests`)는 별도 job으로 돌아 실패해도 프리뷰 파일은 올라갑니다. 실패하면 `test-results` 아티팩트에 결과가 남습니다.
 
 ## 실행
 

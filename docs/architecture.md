@@ -7,6 +7,8 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
+│   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
+│   ├── GitDiffView.xaml/.cs        — Git 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
@@ -19,6 +21,7 @@ Folderss/
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
+│   ├── GitModels.cs                — Git 저장소·상태 항목·커밋·브랜치 모델
 │   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델, 그룹 위쪽 고정 바로가기(FavoritesConfiguration.Pinned) 포함
 │   ├── DriveUsageInfo.cs           — 드라이브 총량·사용량·여유 공간(GB, 비율) 모델
 │   ├── SearchResult.cs             — 파일 검색 결과 모델
@@ -26,6 +29,19 @@ Folderss/
 ├── Services/
 │   ├── FileOperationService.cs     — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터 (`GetLinkTarget`로 링크 대상 판별)
+│   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
+│   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
+│   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
+│   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
+│   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
+│   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
+│   ├── GitRestoreCommands.cs       — 파일 되돌리기(restore --worktree / --source=HEAD --staged --worktree) 인수와 모드별 제외 규칙
+│   ├── GitWindowStateService.cs    — Git 창 보기 상태(트리 보기·목록 너비·변경됨/스테이지됨 비율) git-window.xml 저장
+│   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
+│   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
+│   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
+│   ├── GitDiffCommands.cs          — diff·upstream 비교 명령 인수 (UI·테스트 공용)
+│   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml) + 외부 비교 도구 프리셋
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
 │   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
@@ -53,6 +69,8 @@ Folderss/
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
+├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리), 코드로 구성
+├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── AboutWindow.cs                  — 정보 창
@@ -220,6 +238,77 @@ Folderss/
   메타정보 "링크 대상" 행(링크일 때만 표시)으로 드러난다. OneDrive 자리표시자처럼 `LinkTarget`이 없는 reparse point는 링크로 보지 않는다.
 - 링크 생성은 `FileOperationService.CreateLink` — 심볼릭 링크 우선, 권한 오류(1314/UnauthorizedAccess)면 폴더는 `mklink /J`
   junction으로 대체, 파일은 안내와 함께 실패. `MainWindow.CreateLink_Click`은 `ExecuteTransfer`와 같은 대상 패널·핀 잠금·오류 모음 규칙.
+
+### Git 창 (GitWindow)
+- 진입: `MainWindow.ShowGit_Click` — 기준 폴더는 `GitSettings.BaseFolderMode`(기본: 폴더 하나 선택 시 그 폴더, 아니면 `CurrentPath`).
+  드라이브 루트면 한 번 확인. 창은 비모달(`Show`)이고 여러 개 열 수 있다.
+- 탐색: `GitRepositoryScanner.Scan`이 `.git` 폴더/파일을 저장소로 보고, 찾아도 안으로 계속 내려간다(중첩 저장소).
+  reparse point·제외 폴더·`.git`은 들어가지 않는다. 상위 저장소(`IsAncestor`)는 맨 앞. 찾는 즉시 행을 추가하고 status를 읽는다.
+- 실행: 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
+  표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
+- 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.
+- 동시성: 창 안의 쓰기 작업은 `RunBusyAsync`로 한 번에 하나(버튼 잠금 + 취소 버튼). 여러 저장소 동작은 status·fetch만.
+  창을 닫으면 `_lifetime` 토큰이 진행 중 프로세스를 모두 끝낸다.
+- diff: 인수는 모두 `GitDiffCommands`(공통 `--no-color --no-ext-diff -M` — 사용자 외부 diff 도구 설정 무시).
+  작업 트리 `diff -- <p>`, 스테이지 `diff --cached -- [<원래 경로>] <p>`, 추적 안 됨 `diff --no-index -- /dev/null <p>`(종료 코드 1 = 차이 있음),
+  커밋 `diff <첫 부모> <hash>`(최초 커밋은 `show --format=`), 원격 비교 `log @{u}..HEAD`/`HEAD..@{u}`, `diff @{u}...HEAD`/`HEAD...@{u}`/`diff @{u}`.
+  `GitOutputParser.ParseDiff`는 hunk 밖의 `---`/`+++`만 헤더로 보고(hunk 안 `--`로 시작하는 줄 삭제 오판 방지), 충돌 파일 combined diff(`@@@`)는
+  앞 두 글자로 분류하고 줄 번호를 매기지 않는다. `GitDiffView`는 `BeginLoad`가 준 번호로만 `Complete`해 빠른 연속 선택의 늦은 결과를 버린다.
+  원격 비교는 원격 추적 브랜치 기준이라 fetch 전에는 오래된 상태다(요약 문구로 알림).
+- 설정: `SettingsWindow`의 Git 탭(`GitPanel`)이 유일한 편집 화면이다(별도 옵션 대화상자 없음). Git 창의 `설정…`은
+  `MainWindow.OpenSettings(gitWindow, "Git")`를 부른다. 저장하면 `SavedGitSettings`(파일 저장 실패여도 이번 실행 값)를
+  `MainWindow._gitSettings`에 두고 열린 모든 `GitWindow.ApplySettings`에 알린다 — git 경로가 바뀌면 재확인+재탐색, 탐색 옵션이면 재탐색,
+  표시 옵션이면 상세만 다시 읽음. `GitCommandRunner.ConfiguredGitPath`는 정적이라 마지막으로 반영한 설정이 모든 창에 적용된다.
+- 인코딩 규칙: BOM(매직넘버)이 있으면 그 인코딩, 없으면 UTF-8(`GitTextDecoder.DetectBom`/`DecodeFile`). 대체 인코딩(기본 없음)은
+  BOM 없는 내용에서 엄격 UTF-8로 안 읽히는 줄에만 쓴다(`Decode`, `CodePagesEncodingProvider` 등록 필요). 상태·로그·브랜치 출력은 UTF-8 그대로.
+  UTF-16/32 파일은 git이 NUL 때문에 바이너리로 보므로 `GitEncodingDiff.ExpandAsync`가 "Binary files a/X and b/Y differ" 줄을 찾아
+  `GitDiffRequest.OldSide/NewSide`(작업 트리 / 인덱스 `:` / 리비전, `A...B`는 merge-base)에서 양쪽 바이트를 읽고(`cat-file blob`, `rawOutput`)
+  한쪽이라도 UTF-16/32 BOM이면 UTF-8 임시 파일 두 개를 `diff --no-index`로 비교해 그 줄을 헤더+hunk로 바꾼다. BOM 없는 진짜 바이너리·10MB 초과는 그대로.
+  모든 diff에 `--src-prefix=a/ --dst-prefix=b/`를 붙여 사용자 `diff.noprefix` 설정이 경로 해석을 깨지 않게 한다.
+- diff 보기 모드: `GitDiffView.ViewMode`(창마다, 초기값 `GitSettings.DiffViewMode`)를 `LoadDiffAsync`가 `GitDiffCommands.WithViewMode`로
+  하위 명령 바로 뒤에 `-U10` / `-U1000000`(전체 파일)으로 넣는다. 변경점만은 옵션을 넣지 않아 사용자 `diff.context`를 따른다.
+  모드를 바꾸면 `ViewModeChanged` → 같은 `CurrentRequest`를 다시 불러온다. UTF-16 재비교(`GitEncodingDiff`)에도 같은 모드를 쓴다. 추적 안 됨(전체 추가)은 선택 상자를 숨긴다.
+- 상태 조회는 `GitOutputParser.StatusArguments`(`--untracked-files=all`)로 새 폴더 안 파일을 하나씩 받는다(폴더 한 줄로 접지 않음 —
+  add할 파일을 고를 수 있게). 대가로 무시되지 않은 거대한 새 폴더(빌드 산출물 등)가 있으면 항목이 많아지고 status가 느려진다.
+- 상태 배지: 같은 파일이 변경됨·스테이지됨 양쪽에 있을 수 있어(MM, AM) `ShowChanges`가 `GitStatusEntry.ForSide(WorkTree|Index)` 사본을 만든다.
+  `Kind`는 목록 쪽 코드(Y 또는 X)로 정해지고 `GitStatusIcon` 스타일(GitWindow.xaml, ContentControl 템플릿의 Border+Path)이
+  12×12 벡터 도형·색을 고른다(`Stretch=None`, 이미지 파일 없음, 상태 이름은 툴팁). Path `Data` 문자열은 실행 시 해석되므로 고칠 때 문법 주의. 변경됨은 수정·새 파일을 경로순으로 섞고 충돌만 위.
+  목록 제목은 `GitStatusEntry.Summarize`("수정 3 · 새 파일 2"). 작업 트리 쪽 이름 변경은 git이 감지하지 않으므로 삭제 + 새 파일로 보인다.
+- reset·브랜치·체크아웃·워킹트리: 인수는 `GitRefCommands` 한 곳. 선택은 `GitDialogs.cs`의 대화상자가 받는다(`GitDialogBase.ValidateAsync`로
+  닫기 전 비동기 검사 — 브랜치 이름은 `git check-ref-format --branch`). 작업 트리를 바꾸는 것(hard reset, 전환·체크아웃)은 실행 전
+  `ConfirmNoUnsavedDocuments`. 워킹트리 목록은 `worktree list --porcelain`(`ParseWorktrees`)으로 상세를 읽을 때 함께 읽고, 추가하면
+  `EnsureRepositoryRow`로 저장소 목록에 넣는다(워킹트리는 `.git` 파일이라 탐색기도 원래 찾는다). 강제 옵션(`reset`은 모드 선택, `worktree remove --force`, `branch -D`)은 없다.
+- ▾ 옵션: 기본 버튼은 `new GitXxxOptions()`(또는 설정값)로 바로 실행하고, 옆 `OptionArrowButton`이 `GitPullDialog`/`GitPushDialog`/
+  `GitFetchDialog`/`GitCommitOptionsDialog`/`GitForceConfirmDialog`를 열어 고른 옵션을 같은 `GitSyncCommands`/`GitRefCommands` 함수에 넘긴다.
+  강제 옵션은 `GitForceConfirmDialog`(기본 꺼짐, 켜면 경고·확인 체크 필요). 강제 푸시는 두지 않는다.
+- 되돌리기: `되돌리기…`(변경됨 목록)는 버린 변경을 복구할 수 없어 곧바로 `GitRestoreDialog`(확인 체크 필수)를 연다. git은 경로 하나라도
+  모르면 명령 전체를 거부하고, 일부 경우 파일을 지우거나 비우므로 `GitRestoreCommands.ExclusionReason`이 모드별로 뺀다 — 새 파일, `add -N`(빈 파일이 됨),
+  작업 트리 모드의 충돌(git 거부), HEAD 모드의 HEAD에 없는 경로(A/R/C, 충돌 UA/AA — 디스크에서 삭제됨). 실행 전 `ConfirmNoUnsavedDocuments`.
+- 끌어 놓기: 변경됨/스테이지됨 목록·트리의 Preview 마우스 이벤트로 끌기를 시작하고(`ChangeDragFormat`, 앱 안 전용 형식),
+  반대쪽 영역(`UnstagedDropArea`/`StagedDropArea`)에 놓으면(받을 수 있는 끌기가 올라오면 `*DropHighlight` 테두리·안내 문구 표시,
+  히트 테스트 제외. DragLeave는 영역 밖으로 나갈 때만, 끌기가 끝나면 `DoDragDrop` 뒤에서 항상 끔) 버튼과 같은 `StageAsync`/`UnstageAsync`를 부른다. 같은 목록·외부 파일·작업 중이면 거부.
+  여러 개 선택한 상태에서 선택된 항목을 누르면 ListBox가 즉시 그 하나만 남기므로, 그 경우 선택 변경을 마우스를 놓을 때까지 미룬다.
+  작업 트리 되돌리기(변경 버리기)는 끌어 놓기에 두지 않는다(실수로 놓으면 복구 불가).
+- 보기 상태: `트리로 보기` 클릭과 변경 사항 탭의 두 분할선 `DragCompleted`마다 `%LOCALAPPDATA%\Folderss\git-window.xml`에 저장, 창 생성 시 복원.
+  읽기 실패는 기본값, 저장 실패는 출력 창에 표시. 변경 없는 파일 목록의 분할선은 저장하지 않는다(보일 때만 있는 행).
+- stash: `stash list -z --format=%gd%x1f%H%x1f%P%x1f%at%x1f%gs`(`ParseStashes`, 부모 3개 = `-u`로 새 파일 포함). diff는 stash 커밋 ↔ 첫 부모
+  (`GitDiffCommands.Commit`), 새 파일은 `ls-tree <hash>^3` 목록을 제목에 표시. 작업 참조는 `stash@{n}`이라 작업마다 목록을 다시 읽는다.
+  저장·적용은 작업 트리를 바꾸므로 `ConfirmNoUnsavedDocuments`. 고른 파일만 저장은 pathspec을 표준 입력으로(새 파일이 섞였는데 `-u`가 꺼져 있으면 미리 안내).
+- 변경 없는 파일: `변경 없는 파일 보기`를 켜면 `ls-files -z --cached`에서 상태 목록(경로·이름 변경 전 경로)을 뺀 것을
+  `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
+  BOM 규칙으로 읽어 `GitDiffView.ShowLines`로 줄 번호와 함께 보인다(10MB 초과·바이너리는 안내만). 상태를 다시 읽을 때마다 다시 계산.
+- 변경 사항 트리 보기: `ShowChanges`가 평면 목록(ListBox)과 트리(`GitChangeTree.Build` → TreeView) 소스를 함께 채우고
+  `트리로 보기` 체크박스가 둘의 표시만 바꾼다(`GitWindowStateService`로 저장). 스테이지/언스테이지 대상은 `SelectedChangeEntries` —
+  평면은 다중 선택, 트리는 선택 노드 하나(폴더면 `GitChangeNode.Entries`로 그 아래 전체). diff 표시 로직은 두 보기가 공유한다.
+- 브랜치 그래프: `GitGraphLayout.Compute`(topo 순서 커밋 + 부모) → 행마다 점 레인과 선분(Y: 0 위/1 가운데/2 아래). 레인은 "기다리는 해시" 배열이며
+  점에 모이는 레인은 끝나고, 첫 부모는 같은 레인, 나머지 부모는 기존 레인 또는 빈 레인. `GitGraphCell`이 그리며 로그 ListView는 행 높이 22·Padding 0으로
+  행 사이 선이 끊기지 않게 한다. 로그 개수 제한으로 목록 밖 부모를 기다리는 레인은 아래로 이어진 채 끝난다.
+- 외부 비교 도구: `GitDiffRequest.ExternalSelector`가 있는 비교만 `git difftool --no-prompt [--dir-diff]`로 연다(커밋·범위는 폴더 비교).
+  직접 지정은 `-c difftool.folderss.cmd=<BuildToolCommand>` + `--tool=folderss`로 이번 실행에만 등록 — `{left}`/`{right}`는 항상
+  `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,
+  동시 실행 제한 밖(`throttle: false`), 창 수명 토큰 미사용(Git 창을 닫아도 도구는 유지). 2초 안에 끝나면 "바로 종료" 안내.
+- 브랜치 전환·pull 전 `MainWindow.CountModifiedDocumentsUnder(repo)`로 그 저장소 파일의 미저장 뷰어 탭을 세어 경고한다.
+- 회귀 테스트: `tests/Folderss.SearchTests/GitTests.cs`(탐색, 파서, 실제 git 왕복 — git 없으면 건너뜀).
 
 ### 뷰어 미저장 표시 · 닫기 확인
 - `ViewerHost.IsModified`가 뷰어의 `ModifiedChanged`를 따라간다. `MainWindow.SetDocumentTitle`은 잠금 접두사(🔒)와 별개로

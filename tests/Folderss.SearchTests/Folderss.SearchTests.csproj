@@ -23,6 +23,20 @@
     <Compile Include="..\..\Folderss\Services\ViewerConfigService.cs" Link="Linked\ViewerConfigService.cs" />
     <Compile Include="..\..\Folderss\Services\SettingsFile.cs" Link="Linked\SettingsFile.cs" />
     <Compile Include="..\..\Folderss\Services\IgnoreRuleSet.cs" Link="Linked\IgnoreRuleSet.cs" />
+    <Compile Include="..\..\Folderss\Models\GitModels.cs" Link="Linked\GitModels.cs" />
+    <Compile Include="..\..\Folderss\Services\GitRepositoryScanner.cs" Link="Linked\GitRepositoryScanner.cs" />
+    <Compile Include="..\..\Folderss\Services\GitOutputParser.cs" Link="Linked\GitOutputParser.cs" />
+    <Compile Include="..\..\Folderss\Services\GitCommandRunner.cs" Link="Linked\GitCommandRunner.cs" />
+    <Compile Include="..\..\Folderss\Services\GitDiffCommands.cs" Link="Linked\GitDiffCommands.cs" />
+    <Compile Include="..\..\Folderss\Services\GitSettingsService.cs" Link="Linked\GitSettingsService.cs" />
+    <Compile Include="..\..\Folderss\Services\GitGraphLayout.cs" Link="Linked\GitGraphLayout.cs" />
+    <Compile Include="..\..\Folderss\Services\GitChangeTree.cs" Link="Linked\GitChangeTree.cs" />
+    <Compile Include="..\..\Folderss\Services\GitRefCommands.cs" Link="Linked\GitRefCommands.cs" />
+    <Compile Include="..\..\Folderss\Services\GitSyncCommands.cs" Link="Linked\GitSyncCommands.cs" />
+    <Compile Include="..\..\Folderss\Services\GitStashCommands.cs" Link="Linked\GitStashCommands.cs" />
+    <Compile Include="..\..\Folderss\Services\GitRestoreCommands.cs" Link="Linked\GitRestoreCommands.cs" />
+    <Compile Include="..\..\Folderss\Services\GitWindowStateService.cs" Link="Linked\GitWindowStateService.cs" />
+    <Compile Include="..\..\Folderss\Services\GitEncodingDiff.cs" Link="Linked\GitEncodingDiff.cs" />
   </ItemGroup>
 
   <ItemGroup>

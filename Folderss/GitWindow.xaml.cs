@@ -1,0 +1,2114 @@
+using System;
+using System.Collections.Generic;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Threading;
+using System.Threading.Tasks;
+using System.Windows;
+using System.Windows.Controls;
+using System.Windows.Input;
+using Folderss.Controls;
+using Folderss.Models;
+using Folderss.Services;
+
+namespace Folderss
+{
+    /// <summary>
+    /// 기준 폴더 아래의 여러 Git 저장소를 보여 주고, 선택한 저장소 하나에 대해 스테이지·커밋·브랜치·로그·pull/push를 한다.
+    /// 여러 저장소에 한꺼번에 하는 동작은 작업 트리를 바꾸지 않는 상태 조회와 fetch뿐이다(일괄 pull/push는 부분 실패 복구가 어려움).
+    /// 모든 명령과 stderr는 아래 출력 영역에 남긴다.
+    /// </summary>
+    public partial class GitWindow : Window
+    {
+        public sealed class RepositoryRow : INotifyPropertyChanged
+        {
+            private GitStatusSnapshot _snapshot;
+            private string _error;
+
+            public GitRepositoryInfo Info { get; }
+            public string RootPath => Info.RootPath;
+            public string Title => Info.IsAncestor ? "▲ " + Info.DisplayPath + "  (상위 저장소)" : Info.DisplayPath;
+
+            public GitStatusSnapshot Snapshot
+            {
+                get => _snapshot;
+                set { _snapshot = value; _error = null; Notify(); }
+            }
+
+            public string Error
+            {
+                get => _error;
+                set { _error = value; Notify(); }
+            }
+
+            public string Summary
+            {
+                get
+                {
+                    if (_error != null)
+                        return "⚠ " + _error;
+                    if (_snapshot == null)
+                        return "읽는 중…";
+
+                    var parts = new List<string> { _snapshot.BranchDisplay };
+                    if (_snapshot.Upstream == null && !_snapshot.IsDetached)
+                        parts.Add("upstream 없음");
+                    if (_snapshot.Ahead > 0) parts.Add("↑" + _snapshot.Ahead);
+                    if (_snapshot.Behind > 0) parts.Add("↓" + _snapshot.Behind);
+                    if (_snapshot.ConflictCount > 0) parts.Add("⚠ 충돌 " + _snapshot.ConflictCount);
+                    var changed = _snapshot.Entries.Count - _snapshot.ConflictCount;
+                    parts.Add(changed > 0 ? "● 변경 " + changed : "깨끗함");
+                    return string.Join("  ", parts);
+                }
+            }
+
+            public RepositoryRow(GitRepositoryInfo info) { Info = info; }
+
+            public event PropertyChangedEventHandler PropertyChanged;
+
+            private void Notify()
+            {
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Snapshot)));
+                PropertyChanged?.Invoke(this, new PropertyChangedEventArgs(nameof(Summary)));
+            }
+        }
+
+        private readonly string _basePath;
+        private readonly Func<string, int> _countModifiedDocumentsUnder;
+        private readonly Action<string> _openFile;
+        private readonly Action _openGitSettings;
+        private readonly ObservableCollection<RepositoryRow> _rows = new ObservableCollection<RepositoryRow>();
+        private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
+        private CancellationTokenSource _operation;
+        private GitSettings _settings;
+        private int _busyCount;
+        private List<GitBranchInfo> _branches = new List<GitBranchInfo>();
+
+        /// <param name="basePath">탐색 기준 폴더.</param>
+        /// <param name="countModifiedDocumentsUnder">폴더 아래 경로로 열린 미저장 뷰어 개수 — 브랜치 전환·pull 전 경고용.</param>
+        /// <param name="openFile">파일 더블클릭 시 기존 뷰어로 연다.</param>
+        /// <param name="openGitSettings">설정 창의 Git 탭을 연다. 저장되면 메인 창이 <see cref="ApplySettings"/>로 알려 준다.</param>
+        public GitWindow(string basePath, GitSettings settings, Func<string, int> countModifiedDocumentsUnder,
+            Action<string> openFile, Action openGitSettings)
+        {
+            InitializeComponent();
+            _basePath = basePath;
+            _countModifiedDocumentsUnder = countModifiedDocumentsUnder ?? (_ => 0);
+            _openFile = openFile;
+            _openGitSettings = openGitSettings;
+            _settings = (settings ?? new GitSettings()).Clone();
+            GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
+            ApplyWindowState(GitWindowStateService.Load());
+
+            foreach (var view in new[] { ChangesDiff, RemoteDiff, LogDiff, StashDiff })
+            {
+                view.ExternalToolRequested += DiffView_ExternalToolRequested;
+                view.ViewModeChanged += DiffView_ViewModeChanged;
+                view.ViewMode = _settings.DiffViewMode;
+            }
+
+            Title = "Git — " + basePath;
+            BasePathText.Text = "기준: " + basePath;
+            BasePathText.ToolTip = basePath;
+            RepoList.ItemsSource = _rows;
+            SectionNav.SelectedIndex = 0;
+            UpdateButtons();
+        }
+
+        private RepositoryRow SelectedRow => RepoList.SelectedItem as RepositoryRow;
+
+        // ── 수명·진행 상태 ─────────────────────────────────────────────────────
+
+        private async void Window_Loaded(object sender, RoutedEventArgs e)
+        {
+            if (!await CheckGitAsync())
+            {
+                Close();
+                return;
+            }
+            await ScanAsync();
+        }
+
+        private void Window_Closed(object sender, EventArgs e)
+        {
+            // 창을 닫으면 진행 중인 탐색·git 프로세스를 모두 끝낸다(러너가 프로세스 트리를 종료).
+            _lifetime.Cancel();
+        }
+
+        private async Task<bool> CheckGitAsync()
+        {
+            if (GitCommandRunner.FindGit() == null)
+            {
+                MessageBox.Show(this,
+                    "git 실행 파일을 찾을 수 없습니다.\nGit for Windows를 설치하고 PATH에 등록한 뒤 다시 여세요.",
+                    "Git", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+
+            try
+            {
+                var result = await GitCommandRunner.RunAsync(null, new[] { "--version" }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                var version = GitCommandRunner.ParseVersion(result.StdOut);
+                AppendOutput("$ git --version\n" + result.StdOut.Trim());
+                if (version != null && version < GitCommandRunner.MinimumVersion)
+                {
+                    MessageBox.Show(this,
+                        string.Format("git {0} 이상이 필요합니다 (현재 {1}). Git for Windows를 업데이트하세요.", GitCommandRunner.MinimumVersion, version),
+                        "Git", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return false;
+                }
+                return true;
+            }
+            catch (OperationCanceledException)
+            {
+                return false;
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "git을 실행할 수 없습니다.\n" + ex.Message, "Git", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return false;
+            }
+        }
+
+        /// <summary>진행 중 표시와 버튼 잠금을 걸고 작업을 돌린다. 취소 버튼은 이 토큰을 끊는다.</summary>
+        private async Task RunBusyAsync(string status, Func<CancellationToken, Task> work)
+        {
+            if (_busyCount > 0)
+                return;
+
+            _busyCount++;
+            _operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+            StatusText.Text = status;
+            UpdateButtons();
+            try
+            {
+                await work(_operation.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                if (!_lifetime.IsCancellationRequested)
+                    AppendOutput("(취소됨)");
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("오류: " + ex.Message);
+            }
+            finally
+            {
+                _operation.Dispose();
+                _operation = null;
+                _busyCount--;
+                if (!_lifetime.IsCancellationRequested)
+                {
+                    StatusText.Text = string.Format("저장소 {0}개", _rows.Count);
+                    UpdateButtons();
+                }
+            }
+        }
+
+        private void UpdateButtons()
+        {
+            var idle = _busyCount == 0;
+            var row = SelectedRow;
+            var snapshot = row?.Snapshot;
+            var hasRepo = row != null && snapshot != null;
+
+            RescanButton.IsEnabled = idle;
+            FetchAllButton.IsEnabled = idle && _rows.Count > 0;
+            OptionsButton.IsEnabled = idle;
+            CancelButton.IsEnabled = !idle;
+            PullButton.IsEnabled = PullOptionsButton.IsEnabled = idle && hasRepo;
+            PushButton.IsEnabled = PushOptionsButton.IsEnabled = idle && hasRepo;
+            FetchAllOptionsButton.IsEnabled = idle && _rows.Count > 0;
+            DetailRoot.IsEnabled = idle && hasRepo;
+        }
+
+        private void Cancel_Click(object sender, RoutedEventArgs e)
+        {
+            _operation?.Cancel();
+        }
+
+        private void AppendOutput(string text)
+        {
+            if (string.IsNullOrEmpty(text))
+                return;
+            OutputBox.AppendText(text.TrimEnd() + Environment.NewLine);
+            OutputBox.ScrollToEnd();
+        }
+
+        private void AppendResult(GitRepositoryInfo repo, GitResult result)
+        {
+            var builder = new StringBuilder();
+            builder.Append("$ ").Append(result.CommandLine).Append("    [").Append(repo.DisplayPath).Append(']');
+            if (!string.IsNullOrWhiteSpace(result.StdOut))
+                builder.AppendLine().Append(result.StdOut.TrimEnd());
+            if (!string.IsNullOrWhiteSpace(result.StdErr))
+                builder.AppendLine().Append(result.StdErr.TrimEnd());
+            if (!result.Success)
+                builder.AppendLine().Append("→ 실패 (종료 코드 ").Append(result.ExitCode).Append(')');
+            AppendOutput(builder.ToString());
+        }
+
+        // ── 탐색·상태 ─────────────────────────────────────────────────────────
+
+        private Task ScanAsync()
+        {
+            return RunBusyAsync("저장소 찾는 중…", async token =>
+            {
+                _rows.Clear();
+                ClearDetail();
+
+                var found = 0;
+                var statusTasks = new List<Task>();
+                var excluded = _settings.ExcludedFolders.ToArray();
+                var depth = _settings.ScanDepth;
+
+                // 찾는 즉시 목록에 넣고 상태 읽기를 시작한다(동시 실행 수는 러너가 제한).
+                var result = await Task.Run(() => GitRepositoryScanner.Scan(_basePath, depth, excluded, info =>
+                {
+                    Dispatcher.Invoke(() =>
+                    {
+                        var row = new RepositoryRow(info);
+                        _rows.Add(row);
+                        found++;
+                        StatusText.Text = string.Format("저장소 찾는 중… {0}개", found);
+                        statusTasks.Add(RefreshStatusAsync(row, token));
+                        if (_rows.Count == 1)
+                            RepoList.SelectedIndex = 0;
+                    });
+                }, token), token);
+
+                await Task.WhenAll(statusTasks);
+
+                AppendOutput(string.Format("탐색 완료: 저장소 {0}개 (깊이 {1}, 제외: {2}){3}",
+                    result.Repositories.Count, depth,
+                    excluded.Length == 0 ? "없음" : string.Join(", ", excluded),
+                    result.InaccessibleCount > 0 ? string.Format(", 접근할 수 없는 폴더 {0}개 건너뜀", result.InaccessibleCount) : string.Empty));
+                if (result.Repositories.Count == 0)
+                    AppendOutput("기준 폴더 아래에서 .git을 찾지 못했습니다. 옵션에서 탐색 깊이·제외 폴더를 확인하세요.");
+            });
+        }
+
+        private async Task RefreshStatusAsync(RepositoryRow row, CancellationToken token)
+        {
+            var result = await GitCommandRunner.RunAsync(row.RootPath,
+                GitOutputParser.StatusArguments,
+                GitCommandRunner.QueryTimeout, token, readOnly: true);
+
+            if (result.Success)
+            {
+                row.Snapshot = GitOutputParser.ParseStatusV2(result.StdOut);
+            }
+            else
+            {
+                row.Error = FirstLine(result.StdErr) ?? "상태를 읽지 못했습니다";
+                AppendResult(row.Info, result);
+            }
+
+            if (ReferenceEquals(row, SelectedRow))
+            {
+                ShowChanges(row);
+                UpdateButtons();
+            }
+        }
+
+        private static string FirstLine(string text)
+        {
+            return text?.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0);
+        }
+
+        private async void Rescan_Click(object sender, RoutedEventArgs e)
+        {
+            await ScanAsync();
+        }
+
+        private async void FetchAll_Click(object sender, RoutedEventArgs e)
+        {
+            await FetchAllAsync(new GitFetchOptions());
+        }
+
+        private async void FetchAllOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new GitFetchDialog(string.Format("목록의 저장소 {0}개 모두에서 fetch합니다.", _rows.Count)) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await FetchAllAsync(dialog.Options);
+        }
+
+        private async Task FetchAllAsync(GitFetchOptions options)
+        {
+            var rows = _rows.ToList();
+            var args = GitSyncCommands.Fetch(options);
+            await RunBusyAsync(string.Format("fetch 중… ({0}개)", rows.Count), async token =>
+            {
+                var failed = 0;
+                await Task.WhenAll(rows.Select(async row =>
+                {
+                    var result = await GitCommandRunner.RunAsync(row.RootPath, args, GitCommandRunner.NetworkTimeout, token);
+                    AppendResult(row.Info, result);
+                    if (!result.Success)
+                        failed++;
+                    await RefreshStatusAsync(row, token);
+                }));
+                AppendOutput(string.Format("전체 fetch 완료: 성공 {0}, 실패 {1}", rows.Count - failed, failed));
+            });
+            await ReloadSelectedDetailAsync();
+        }
+
+        // ── 선택 저장소 상세 ──────────────────────────────────────────────────
+
+        private async void RepoList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateButtons();
+            await ReloadSelectedDetailAsync();
+        }
+
+        private void SectionNav_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var tag = (SectionNav.SelectedItem as ListBoxItem)?.Tag as string;
+            ChangesSection.Visibility = tag == "Changes" ? Visibility.Visible : Visibility.Collapsed;
+            BranchesSection.Visibility = tag == "Branches" ? Visibility.Visible : Visibility.Collapsed;
+            RemoteSection.Visibility = tag == "Remote" ? Visibility.Visible : Visibility.Collapsed;
+            LogSection.Visibility = tag == "Log" ? Visibility.Visible : Visibility.Collapsed;
+            WorktreesSection.Visibility = tag == "Worktrees" ? Visibility.Visible : Visibility.Collapsed;
+            StashSection.Visibility = tag == "Stash" ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ClearDetail()
+        {
+            UnstagedList.ItemsSource = null;
+            StagedList.ItemsSource = null;
+            UnstagedTree.ItemsSource = null;
+            StagedTree.ItemsSource = null;
+            UnchangedList.ItemsSource = null;
+            UnchangedTree.ItemsSource = null;
+            UnchangedHeader.Text = "변경 없음";
+            BranchList.ItemsSource = null;
+            WorktreeList.ItemsSource = null;
+            _worktrees = new List<GitWorktreeInfo>();
+            StashList.ItemsSource = null;
+            StashDiff.Clear("stash를 선택하면 변경을 보여 줍니다.");
+            LogList.ItemsSource = null;
+            OutgoingList.ItemsSource = null;
+            IncomingList.ItemsSource = null;
+            UnstagedHeader.Text = "변경됨";
+            StagedHeader.Text = "스테이지됨";
+            OutgoingHeader.Text = "보낼 커밋 (push)";
+            IncomingHeader.Text = "받을 커밋 (pull)";
+            RemoteSummaryText.Text = string.Empty;
+            ChangesDiff.Clear();
+            RemoteDiff.Clear();
+            LogDiff.Clear();
+        }
+
+        private void ShowChanges(RepositoryRow row)
+        {
+            // 목록을 새로 만들면 선택이 풀리므로, 옛 diff가 남아 현재 상태처럼 보이지 않게 비운다.
+            ChangesDiff.Clear();
+            var snapshot = row?.Snapshot;
+            if (snapshot == null)
+            {
+                UnstagedList.ItemsSource = null;
+                StagedList.ItemsSource = null;
+                UnstagedTree.ItemsSource = null;
+                StagedTree.ItemsSource = null;
+                return;
+            }
+
+            // 변경됨: 수정된 파일과 새 파일(추적 안 됨)을 한 목록에 경로순으로 섞어 보이고, 충돌만 맨 위.
+            // 스테이지됨: 인덱스 변경. 둘 다 바뀐 파일(MM, AM)은 양쪽에 보이며 배지는 각 목록 기준(ForSide).
+            var unstaged = snapshot.Entries.Where(entry => entry.IsUnstaged)
+                .Select(entry => entry.ForSide(GitChangeSide.WorkTree))
+                .OrderBy(entry => entry.IsConflicted ? 0 : 1)
+                .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            var staged = snapshot.Entries.Where(entry => entry.IsStaged)
+                .Select(entry => entry.ForSide(GitChangeSide.Index))
+                .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            UnstagedList.ItemsSource = unstaged;
+            StagedList.ItemsSource = staged;
+            UnstagedTree.ItemsSource = GitChangeTree.Build(unstaged);
+            StagedTree.ItemsSource = GitChangeTree.Build(staged);
+
+            if (UnchangedToggle.IsChecked == true)
+                LoadUnchanged(row);
+            UnstagedHeader.Text = FormatListHeader("변경됨", unstaged);
+            StagedHeader.Text = FormatListHeader("스테이지됨", staged);
+        }
+
+        /// <summary>"변경됨 (5) — 수정 3 · 새 파일 2"</summary>
+        private static string FormatListHeader(string title, List<GitStatusEntry> entries)
+        {
+            return entries.Count == 0
+                ? title + " (0)"
+                : string.Format("{0} ({1}) — {2}", title, entries.Count, GitStatusEntry.Summarize(entries));
+        }
+
+        private async Task ReloadSelectedDetailAsync()
+        {
+            var row = SelectedRow;
+            ClearDetail();
+            if (row == null)
+                return;
+
+            ShowChanges(row);
+            try
+            {
+                await LoadBranchesAndLogAsync(row, _lifetime.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // async void 이벤트에서 부르므로 여기서 막지 않으면 앱이 종료된다.
+                AppendOutput("오류: " + ex.Message);
+            }
+        }
+
+        private async Task LoadBranchesAndLogAsync(RepositoryRow row, CancellationToken token)
+        {
+            var branchTask = GitCommandRunner.RunAsync(row.RootPath,
+                new[] { "for-each-ref", GitOutputParser.BranchFormat, "refs/heads", "refs/remotes" },
+                GitCommandRunner.QueryTimeout, token, readOnly: true);
+
+            var logArgs = new List<string> { "log", "--topo-order", "-z", "-n", _settings.LogLimit.ToString(), GitOutputParser.LogFormat };
+            if (_settings.LogAllBranches)
+                logArgs.Add("--all");
+            var logTask = row.Snapshot?.HeadOid == null && !_settings.LogAllBranches
+                ? Task.FromResult<GitResult>(null)   // 최초 커밋 전: log가 실패하므로 부르지 않는다
+                : GitCommandRunner.RunAsync(row.RootPath, logArgs, GitCommandRunner.QueryTimeout, token, readOnly: true);
+
+            var branchResult = await branchTask;
+            var logResult = await logTask;
+
+            // 기다리는 사이 다른 저장소를 골랐으면 버린다.
+            if (!ReferenceEquals(row, SelectedRow))
+                return;
+
+            if (branchResult.Success)
+            {
+                _branches = GitOutputParser.ParseBranches(branchResult.StdOut)
+                    .OrderBy(b => b.IsRemote).ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
+                BranchList.ItemsSource = _branches;
+            }
+            else
+            {
+                AppendResult(row.Info, branchResult);
+            }
+
+            if (logResult != null)
+            {
+                // 커밋이 하나도 없는 저장소의 log 실패는 정상이므로 출력하지 않는다.
+                if (logResult.Success)
+                {
+                    var commits = GitOutputParser.ParseLog(logResult.StdOut);
+                    var graph = GitGraphLayout.Compute(commits);
+                    var maxLanes = 1;
+                    for (var i = 0; i < commits.Count; i++)
+                    {
+                        commits[i].Graph = graph[i];
+                        maxLanes = Math.Max(maxLanes, graph[i].LaneCount);
+                    }
+                    GraphColumn.Width = GitGraphCell.WidthFor(maxLanes);
+                    LogList.ItemsSource = commits;
+                }
+                else if (row.Snapshot?.HeadOid != null)
+                    AppendResult(row.Info, logResult);
+            }
+
+            await LoadRemoteAsync(row, token);
+            await LoadWorktreesAsync(row, token);
+            await LoadStashesAsync(row, token);
+        }
+
+        // ── diff ────────────────────────────────────────────────────────────
+
+        /// <summary>선택 저장소에서 diff 명령을 돌려 <paramref name="view"/>에 보인다. 조회 전용이라 진행 중 잠금과 무관하게 돈다.</summary>
+        private async Task LoadDiffAsync(GitDiffView view, GitDiffRequest diff)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+
+            var request = view.BeginLoad(diff);
+            try
+            {
+                var fallback = ResolveFallbackEncoding();
+                var mode = view.ViewMode;
+                var result = await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.WithViewMode(diff.Arguments, mode),
+                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true, fallbackEncoding: fallback);
+                if (GitDiffCommands.IsSuccess(result, diff.NoIndex))
+                {
+                    // UTF-16/32(BOM) 파일은 git이 바이너리로 보이므로 BOM으로 읽어 텍스트로 다시 비교해 끼운다.
+                    var text = await GitEncodingDiff.ExpandAsync(row.RootPath, diff, result.StdOut, _settings.IgnoreWhitespace, fallback,
+                        _lifetime.Token, mode);
+                    view.Complete(request, text, diff.EmptyMessage);
+                }
+                else if (view.Fail(request, FirstLine(result.StdErr) ?? "차이를 읽지 못했습니다."))
+                {
+                    AppendResult(row.Info, result);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // async void 이벤트에서 부르므로 여기서 막는다.
+                view.Fail(request, ex.Message);
+            }
+        }
+
+        private async void DiffView_ViewModeChanged(object sender, EventArgs e)
+        {
+            // 보고 있던 비교를 새 보기 모드로 다시 불러온다(제목·외부 도구 대상은 그대로).
+            var view = (GitDiffView)sender;
+            if (view.CurrentRequest != null)
+                await LoadDiffAsync(view, view.CurrentRequest);
+        }
+
+        private System.Text.Encoding ResolveFallbackEncoding()
+        {
+            try
+            {
+                return GitTextDecoder.Resolve(_settings.FallbackEncoding);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException)
+            {
+                return null;   // 코드 페이지를 못 쓰는 환경이면 대체 해석 없이 UTF-8로만 읽는다.
+            }
+        }
+
+        private static GitDiffRequest WithTitle(GitDiffRequest request, string title, string emptyMessage = null)
+        {
+            request.Title = title;
+            if (emptyMessage != null)
+                request.EmptyMessage = emptyMessage;
+            return request;
+        }
+
+        private async void UnstagedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (UnstagedList.SelectedItems.Count != 1)
+            {
+                if (UnstagedList.IsKeyboardFocusWithin)
+                    ChangesDiff.Clear(UnstagedList.SelectedItems.Count == 0 ? "파일을 선택하면 차이를 보여 줍니다." : "파일 하나를 선택하면 차이를 보여 줍니다.");
+                return;
+            }
+
+            await ShowUnstagedDiffAsync((GitStatusEntry)UnstagedList.SelectedItem);
+        }
+
+        private async Task ShowUnstagedDiffAsync(GitStatusEntry entry)
+        {
+            if (entry.IsUntracked)
+            {
+                if (entry.Path.EndsWith("/", StringComparison.Ordinal))
+                {
+                    ChangesDiff.Clear("추적 안 되는 폴더입니다. 폴더 안 파일은 스테이지한 뒤 볼 수 있습니다.");
+                    return;
+                }
+                await LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.Untracked(entry.Path, _settings.IgnoreWhitespace),
+                    "추적 안 됨 (새 파일): " + entry.Path));
+                return;
+            }
+
+            await LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.WorkTree(entry.Path, _settings.IgnoreWhitespace),
+                (entry.IsConflicted ? "충돌 (작업 트리): " : "작업 트리 ↔ 인덱스: ") + entry.Path));
+        }
+
+        private async void StagedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (StagedList.SelectedItems.Count != 1)
+            {
+                if (StagedList.IsKeyboardFocusWithin)
+                    ChangesDiff.Clear(StagedList.SelectedItems.Count == 0 ? "파일을 선택하면 차이를 보여 줍니다." : "파일 하나를 선택하면 차이를 보여 줍니다.");
+                return;
+            }
+
+            await ShowStagedDiffAsync((GitStatusEntry)StagedList.SelectedItem);
+        }
+
+        private Task ShowStagedDiffAsync(GitStatusEntry entry)
+        {
+            return LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.Staged(entry.Path, entry.OriginalPath, _settings.IgnoreWhitespace),
+                "인덱스 ↔ HEAD (커밋될 내용): " + entry.Path));
+        }
+
+        // ── 변경 사항 트리 보기 ──────────────────────────────────────────────
+
+        private bool IsChangesTreeMode => ChangesTreeToggle.IsChecked == true;
+
+        private void ChangesTreeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyChangesTreeMode();
+            SaveWindowState();
+        }
+
+        private void ApplyChangesTreeMode()
+        {
+            var tree = IsChangesTreeMode;
+            UnstagedList.Visibility = StagedList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            UnstagedTree.Visibility = StagedTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            UnchangedList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            UnchangedTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            // 두 보기의 선택은 따로라, 전환하면 오른쪽 diff가 어느 선택의 것인지 헷갈리지 않게 비운다.
+            UnstagedList.UnselectAll();
+            StagedList.UnselectAll();
+            UnchangedList.UnselectAll();
+            ChangesDiff.Clear();
+        }
+
+        // ── 끌어 놓기: 변경됨 → 스테이지됨 = 스테이지, 스테이지됨 → 변경됨 = 언스테이지 ─────
+
+        private const string ChangeDragFormat = "Folderss.GitChangeDrag";
+
+        private sealed class ChangeDragData
+        {
+            public bool FromStaged { get; set; }
+            public List<GitStatusEntry> Entries { get; set; }
+        }
+
+        private Point? _dragStart;
+        private ListBoxItem _pendingSingleSelect;
+
+        private void ChangeDrag_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStart = null;
+            _pendingSingleSelect = null;
+            var source = e.OriginalSource as DependencyObject;
+
+            if (sender is ListBox list)
+            {
+                // 항목 위에서만 끌기 시작(스크롤바·빈 곳 제외).
+                if (!(ItemsControl.ContainerFromElement(list, source) is ListBoxItem item))
+                    return;
+                _dragStart = e.GetPosition(this);
+                // 여러 개 선택한 상태에서 선택된 항목을 누르면 ListBox가 곧바로 그 하나만 남긴다 —
+                // 끌기로 여러 개를 옮길 수 있게 선택 변경을 놓을 때까지 미룬다.
+                if (e.ClickCount == 1 && Keyboard.Modifiers == ModifierKeys.None && item.IsSelected && list.SelectedItems.Count > 1)
+                {
+                    _pendingSingleSelect = item;
+                    item.Focus();
+                    e.Handled = true;
+                }
+                return;
+            }
+
+            // 트리: 노드 위에서만(스크롤바 제외). 선택은 TreeView가 누를 때 바꾼다.
+            for (var node = source; node != null && !(node is TreeView); node = System.Windows.Media.VisualTreeHelper.GetParent(node))
+            {
+                if (node is System.Windows.Controls.Primitives.ScrollBar)
+                    return;
+                if (node is TreeViewItem)
+                {
+                    _dragStart = e.GetPosition(this);
+                    return;
+                }
+            }
+        }
+
+        private void ChangeDrag_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // 끌지 않고 놓았으면 미뤄 둔 "그 항목만 선택"을 한다.
+            if (_pendingSingleSelect != null && sender is ListBox list)
+            {
+                var item = _pendingSingleSelect;
+                list.UnselectAll();
+                item.IsSelected = true;
+            }
+            _dragStart = null;
+            _pendingSingleSelect = null;
+        }
+
+        private void ChangeDrag_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragStart == null || e.LeftButton != MouseButtonState.Pressed)
+                return;
+            var delta = e.GetPosition(this) - _dragStart.Value;
+            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            _dragStart = null;
+            _pendingSingleSelect = null;
+            var fromStaged = ReferenceEquals(sender, StagedList) || ReferenceEquals(sender, StagedTree);
+            var entries = fromStaged ? SelectedChangeEntries(StagedList, StagedTree) : SelectedChangeEntries(UnstagedList, UnstagedTree);
+            if (entries.Count == 0 || _busyCount > 0)
+                return;
+
+            var data = new DataObject(ChangeDragFormat, new ChangeDragData { FromStaged = fromStaged, Entries = entries });
+            try
+            {
+                DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Move);
+            }
+            finally
+            {
+                // 창 밖에 놓거나 Esc로 취소하면 DragLeave가 안 올 수 있어 끝날 때 항상 지운다.
+                ShowDropHighlight(null);
+            }
+        }
+
+        /// <summary>강조할 영역(null이면 모두 끔).</summary>
+        private void ShowDropHighlight(object target)
+        {
+            UnstagedDropHighlight.Visibility = ReferenceEquals(target, UnstagedDropArea) ? Visibility.Visible : Visibility.Collapsed;
+            StagedDropHighlight.Visibility = ReferenceEquals(target, StagedDropArea) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ChangeDrop_DragLeave(object sender, DragEventArgs e)
+        {
+            // 영역 안의 자식 사이를 옮겨 다닐 때도 DragLeave가 오므로, 포인터가 실제로 영역을 벗어났을 때만 끈다.
+            var area = (FrameworkElement)sender;
+            var point = e.GetPosition(area);
+            if (point.X < 0 || point.Y < 0 || point.X >= area.ActualWidth || point.Y >= area.ActualHeight)
+                ShowDropHighlight(null);
+        }
+
+        /// <summary>반대쪽 목록에서 온 끌기만 받는다(같은 목록·다른 프로그램의 파일은 거부).</summary>
+        private ChangeDragData AcceptedDrag(object target, DragEventArgs e)
+        {
+            var data = e.Data.GetDataPresent(ChangeDragFormat) ? e.Data.GetData(ChangeDragFormat) as ChangeDragData : null;
+            var toStaged = ReferenceEquals(target, StagedDropArea);
+            return data != null && data.FromStaged != toStaged && _busyCount == 0 ? data : null;
+        }
+
+        private void ChangeDrop_DragOver(object sender, DragEventArgs e)
+        {
+            var accepted = AcceptedDrag(sender, e) != null;
+            e.Effects = accepted ? DragDropEffects.Move : DragDropEffects.None;
+            ShowDropHighlight(accepted ? sender : null);
+            e.Handled = true;
+        }
+
+        private async void ChangeDrop_Drop(object sender, DragEventArgs e)
+        {
+            var data = AcceptedDrag(sender, e);
+            e.Handled = true;
+            ShowDropHighlight(null);
+            if (data == null)
+                return;
+            if (data.FromStaged)
+                await UnstageAsync(data.Entries);
+            else
+                await StageAsync(data.Entries);
+        }
+
+        // ── 보기 상태 저장(트리 보기·분할선 위치) ─────────────────────────────
+
+        private void ApplyWindowState(GitWindowState state)
+        {
+            ChangesTreeToggle.IsChecked = state.ChangesTreeMode;
+            ApplyChangesTreeMode();
+            ChangesListColumn.Width = new GridLength(state.ChangesListWidth);
+            UnstagedListRow.Height = new GridLength(state.UnstagedWeight, GridUnitType.Star);
+            StagedListRow.Height = new GridLength(state.StagedWeight, GridUnitType.Star);
+        }
+
+        private void ChangesSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            SaveWindowState();
+        }
+
+        private void SaveWindowState()
+        {
+            // GridSplitter는 * 행을 * 값으로 바꿔 두지만, 픽셀로 바뀐 경우에도 실제 높이로 비율을 남긴다.
+            static double Weight(RowDefinition row) => row.Height.IsStar ? row.Height.Value : row.ActualHeight;
+            var state = new GitWindowState
+            {
+                ChangesTreeMode = IsChangesTreeMode,
+                ChangesListWidth = Math.Clamp(ChangesListColumn.ActualWidth > 0 ? ChangesListColumn.ActualWidth : ChangesListColumn.Width.Value,
+                    GitWindowState.MinListWidth, GitWindowState.MaxListWidth),
+                UnstagedWeight = Math.Clamp(Weight(UnstagedListRow), GitWindowState.MinWeight, GitWindowState.MaxWeight),
+                StagedWeight = Math.Clamp(Weight(StagedListRow), GitWindowState.MinWeight, GitWindowState.MaxWeight)
+            };
+            try
+            {
+                GitWindowStateService.Save(state);
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("보기 상태 저장 실패 (" + GitWindowStateService.DefaultPath + "): " + ex.Message);
+            }
+        }
+
+        // ── 변경 없는 파일 ─────────────────────────────────────────────────
+
+        /// <summary>미리보기로 읽을 최대 파일 크기.</summary>
+        private const long MaxPreviewBytes = 10 * 1024 * 1024;
+
+        private void UnchangedToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var on = UnchangedToggle.IsChecked == true;
+            UnchangedSplitterRow.Height = on ? new GridLength(8) : new GridLength(0);
+            UnchangedRow.Height = on ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            UnchangedRow.MinHeight = on ? 60 : 0;
+            UnchangedSplitter.Visibility = UnchangedPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (on)
+            {
+                LoadUnchanged(SelectedRow);
+            }
+            else
+            {
+                UnchangedList.ItemsSource = null;
+                UnchangedTree.ItemsSource = null;
+            }
+        }
+
+        /// <summary>추적 파일(ls-files)에서 변경 목록을 뺀 것을 채운다. 조회 전용이라 진행 중 잠금과 무관하게 돈다.</summary>
+        private async void LoadUnchanged(RepositoryRow row)
+        {
+            UnchangedList.ItemsSource = null;
+            UnchangedTree.ItemsSource = null;
+            UnchangedHeader.Text = "변경 없음 (읽는 중…)";
+            if (row?.Snapshot == null)
+            {
+                UnchangedHeader.Text = "변경 없음";
+                return;
+            }
+
+            try
+            {
+                var result = await GitCommandRunner.RunAsync(row.RootPath, GitOutputParser.TrackedFilesArguments,
+                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                if (!ReferenceEquals(row, SelectedRow) || UnchangedToggle.IsChecked != true)
+                    return;
+                if (!result.Success)
+                {
+                    UnchangedHeader.Text = "변경 없음 (읽지 못함)";
+                    AppendResult(row.Info, result);
+                    return;
+                }
+
+                var unchanged = GitOutputParser.UnchangedEntries(GitOutputParser.ParseNulList(result.StdOut), row.Snapshot)
+                    .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                UnchangedList.ItemsSource = unchanged;
+                UnchangedTree.ItemsSource = GitChangeTree.Build(unchanged);
+                UnchangedHeader.Text = string.Format("변경 없음 ({0})", unchanged.Count);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // async void라 여기서 막는다.
+                UnchangedHeader.Text = "변경 없음 (읽지 못함)";
+                AppendOutput("변경 없는 파일 목록을 읽지 못했습니다: " + ex.Message);
+            }
+        }
+
+        private void UnchangedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (UnchangedList.SelectedItem is GitStatusEntry entry)
+                ShowUnchangedContent(entry);
+        }
+
+        private void UnchangedTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = UnchangedTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+                ChangesDiff.Clear(string.Format("폴더 {0} — 변경 없는 파일 {1}개", node.Path, node.Entries.Count()));
+            else
+                ShowUnchangedContent(node.Entry);
+        }
+
+        /// <summary>변경 없는 파일은 차이가 없으므로 작업 트리 파일 내용을 줄 번호와 함께 보인다(BOM 규칙으로 디코딩).</summary>
+        private async void ShowUnchangedContent(GitStatusEntry entry)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+
+            var title = "변경 없음 (현재 내용): " + entry.Path;
+            var full = Path.Combine(row.RootPath, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            var fallback = ResolveFallbackEncoding();
+            ChangesDiff.ShowLines(title, new List<GitDiffLine>(), "불러오는 중…");
+            try
+            {
+                var (lines, message) = await Task.Run(() =>
+                {
+                    if (!File.Exists(full))
+                        return (new List<GitDiffLine>(), "작업 트리에 파일이 없습니다.");
+                    if (new FileInfo(full).Length > MaxPreviewBytes)
+                        return (new List<GitDiffLine>(), "파일이 너무 커서(10MB 초과) 미리 보지 않습니다. 더블클릭해 여세요.");
+                    var bytes = File.ReadAllBytes(full);
+                    // NUL이 있는데 UTF-16/32 BOM이 아니면 바이너리로 본다(git과 같은 기준: 앞 8000바이트).
+                    if (!GitTextDecoder.HasWideBom(bytes) && Array.IndexOf(bytes, (byte)0, 0, Math.Min(bytes.Length, 8000)) >= 0)
+                        return (new List<GitDiffLine>(), "바이너리 파일입니다.");
+                    return (GitOutputParser.ContentLines(GitTextDecoder.DecodeFile(bytes, fallback), GitDiffView.MaxLines), "빈 파일입니다.");
+                });
+
+                // 기다리는 사이 다른 항목을 골랐으면 버린다.
+                var current = (IsChangesTreeMode ? (UnchangedTree.SelectedItem as GitChangeNode)?.Entry : UnchangedList.SelectedItem as GitStatusEntry);
+                if (ReferenceEquals(current, entry))
+                    ChangesDiff.ShowLines(title, lines, message);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                ChangesDiff.ShowLines(title, new List<GitDiffLine>(), "파일을 읽지 못했습니다: " + ex.Message);
+            }
+        }
+
+        private async void UnstagedTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = UnstagedTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+            {
+                ChangesDiff.Clear(string.Format("폴더 {0} — 파일 {1}개. 스테이지하면 이 폴더 아래 전체가 대상입니다.", node.Path, node.Entries.Count()));
+                return;
+            }
+            await ShowUnstagedDiffAsync(node.Entry);
+        }
+
+        private async void StagedTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = StagedTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+            {
+                ChangesDiff.Clear(string.Format("폴더 {0} — 파일 {1}개. 언스테이지하면 이 폴더 아래 전체가 대상입니다.", node.Path, node.Entries.Count()));
+                return;
+            }
+            await ShowStagedDiffAsync(node.Entry);
+        }
+
+        private void ChangeTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            // 폴더 더블클릭은 TreeView 기본 동작(접기/펴기)에 맡기고, 파일만 연다.
+            var node = (sender as TreeView)?.SelectedItem as GitChangeNode;
+            if (node?.Entry != null)
+                OpenEntry(node.Entry);
+        }
+
+        /// <summary>스테이지/언스테이지 대상: 평면 보기는 선택한 항목들, 트리 보기는 선택한 노드(폴더면 그 아래 전체).</summary>
+        private List<GitStatusEntry> SelectedChangeEntries(ListBox list, TreeView tree)
+        {
+            if (IsChangesTreeMode)
+                return (tree.SelectedItem as GitChangeNode)?.Entries.ToList() ?? new List<GitStatusEntry>();
+            return list.SelectedItems.Cast<GitStatusEntry>().ToList();
+        }
+
+        private async void LogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            LogResetButton.IsEnabled = LogBranchButton.IsEnabled = LogCheckoutButton.IsEnabled = LogList.SelectedItem != null;
+            await ShowCommitDiffAsync(LogDiff, LogList.SelectedItem as GitCommitInfo);
+        }
+
+        private async void RemoteCommitList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var list = (ListBox)sender;
+            if (!list.IsKeyboardFocusWithin && list.SelectedItem == null)
+                return;
+            await ShowCommitDiffAsync(RemoteDiff, list.SelectedItem as GitCommitInfo);
+        }
+
+        private Task ShowCommitDiffAsync(GitDiffView view, GitCommitInfo commit)
+        {
+            if (commit == null)
+            {
+                view.Clear("커밋을 선택하면 변경을 보여 줍니다.");
+                return Task.CompletedTask;
+            }
+
+            var basis = commit.Parents.Length == 0 ? "최초 커밋" : commit.Parents.Length > 1 ? "병합 커밋 — 첫 부모 기준" : null;
+            var title = string.Format("{0}  {1}  ({2}, {3}{4})", commit.ShortHash, commit.Subject, commit.Author, commit.TimeText,
+                basis == null ? string.Empty : ", " + basis);
+            return LoadDiffAsync(view, WithTitle(GitDiffCommands.Commit(commit.Hash, commit.Parents, _settings.IgnoreWhitespace), title));
+        }
+
+        // ── 원격 비교 ────────────────────────────────────────────────────────
+
+        private const int RemoteLogLimit = 500;
+
+        /// <summary>현재 브랜치와 upstream의 차이(보낼/받을 커밋)를 읽는다. 원격 추적 브랜치 기준이라 최신은 fetch 뒤에 보인다.</summary>
+        private async Task LoadRemoteAsync(RepositoryRow row, CancellationToken token)
+        {
+            var snapshot = row.Snapshot;
+            OutgoingList.ItemsSource = null;
+            IncomingList.ItemsSource = null;
+            RemoteDiff.Clear("커밋을 선택하거나 위 버튼으로 전체 차이를 보세요.");
+
+            var hasUpstream = snapshot != null && !snapshot.IsDetached && snapshot.Upstream != null;
+            OutgoingDiffButton.IsEnabled = hasUpstream;
+            IncomingDiffButton.IsEnabled = hasUpstream;
+            WorkTreeDiffButton.IsEnabled = hasUpstream;
+
+            if (snapshot == null)
+                return;
+            if (snapshot.IsDetached)
+            {
+                RemoteSummaryText.Text = "detached HEAD 상태라 비교할 upstream이 없습니다.";
+                return;
+            }
+            if (snapshot.Upstream == null)
+            {
+                RemoteSummaryText.Text = string.Format("'{0}' 브랜치에 upstream이 없습니다. push하면 설정할 수 있습니다.", snapshot.Branch);
+                return;
+            }
+
+            RemoteSummaryText.Text = "비교 중…";
+            var outgoingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange(GitDiffCommands.Upstream, "HEAD", RemoteLogLimit),
+                GitCommandRunner.QueryTimeout, token, readOnly: true);
+            var incomingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange("HEAD", GitDiffCommands.Upstream, RemoteLogLimit),
+                GitCommandRunner.QueryTimeout, token, readOnly: true);
+            var outgoing = await outgoingTask;
+            var incoming = await incomingTask;
+
+            if (!ReferenceEquals(row, SelectedRow))
+                return;
+
+            if (!outgoing.Success || !incoming.Success)
+            {
+                // 원격에서 브랜치가 지워졌거나(upstream gone) 아직 fetch 전인 경우.
+                RemoteSummaryText.Text = string.Format("{0} 와(과) 비교할 수 없습니다: {1}", snapshot.Upstream,
+                    FirstLine(outgoing.Success ? incoming.StdErr : outgoing.StdErr) ?? "알 수 없는 오류");
+                OutgoingDiffButton.IsEnabled = IncomingDiffButton.IsEnabled = WorkTreeDiffButton.IsEnabled = false;
+                return;
+            }
+
+            var outgoingCommits = GitOutputParser.ParseLog(outgoing.StdOut);
+            var incomingCommits = GitOutputParser.ParseLog(incoming.StdOut);
+            OutgoingList.ItemsSource = outgoingCommits;
+            IncomingList.ItemsSource = incomingCommits;
+            OutgoingHeader.Text = string.Format("보낼 커밋 (push) — {0}{1}개", outgoingCommits.Count, outgoingCommits.Count >= RemoteLogLimit ? "+" : string.Empty);
+            IncomingHeader.Text = string.Format("받을 커밋 (pull) — {0}{1}개", incomingCommits.Count, incomingCommits.Count >= RemoteLogLimit ? "+" : string.Empty);
+            RemoteSummaryText.Text = string.Format("{0} ↔ {1}   (원격 상태는 마지막 fetch 기준입니다. 최신으로 비교하려면 'fetch 후 비교')",
+                snapshot.Branch, snapshot.Upstream);
+        }
+
+        private async void FetchSelected_Click(object sender, RoutedEventArgs e)
+        {
+            await RunOnSelectedAsync("fetch 중…", GitSyncCommands.Fetch(new GitFetchOptions()), GitCommandRunner.NetworkTimeout);
+        }
+
+        private async void FetchSelectedOptions_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedRow == null)
+                return;
+            var dialog = new GitFetchDialog("이 저장소에서 fetch한 뒤 다시 비교합니다: " + SelectedRow.Info.DisplayPath) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await RunOnSelectedAsync("fetch 중…", GitSyncCommands.Fetch(dialog.Options), GitCommandRunner.NetworkTimeout);
+        }
+
+        private async void OutgoingDiff_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadDiffAsync(RemoteDiff, WithTitle(GitDiffCommands.Range(GitDiffCommands.Upstream + "...HEAD", _settings.IgnoreWhitespace),
+                "보낼 변경 전체: upstream과 갈라진 뒤 로컬에서 커밋한 변경 (@{u}...HEAD)", "보낼 변경이 없습니다."));
+        }
+
+        private async void IncomingDiff_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadDiffAsync(RemoteDiff, WithTitle(GitDiffCommands.Range("HEAD..." + GitDiffCommands.Upstream, _settings.IgnoreWhitespace),
+                "받을 변경 전체: 갈라진 뒤 upstream에 커밋된 변경 (HEAD...@{u})", "받을 변경이 없습니다."));
+        }
+
+        private async void WorkTreeVsUpstream_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadDiffAsync(RemoteDiff, WithTitle(GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream, _settings.IgnoreWhitespace),
+                "작업 트리 ↔ upstream: 커밋 안 한 수정 포함, 추적 안 되는 파일 제외 (@{u})", "로컬 작업 트리와 upstream이 같습니다."));
+        }
+
+        /// <summary>선택 저장소에 쓰기 명령을 실행하고, 끝나면 상태·브랜치·로그를 다시 읽는다.</summary>
+        private Task RunOnSelectedAsync(string status, IEnumerable<string> args, TimeSpan timeout, string standardInput = null,
+            Action<GitResult> onDone = null)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return Task.CompletedTask;
+
+            var argList = args.ToList();
+            return RunBusyAsync(status, async token =>
+            {
+                GitResult result;
+                try
+                {
+                    result = await GitCommandRunner.RunAsync(row.RootPath, argList, timeout, token, standardInput: standardInput);
+                }
+                finally
+                {
+                    // 취소돼도 상태는 다시 읽는다(명령이 일부만 적용됐을 수 있음).
+                    await RefreshStatusAsync(row, _lifetime.Token);
+                }
+                AppendResult(row.Info, result);
+                onDone?.Invoke(result);
+                if (ReferenceEquals(row, SelectedRow))
+                    await LoadBranchesAndLogAsync(row, _lifetime.Token);
+            });
+        }
+
+        // ── 스테이지·커밋 ─────────────────────────────────────────────────────
+
+        private static string ToPathspecInput(IEnumerable<GitStatusEntry> entries, bool includeOriginal)
+        {
+            var paths = new List<string>();
+            foreach (var entry in entries)
+            {
+                paths.Add(entry.Path);
+                if (includeOriginal && !string.IsNullOrEmpty(entry.OriginalPath))
+                    paths.Add(entry.OriginalPath);
+            }
+            // 경로는 NUL 구분으로 표준 입력에 넘긴다(명령줄 길이 제한·특수 문자 회피).
+            return string.Join("\0", paths.Distinct()) + "\0";
+        }
+
+        private async void Stage_Click(object sender, RoutedEventArgs e)
+        {
+            await StageAsync(SelectedChangeEntries(UnstagedList, UnstagedTree));
+        }
+
+        private async Task StageAsync(List<GitStatusEntry> entries)
+        {
+            if (entries.Count == 0)
+                return;
+            await RunOnSelectedAsync("스테이지 중…",
+                new[] { "add", "--pathspec-from-file=-", "--pathspec-file-nul" },
+                GitCommandRunner.QueryTimeout, ToPathspecInput(entries, false));
+        }
+
+        private async void Restore_Click(object sender, RoutedEventArgs e)
+        {
+            var entries = SelectedChangeEntries(UnstagedList, UnstagedTree);
+            var snapshot = SelectedRow?.Snapshot;
+            if (entries.Count == 0 || snapshot == null)
+                return;
+
+            var dialog = new GitRestoreDialog(entries, snapshot.HeadOid != null) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            var targets = dialog.Targets;
+            if (targets.Count == 0 || !ConfirmNoUnsavedDocuments("되돌리기"))
+                return;
+
+            await RunOnSelectedAsync("되돌리는 중…", GitRestoreCommands.Arguments(dialog.Mode),
+                GitCommandRunner.QueryTimeout, GitRestoreCommands.PathspecInput(targets));
+        }
+
+        private async void StageAll_Click(object sender, RoutedEventArgs e)
+        {
+            await RunOnSelectedAsync("전체 스테이지 중…", new[] { "add", "-A" }, GitCommandRunner.QueryTimeout);
+        }
+
+        private async void Unstage_Click(object sender, RoutedEventArgs e)
+        {
+            await UnstageAsync(SelectedChangeEntries(StagedList, StagedTree));
+        }
+
+        private async Task UnstageAsync(List<GitStatusEntry> entries)
+        {
+            if (entries.Count == 0 || SelectedRow?.Snapshot == null)
+                return;
+
+            if (SelectedRow.Snapshot.HeadOid == null)
+            {
+                // 최초 커밋 전에는 되돌릴 HEAD가 없어 restore --staged가 실패한다 — 인덱스에서만 뺀다.
+                var args = new List<string> { "rm", "--cached", "-r", "-q", "--" };
+                args.AddRange(entries.Select(entry => entry.Path));
+                await RunOnSelectedAsync("언스테이지 중…", args, GitCommandRunner.QueryTimeout);
+                return;
+            }
+
+            // 이름 변경은 원래 경로도 넣어야 양쪽이 모두 풀린다.
+            await RunOnSelectedAsync("언스테이지 중…",
+                new[] { "restore", "--staged", "--pathspec-from-file=-", "--pathspec-file-nul" },
+                GitCommandRunner.QueryTimeout, ToPathspecInput(entries, true));
+        }
+
+        private async void UnstageAll_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedRow?.Snapshot == null)
+                return;
+            var args = SelectedRow.Snapshot.HeadOid == null
+                ? new[] { "rm", "--cached", "-r", "-q", "--", "." }
+                : new[] { "restore", "--staged", "--", "." };
+            await RunOnSelectedAsync("전체 언스테이지 중…", args, GitCommandRunner.QueryTimeout);
+        }
+
+        private void CommitMessageBox_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key == Key.Enter && Keyboard.Modifiers == ModifierKeys.Control)
+            {
+                e.Handled = true;
+                Commit_Click(sender, e);
+            }
+        }
+
+        private async void Commit_Click(object sender, RoutedEventArgs e)
+        {
+            await CommitAsync(new GitCommitOptions());
+        }
+
+        private async void CommitOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            if (row?.Snapshot == null || _busyCount > 0)
+                return;
+
+            // 직전 커밋 제목과 push 여부(upstream에 이미 있는지 = 보낼 커밋이 0개)
+            string lastSubject = null;
+            if (row.Snapshot.HeadOid != null)
+            {
+                var last = await GitCommandRunner.RunAsync(row.RootPath, new[] { "log", "-1", "--format=%s" }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                lastSubject = last.Success ? last.StdOut.Trim() : null;
+            }
+            var headPushed = row.Snapshot.Upstream != null && row.Snapshot.Ahead == 0;
+            var dialog = new GitCommitOptionsDialog(lastSubject, headPushed, string.IsNullOrWhiteSpace(CommitMessageBox.Text)) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await CommitAsync(dialog.Options);
+        }
+
+        private async Task CommitAsync(GitCommitOptions options)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null || _busyCount > 0)
+                return;
+
+            var message = CommitMessageBox.Text;
+            // amend는 메시지가 비면 직전 메시지를 그대로 쓴다.
+            if (string.IsNullOrWhiteSpace(message) && !options.Amend)
+            {
+                MessageBox.Show(this, "커밋 메시지를 입력하세요.", "커밋", MessageBoxButton.OK, MessageBoxImage.Information);
+                CommitMessageBox.Focus();
+                return;
+            }
+            // amend(메시지만 고치기)와 빈 커밋은 스테이지된 변경이 없어도 된다.
+            if (snapshot.StagedCount == 0 && !options.Amend && !options.AllowEmpty)
+            {
+                MessageBox.Show(this, "스테이지된 변경이 없습니다.", "커밋", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (snapshot.ConflictCount > 0)
+            {
+                MessageBox.Show(this, "충돌이 해결되지 않은 파일이 있어 커밋할 수 없습니다.", "커밋", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            // 메시지는 UTF-8 임시 파일로 넘긴다(여러 줄·따옴표·한글 안전, 편집기 안 뜸). amend + 빈 메시지면 파일 없이 --no-edit.
+            var keepMessage = options.Amend && string.IsNullOrWhiteSpace(message);
+            var messageFile = keepMessage ? null : Path.Combine(Path.GetTempPath(), "folderss-commit-" + Guid.NewGuid().ToString("N") + ".txt");
+            try
+            {
+                if (messageFile != null)
+                    File.WriteAllText(messageFile, message.Replace("\r\n", "\n"), new UTF8Encoding(false));
+                await RunOnSelectedAsync(options.Amend ? "직전 커밋 고치는 중…" : "커밋 중…", GitSyncCommands.Commit(messageFile, options), GitCommandRunner.NetworkTimeout,
+                    onDone: result =>
+                    {
+                        if (result.Success)
+                            CommitMessageBox.Clear();
+                    });
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("커밋 메시지 파일을 만들 수 없습니다: " + ex.Message);
+            }
+            finally
+            {
+                if (messageFile != null)
+                {
+                    try { File.Delete(messageFile); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                }
+            }
+        }
+
+        private void ChangeList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            if ((sender as ListBox)?.SelectedItem is GitStatusEntry entry)
+                OpenEntry(entry);
+        }
+
+        private void OpenEntry(GitStatusEntry entry)
+        {
+            var row = SelectedRow;
+            if (entry == null || row == null || _openFile == null)
+                return;
+
+            var path = Path.Combine(row.RootPath, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            if (File.Exists(path))
+                _openFile(path);
+        }
+
+        // ── 브랜치 ──────────────────────────────────────────────────────────
+
+        /// <summary>작업 트리를 바꾸는 명령 전에, 이 저장소 파일을 저장하지 않은 뷰어 탭이 있으면 묻는다.</summary>
+        private bool ConfirmNoUnsavedDocuments(string action)
+        {
+            var row = SelectedRow;
+            var count = row == null ? 0 : _countModifiedDocumentsUnder(row.RootPath);
+            if (count == 0)
+                return true;
+
+            return MessageBox.Show(this,
+                string.Format("이 저장소의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.\n{1}하면 디스크의 파일이 바뀌어 편집 내용과 어긋날 수 있습니다. 계속할까요?", count, action),
+                "Git", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
+        }
+
+        private async void SwitchBranch_Click(object sender, RoutedEventArgs e)
+        {
+            var branch = BranchList.SelectedItem as GitBranchInfo;
+            if (branch == null || branch.IsCurrent)
+                return;
+            if (!ConfirmNoUnsavedDocuments("브랜치를 전환"))
+                return;
+
+            // 원격 브랜치는 같은 이름의 추적 로컬 브랜치를 만들어 전환한다(이미 있으면 git이 거부 → 출력에 표시).
+            var args = branch.IsRemote
+                ? new[] { "switch", "--track", branch.Name }
+                : new[] { "switch", branch.Name };
+            await RunOnSelectedAsync("브랜치 전환 중…", args, GitCommandRunner.QueryTimeout);
+        }
+
+        private void BranchList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            SwitchBranch_Click(sender, e);
+        }
+
+        private async void NewBranch_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedRow == null)
+                return;
+
+            // 브랜치 목록에서 고른 브랜치가 있으면 그것을 기본 시작점으로.
+            var selected = BranchList.SelectedItem as GitBranchInfo;
+            await CreateBranchWithDialogAsync(null, selected != null && !selected.IsCurrent ? selected.Name : null);
+        }
+
+        /// <summary>시작점 후보: 현재 HEAD, (있으면) 로그에서 고른 커밋, 로컬 브랜치, 원격 브랜치.</summary>
+        private List<GitDialogBase.Choice> StartPointChoices(GitCommitInfo commit)
+        {
+            var head = SelectedRow?.Snapshot?.BranchDisplay;
+            var choices = new List<GitDialogBase.Choice>
+            {
+                new GitDialogBase.Choice { Text = "현재 HEAD" + (string.IsNullOrEmpty(head) ? string.Empty : " (" + head + ")"), Value = null }
+            };
+            if (commit != null)
+                choices.Add(new GitDialogBase.Choice { Text = "커밋 " + commit.ShortHash + "  " + commit.Subject, Value = commit.Hash });
+            foreach (var branch in _branches.Where(b => !b.IsCurrent))
+                choices.Add(new GitDialogBase.Choice { Text = (branch.IsRemote ? "원격 " : "브랜치 ") + branch.Name, Value = branch.Name });
+            return choices;
+        }
+
+        /// <summary>git 규칙(check-ref-format)으로 브랜치 이름 검사. 쓸 수 있으면 null.</summary>
+        private async Task<string> ValidateBranchNameAsync(string name)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return "저장소를 선택하세요.";
+            var result = await GitCommandRunner.RunAsync(row.RootPath, GitRefCommands.CheckBranchName(name), GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+            if (!result.Success)
+                return "브랜치 이름으로 쓸 수 없습니다: " + name + "\n(공백, ~ ^ : ? * [ \\, '-'로 시작, '..' 등은 쓸 수 없습니다)";
+            if (_branches.Any(b => !b.IsRemote && b.Name == name))
+                return "같은 이름의 브랜치가 이미 있습니다: " + name;
+            return null;
+        }
+
+        private async Task CreateBranchWithDialogAsync(GitCommitInfo commit, string preferredStart)
+        {
+            var choices = StartPointChoices(commit);
+            var index = commit != null ? 1 : Math.Max(0, choices.FindIndex(c => c.Value != null && c.Value == preferredStart));
+            var dialog = new GitBranchDialog(choices, index, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            if (dialog.SwitchAfter && !ConfirmNoUnsavedDocuments("브랜치를 전환"))
+                return;
+            await RunOnSelectedAsync(dialog.SwitchAfter ? "브랜치 만들고 전환하는 중…" : "브랜치 만드는 중…",
+                GitRefCommands.CreateBranch(dialog.BranchName, dialog.StartPoint, dialog.SwitchAfter), GitCommandRunner.QueryTimeout);
+        }
+
+        // ── 로그: reset · 브랜치 · 체크아웃 ───────────────────────────────────
+
+        private GitCommitInfo SelectedCommit => LogList.SelectedItem as GitCommitInfo;
+
+        private void LogList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            // 커밋을 고르지 않았거나 작업 중이면 메뉴를 열지 않는다.
+            if (SelectedCommit == null || _busyCount > 0)
+                e.Handled = true;
+        }
+
+        private async void LogReset_Click(object sender, RoutedEventArgs e)
+        {
+            var commit = SelectedCommit;
+            var snapshot = SelectedRow?.Snapshot;
+            if (commit == null || snapshot == null)
+                return;
+
+            var uncommitted = snapshot.Entries.Count(entry => !entry.IsUntracked);
+            var dialog = new GitResetDialog(commit, snapshot.IsDetached ? "detached HEAD" : snapshot.Branch, uncommitted) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            if (dialog.Mode == GitResetMode.Hard && !ConfirmNoUnsavedDocuments("hard reset"))
+                return;
+
+            await RunOnSelectedAsync("reset 중…", GitRefCommands.Reset(dialog.Mode, commit.Hash), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (result.Success)
+                        AppendOutput("되돌린 커밋은 git reflog로 찾을 수 있습니다. 이전 위치로 돌아가려면 reflog의 해시로 다시 reset하세요.");
+                });
+        }
+
+        private async void LogBranch_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedCommit != null)
+                await CreateBranchWithDialogAsync(SelectedCommit, null);
+        }
+
+        private async void LogCheckout_Click(object sender, RoutedEventArgs e)
+        {
+            var commit = SelectedCommit;
+            if (commit == null)
+                return;
+            var dialog = new GitCheckoutDialog(commit, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            if (!ConfirmNoUnsavedDocuments("체크아웃"))
+                return;
+
+            var args = dialog.NewBranchName != null
+                ? GitRefCommands.CreateBranch(dialog.NewBranchName, commit.Hash, switchAfter: true)
+                : GitRefCommands.CheckoutDetached(commit.Hash);
+            await RunOnSelectedAsync("체크아웃 중…", args, GitCommandRunner.QueryTimeout);
+        }
+
+        private void LogCopyHash_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedCommit == null)
+                return;
+            try
+            {
+                Clipboard.SetText(SelectedCommit.Hash);
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                // 다른 프로그램이 클립보드를 잡고 있으면 조용히 실패한다.
+            }
+        }
+
+        // ── 워킹트리 ──────────────────────────────────────────────────────────
+
+        private List<GitWorktreeInfo> _worktrees = new List<GitWorktreeInfo>();
+
+        private async Task LoadWorktreesAsync(RepositoryRow row, CancellationToken token)
+        {
+            var result = await GitCommandRunner.RunAsync(row.RootPath, GitRefCommands.WorktreeList, GitCommandRunner.QueryTimeout, token, readOnly: true);
+            if (!ReferenceEquals(row, SelectedRow))
+                return;
+            if (!result.Success)
+            {
+                AppendResult(row.Info, result);
+                return;
+            }
+            _worktrees = GitOutputParser.ParseWorktrees(result.StdOut);
+            WorktreeList.ItemsSource = _worktrees;
+        }
+
+        private static string NormalizePath(string path)
+        {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        /// <summary>저장소 목록에서 경로가 같은 행을 찾고, 없으면 만들어 넣는다(상태도 읽음).</summary>
+        private RepositoryRow EnsureRepositoryRow(string path)
+        {
+            var normalized = NormalizePath(path);
+            var row = _rows.FirstOrDefault(r => string.Equals(NormalizePath(r.RootPath), normalized, StringComparison.OrdinalIgnoreCase));
+            if (row != null)
+                return row;
+
+            var relative = Path.GetRelativePath(_basePath, normalized);
+            row = new RepositoryRow(new GitRepositoryInfo
+            {
+                RootPath = normalized,
+                DisplayPath = relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? normalized : relative,
+                IsGitFile = File.Exists(Path.Combine(normalized, ".git"))
+            });
+            _rows.Add(row);
+            _ = RefreshStatusSafeAsync(row);
+            return row;
+        }
+
+        private async Task RefreshStatusSafeAsync(RepositoryRow row)
+        {
+            try
+            {
+                await RefreshStatusAsync(row, _lifetime.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("상태를 읽지 못했습니다: " + ex.Message);
+            }
+        }
+
+        private async void WorktreeAdd_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+
+            // 다른 워킹트리에서 이미 체크아웃한 브랜치는 고를 수 없게 뺀다(git도 거부).
+            var used = new HashSet<string>(_worktrees.Where(w => w.Branch != null).Select(w => w.Branch), StringComparer.Ordinal);
+            var free = _branches.Where(b => !b.IsRemote && !used.Contains(b.Name))
+                .Select(b => new GitDialogBase.Choice { Text = b.Name, Value = b.Name }).ToList();
+            var dialog = new GitWorktreeDialog(row.RootPath, StartPointChoices(SelectedCommit), free, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+
+            var path = dialog.WorktreePath;
+            await RunOnSelectedAsync("워킹트리 만드는 중…", GitRefCommands.WorktreeAdd(path, dialog.NewBranch, dialog.Commitish), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (result.Success)
+                        EnsureRepositoryRow(path);
+                });
+        }
+
+        private void WorktreeOpen_Click(object sender, RoutedEventArgs e)
+        {
+            var worktree = WorktreeList.SelectedItem as GitWorktreeInfo;
+            if (worktree == null || worktree.IsBare || worktree.IsPrunable)
+                return;
+            RepoList.SelectedItem = EnsureRepositoryRow(worktree.Path);
+        }
+
+        private void WorktreeList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            WorktreeOpen_Click(sender, e);
+        }
+
+        private async void WorktreeRemove_Click(object sender, RoutedEventArgs e)
+        {
+            var worktree = RemovableWorktree();
+            if (worktree == null)
+                return;
+
+            var unsaved = _countModifiedDocumentsUnder(worktree.Path);
+            if (MessageBox.Show(this,
+                    string.Format("워킹트리 폴더를 지웁니다:\n{0}\n\n커밋 안 한 변경이 있으면 git이 거부합니다(강제 제거는 ▾ 옵션). 브랜치는 지우지 않습니다.{1}\n계속할까요?",
+                        worktree.Path, unsaved > 0 ? string.Format("\n\n⚠ 이 폴더의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.", unsaved) : string.Empty),
+                    "워킹트리 제거", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+            await RemoveWorktreeAsync(worktree.Path, force: false);
+        }
+
+        private async void WorktreeRemoveOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var worktree = RemovableWorktree();
+            if (worktree == null)
+                return;
+            var unsaved = _countModifiedDocumentsUnder(worktree.Path);
+            var dialog = new GitForceConfirmDialog("워킹트리 제거 옵션",
+                "워킹트리 폴더를 지웁니다(브랜치는 남김):\n" + worktree.Path + (unsaved > 0 ? string.Format("\n\n⚠ 이 폴더의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.", unsaved) : string.Empty),
+                "커밋 안 한 변경이 있어도 강제 제거 (--force)",
+                "그 워킹트리의 커밋 안 한 변경과 추적 안 되는 파일이 모두 삭제되며 복구할 수 없습니다.",
+                "제거") { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await RemoveWorktreeAsync(worktree.Path, dialog.Force);
+        }
+
+        /// <summary>제거할 수 있는 워킹트리인지 확인하고 안 되면 이유를 알린다.</summary>
+        private GitWorktreeInfo RemovableWorktree()
+        {
+            var worktree = WorktreeList.SelectedItem as GitWorktreeInfo;
+            if (worktree == null)
+                return null;
+            if (worktree.IsMain)
+            {
+                MessageBox.Show(this, "주 작업 트리는 제거할 수 없습니다.", "워킹트리 제거", MessageBoxButton.OK, MessageBoxImage.Information);
+                return null;
+            }
+            if (worktree.IsPrunable)
+            {
+                MessageBox.Show(this, "폴더가 이미 없습니다. 'prune'으로 기록을 정리하세요.", "워킹트리 제거", MessageBoxButton.OK, MessageBoxImage.Information);
+                return null;
+            }
+            return worktree;
+        }
+
+        private async Task RemoveWorktreeAsync(string path, bool force)
+        {
+            await RunOnSelectedAsync(force ? "워킹트리 강제 제거 중…" : "워킹트리 제거 중…", GitRefCommands.WorktreeRemove(path, force), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (!result.Success)
+                        return;
+                    var normalized = NormalizePath(path);
+                    var stale = _rows.FirstOrDefault(r => string.Equals(NormalizePath(r.RootPath), normalized, StringComparison.OrdinalIgnoreCase));
+                    if (stale != null && !ReferenceEquals(stale, SelectedRow))
+                        _rows.Remove(stale);
+                });
+        }
+
+        // ── stash ─────────────────────────────────────────────────────────────
+
+        private GitStashInfo SelectedStash => StashList.SelectedItem as GitStashInfo;
+
+        private async Task LoadStashesAsync(RepositoryRow row, CancellationToken token)
+        {
+            var result = await GitCommandRunner.RunAsync(row.RootPath, GitStashCommands.List, GitCommandRunner.QueryTimeout, token, readOnly: true);
+            if (!ReferenceEquals(row, SelectedRow))
+                return;
+            if (!result.Success)
+            {
+                AppendResult(row.Info, result);
+                return;
+            }
+            StashList.ItemsSource = GitOutputParser.ParseStashes(result.StdOut);
+            StashDiff.Clear("stash를 선택하면 변경을 보여 줍니다.");
+        }
+
+        private async void StashList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var stash = SelectedStash;
+            StashApplyButton.IsEnabled = StashApplyOptionsButton.IsEnabled = StashDropButton.IsEnabled = stash != null;
+            if (stash == null)
+                return;
+
+            // stash 커밋의 첫 부모(만든 시점의 HEAD) 기준 diff = 추적 파일 변경. 새 파일(-u)은 세 번째 부모에 따로 있다.
+            var request = GitDiffCommands.Commit(stash.Hash, stash.Parents.Take(1).ToArray(), _settings.IgnoreWhitespace);
+            request.Title = stash.Ref + "  " + stash.Subject;
+            await LoadDiffAsync(StashDiff, request);
+
+            if (stash.HasUntracked && ReferenceEquals(stash, SelectedStash))
+            {
+                try
+                {
+                    var files = await GitCommandRunner.RunAsync(SelectedRow.RootPath, GitStashCommands.UntrackedFiles(stash.Hash),
+                        GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                    if (files.Success && ReferenceEquals(stash, SelectedStash))
+                    {
+                        var names = GitOutputParser.ParseNulList(files.StdOut);
+                        request.Title = string.Format("{0}  {1}   (+ 새 파일 {2}개: {3}{4})", stash.Ref, stash.Subject, names.Count,
+                            string.Join(", ", names.Take(5)), names.Count > 5 ? " …" : string.Empty);
+                        await LoadDiffAsync(StashDiff, request);
+                    }
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    AppendOutput("stash의 새 파일 목록을 읽지 못했습니다: " + ex.Message);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+
+        /// <summary>변경 사항 목록에서 고른 파일(평면·트리 모두, 변경됨·스테이지됨 합쳐 중복 제거).</summary>
+        private List<string> SelectedChangePaths()
+        {
+            return SelectedChangeEntries(UnstagedList, UnstagedTree)
+                .Concat(SelectedChangeEntries(StagedList, StagedTree))
+                .SelectMany(entry => string.IsNullOrEmpty(entry.OriginalPath) ? new[] { entry.Path } : new[] { entry.Path, entry.OriginalPath })
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private async void StashPush_Click(object sender, RoutedEventArgs e)
+        {
+            await StashPushAsync(new GitStashPushOptions(), null);
+        }
+
+        private async void StashPushOptions_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedRow?.Snapshot == null)
+                return;
+            var paths = SelectedChangePaths();
+            var dialog = new GitStashPushDialog(paths.Count) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+
+            // 고른 파일에 새 파일(추적 안 됨)이 있는데 -u를 끄면 git이 "알 수 없는 경로"로 거부하므로 미리 알린다.
+            var selectedUntracked = SelectedChangeEntries(UnstagedList, UnstagedTree).Any(entry => entry.IsUntracked);
+            if (dialog.SelectedOnly && selectedUntracked && !dialog.Options.IncludeUntracked)
+            {
+                MessageBox.Show(this, "고른 파일에 새 파일(추적 안 됨)이 있습니다. '추적 안 되는 새 파일도 함께 (-u)'를 켜고 다시 하세요.",
+                    "stash", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            await StashPushAsync(dialog.Options, dialog.SelectedOnly ? paths : null);
+        }
+
+        private async Task StashPushAsync(GitStashPushOptions options, List<string> paths)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null)
+                return;
+            if (snapshot.Entries.Count == 0)
+            {
+                MessageBox.Show(this, "stash에 넣을 변경이 없습니다.", "stash", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (!ConfirmNoUnsavedDocuments("stash 저장(작업 트리 되돌림)"))
+                return;
+
+            var stdin = paths == null ? null : string.Join("\0", paths) + "\0";
+            await RunOnSelectedAsync("stash 저장 중…", GitStashCommands.Push(options, usePathspecStdin: paths != null), GitCommandRunner.QueryTimeout, stdin);
+        }
+
+        private async void StashApply_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = SelectedStash;
+            if (stash == null || !ConfirmNoUnsavedDocuments("stash 적용"))
+                return;
+            await RunStashApplyAsync(stash, GitStashApplyMode.Apply, false, null);
+        }
+
+        private async void StashApplyOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = SelectedStash;
+            if (stash == null)
+                return;
+            var dialog = new GitStashApplyDialog(stash, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true || !ConfirmNoUnsavedDocuments("stash 적용"))
+                return;
+            await RunStashApplyAsync(stash, dialog.Mode, dialog.RestoreIndex, dialog.BranchName);
+        }
+
+        private Task RunStashApplyAsync(GitStashInfo stash, GitStashApplyMode mode, bool restoreIndex, string branchName)
+        {
+            var status = mode == GitStashApplyMode.Pop ? "stash 꺼내는 중…" : mode == GitStashApplyMode.Branch ? "stash를 새 브랜치로 꺼내는 중…" : "stash 적용 중…";
+            return RunOnSelectedAsync(status, GitStashCommands.Apply(stash.Ref, mode, restoreIndex, branchName), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (!result.Success && mode != GitStashApplyMode.Branch)
+                        AppendOutput("적용 중 충돌이 났다면 충돌 파일을 해결하세요. stash는 삭제되지 않고 남아 있습니다" +
+                                     (mode == GitStashApplyMode.Pop ? "(pop이어도 충돌 시에는 남김)." : "."));
+                });
+        }
+
+        private async void StashDrop_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = SelectedStash;
+            if (stash == null)
+                return;
+            if (MessageBox.Show(this, string.Format("{0}을(를) 삭제할까요?\n{1}\n\n삭제한 stash는 되살리기 어렵습니다.", stash.Ref, stash.Subject),
+                    "stash 삭제", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+            await RunOnSelectedAsync("stash 삭제 중…", GitStashCommands.Drop(stash.Ref), GitCommandRunner.QueryTimeout);
+        }
+
+        private async void StashDropOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var count = (StashList.ItemsSource as List<GitStashInfo>)?.Count ?? 0;
+            if (SelectedRow == null || count == 0)
+                return;
+            var stash = SelectedStash;
+            var dialog = new GitForceConfirmDialog("stash 삭제 옵션",
+                stash != null ? "선택한 stash를 삭제합니다: " + stash.Ref + "  " + stash.Subject : "stash를 고르지 않았습니다. 아래를 켜면 모두 삭제합니다.",
+                string.Format("모든 stash {0}개 삭제 (git stash clear)", count),
+                "모든 stash가 지워지며 되살리기 어렵습니다.",
+                "삭제") { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            if (dialog.Force)
+                await RunOnSelectedAsync("모든 stash 삭제 중…", GitStashCommands.Clear, GitCommandRunner.QueryTimeout);
+            else if (stash != null)
+                await RunOnSelectedAsync("stash 삭제 중…", GitStashCommands.Drop(stash.Ref), GitCommandRunner.QueryTimeout);
+        }
+
+        private async void WorktreePrune_Click(object sender, RoutedEventArgs e)
+        {
+            await RunOnSelectedAsync("워킹트리 기록 정리 중…", GitRefCommands.WorktreePrune, GitCommandRunner.QueryTimeout);
+        }
+
+        /// <summary>삭제할 수 있는 로컬 브랜치인지 확인하고 안 되면 이유를 알린다.</summary>
+        private GitBranchInfo DeletableBranch()
+        {
+            var branch = BranchList.SelectedItem as GitBranchInfo;
+            if (branch == null)
+                return null;
+            if (branch.IsRemote)
+            {
+                MessageBox.Show(this, "원격 브랜치는 여기서 삭제하지 않습니다.", "브랜치 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
+                return null;
+            }
+            if (branch.IsCurrent)
+            {
+                MessageBox.Show(this, "현재 브랜치는 삭제할 수 없습니다.", "브랜치 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
+                return null;
+            }
+            return branch;
+        }
+
+        private async void DeleteBranch_Click(object sender, RoutedEventArgs e)
+        {
+            var branch = DeletableBranch();
+            if (branch == null)
+                return;
+            if (MessageBox.Show(this,
+                    string.Format("로컬 브랜치 '{0}'을(를) 삭제할까요?\n병합되지 않은 브랜치는 git이 거부합니다(강제 삭제는 ▾ 옵션).", branch.Name),
+                    "브랜치 삭제", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+
+            await RunOnSelectedAsync("브랜치 삭제 중…", GitSyncCommands.DeleteBranch(branch.Name, force: false), GitCommandRunner.QueryTimeout);
+        }
+
+        private async void DeleteBranchOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var branch = DeletableBranch();
+            if (branch == null)
+                return;
+            var dialog = new GitForceConfirmDialog("브랜치 삭제 옵션",
+                string.Format("로컬 브랜치 '{0}'을(를) 삭제합니다. 기본은 병합된 브랜치만 지웁니다(git branch -d).", branch.Name),
+                "병합 안 된 커밋이 있어도 강제 삭제 (git branch -D)",
+                "병합 안 된 커밋은 어느 브랜치에서도 가리키지 않게 되어 git reflog로만 찾을 수 있습니다.",
+                "삭제") { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            await RunOnSelectedAsync(dialog.Force ? "브랜치 강제 삭제 중…" : "브랜치 삭제 중…",
+                GitSyncCommands.DeleteBranch(branch.Name, dialog.Force), GitCommandRunner.QueryTimeout);
+        }
+
+        // ── pull / push ─────────────────────────────────────────────────────
+
+        private async void Pull_Click(object sender, RoutedEventArgs e)
+        {
+            await PullAsync(new GitPullOptions { Mode = _settings.PullMode });
+        }
+
+        private async void PullOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null)
+                return;
+            var dialog = new GitPullDialog(string.Format("'{0}' ← {1}", snapshot.BranchDisplay, snapshot.Upstream ?? "upstream 없음"),
+                new GitPullOptions { Mode = _settings.PullMode }) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await PullAsync(dialog.Options);
+        }
+
+        private async Task PullAsync(GitPullOptions options)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null)
+                return;
+            if (snapshot.IsDetached)
+            {
+                MessageBox.Show(this, "detached HEAD 상태에서는 pull할 수 없습니다. 브랜치로 전환하세요.", "pull", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (!ConfirmNoUnsavedDocuments("pull"))
+                return;
+
+            await RunOnSelectedAsync("pull 중…", GitSyncCommands.Pull(options), GitCommandRunner.NetworkTimeout, onDone: result =>
+            {
+                if (result.Success)
+                    return;
+                if (options.Mode == GitPullMode.FastForwardOnly)
+                    AppendOutput("fast-forward로 받을 수 없습니다(로컬과 원격이 갈라짐). pull 옆 ▾에서 병합·rebase를 고르거나 콘솔에서 병합하세요.");
+                else
+                    AppendOutput("병합·rebase가 중간에 멈췄다면 충돌을 콘솔/IDE에서 해결하세요 (git status로 확인, 취소는 git merge --abort / git rebase --abort).");
+            });
+        }
+
+        private async void Push_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            var snapshot = row?.Snapshot;
+            if (snapshot == null)
+                return;
+            if (snapshot.IsDetached || string.IsNullOrEmpty(snapshot.Branch))
+            {
+                MessageBox.Show(this, "현재 브랜치가 없어(detached HEAD) push할 수 없습니다.", "push", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            if (snapshot.Upstream != null)
+            {
+                await RunOnSelectedAsync("push 중…", new[] { "push" }, GitCommandRunner.NetworkTimeout);
+                return;
+            }
+
+            // upstream이 없으면 원격을 골라 -u로 연결한다. 원격이 여러 개면 origin 우선, 없으면 첫 번째.
+            var names = await GetRemotesAsync(row);
+            if (names == null)
+                return;
+            var remote = names.Contains("origin") ? "origin" : names[0];
+            if (MessageBox.Show(this,
+                    string.Format("'{0}' 브랜치에 upstream이 없습니다.\n{1}/{0}(으)로 push하고 upstream으로 설정할까요?", snapshot.Branch, remote),
+                    "push", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
+                return;
+
+            await RunOnSelectedAsync("push 중…",
+                GitSyncCommands.Push(new GitPushOptions { Remote = remote, Branch = snapshot.Branch, SetUpstream = true }), GitCommandRunner.NetworkTimeout);
+        }
+
+        /// <summary>원격 이름 목록. 없거나 못 읽으면 알리고 null.</summary>
+        private async Task<List<string>> GetRemotesAsync(RepositoryRow row)
+        {
+            GitResult remotes;
+            try
+            {
+                remotes = await GitCommandRunner.RunAsync(row.RootPath, GitSyncCommands.Remotes, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+            }
+            catch (Exception ex)
+            {
+                if (!(ex is OperationCanceledException))
+                    AppendOutput("오류: " + ex.Message);
+                return null;
+            }
+            var names = remotes.StdOut.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).ToList();
+            if (names.Count == 0)
+            {
+                MessageBox.Show(this, "이 저장소에 원격(remote)이 없습니다. 콘솔에서 git remote add로 먼저 등록하세요.", "push", MessageBoxButton.OK, MessageBoxImage.Information);
+                return null;
+            }
+            return names;
+        }
+
+        private async void PushOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            var snapshot = row?.Snapshot;
+            if (snapshot == null)
+                return;
+            if (snapshot.IsDetached || string.IsNullOrEmpty(snapshot.Branch))
+            {
+                MessageBox.Show(this, "현재 브랜치가 없어(detached HEAD) push할 수 없습니다.", "push", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var remotes = await GetRemotesAsync(row);
+            if (remotes == null)
+                return;
+            var dialog = new GitPushDialog(snapshot.Branch, snapshot.Upstream, remotes) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await RunOnSelectedAsync("push 중…", GitSyncCommands.Push(dialog.Options), GitCommandRunner.NetworkTimeout);
+        }
+
+        // ── 외부 비교 도구 ─────────────────────────────────────────────────────
+
+        private async void DiffView_ExternalToolRequested(object sender, EventArgs e)
+        {
+            var request = (sender as GitDiffView)?.CurrentRequest;
+            var row = SelectedRow;
+            if (request == null || row == null)
+                return;
+
+            var mode = _settings.DiffToolMode;
+            if (mode == GitDiffToolMode.None)
+            {
+                if (MessageBox.Show(this, "외부 비교 도구가 지정되어 있지 않습니다.\n설정 > Git에서 도구를 지정할까요?", "외부 비교 도구",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    _openGitSettings?.Invoke();
+                return;
+            }
+
+            try
+            {
+                if (mode == GitDiffToolMode.Custom && !File.Exists(_settings.DiffToolPath))
+                {
+                    MessageBox.Show(this, "지정한 비교 도구 실행 파일이 없습니다:\n" + _settings.DiffToolPath + "\n\n설정 > Git에서 경로를 확인하세요.",
+                        "외부 비교 도구", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                if (mode == GitDiffToolMode.GitConfig && !await HasConfiguredDiffToolAsync(row))
+                {
+                    MessageBox.Show(this, "git 설정에 difftool이 없습니다 (diff.tool / merge.tool).\n" +
+                        "git config --global diff.tool <도구>로 설정하거나, 설정 > Git에서 '직접 지정'을 고르세요.",
+                        "외부 비교 도구", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var args = GitDiffCommands.ExternalTool(request, mode, _settings.DiffToolPath, _settings.DiffToolArguments);
+                AppendOutput("외부 비교 도구 실행: " + GitCommandRunner.FormatCommandLine(args) + "    [" + row.Info.DisplayPath + "]");
+
+                // 도구 창을 닫을 때까지 git difftool이 끝나지 않으므로: 시간 제한 없음, 동시 실행 제한 밖,
+                // Git 창을 닫아도 도구가 같이 꺼지지 않도록 창 수명 토큰을 쓰지 않는다.
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var result = await GitCommandRunner.RunAsync(row.RootPath, args, Timeout.InfiniteTimeSpan, CancellationToken.None, throttle: false);
+                watch.Stop();
+
+                if (!result.Success || !string.IsNullOrWhiteSpace(result.StdErr))
+                    AppendResult(row.Info, result);
+                else if (watch.Elapsed < TimeSpan.FromSeconds(2))
+                    AppendOutput("비교 도구가 바로 종료됐습니다. 도구 창이 비어 있거나 파일을 못 찾으면, 창을 닫을 때까지 기다리도록 인수를 설정하세요 " +
+                                 "(git은 도구가 끝나면 임시 파일을 지웁니다. VS Code: --wait, WinMerge: 단일 인스턴스 옵션 끄기).");
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("외부 비교 도구를 실행하지 못했습니다: " + ex.Message);
+            }
+        }
+
+        private async Task<bool> HasConfiguredDiffToolAsync(RepositoryRow row)
+        {
+            foreach (var key in new[] { "diff.tool", "merge.tool" })
+            {
+                var result = await GitCommandRunner.RunAsync(row.RootPath, new[] { "config", "--get", key },
+                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                if (result.Success && !string.IsNullOrWhiteSpace(result.StdOut))
+                    return true;
+            }
+            return false;
+        }
+
+        // ── 설정 ────────────────────────────────────────────────────────────
+
+        private void Options_Click(object sender, RoutedEventArgs e)
+        {
+            _openGitSettings?.Invoke();
+        }
+
+        /// <summary>설정 창에서 저장한 값을 반영한다. 탐색·git 경로가 바뀌면 다시 찾고, 표시 옵션만 바뀌면 상세만 다시 읽는다.</summary>
+        public async void ApplySettings(GitSettings settings)
+        {
+            if (settings == null || _lifetime.IsCancellationRequested)
+                return;
+
+            var previous = _settings;
+            _settings = settings.Clone();
+            GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
+
+            if (_busyCount > 0)
+            {
+                AppendOutput("설정이 바뀌었습니다. 진행 중인 작업이 끝나면 '다시 찾기'로 반영하세요.");
+                return;
+            }
+
+            try
+            {
+                if (!string.Equals(previous.GitExecutablePath, _settings.GitExecutablePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (await CheckGitAsync())
+                        await ScanAsync();
+                    return;
+                }
+
+                var scanChanged = previous.ScanDepth != _settings.ScanDepth
+                    || !previous.ExcludedFolders.SequenceEqual(_settings.ExcludedFolders, StringComparer.OrdinalIgnoreCase);
+                if (scanChanged)
+                {
+                    await ScanAsync();
+                    return;
+                }
+
+                if (previous.DiffViewMode != _settings.DiffViewMode)
+                {
+                    // 기본 보기가 바뀌면 세 diff 창 모두 새 기본값으로 맞춘다(창에서 따로 바꿔 둔 값은 덮어씀).
+                    ChangesDiff.ViewMode = RemoteDiff.ViewMode = LogDiff.ViewMode = StashDiff.ViewMode = _settings.DiffViewMode;
+                }
+
+                if (previous.LogLimit != _settings.LogLimit || previous.LogAllBranches != _settings.LogAllBranches
+                    || previous.IgnoreWhitespace != _settings.IgnoreWhitespace || previous.FallbackEncoding != _settings.FallbackEncoding
+                    || previous.DiffViewMode != _settings.DiffViewMode)
+                    await ReloadSelectedDetailAsync();
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("설정 반영 중 오류: " + ex.Message);
+            }
+        }
+    }
+}

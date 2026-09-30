@@ -81,6 +81,9 @@
                     <ListBoxItem Tag="Console">
                         <TextBlock Text="콘솔"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="Git">
+                        <TextBlock Text="Git"/>
+                    </ListBoxItem>
                 </ListBox>
             </Border>
 
@@ -669,6 +672,104 @@
                         </Grid>
                     </Grid>
                 </Grid>
+
+                <!-- Git panel -->
+                <ScrollViewer x:Name="GitPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,16">
+                        <StackPanel.Resources>
+                            <Style x:Key="GitLabel" TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="Margin" Value="0,12,0,4"/>
+                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                            </Style>
+                            <Style x:Key="GitHint" TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="Margin" Value="0,3,0,0"/>
+                                <Setter Property="TextWrapping" Value="Wrap"/>
+                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                            </Style>
+                            <Style x:Key="GitSection" TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Margin" Value="0,18,0,0"/>
+                            </Style>
+                            <Style TargetType="TextBox" BasedOn="{StaticResource {x:Type TextBox}}">
+                                <Setter Property="Padding" Value="6,4"/>
+                                <Setter Property="VerticalContentAlignment" Value="Center"/>
+                            </Style>
+                            <Style TargetType="CheckBox">
+                                <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                                <Setter Property="Margin" Value="0,10,0,0"/>
+                            </Style>
+                        </StackPanel.Resources>
+
+                        <TextBlock Text="Git" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Style="{StaticResource GitHint}" Margin="0,0,0,0"
+                                   Text="⋯ 메뉴 > Git 저장소… 창의 동작을 설정합니다. 저장하면 열려 있는 Git 창에도 바로 반영됩니다."/>
+
+                        <TextBlock Style="{StaticResource GitSection}" Text="실행"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="git 실행 파일 (비우면 자동: PATH → Git for Windows 기본 위치)"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="찾아보기…" Click="GitPathBrowse_Click" Padding="10,4" Margin="6,0,0,0"/>
+                            <TextBox x:Name="GitPathBox"/>
+                        </DockPanel>
+                        <TextBlock x:Name="GitDetectedText" Style="{StaticResource GitHint}"/>
+
+                        <TextBlock Style="{StaticResource GitLabel}" Text="기준 폴더"/>
+                        <ComboBox x:Name="GitBaseFolderCombo" HorizontalAlignment="Left" MinWidth="320"/>
+
+                        <TextBlock Style="{StaticResource GitLabel}" Text="pull 방식"/>
+                        <ComboBox x:Name="GitPullModeCombo" HorizontalAlignment="Left" MinWidth="320"/>
+                        <TextBlock Style="{StaticResource GitHint}"
+                                   Text="fast-forward만: 로컬과 원격이 갈라졌으면 아무것도 바꾸지 않고 실패합니다. 병합·rebase: 충돌이 나면 저장소가 병합/rebase 중 상태로 남으며 해결은 콘솔·IDE에서 해야 합니다."/>
+
+                        <TextBlock Style="{StaticResource GitSection}" Text="저장소 탐색"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="탐색 깊이 (0~20, 기준 폴더 = 0)"/>
+                        <TextBox x:Name="GitScanDepthBox" Width="100" HorizontalAlignment="Left"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="탐색 제외 폴더 이름 (한 줄에 하나, 대/소문자 무시)"/>
+                        <TextBox x:Name="GitExcludedBox" Height="80" AcceptsReturn="True" VerticalContentAlignment="Top"
+                                 VerticalScrollBarVisibility="Auto"/>
+                        <TextBlock Style="{StaticResource GitHint}" Text=".git 폴더와 링크(정션·심볼릭 링크) 폴더는 항상 제외됩니다."/>
+
+                        <TextBlock Style="{StaticResource GitSection}" Text="로그"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="로그 최대 개수 (10~5000)"/>
+                        <TextBox x:Name="GitLogLimitBox" Width="100" HorizontalAlignment="Left"/>
+                        <CheckBox x:Name="GitLogAllCheck" Content="로그에 모든 브랜치 포함 (--all)"/>
+
+                        <TextBlock Style="{StaticResource GitSection}" Text="diff"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="diff 기본 보기 (각 diff 창 제목 줄에서 바로 바꿀 수 있음)"/>
+                        <ComboBox x:Name="GitDiffViewModeCombo" HorizontalAlignment="Left" MinWidth="320"/>
+                        <CheckBox x:Name="GitIgnoreWhitespaceCheck" Content="공백만 바뀐 줄 무시 (-w, 내장 diff에만 적용)"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="BOM 없는 파일에서 UTF-8이 아닌 줄의 대체 인코딩"/>
+                        <ComboBox x:Name="GitFallbackEncodingCombo" HorizontalAlignment="Left" MinWidth="320"/>
+                        <TextBlock Style="{StaticResource GitHint}"
+                                   Text="인코딩 판정: BOM(매직넘버)이 있으면 그 인코딩(UTF-8/UTF-16/UTF-32), 없으면 UTF-8. 여기서 고른 인코딩은 BOM 없는 파일 중 UTF-8로 읽히지 않는 줄에만 쓰입니다(오래된 CP949 소스용). UTF-16/32 파일은 git이 바이너리로 보므로 양쪽을 BOM으로 읽어 텍스트로 다시 비교합니다."/>
+
+                        <TextBlock Style="{StaticResource GitSection}" Text="외부 비교 도구"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="사용 방식"/>
+                        <ComboBox x:Name="GitDiffToolModeCombo" HorizontalAlignment="Left" MinWidth="320"
+                                  SelectionChanged="GitDiffToolModeCombo_SelectionChanged"/>
+
+                        <StackPanel x:Name="GitCustomToolPanel">
+                            <TextBlock Style="{StaticResource GitLabel}" Text="프리셋 (선택하면 아래 경로·인수를 채웁니다)"/>
+                            <StackPanel Orientation="Horizontal">
+                                <ComboBox x:Name="GitDiffToolPresetCombo" MinWidth="220"/>
+                                <Button Content="적용" Click="GitDiffToolPresetApply_Click" Padding="10,4" Margin="6,0,0,0"/>
+                            </StackPanel>
+                            <TextBlock Style="{StaticResource GitLabel}" Text="실행 파일"/>
+                            <DockPanel>
+                                <Button DockPanel.Dock="Right" Content="찾아보기…" Click="GitDiffToolBrowse_Click" Padding="10,4" Margin="6,0,0,0"/>
+                                <TextBox x:Name="GitDiffToolPathBox"/>
+                            </DockPanel>
+                            <TextBlock Style="{StaticResource GitLabel}" Text="인수"/>
+                            <TextBox x:Name="GitDiffToolArgsBox"/>
+                            <TextBlock x:Name="GitDiffToolHint" Style="{StaticResource GitHint}"
+                                       Text="{}{left}·{right}는 비교할 두 파일(커밋·원격 비교는 두 폴더)로 바뀝니다. 도구는 창을 닫을 때까지 종료되지 않아야 합니다 — git이 도구 종료 후 임시 파일을 지웁니다 (VS Code는 --wait 필요). 인수는 git의 셸이 해석하므로 공백이 든 값은 큰따옴표로 감싸세요."/>
+                        </StackPanel>
+                        <TextBlock x:Name="GitConfigToolHint" Style="{StaticResource GitHint}"
+                                   Text="git 설정의 difftool(diff.tool, 없으면 merge.tool)을 씁니다. 예: git config --global diff.tool winmerge"/>
+                    </StackPanel>
+                </ScrollViewer>
 
                 <!-- Shortcuts panel -->
                 <Grid x:Name="ShortcutsPanel" Margin="24,16">

@@ -1526,6 +1526,59 @@ namespace Folderss
             UpdateActivePaneText();
         }
 
+        private void ShowGit_Click(object sender, RoutedEventArgs e)
+        {
+            var pane = ActivePane;
+            if (pane == null)
+                return;
+
+            // 기준 폴더: 옵션이 "선택한 폴더 우선"이고 폴더 하나만 골랐으면 그 폴더, 아니면 패널의 현재 폴더.
+            var settings = CurrentGitSettings;
+            var selected = pane.SelectedItems;
+            var basePath = settings.BaseFolderMode == GitBaseFolderMode.SelectedFolderFirst
+                           && selected.Count == 1 && selected[0].IsDirectory
+                ? selected[0].FullPath
+                : pane.CurrentPath;
+
+            if (string.IsNullOrWhiteSpace(basePath) || !Directory.Exists(basePath))
+            {
+                MessageBox.Show("폴더를 찾을 수 없습니다.", "Git", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            // 드라이브 루트 전체 탐색은 수 분 걸릴 수 있어 한 번 묻는다.
+            var fullPath = Path.GetFullPath(basePath);
+            if (string.Equals(fullPath.TrimEnd('\\'), (Path.GetPathRoot(fullPath) ?? string.Empty).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)
+                && MessageBox.Show(string.Format("드라이브 루트({0}) 전체에서 저장소를 찾습니다. 오래 걸릴 수 있습니다. 계속할까요?", fullPath),
+                    "Git", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+
+            GitWindow gitWindow = null;
+            gitWindow = new GitWindow(fullPath, settings, CountModifiedDocumentsUnder, OpenViewerTab,
+                () => OpenSettings(gitWindow, "Git")) { Owner = this };
+            gitWindow.Show();
+        }
+
+        private GitSettings _gitSettings;
+
+        /// <summary>
+        /// 이번 실행의 Git 설정. 설정 창에서 저장하면 파일 쓰기가 실패해도 이 값은 바뀐다 —
+        /// 다른 설정들과 같이 "이번 실행 중에는 적용, 다음 실행에 복원 안 될 수 있음"을 따른다.
+        /// </summary>
+        private GitSettings CurrentGitSettings => _gitSettings ?? (_gitSettings = GitSettingsService.Load());
+
+        /// <summary>폴더 아래 파일을 열어 둔 채 저장하지 않은 뷰어 탭 수. Git 브랜치 전환·pull 전 경고에 쓴다.</summary>
+        private int CountModifiedDocumentsUnder(string folder)
+        {
+            var prefix = Path.GetFullPath(folder).TrimEnd('\\') + "\\";
+            return DockManager.Layout.Descendents()
+                .OfType<LayoutDocument>()
+                .Select(d => d.Content as ViewerHost)
+                .Count(host => host != null && host.IsModified
+                    && !string.IsNullOrEmpty(host.CurrentFilePath)
+                    && Path.GetFullPath(host.CurrentFilePath).StartsWith(prefix, StringComparison.OrdinalIgnoreCase));
+        }
+
         private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
         {
             var selected = ActivePane.SelectedItem;
@@ -1783,11 +1836,27 @@ namespace Folderss
 
         private void Settings_Click(object sender, RoutedEventArgs e)
         {
-            var win = new SettingsWindow(_keyBindingService, _viewerConfigService) { Owner = this };
+            OpenSettings(this, null);
+        }
+
+        /// <summary>설정 창을 연다. <paramref name="tab"/>은 처음 보일 탭(예: "Git"), null이면 기본 탭.</summary>
+        private void OpenSettings(Window owner, string tab)
+        {
+            var win = new SettingsWindow(_keyBindingService, _viewerConfigService, CurrentGitSettings) { Owner = owner ?? this };
+            if (tab != null)
+                win.SelectTab(tab);
             if (win.ShowDialog() == true)
             {
                 // 콘솔 패널은 설정을 자체 캐시하므로 저장 직후 다시 읽혀 열린 탭의 폰트 크기를 바로 바꾼다.
                 _consolePanel?.ApplySettings();
+
+                // 열려 있는 Git 창에도 바로 반영한다.
+                if (win.SavedGitSettings != null)
+                {
+                    _gitSettings = win.SavedGitSettings;
+                    foreach (var gitWindow in Application.Current.Windows.OfType<GitWindow>())
+                        gitWindow.ApplySettings(_gitSettings);
+                }
             }
         }
 
