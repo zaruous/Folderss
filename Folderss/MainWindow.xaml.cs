@@ -679,7 +679,28 @@ namespace Folderss
 
         private void Browser_CompareFilesRequested(object sender, string[] files)
         {
-            new FileCompareWindow(files[0], files[1], CurrentGitSettings) { Owner = this }.Show();
+            OpenFileCompare(files);
+        }
+
+        private void CompareFiles_Click(object sender, RoutedEventArgs e)
+        {
+            var files = ActivePane?.GetSelectedFilePair();
+            if (files == null)
+            {
+                MessageBox.Show("폴더 패널에서 비교할 파일 두 개를 선택하세요. (폴더는 비교할 수 없습니다)", "두 파일 비교",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            OpenFileCompare(files);
+        }
+
+        /// <summary>[왼쪽(변경 전), 오른쪽(변경 후)] 두 파일 비교 창을 연다.</summary>
+        private void OpenFileCompare(string[] files)
+        {
+            FileCompareWindow window = null;
+            window = new FileCompareWindow(files[0], files[1], CurrentDiffSettings, CurrentGitSettings.GitExecutablePath,
+                () => OpenSettings(window, "Diff")) { Owner = this };
+            window.Show();
         }
 
         private void Browser_FileOpenRequested(object sender, string filePath)
@@ -1561,8 +1582,8 @@ namespace Folderss
                 return;
 
             GitWindow gitWindow = null;
-            gitWindow = new GitWindow(fullPath, settings, CountModifiedDocumentsUnder, OpenViewerTab,
-                () => OpenSettings(gitWindow, "Git")) { Owner = this };
+            gitWindow = new GitWindow(fullPath, settings, CurrentDiffSettings, CountModifiedDocumentsUnder, OpenViewerTab,
+                tab => OpenSettings(gitWindow, tab)) { Owner = this };
             gitWindow.Show();
         }
 
@@ -1573,6 +1594,11 @@ namespace Folderss
         /// 다른 설정들과 같이 "이번 실행 중에는 적용, 다음 실행에 복원 안 될 수 있음"을 따른다.
         /// </summary>
         private GitSettings CurrentGitSettings => _gitSettings ?? (_gitSettings = GitSettingsService.Load());
+
+        private DiffSettings _diffSettings;
+
+        /// <summary>이번 실행의 비교(diff) 설정. Git 창·두 파일 비교 창·HTML 보고서가 함께 쓴다. 저장 규칙은 <see cref="CurrentGitSettings"/>와 같다.</summary>
+        private DiffSettings CurrentDiffSettings => _diffSettings ?? (_diffSettings = DiffSettingsService.Load());
 
         /// <summary>폴더 아래 파일을 열어 둔 채 저장하지 않은 뷰어 탭 수. Git 브랜치 전환·pull 전 경고에 쓴다.</summary>
         private int CountModifiedDocumentsUnder(string folder)
@@ -1849,7 +1875,7 @@ namespace Folderss
         /// <summary>설정 창을 연다. <paramref name="tab"/>은 처음 보일 탭(예: "Git"), null이면 기본 탭.</summary>
         private void OpenSettings(Window owner, string tab)
         {
-            var win = new SettingsWindow(_keyBindingService, _viewerConfigService, CurrentGitSettings) { Owner = owner ?? this };
+            var win = new SettingsWindow(_keyBindingService, _viewerConfigService, CurrentGitSettings, CurrentDiffSettings) { Owner = owner ?? this };
             if (tab != null)
                 win.SelectTab(tab);
             if (win.ShowDialog() == true)
@@ -1857,12 +1883,15 @@ namespace Folderss
                 // 콘솔 패널은 설정을 자체 캐시하므로 저장 직후 다시 읽혀 열린 탭의 폰트 크기를 바로 바꾼다.
                 _consolePanel?.ApplySettings();
 
-                // 열려 있는 Git 창에도 바로 반영한다.
-                if (win.SavedGitSettings != null)
+                // 열려 있는 Git 창·두 파일 비교 창에도 바로 반영한다.
+                if (win.SavedGitSettings != null && win.SavedDiffSettings != null)
                 {
                     _gitSettings = win.SavedGitSettings;
+                    _diffSettings = win.SavedDiffSettings;
                     foreach (var gitWindow in Application.Current.Windows.OfType<GitWindow>())
-                        gitWindow.ApplySettings(_gitSettings);
+                        gitWindow.ApplySettings(_gitSettings, _diffSettings);
+                    foreach (var compareWindow in Application.Current.Windows.OfType<FileCompareWindow>())
+                        compareWindow.ApplySettings(_diffSettings);
                 }
             }
         }

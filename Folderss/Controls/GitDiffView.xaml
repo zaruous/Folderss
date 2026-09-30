@@ -3,13 +3,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
     <DockPanel>
         <DockPanel DockPanel.Dock="Top" Margin="2,0,2,4">
+            <Button x:Name="ReportButton"
+                    DockPanel.Dock="Right"
+                    Content="HTML 보고서…"
+                    Margin="4,0,0,0"
+                    Style="{StaticResource CompactToolButtonStyle}"
+                    Visibility="Collapsed"
+                    Click="ReportButton_Click"
+                    ToolTip="이 비교를 HTML 파일로 저장합니다 (양옆 / 한 줄, 변경점만 / 전체 파일 선택)"/>
             <Button x:Name="ExternalToolButton"
                     DockPanel.Dock="Right"
                     Content="외부 도구로 비교"
                     Style="{StaticResource CompactToolButtonStyle}"
                     Visibility="Collapsed"
                     Click="ExternalToolButton_Click"
-                    ToolTip="설정 &gt; Git에서 지정한 비교 도구(WinMerge, Beyond Compare 등)로 같은 비교를 엽니다"/>
+                    ToolTip="설정 &gt; 비교에서 지정한 비교 도구(WinMerge, Beyond Compare 등)로 같은 비교를 엽니다"/>
             <ComboBox x:Name="ViewModeCombo"
                       DockPanel.Dock="Right"
                       Width="110"

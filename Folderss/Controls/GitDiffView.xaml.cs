@@ -1,5 +1,7 @@
 using System;
 using System.Linq;
+using System.Threading;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -9,7 +11,8 @@ using Folderss.Services;
 namespace Folderss.Controls
 {
     /// <summary>
-    /// unified diff를 줄 단위(변경 전/후 줄 번호, 추가·삭제 색)로 보이는 읽기 전용 뷰. Git 창의 변경 사항·원격 비교·로그에서 쓴다.
+    /// unified diff를 줄 단위(변경 전/후 줄 번호, 추가·삭제 색)로 보이는 읽기 전용 뷰. Git 창의 변경 사항·원격 비교·로그와
+    /// 두 파일 비교 창(<see cref="FileCompareWindow"/>)이 함께 쓴다.
     /// 비동기 로드는 <see cref="BeginLoad"/>가 준 번호로 <see cref="Complete"/>해야 반영된다 — 빠르게 다른 항목을 고르면 늦게 온 옛 결과는 버린다.
     /// </summary>
     public partial class GitDiffView : UserControl
@@ -29,6 +32,12 @@ namespace Folderss.Controls
         public event EventHandler ViewModeChanged;
 
         private bool _settingMode;
+
+        /// <summary>
+        /// 비교를 주어진 범위(보기 모드)로 다시 읽어 diff 텍스트를 돌려준다(실패는 예외). 호스트 창이 설정하며,
+        /// 있으면 "HTML 보고서…" 버튼이 보인다 — 보고서 범위가 화면 보기 모드와 다를 수 있어서 호스트가 다시 실행한다.
+        /// </summary>
+        public Func<GitDiffRequest, GitDiffViewMode, CancellationToken, Task<string>> TextLoader { get; set; }
 
         /// <summary>
         /// 변경점만 / 문맥 10줄 / 전체 파일. 코드에서 바꿀 때는 <see cref="ViewModeChanged"/>를 내지 않는다(다시 불러오기는 호출 측 몫).
@@ -111,12 +120,26 @@ namespace Folderss.Controls
             ExternalToolButton.Visibility = request?.ExternalSelector != null ? Visibility.Visible : Visibility.Collapsed;
             // 추적 안 되는 파일(빈 쪽 ↔ 파일)은 원래 전체가 추가로 보이므로 보기 모드가 의미 없다. 두 파일 비교(--no-index)는 보인다.
             ViewModeCombo.Visibility = request != null && !(request.NoIndex && request.OldSide == null) ? Visibility.Visible : Visibility.Collapsed;
+            ReportButton.Visibility = request != null && TextLoader != null ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ViewModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (!_settingMode && CurrentRequest != null)
                 ViewModeChanged?.Invoke(this, EventArgs.Empty);
+        }
+
+        private async void ReportButton_Click(object sender, RoutedEventArgs e)
+        {
+            ReportButton.IsEnabled = false;
+            try
+            {
+                await DiffReportExporter.ExportAsync(Window.GetWindow(this), CurrentRequest, ViewMode, TextLoader);
+            }
+            finally
+            {
+                ReportButton.IsEnabled = true;
+            }
         }
 
         private void ExternalToolButton_Click(object sender, RoutedEventArgs e)

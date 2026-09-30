@@ -67,6 +67,18 @@ namespace Folderss.Controls
             get { return FileList.SelectedItem as FileSystemItem; }
         }
 
+        /// <summary>
+        /// 파일 두 개(폴더 제외)만 골랐으면 [왼쪽, 오른쪽] 경로, 아니면 null. 선택 순서가 아니라 목록에 보이는 순서로 정한다.
+        /// 우클릭 메뉴와 ⋯ 메뉴의 "두 파일 비교"가 같은 규칙을 쓴다.
+        /// </summary>
+        public string[] GetSelectedFilePair()
+        {
+            var selected = SelectedItems;
+            if (selected.Count != 2 || selected.Any(item => item.IsDirectory))
+                return null;
+            return selected.OrderBy(item => FileList.Items.IndexOf(item)).Select(item => item.FullPath).ToArray();
+        }
+
         public IList<FileSystemItem> SelectedItems
         {
             get { return FileList.SelectedItems.Cast<FileSystemItem>().ToList(); }
@@ -1217,11 +1229,9 @@ namespace Folderss.Controls
                 })
                 .ToList();
 
-            // 파일 두 개(폴더 제외)를 골랐을 때만. 선택 순서가 아니라 목록에 보이는 순서로 왼쪽/오른쪽을 정한다.
-            var selectedFiles = SelectedItems.Where(item => !item.IsDirectory).OrderBy(item => FileList.Items.IndexOf(item)).ToList();
-            if (selectedFiles.Count == 2 && SelectedItems.Count == 2)
+            var pair = GetSelectedFilePair();
+            if (pair != null)
             {
-                var pair = new[] { selectedFiles[0].FullPath, selectedFiles[1].FullPath };
                 customItems.Insert(0, new ShellContextMenuService.CustomMenuItem
                 {
                     Label = "선택한 두 파일 비교",

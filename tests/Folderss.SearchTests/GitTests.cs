@@ -497,6 +497,33 @@ namespace Folderss.SearchTests
             Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.Untracked("n.txt"), GitDiffToolMode.Custom, "t.exe", null));
             Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.Commit("h", new string[0]), GitDiffToolMode.Custom, "t.exe", null));
             Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.WorkTree("a.txt"), GitDiffToolMode.None, "t.exe", null));
+
+            // 두 파일 비교: 저장소 없이 --no-index로 원본 경로를 그대로 넘긴다(폴더 비교 아님).
+            var files = GitDiffCommands.ExternalTool(GitDiffCommands.Files(@"C:\a b\x.txt", @"D:\y.txt"), GitDiffToolMode.GitConfig, null, null);
+            Assert.Equal(new[] { "difftool", "--no-prompt", "--no-index", "--", @"C:\a b\x.txt", @"D:\y.txt" }, files);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CustomDifftool_ComparesTwoFilesOutsideRepository()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null || OperatingSystem.IsWindows(), "셸 스크립트 도구로 검증 — 리눅스·맥 전용");
+            var outDir = P("files tool");
+            Directory.CreateDirectory(outDir);
+            var left = Path.Combine(outDir, "왼쪽 파일.txt");
+            var right = Path.Combine(outDir, "right.txt");
+            File.WriteAllText(left, "L\n");
+            File.WriteAllText(right, "R\n");
+            var script = Path.Combine(outDir, "tool.sh");
+            File.WriteAllText(script, "#!/bin/sh\necho \"$1|$2\" > \"" + outDir + "/args.txt\"\n");
+            System.Diagnostics.Process.Start("chmod", new[] { "+x", script }).WaitForExit();
+
+            var request = GitDiffCommands.Files(left, right);
+            var args = GitDiffCommands.ExternalTool(request, GitDiffToolMode.Custom, script, null);
+            var run = await GitCommandRunner.RunAsync(null, args, GitCommandRunner.QueryTimeout, CancellationToken.None, throttle: false);
+            // --no-index는 차이가 있으면 difftool도 종료 코드 1이다.
+            Assert.True(GitDiffCommands.IsSuccess(run, request.NoIndex), run.StdErr);
+            // 임시 복사본이 아니라 원래 파일 경로를 받는다(도구에서 고치면 원본이 바뀜).
+            Assert.Equal(left + "|" + right, File.ReadAllText(Path.Combine(outDir, "args.txt")).Trim());
         }
 
         [SkippableFact]
@@ -546,13 +573,7 @@ namespace Folderss.SearchTests
                 ScanDepth = 3,
                 ExcludedFolders = new System.Collections.Generic.List<string> { "dist", "out" },
                 LogLimit = 50,
-                LogAllBranches = false,
-                IgnoreWhitespace = true,
-                FallbackEncoding = GitFallbackEncoding.Cp949,
-                DiffViewMode = GitDiffViewMode.FullFile,
-                DiffToolMode = GitDiffToolMode.Custom,
-                DiffToolPath = @"C:\Program Files\WinMerge\WinMergeU.exe",
-                DiffToolArguments = "-e -u \"{left}\" \"{right}\""
+                LogAllBranches = false
             };
 
             GitSettingsService.Save(original, path);
@@ -565,6 +586,29 @@ namespace Folderss.SearchTests
             Assert.Equal(new[] { "dist", "out" }, loaded.ExcludedFolders);
             Assert.Equal(50, loaded.LogLimit);
             Assert.False(loaded.LogAllBranches);
+
+            // 파일이 없으면 기본값.
+            var defaults = GitSettingsService.Load(P("none.xml"));
+            Assert.Equal(GitSettingsService.DefaultScanDepth, defaults.ScanDepth);
+        }
+
+        [Fact]
+        public void DiffSettings_RoundTrip_AndDefaults()
+        {
+            var path = P("diff-settings.xml");
+            var original = new DiffSettings
+            {
+                IgnoreWhitespace = true,
+                FallbackEncoding = GitFallbackEncoding.Cp949,
+                DiffViewMode = GitDiffViewMode.FullFile,
+                DiffToolMode = GitDiffToolMode.Custom,
+                DiffToolPath = @"C:\Program Files\WinMerge\WinMergeU.exe",
+                DiffToolArguments = "-e -u \"{left}\" \"{right}\""
+            };
+
+            DiffSettingsService.Save(original, path);
+            var loaded = DiffSettingsService.Load(path, P("no-git-settings.xml"));
+
             Assert.True(loaded.IgnoreWhitespace);
             Assert.Equal(GitFallbackEncoding.Cp949, loaded.FallbackEncoding);
             Assert.Equal(GitDiffViewMode.FullFile, loaded.DiffViewMode);
@@ -572,10 +616,32 @@ namespace Folderss.SearchTests
             Assert.Equal(original.DiffToolPath, loaded.DiffToolPath);
             Assert.Equal(original.DiffToolArguments, loaded.DiffToolArguments);
 
-            // 파일이 없으면 기본값.
-            var defaults = GitSettingsService.Load(P("none.xml"));
+            var defaults = DiffSettingsService.Load(P("none.xml"), P("none-git.xml"));
             Assert.Equal(GitDiffToolMode.None, defaults.DiffToolMode);
             Assert.Equal(GitFallbackEncoding.None, defaults.FallbackEncoding);   // BOM 없으면 UTF-8이 기본
+            Assert.Equal(DiffSettingsService.DefaultDiffToolArguments, defaults.DiffToolArguments);
+        }
+
+        [Fact]
+        public void DiffSettings_WithoutOwnFile_MigratesFromLegacyGitSettings()
+        {
+            // 이전 버전은 diff 옵션을 git-settings.xml에 저장했다.
+            var legacy = P("git-settings.xml");
+            File.WriteAllText(legacy,
+                "<git gitPath=\"\" ignoreWhitespace=\"True\" fallbackEncoding=\"SystemAnsi\" diffView=\"Context10\">" +
+                "<diffTool mode=\"GitConfig\" path=\"C:\\bc.exe\" arguments=\"-x {left} {right}\" /></git>");
+
+            var migrated = DiffSettingsService.Load(P("diff-settings.xml"), legacy);
+            Assert.True(migrated.IgnoreWhitespace);
+            Assert.Equal(GitFallbackEncoding.SystemAnsi, migrated.FallbackEncoding);
+            Assert.Equal(GitDiffViewMode.Context10, migrated.DiffViewMode);
+            Assert.Equal(GitDiffToolMode.GitConfig, migrated.DiffToolMode);
+            Assert.Equal(@"C:\bc.exe", migrated.DiffToolPath);
+            Assert.Equal("-x {left} {right}", migrated.DiffToolArguments);
+
+            // 자체 파일이 생기면 옛 값은 더 읽지 않는다.
+            DiffSettingsService.Save(new DiffSettings(), P("diff-settings.xml"));
+            Assert.False(DiffSettingsService.Load(P("diff-settings.xml"), legacy).IgnoreWhitespace);
         }
 
         [Fact]
