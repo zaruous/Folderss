@@ -1009,6 +1009,130 @@ namespace Folderss.SearchTests
             Assert.Equal("one\n", File.ReadAllText(Path.Combine(hard, "f.txt")));
         }
 
+        private static Task<GitResult> RestoreAsync(string repo, GitRestoreMode mode, System.Collections.Generic.IEnumerable<GitStatusEntry> targets) =>
+            GitCommandRunner.RunAsync(repo, GitRestoreCommands.Arguments(mode), GitCommandRunner.QueryTimeout, CancellationToken.None,
+                standardInput: GitRestoreCommands.PathspecInput(targets));
+
+        [Fact]
+        public void WindowState_RoundTrips_AndBadValuesFallBackToDefaults()
+        {
+            var path = P("git-window.xml");
+            Assert.False(GitWindowStateService.Load(path).ChangesTreeMode);   // 파일 없음 → 기본값
+
+            GitWindowStateService.Save(new GitWindowState { ChangesTreeMode = true, ChangesListWidth = 412.5, UnstagedWeight = 0.75, StagedWeight = 1.25 }, path);
+            var loaded = GitWindowStateService.Load(path);
+            Assert.True(loaded.ChangesTreeMode);
+            Assert.Equal(412.5, loaded.ChangesListWidth);
+            Assert.Equal(0.75, loaded.UnstagedWeight);
+            Assert.Equal(1.25, loaded.StagedWeight);
+
+            // 음수·NaN·한쪽만 있는 비율은 버리고, 범위를 벗어난 너비는 잘라 낸다.
+            File.WriteAllText(path, "<gitWindow changesTree=\"x\" listWidth=\"99999\" unstagedWeight=\"NaN\" stagedWeight=\"2\"/>");
+            loaded = GitWindowStateService.Load(path);
+            Assert.False(loaded.ChangesTreeMode);
+            Assert.Equal(GitWindowState.MaxListWidth, loaded.ChangesListWidth);
+            Assert.Equal(1, loaded.UnstagedWeight);
+            Assert.Equal(1, loaded.StagedWeight);
+
+            File.WriteAllText(path, "<broken");
+            Assert.Equal(GitWindowState.DefaultListWidth, GitWindowStateService.Load(path).ChangesListWidth);
+        }
+
+        [Fact]
+        public void Restore_ExcludesEntriesGitRejectsOrWouldDeleteOrEmpty()
+        {
+            GitStatusEntry E(char x, char y, bool untracked = false, bool conflict = false) =>
+                new GitStatusEntry { Path = "p", IndexState = x, WorkTreeState = y, IsUntracked = untracked, IsConflicted = conflict };
+            var wt = GitRestoreMode.WorkTree;
+            var both = GitRestoreMode.WorkTreeAndIndex;
+
+            Assert.Null(GitRestoreCommands.ExclusionReason(E('.', 'M'), wt, true));
+            Assert.Null(GitRestoreCommands.ExclusionReason(E('A', 'M'), wt, true));        // 스테이지된 새 파일의 추가 수정 → 스테이지 내용으로
+            Assert.NotNull(GitRestoreCommands.ExclusionReason(E('?', '?', untracked: true), wt, true));
+            Assert.NotNull(GitRestoreCommands.ExclusionReason(E('.', 'A'), wt, true));     // add -N: 빈 파일이 됨
+            Assert.NotNull(GitRestoreCommands.ExclusionReason(E('U', 'U', conflict: true), wt, true));
+
+            Assert.Null(GitRestoreCommands.ExclusionReason(E('M', 'M'), both, true));
+            Assert.Null(GitRestoreCommands.ExclusionReason(E('U', 'U', conflict: true), both, true));
+            Assert.Null(GitRestoreCommands.ExclusionReason(E('A', 'U', conflict: true), both, true));   // 우리 쪽에 있음
+            Assert.NotNull(GitRestoreCommands.ExclusionReason(E('U', 'A', conflict: true), both, true)); // 우리 쪽에 없음 → 삭제됨
+            Assert.NotNull(GitRestoreCommands.ExclusionReason(E('A', 'M'), both, true));   // HEAD에 없음 → 삭제됨
+            Assert.NotNull(GitRestoreCommands.ExclusionReason(E('R', 'M'), both, true));
+            Assert.NotNull(GitRestoreCommands.ExclusionReason(E('M', 'M'), both, false));  // 첫 커밋 전
+        }
+
+        [SkippableFact]
+        public async Task RealGit_Restore_WorkTreeKeepsIndex_HeadModeDropsBoth_ExcludedEntriesDoNotBreakCommand()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("restore");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "a\n");
+            File.WriteAllText(Path.Combine(repo, "b.txt"), "b\n");
+            await CommitAllAsync(repo, "init");
+
+            // a: 스테이지(a2) + 추가 수정(a3), b: 작업 트리에서 삭제, 새 파일, add -N 파일, 스테이지된 새 파일 + 추가 수정
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "a2\n");
+            await Git(repo, "add", "a.txt");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "a3\n");
+            File.Delete(Path.Combine(repo, "b.txt"));
+            File.WriteAllText(Path.Combine(repo, "new.txt"), "keep\n");
+            File.WriteAllText(Path.Combine(repo, "ita.txt"), "keep\n");
+            await Git(repo, "add", "-N", "ita.txt");
+            File.WriteAllText(Path.Combine(repo, "added.txt"), "s\n");
+            await Git(repo, "add", "added.txt");
+            File.WriteAllText(Path.Combine(repo, "added.txt"), "s2\n");
+
+            var unstaged = (await StatusAsync(repo)).Entries.Where(entry => entry.IsUnstaged).ToList();
+            Assert.Equal(5, unstaged.Count);
+
+            // 작업 트리 모드: 새 파일·add -N은 빠지고, 나머지로 명령이 성공한다.
+            var targets = GitRestoreCommands.Restorable(unstaged, GitRestoreMode.WorkTree, hasHead: true);
+            Assert.Equal(new[] { "a.txt", "added.txt", "b.txt" }, targets.Select(t => t.Path).OrderBy(p => p, StringComparer.Ordinal));
+            var result = await RestoreAsync(repo, GitRestoreMode.WorkTree, targets);
+            Assert.True(result.Success, result.StdErr);
+            Assert.Equal("a2\n", File.ReadAllText(Path.Combine(repo, "a.txt")));        // 스테이지 내용으로
+            Assert.Equal("b\n", File.ReadAllText(Path.Combine(repo, "b.txt")));          // 삭제 복구
+            Assert.Equal("s\n", File.ReadAllText(Path.Combine(repo, "added.txt")));
+            Assert.Equal("keep\n", File.ReadAllText(Path.Combine(repo, "new.txt")));     // 건드리지 않음
+            Assert.Equal("keep\n", File.ReadAllText(Path.Combine(repo, "ita.txt")));     // 비워지지 않음
+            var status = await StatusAsync(repo);
+            Assert.True(status.Entries.Single(entry => entry.Path == "a.txt").IsStaged);  // 스테이지는 남음
+
+            // HEAD 모드: a는 HEAD로, 스테이지된 새 파일은 빠져서 디스크에 남는다.
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "a4\n");
+            File.WriteAllText(Path.Combine(repo, "added.txt"), "s3\n");
+            unstaged = (await StatusAsync(repo)).Entries.Where(entry => entry.IsUnstaged).ToList();
+            targets = GitRestoreCommands.Restorable(unstaged, GitRestoreMode.WorkTreeAndIndex, hasHead: true);
+            Assert.Equal(new[] { "a.txt" }, targets.Select(t => t.Path));
+            result = await RestoreAsync(repo, GitRestoreMode.WorkTreeAndIndex, targets);
+            Assert.True(result.Success, result.StdErr);
+            Assert.Equal("a\n", File.ReadAllText(Path.Combine(repo, "a.txt")));
+            Assert.DoesNotContain((await StatusAsync(repo)).Entries, entry => entry.Path == "a.txt");
+            Assert.Equal("s3\n", File.ReadAllText(Path.Combine(repo, "added.txt")));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_Restore_HeadModeResolvesConflictToHead_WorkTreeModeExcludesIt()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (repo, first, _) = await TwoCommitRepoAsync("restore-conflict");
+            await Git(repo, "switch", "-c", "other", first);
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "other\n");
+            await CommitAllAsync(repo, "other");
+            await Git(repo, "switch", "main");
+            Assert.False((await Git(repo, "merge", "other")).Success);
+
+            var unstaged = (await StatusAsync(repo)).Entries.Where(entry => entry.IsUnstaged).ToList();
+            Assert.True(unstaged.Single().IsConflicted);
+            Assert.Empty(GitRestoreCommands.Restorable(unstaged, GitRestoreMode.WorkTree, hasHead: true));
+
+            var targets = GitRestoreCommands.Restorable(unstaged, GitRestoreMode.WorkTreeAndIndex, hasHead: true);
+            var result = await RestoreAsync(repo, GitRestoreMode.WorkTreeAndIndex, targets);
+            Assert.True(result.Success, result.StdErr);
+            Assert.Equal("two\n", File.ReadAllText(Path.Combine(repo, "f.txt")));
+            Assert.Empty((await StatusAsync(repo)).Entries);
+        }
+
         [SkippableFact]
         public async Task RealGit_CreateBranchFromCommit_WithOrWithoutSwitch_AndDetachedCheckout()
         {

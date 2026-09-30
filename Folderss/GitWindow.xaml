@@ -238,7 +238,7 @@
                         <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
                     <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="340" MinWidth="200"/>
+                        <ColumnDefinition x:Name="ChangesListColumn" Width="340" MinWidth="200"/>
                         <ColumnDefinition Width="5"/>
                         <ColumnDefinition Width="*" MinWidth="200"/>
                     </Grid.ColumnDefinitions>
@@ -246,9 +246,9 @@
                     <Grid Grid.Column="0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*" MinHeight="60"/>
+                            <RowDefinition x:Name="UnstagedListRow" Height="*" MinHeight="60"/>
                             <RowDefinition Height="8"/>
-                            <RowDefinition Height="*" MinHeight="60"/>
+                            <RowDefinition x:Name="StagedListRow" Height="*" MinHeight="60"/>
                             <!-- "변경 없는 파일 보기"를 켤 때만 높이를 준다(코드에서 0 ↔ 8/*). -->
                             <RowDefinition x:Name="UnchangedSplitterRow" Height="0"/>
                             <RowDefinition x:Name="UnchangedRow" Height="0"/>
@@ -263,6 +263,7 @@
                                       ResizeBehavior="PreviousAndNext"
                                       Background="Transparent"
                                       Cursor="SizeNS"
+                                      DragCompleted="ChangesSplitter_DragCompleted"
                                       ToolTip="끌어서 변경됨·스테이지됨 목록 높이를 조절합니다"/>
 
                         <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="2,0,0,6">
@@ -319,6 +320,8 @@
                         <DockPanel Grid.Row="1">
                             <DockPanel DockPanel.Dock="Top">
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
+                                    <Button x:Name="RestoreButton" Content="되돌리기…" Margin="0,0,6,0" Click="Restore_Click"
+                                            ToolTip="선택한 파일의 변경을 버립니다 (git restore). 되돌릴 수 없어 확인 창을 거칩니다."/>
                                     <Button x:Name="StageButton" Content="스테이지 ↓" Click="Stage_Click"/>
                                     <Button x:Name="StageAllButton" Content="전체" Click="StageAll_Click"
                                             ToolTip="git add -A"/>
@@ -366,7 +369,8 @@
                         </DockPanel>
                     </Grid>
 
-                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"
+                                  DragCompleted="ChangesSplitter_DragCompleted"/>
 
                     <controls:GitDiffView x:Name="ChangesDiff" Grid.Column="2"/>
 

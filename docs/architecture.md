@@ -35,6 +35,8 @@ Folderss/
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
+│   ├── GitRestoreCommands.cs       — 파일 되돌리기(restore --worktree / --source=HEAD --staged --worktree) 인수와 모드별 제외 규칙
+│   ├── GitWindowStateService.cs    — Git 창 보기 상태(트리 보기·목록 너비·변경됨/스테이지됨 비율) git-window.xml 저장
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
 │   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
@@ -279,6 +281,11 @@ Folderss/
 - ▾ 옵션: 기본 버튼은 `new GitXxxOptions()`(또는 설정값)로 바로 실행하고, 옆 `OptionArrowButton`이 `GitPullDialog`/`GitPushDialog`/
   `GitFetchDialog`/`GitCommitOptionsDialog`/`GitForceConfirmDialog`를 열어 고른 옵션을 같은 `GitSyncCommands`/`GitRefCommands` 함수에 넘긴다.
   강제 옵션은 `GitForceConfirmDialog`(기본 꺼짐, 켜면 경고·확인 체크 필요). 강제 푸시는 두지 않는다.
+- 되돌리기: `되돌리기…`(변경됨 목록)는 버린 변경을 복구할 수 없어 곧바로 `GitRestoreDialog`(확인 체크 필수)를 연다. git은 경로 하나라도
+  모르면 명령 전체를 거부하고, 일부 경우 파일을 지우거나 비우므로 `GitRestoreCommands.ExclusionReason`이 모드별로 뺀다 — 새 파일, `add -N`(빈 파일이 됨),
+  작업 트리 모드의 충돌(git 거부), HEAD 모드의 HEAD에 없는 경로(A/R/C, 충돌 UA/AA — 디스크에서 삭제됨). 실행 전 `ConfirmNoUnsavedDocuments`.
+- 보기 상태: `트리로 보기` 클릭과 변경 사항 탭의 두 분할선 `DragCompleted`마다 `%LOCALAPPDATA%\Folderss\git-window.xml`에 저장, 창 생성 시 복원.
+  읽기 실패는 기본값, 저장 실패는 출력 창에 표시. 변경 없는 파일 목록의 분할선은 저장하지 않는다(보일 때만 있는 행).
 - stash: `stash list -z --format=%gd%x1f%H%x1f%P%x1f%at%x1f%gs`(`ParseStashes`, 부모 3개 = `-u`로 새 파일 포함). diff는 stash 커밋 ↔ 첫 부모
   (`GitDiffCommands.Commit`), 새 파일은 `ls-tree <hash>^3` 목록을 제목에 표시. 작업 참조는 `stash@{n}`이라 작업마다 목록을 다시 읽는다.
   저장·적용은 작업 트리를 바꾸므로 `ConfirmNoUnsavedDocuments`. 고른 파일만 저장은 pathspec을 표준 입력으로(새 파일이 섞였는데 `-u`가 꺼져 있으면 미리 안내).
@@ -286,7 +293,7 @@ Folderss/
   `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
   BOM 규칙으로 읽어 `GitDiffView.ShowLines`로 줄 번호와 함께 보인다(10MB 초과·바이너리는 안내만). 상태를 다시 읽을 때마다 다시 계산.
 - 변경 사항 트리 보기: `ShowChanges`가 평면 목록(ListBox)과 트리(`GitChangeTree.Build` → TreeView) 소스를 함께 채우고
-  `트리로 보기` 체크박스가 둘의 표시만 바꾼다(창 단위, 저장 안 함). 스테이지/언스테이지 대상은 `SelectedChangeEntries` —
+  `트리로 보기` 체크박스가 둘의 표시만 바꾼다(`GitWindowStateService`로 저장). 스테이지/언스테이지 대상은 `SelectedChangeEntries` —
   평면은 다중 선택, 트리는 선택 노드 하나(폴더면 `GitChangeNode.Entries`로 그 아래 전체). diff 표시 로직은 두 보기가 공유한다.
 - 브랜치 그래프: `GitGraphLayout.Compute`(topo 순서 커밋 + 부모) → 행마다 점 레인과 선분(Y: 0 위/1 가운데/2 아래). 레인은 "기다리는 해시" 배열이며
   점에 모이는 레인은 끝나고, 첫 부모는 같은 레인, 나머지 부모는 기존 레인 또는 빈 레인. `GitGraphCell`이 그리며 로그 ListView는 행 높이 22·Padding 0으로

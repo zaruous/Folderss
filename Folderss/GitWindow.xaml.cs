@@ -101,6 +101,7 @@ namespace Folderss
             _openGitSettings = openGitSettings;
             _settings = (settings ?? new GitSettings()).Clone();
             GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
+            ApplyWindowState(GitWindowStateService.Load());
 
             foreach (var view in new[] { ChangesDiff, RemoteDiff, LogDiff, StashDiff })
             {
@@ -645,6 +646,12 @@ namespace Folderss
 
         private void ChangesTreeToggle_Click(object sender, RoutedEventArgs e)
         {
+            ApplyChangesTreeMode();
+            SaveWindowState();
+        }
+
+        private void ApplyChangesTreeMode()
+        {
             var tree = IsChangesTreeMode;
             UnstagedList.Visibility = StagedList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
             UnstagedTree.Visibility = StagedTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
@@ -655,6 +662,44 @@ namespace Folderss
             StagedList.UnselectAll();
             UnchangedList.UnselectAll();
             ChangesDiff.Clear();
+        }
+
+        // ── 보기 상태 저장(트리 보기·분할선 위치) ─────────────────────────────
+
+        private void ApplyWindowState(GitWindowState state)
+        {
+            ChangesTreeToggle.IsChecked = state.ChangesTreeMode;
+            ApplyChangesTreeMode();
+            ChangesListColumn.Width = new GridLength(state.ChangesListWidth);
+            UnstagedListRow.Height = new GridLength(state.UnstagedWeight, GridUnitType.Star);
+            StagedListRow.Height = new GridLength(state.StagedWeight, GridUnitType.Star);
+        }
+
+        private void ChangesSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
+        {
+            SaveWindowState();
+        }
+
+        private void SaveWindowState()
+        {
+            // GridSplitter는 * 행을 * 값으로 바꿔 두지만, 픽셀로 바뀐 경우에도 실제 높이로 비율을 남긴다.
+            static double Weight(RowDefinition row) => row.Height.IsStar ? row.Height.Value : row.ActualHeight;
+            var state = new GitWindowState
+            {
+                ChangesTreeMode = IsChangesTreeMode,
+                ChangesListWidth = Math.Clamp(ChangesListColumn.ActualWidth > 0 ? ChangesListColumn.ActualWidth : ChangesListColumn.Width.Value,
+                    GitWindowState.MinListWidth, GitWindowState.MaxListWidth),
+                UnstagedWeight = Math.Clamp(Weight(UnstagedListRow), GitWindowState.MinWeight, GitWindowState.MaxWeight),
+                StagedWeight = Math.Clamp(Weight(StagedListRow), GitWindowState.MinWeight, GitWindowState.MaxWeight)
+            };
+            try
+            {
+                GitWindowStateService.Save(state);
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("보기 상태 저장 실패 (" + GitWindowStateService.DefaultPath + "): " + ex.Message);
+            }
         }
 
         // ── 변경 없는 파일 ─────────────────────────────────────────────────
@@ -990,6 +1035,24 @@ namespace Folderss
             await RunOnSelectedAsync("스테이지 중…",
                 new[] { "add", "--pathspec-from-file=-", "--pathspec-file-nul" },
                 GitCommandRunner.QueryTimeout, ToPathspecInput(entries, false));
+        }
+
+        private async void Restore_Click(object sender, RoutedEventArgs e)
+        {
+            var entries = SelectedChangeEntries(UnstagedList, UnstagedTree);
+            var snapshot = SelectedRow?.Snapshot;
+            if (entries.Count == 0 || snapshot == null)
+                return;
+
+            var dialog = new GitRestoreDialog(entries, snapshot.HeadOid != null) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            var targets = dialog.Targets;
+            if (targets.Count == 0 || !ConfirmNoUnsavedDocuments("되돌리기"))
+                return;
+
+            await RunOnSelectedAsync("되돌리는 중…", GitRestoreCommands.Arguments(dialog.Mode),
+                GitCommandRunner.QueryTimeout, GitRestoreCommands.PathspecInput(targets));
         }
 
         private async void StageAll_Click(object sender, RoutedEventArgs e)

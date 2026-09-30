@@ -510,6 +510,70 @@ namespace Folderss
         }
     }
 
+    /// <summary>
+    /// 파일 되돌리기(git restore). 버린 변경은 복구할 수 없으므로 버튼이 곧바로 이 창을 열고, 확인 체크를 거쳐야 실행된다.
+    /// 모드마다 git이 거부하거나 파일을 지우는 항목은 빼고, 몇 개를 왜 뺐는지 보인다.
+    /// </summary>
+    public sealed class GitRestoreDialog : GitDialogBase
+    {
+        private readonly RadioButton _workTree;
+        private readonly RadioButton _both;
+        private readonly TextBlock _summary;
+        private readonly CheckBox _confirm;
+        private readonly Button _ok;
+        private readonly IList<GitStatusEntry> _entries;
+        private readonly bool _hasHead;
+
+        public GitRestoreMode Mode => _both.IsChecked == true ? GitRestoreMode.WorkTreeAndIndex : GitRestoreMode.WorkTree;
+
+        /// <summary>선택한 모드로 실제 되돌릴 항목.</summary>
+        public List<GitStatusEntry> Targets => GitRestoreCommands.Restorable(_entries, Mode, _hasHead);
+
+        public GitRestoreDialog(IList<GitStatusEntry> entries, bool hasHead) : base("변경 되돌리기", 520)
+        {
+            _entries = entries;
+            _hasHead = hasHead;
+            AddText(entries.Count == 1
+                ? string.Format("\"{0}\"의 변경을 버립니다.", entries[0].Path)
+                : string.Format("선택한 파일 {0}개의 변경을 버립니다.", entries.Count));
+
+            AddLabel("되돌릴 범위");
+            _workTree = AddRadio("restore", "작업 트리만 — 스테이지된 내용으로 (git restore --worktree)",
+                "스테이지하지 않은 수정만 버립니다. 스테이지된 변경은 남습니다.", true);
+            _both = AddRadio("restore", "스테이지까지 — HEAD(마지막 커밋)로 (git restore --source=HEAD --staged --worktree)",
+                "스테이지된 변경과 작업 트리 수정을 모두 버립니다. 충돌 파일은 HEAD 쪽으로 해결됩니다.", false);
+            _both.IsEnabled = hasHead;
+
+            _summary = AddText(string.Empty, secondary: true, top: 10);
+            AddText("⚠ 버린 변경은 git에 기록이 없어 되돌릴 수 없습니다. 보관하려면 먼저 stash 저장을 쓰세요.", warning: true, top: 10);
+            _confirm = AddCheck("되돌릴 수 없다는 것을 이해했습니다", false);
+            _ok = AddButtons("되돌리기");
+
+            _workTree.Checked += (s, e) => Update();
+            _both.Checked += (s, e) => Update();
+            _confirm.Checked += (s, e) => Update();
+            _confirm.Unchecked += (s, e) => Update();
+            Update();
+        }
+
+        private void Update()
+        {
+            var mode = Mode;
+            var excluded = _entries
+                .Select(entry => GitRestoreCommands.ExclusionReason(entry, mode, _hasHead))
+                .Where(reason => reason != null)
+                .GroupBy(reason => reason)
+                .Select(group => string.Format("{0} {1}개", group.Key, group.Count()))
+                .ToList();
+            var count = GitRestoreCommands.Restorable(_entries, mode, _hasHead).Count;
+            _summary.Text = excluded.Count == 0
+                ? string.Format("되돌릴 파일: {0}개", count)
+                : string.Format("되돌릴 파일: {0}개 · 제외: {1} (git이 거부하거나 파일이 지워지거나 비워지는 항목)", count, string.Join(", ", excluded));
+            if (_ok != null)
+                _ok.IsEnabled = count > 0 && _confirm.IsChecked == true;
+        }
+    }
+
     /// <summary>stash 저장 옵션(▾): 메시지, 새 파일 포함, 스테이지 유지, 선택한 파일만.</summary>
     public sealed class GitStashPushDialog : GitDialogBase
     {
