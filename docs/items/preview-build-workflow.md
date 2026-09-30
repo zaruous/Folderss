@@ -30,8 +30,14 @@
 
 ## 검증
 
-- 로컬: YAML 구문 확인(파이썬 yaml 파서). 워크플로 자체는 GitHub에서만 실행 가능 — PR #29 푸시로 첫 실행 결과를 확인한다(아래 변경 이력에 기록).
+- 로컬: YAML 구문 확인(파이썬 yaml 파서).
+- GitHub 첫 실행(PR #29, run 36652463791, 커밋 b07e5f5): `build` 성공(약 1분) — 아티팩트 `Folderss-preview-pr29-b07e5f5`
+  (약 66MB, 14일 보관) 업로드 확인. `test` 성공 — Windows 러너(git 2.55.0.windows.5)에서 68개 중 통과 66·건너뜀 2
+  (기존 권한 테스트, 셸 스크립트 도구를 쓰는 difftool 테스트는 Windows에서 의도적으로 건너뜀). 이 테스트들이 Windows에서 돈 첫 기록.
+- 경고: `actions/checkout@v4`, `actions/setup-dotnet@v4`가 Node.js 20 대상이라 러너가 Node 24로 강제 실행한다는 경고(동작에는 영향 없음, release.yml도 동일).
+- 미확인: 받은 zip을 Windows에서 풀어 실행해 보는 것(사용자 확인 필요).
 
 ## 변경 이력
 
 - 2026-09-30: 요청 접수, preview.yml 추가.
+- 2026-09-30: 첫 실행 성공(build·test), 결과 기록. 상태 Ready for Verification.
