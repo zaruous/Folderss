@@ -444,6 +444,14 @@ dotnet test tests\Folderss.SearchTests
 
 `v*.*.*` 형식의 태그를 푸시하면 GitHub Actions(`.github/workflows/release.yml`)가 태그 버전으로 `AssemblyInfo.cs`를 갱신한 뒤 `dotnet publish`로 빌드하고, `Folderss-<태그>.zip`을 GitHub Release에 첨부합니다. 앱의 `업데이트 확인` 메뉴가 이 릴리스를 조회합니다.
 
+### 프리뷰 빌드
+
+`master` 대상 PR을 열거나 커밋을 푸시하면 GitHub Actions(`.github/workflows/preview.yml`)가 Windows에서 `dotnet publish`로 빌드해 `Folderss-preview-pr<번호>-<커밋>` 아티팩트(14일 보관)로 올립니다. 문서만 바뀐 PR은 건너뜁니다. Actions 탭의 **Preview Build**에서 수동 실행(`Run workflow`)으로 다른 브랜치도 빌드할 수 있습니다.
+
+- 받는 곳: 해당 실행의 Summary에 있는 링크(또는 Artifacts 목록). GitHub에 로그인해야 받을 수 있습니다.
+- 버전은 `<현재 버전>.<실행 번호>`(예: `1.7.0.42`)이고, 폴더 안 `PREVIEW.txt`에 커밋·PR·빌드 시각이 적혀 있습니다. 정식 릴리스가 아니며 GitHub Release는 만들지 않습니다.
+- 테스트(`tests/Folderss.SearchTests`)는 별도 job으로 돌아 실패해도 프리뷰 파일은 올라갑니다. 실패하면 `test-results` 아티팩트에 결과가 남습니다.
+
 ## 실행
 
 빌드 없이 바로 실행하려면 최신 Release 바이너리를 사용합니다.
