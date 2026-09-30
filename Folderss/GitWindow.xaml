@@ -149,10 +149,21 @@
                     <Grid Grid.Column="0">
                         <Grid.RowDefinitions>
                             <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*" MinHeight="60"/>
                             <RowDefinition Height="8"/>
-                            <RowDefinition Height="*"/>
+                            <RowDefinition Height="*" MinHeight="60"/>
                         </Grid.RowDefinitions>
+
+                        <!-- 변경됨 ↔ 스테이지됨 높이 조절 -->
+                        <GridSplitter Grid.Row="2"
+                                      Height="8"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      ResizeDirection="Rows"
+                                      ResizeBehavior="PreviousAndNext"
+                                      Background="Transparent"
+                                      Cursor="SizeNS"
+                                      ToolTip="끌어서 변경됨·스테이지됨 목록 높이를 조절합니다"/>
 
                         <CheckBox x:Name="ChangesTreeToggle"
                                   Grid.Row="0"
