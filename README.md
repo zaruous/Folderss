@@ -265,6 +265,8 @@ Git 창의 diff, 두 파일 비교 창, HTML 보고서가 함께 쓰는 옵션�
 
 ## 플러그인
 
+플러그인 개발 방법은 [플러그인 개발 가이드](docs/plugin-development.md)와 [주문서 튜토리얼](docs/plugin-tutorial-order-form.md)을 참고하세요.
+
 `설정 > 플러그인 > 플러그인 찾기…`로 플러그인 zip을 등록하면 `⋯ 메뉴 > 플러그인`에 나타납니다.
 메뉴에서 처음 선택할 때 zip을 풀고 로드해 팝업 창을 엽니다.
 
@@ -534,4 +536,6 @@ Folderss\bin\Release\net8.0-windows\Folderss.exe
 | `docs/items/` | 개발 아이템별 요구사항·설계·검증 기록 |
 | `docs/done/DONE.md` | 릴리스별 완료 이력 |
 | `docs/keyboard-shortcuts.md` | 단축키 전체 매핑표 |
+| `docs/plugin-development.md` | 플러그인 개발 가이드 (plugin.json, API, 테마, 오류 처리, 디버깅) |
+| `docs/plugin-tutorial-order-form.md` | 튜토리얼: 타이틀 + 그리드 주문서 플러그인 만들기 |
 | `docs/설정/콘솔설정.md` | 콘솔 설정 항목 설명 |

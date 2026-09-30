@@ -23,6 +23,10 @@
 4. 팝업 방식 유지.
 5. 플러그인이 메인 프로세스를 죽이려는 경우 막을 수 있는지, 불가능하면 종료 감지·로깅이 가능한지 확인한다.
 
+### 4차 요청 (2026-09-30)
+
+- 플러그인 개발자용 개발 방법 문서(Markdown)와 별도 튜토리얼 문서 작성. 튜토리얼은 화면에 타이틀과 그리드를 배치한 "주문서" 콘텐츠.
+
 ## 원인 분석 또는 설계
 
 ### 3차 설계
@@ -78,6 +82,13 @@
 - `SettingsWindow`: 플러그인 로드 제거, 이미 로드한 플러그인 탭 / 안내 탭.
 - `HelloPlugin`: 본체 테마 표시, 종료 감지 확인용 `Application.Shutdown`·`Environment.Exit` 버튼.
 
+### 4차
+- `docs/plugin-development.md`: 수명 주기, 프로젝트 설정(프로젝트/파일 참조, zip 생성 타깃), plugin.json 키, `IFolderssPlugin`/`IPluginManager`/`IFolderPanel`/`IPluginSettingsPage`,
+  `GetAppSettings` 키, 테마 리소스 키, 오류 처리·보호 범위, 디버깅, 제약, 배포 체크리스트.
+- `docs/plugin-tutorial-order-form.md`: 타이틀 + `DataGrid`(품목·수량·단가·금액, 금액 자동 계산, 행 추가·삭제, 테마 연결) 주문서 플러그인 단계별 작성·등록·실행·문제 해결.
+- 결정: 튜토리얼 코드는 저장소 샘플로 넣지 않고 문서에만 둔다(요청 범위). 대신 문서의 코드 블록을 그대로 뽑아 문서에 적힌 위치에서 빌드해 검증.
+- UI는 코드로 구성하는 방식만 안내. 전용 로드 영역에서 XAML `UserControl` 리소스 로드는 미검증이라 "원리상 가능, 미검증"으로 적었다.
+
 ## 변경 파일
 
 - `Folderss.PluginContract/` (신규), `Folderss.sln`, `Folderss/Folderss.csproj`
@@ -110,8 +121,13 @@
   5. 작업 관리자로 Folderss 강제 종료 → 다시 시작하면 "기록 없음 — 강제 종료로 추정" 알림
   6. 플러그인 실행 후 ⋯ > 종료로 정상 종료 → 다시 시작해도 알림 없음
 
+- 4차: 튜토리얼 문서의 코드 블록 4개(csproj, plugin.json, OrderItem.cs, OrderFormPlugin.cs)를 추출해 `samples/OrderFormPlugin`에서 빌드 성공,
+  zip에 `plugin.json` + `OrderFormPlugin.dll`만 포함, 본체 `PluginPackage.ReadManifest`로 검증 통과(`tutorial.order-form | 주문서`). 확인 후 임시 폴더 삭제.
+  **Windows 확인 필요**: 튜토리얼 6단계 체크 항목(금액 재계산, 행 추가, 테마 전환 시 그리드 색, 창 두 개).
+
 ## 변경 이력
 
 - 2026-09-30: 요청 접수, 설계 제안(형식 A/B, 폴더 패널 노출 방식 질의)
 - 2026-09-30: 2차 요청 반영해 구현, Ready for Verification
 - 2026-09-30: 3차 요청(본체 설정 읽기 전용, 실행 시점 로드, 종료 감지·로깅) 반영, Ready for Verification
+- 2026-09-30: 4차 요청(개발 가이드·주문서 튜토리얼 문서) 작성

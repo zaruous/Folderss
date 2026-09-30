@@ -99,6 +99,7 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `samples/HelloPlugin` — 예제가 계속 빌드되는지 확인 (`dotnet build samples/HelloPlugin`)
 - [ ] 플러그인에 보여 줄 본체 설정 키를 추가·변경하면 `Services/PluginAppSettings.cs`, 계약 `GetAppSettings` 주석, `PluginSessionTests.AppSettings_ExposesDocumentedKeysOnly`를 함께 고친다 (키 이름 변경은 깨지는 변경)
 - [ ] `README.md` 플러그인 섹션, `docs/architecture.md` PluginManager 절
+- [ ] 플러그인 개발자 문서 `docs/plugin-development.md`(API 표·plugin.json 표·오류 처리 표), 튜토리얼 `docs/plugin-tutorial-order-form.md`의 코드가 계속 빌드되는지
 
 ### 태그/릴리스 생성 시
 - [ ] `Properties/AssemblyInfo.cs` — `AssemblyVersion`, `AssemblyFileVersion`을 태그 버전에 맞게 갱신
