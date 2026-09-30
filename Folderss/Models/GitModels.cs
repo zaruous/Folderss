@@ -19,6 +19,29 @@ namespace Folderss.Models
         public bool IsGitFile { get; set; }
     }
 
+    /// <summary>항목이 어느 목록에 보이는지. 같은 파일도 목록마다 상태가 다를 수 있다(예: 스테이지 쪽 "추가", 작업 트리 쪽 "수정").</summary>
+    public enum GitChangeSide
+    {
+        /// <summary>변경됨(작업 트리 ↔ 인덱스) — Y 코드 기준.</summary>
+        WorkTree,
+        /// <summary>스테이지됨(인덱스 ↔ HEAD) — X 코드 기준.</summary>
+        Index
+    }
+
+    /// <summary>목록에 보이는 상태 종류. 배지 글자·색을 정한다.</summary>
+    public enum GitChangeKind
+    {
+        Modified,
+        Added,
+        Deleted,
+        Renamed,
+        Copied,
+        TypeChanged,
+        Conflict,
+        Untracked,
+        Unchanged
+    }
+
     public sealed class GitStatusEntry
     {
         public string Path { get; set; }
@@ -38,6 +61,68 @@ namespace Folderss.Models
 
         public bool IsStaged => !IsUntracked && !IsConflicted && IndexState != '.';
         public bool IsUnstaged => IsUntracked || IsConflicted || WorkTreeState != '.';
+
+        /// <summary>이 항목이 놓인 목록. 상태 배지를 X/Y 중 어느 코드로 볼지 정한다.</summary>
+        public GitChangeSide Side { get; set; } = GitChangeSide.WorkTree;
+
+        public GitChangeKind Kind
+        {
+            get
+            {
+                if (IsUnchanged) return GitChangeKind.Unchanged;
+                if (IsConflicted) return GitChangeKind.Conflict;
+                if (IsUntracked) return GitChangeKind.Untracked;
+                switch (Side == GitChangeSide.Index ? IndexState : WorkTreeState)
+                {
+                    case 'A': return GitChangeKind.Added;
+                    case 'D': return GitChangeKind.Deleted;
+                    case 'R': return GitChangeKind.Renamed;
+                    case 'C': return GitChangeKind.Copied;
+                    case 'T': return GitChangeKind.TypeChanged;
+                    default: return GitChangeKind.Modified;
+                }
+            }
+        }
+
+        public string StatusLabel => LabelOf(Kind);
+
+        public static string LabelOf(GitChangeKind kind)
+        {
+            switch (kind)
+            {
+                case GitChangeKind.Added: return "추가";
+                case GitChangeKind.Deleted: return "삭제";
+                case GitChangeKind.Renamed: return "이름 변경";
+                case GitChangeKind.Copied: return "복사";
+                case GitChangeKind.TypeChanged: return "형식 변경";
+                case GitChangeKind.Conflict: return "충돌";
+                case GitChangeKind.Untracked: return "새 파일";
+                case GitChangeKind.Unchanged: return "변경 없음";
+                default: return "수정";
+            }
+        }
+
+        /// <summary>목록에 보일 경로. 이름 변경·복사는 원래 경로를 함께.</summary>
+        public string PathText => (Kind == GitChangeKind.Renamed || Kind == GitChangeKind.Copied) && !string.IsNullOrEmpty(OriginalPath)
+            ? Path + "  ← " + OriginalPath
+            : Path;
+
+        /// <summary>같은 파일을 다른 목록에 둘 사본(명령에는 Path/OriginalPath만 쓰므로 안전).</summary>
+        public GitStatusEntry ForSide(GitChangeSide side)
+        {
+            var copy = (GitStatusEntry)MemberwiseClone();
+            copy.Side = side;
+            return copy;
+        }
+
+        /// <summary>목록 제목용 종류별 개수: "수정 3 · 새 파일 2". 많은 순(같으면 종류 순).</summary>
+        public static string Summarize(IEnumerable<GitStatusEntry> entries)
+        {
+            return string.Join(" · ", entries
+                .GroupBy(e => e.Kind)
+                .OrderByDescending(g => g.Count()).ThenBy(g => g.Key)
+                .Select(g => LabelOf(g.Key) + " " + g.Count()));
+        }
 
         public string DisplayText
         {
@@ -66,6 +151,22 @@ namespace Folderss.Models
         public List<GitChangeNode> Children { get; } = new List<GitChangeNode>();
 
         public bool IsFolder => Entry == null;
+
+        /// <summary>파일 노드의 상태 배지(폴더는 null).</summary>
+        public string StatusLabel => Entry?.StatusLabel;
+        public GitChangeKind? Kind => Entry?.Kind;
+
+        /// <summary>배지 옆에 보일 글자: 폴더는 "📁 이름 (개수)", 파일은 이름(이름 변경은 원래 경로 포함).</summary>
+        public string LabelText
+        {
+            get
+            {
+                if (IsFolder)
+                    return string.Format("📁 {0}  ({1})", Name, Entries.Count());
+                var renamed = (Entry.Kind == GitChangeKind.Renamed || Entry.Kind == GitChangeKind.Copied) && !string.IsNullOrEmpty(Entry.OriginalPath);
+                return Name + (renamed ? "  ← " + Entry.OriginalPath : string.Empty);
+            }
+        }
 
         /// <summary>이 노드 아래(자신 포함) 파일 항목 전부.</summary>
         public IEnumerable<GitStatusEntry> Entries

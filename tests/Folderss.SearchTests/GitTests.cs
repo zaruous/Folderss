@@ -909,5 +909,61 @@ namespace Folderss.SearchTests
             Assert.Equal(GitDiffLineKind.Meta, lines[2].Kind);        // 한도 초과 안내
             Assert.Empty(GitOutputParser.ContentLines(""));
         }
+
+        // ── 상태 배지 ───────────────────────────────────────────────────────────
+
+        [Fact]
+        public void StatusKind_DependsOnListSide_AndLabelsAreKorean()
+        {
+            var output = string.Join("\0",
+                "# branch.oid abc",
+                "# branch.head main",
+                "1 AM N... 000000 100644 100644 0000 aaaa new-then-edited.cs",   // 스테이지: 추가 / 작업 트리: 수정
+                "1 .M N... 100644 100644 100644 aaaa bbbb edited.cs",
+                "1 .D N... 100644 100644 000000 aaaa bbbb removed.cs",
+                "2 R. N... 100644 100644 100644 aaaa bbbb R100 b/new.cs",
+                "a/old.cs",
+                "u UU N... 100644 100644 100644 100644 aaaa bbbb cccc both.cs",
+                "? brand-new.txt",
+                "");
+            var s = GitOutputParser.ParseStatusV2(output);
+            GitStatusEntry Get(string path) => s.Entries.Single(e => e.Path == path);
+
+            Assert.Equal(GitChangeKind.Modified, Get("new-then-edited.cs").ForSide(GitChangeSide.WorkTree).Kind);
+            Assert.Equal(GitChangeKind.Added, Get("new-then-edited.cs").ForSide(GitChangeSide.Index).Kind);
+            Assert.Equal("삭제", Get("removed.cs").ForSide(GitChangeSide.WorkTree).StatusLabel);
+            Assert.Equal("이름 변경", Get("b/new.cs").ForSide(GitChangeSide.Index).StatusLabel);
+            Assert.Equal("b/new.cs  ← a/old.cs", Get("b/new.cs").ForSide(GitChangeSide.Index).PathText);
+            Assert.Equal("충돌", Get("both.cs").StatusLabel);
+            Assert.Equal("새 파일", Get("brand-new.txt").StatusLabel);
+            Assert.Equal("edited.cs", Get("edited.cs").PathText);
+            Assert.Equal("변경 없음", new GitStatusEntry { Path = "x", IsUnchanged = true }.StatusLabel);
+
+            // 사본은 원본을 바꾸지 않는다.
+            var original = Get("new-then-edited.cs");
+            original.ForSide(GitChangeSide.Index);
+            Assert.Equal(GitChangeSide.WorkTree, original.Side);
+        }
+
+        [Fact]
+        public void Summarize_CountsByKind_MostFirst()
+        {
+            var entries = new[]
+            {
+                new GitStatusEntry { Path = "a", WorkTreeState = 'M' },
+                new GitStatusEntry { Path = "b", WorkTreeState = 'M' },
+                new GitStatusEntry { Path = "c", IsUntracked = true },
+                new GitStatusEntry { Path = "d", WorkTreeState = 'D' },
+                new GitStatusEntry { Path = "e", IsUntracked = true },
+                new GitStatusEntry { Path = "f", IsUntracked = true }
+            };
+
+            Assert.Equal("새 파일 3 · 수정 2 · 삭제 1", GitStatusEntry.Summarize(entries));
+            Assert.Equal(string.Empty, GitStatusEntry.Summarize(new GitStatusEntry[0]));
+
+            var node = GitChangeTree.Build(new[] { entries[2] }).Single();
+            Assert.Equal("새 파일", node.StatusLabel);
+            Assert.Equal("c", node.LabelText);
+        }
     }
 }

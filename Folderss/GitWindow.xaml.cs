@@ -396,12 +396,15 @@ namespace Folderss
                 return;
             }
 
-            // 충돌·추적 안 됨·작업 트리 변경은 왼쪽, 인덱스 변경은 오른쪽. 둘 다 바뀐 파일(MM)은 양쪽에 보인다.
+            // 변경됨: 수정된 파일과 새 파일(추적 안 됨)을 한 목록에 경로순으로 섞어 보이고, 충돌만 맨 위.
+            // 스테이지됨: 인덱스 변경. 둘 다 바뀐 파일(MM, AM)은 양쪽에 보이며 배지는 각 목록 기준(ForSide).
             var unstaged = snapshot.Entries.Where(entry => entry.IsUnstaged)
-                .OrderBy(entry => entry.IsConflicted ? 0 : entry.IsUntracked ? 2 : 1)
+                .Select(entry => entry.ForSide(GitChangeSide.WorkTree))
+                .OrderBy(entry => entry.IsConflicted ? 0 : 1)
                 .ThenBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
                 .ToList();
             var staged = snapshot.Entries.Where(entry => entry.IsStaged)
+                .Select(entry => entry.ForSide(GitChangeSide.Index))
                 .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
                 .ToList();
 
@@ -412,8 +415,16 @@ namespace Folderss
 
             if (UnchangedToggle.IsChecked == true)
                 LoadUnchanged(row);
-            UnstagedHeader.Text = string.Format("변경됨 ({0})", unstaged.Count);
-            StagedHeader.Text = string.Format("스테이지됨 ({0})", staged.Count);
+            UnstagedHeader.Text = FormatListHeader("변경됨", unstaged);
+            StagedHeader.Text = FormatListHeader("스테이지됨", staged);
+        }
+
+        /// <summary>"변경됨 (5) — 수정 3 · 새 파일 2"</summary>
+        private static string FormatListHeader(string title, List<GitStatusEntry> entries)
+        {
+            return entries.Count == 0
+                ? title + " (0)"
+                : string.Format("{0} ({1}) — {2}", title, entries.Count, GitStatusEntry.Summarize(entries));
         }
 
         private async Task ReloadSelectedDetailAsync()

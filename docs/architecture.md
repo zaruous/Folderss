@@ -264,6 +264,9 @@ Folderss/
   모드를 바꾸면 `ViewModeChanged` → 같은 `CurrentRequest`를 다시 불러온다. UTF-16 재비교(`GitEncodingDiff`)에도 같은 모드를 쓴다. 추적 안 됨(전체 추가)은 선택 상자를 숨긴다.
 - 상태 조회는 `GitOutputParser.StatusArguments`(`--untracked-files=all`)로 새 폴더 안 파일을 하나씩 받는다(폴더 한 줄로 접지 않음 —
   add할 파일을 고를 수 있게). 대가로 무시되지 않은 거대한 새 폴더(빌드 산출물 등)가 있으면 항목이 많아지고 status가 느려진다.
+- 상태 배지: 같은 파일이 변경됨·스테이지됨 양쪽에 있을 수 있어(MM, AM) `ShowChanges`가 `GitStatusEntry.ForSide(WorkTree|Index)` 사본을 만든다.
+  `Kind`는 목록 쪽 코드(Y 또는 X)로 정해지고 `GitStatusBadge` 스타일(GitWindow.xaml)이 글자·색을 입힌다. 변경됨은 수정·새 파일을 경로순으로 섞고 충돌만 위.
+  목록 제목은 `GitStatusEntry.Summarize`("수정 3 · 새 파일 2"). 작업 트리 쪽 이름 변경은 git이 감지하지 않으므로 삭제 + 새 파일로 보인다.
 - 변경 없는 파일: `변경 없는 파일 보기`를 켜면 `ls-files -z --cached`에서 상태 목록(경로·이름 변경 전 경로)을 뺀 것을
   `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
   BOM 규칙으로 읽어 `GitDiffView.ShowLines`로 줄 번호와 함께 보인다(10MB 초과·바이너리는 안내만). 상태를 다시 읽을 때마다 다시 계산.
