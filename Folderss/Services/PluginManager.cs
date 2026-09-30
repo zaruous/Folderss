@@ -22,6 +22,11 @@ namespace Folderss.Services
         private static readonly Dictionary<string, LoadedPlugin> Loaded =
             new Dictionary<string, LoadedPlugin>(StringComparer.OrdinalIgnoreCase);
         private static readonly HashSet<Assembly> ReportedAssemblies = new HashSet<Assembly>();
+        private static readonly object SessionGate = new object();
+        private static PluginSessionRecord _session;
+        private static bool _userRequestedExit;
+        private static bool _sessionEnding;
+        private static bool _orderlyExit;
 
         private static string AppDataDirectory
         {
@@ -31,6 +36,8 @@ namespace Folderss.Services
         public static string PluginsDirectory { get { return Path.Combine(AppDataDirectory, "plugins"); } }
         private static string ExtractRoot { get { return Path.Combine(PluginsDirectory, "extracted"); } }
         private static string DataRoot { get { return Path.Combine(AppDataDirectory, "plugin-data"); } }
+        private static string SessionDirectory { get { return Path.Combine(AppDataDirectory, "plugin-sessions"); } }
+        public static string LogPath { get { return Path.Combine(AppDataDirectory, "plugin-log.txt"); } }
 
         /// <summary>플러그인 폴더 패널에서 파일을 열 때 호출된다 (메인 창이 뷰어 탭으로 연다).</summary>
         public static Action<string> OpenFileHandler { get; set; }
@@ -43,6 +50,13 @@ namespace Folderss.Services
         public static bool IsLoaded(string id)
         {
             return Loaded.ContainsKey(id);
+        }
+
+        /// <summary>이번 실행에서 이미 로드한 플러그인. 없으면 null (로드하지 않는다).</summary>
+        public static LoadedPlugin GetLoaded(string id)
+        {
+            LoadedPlugin loaded;
+            return Loaded.TryGetValue(id, out loaded) ? loaded : null;
         }
 
         /// <summary>플러그인을 로드해 초기화한다. 이미 로드했으면 그대로 돌려준다. 실패하면 null과 원인.</summary>
@@ -69,6 +83,7 @@ namespace Folderss.Services
                 plugin.Initialize(host);
                 loaded = new LoadedPlugin(manifest, plugin, host);
                 Loaded[manifest.Id] = loaded;
+                RecordLoaded(manifest.Id);
                 return loaded;
             }
             catch (Exception ex)
@@ -76,6 +91,130 @@ namespace Folderss.Services
                 error = Describe(ex);
                 return null;
             }
+        }
+
+        // ── 종료 감지 ────────────────────────────────────────────────────────
+        // 같은 프로세스 안의 플러그인이 본체를 끝내는 것(Application.Shutdown, Environment.Exit, 프로세스 Kill, FailFast,
+        // 백그라운드 스레드의 처리되지 않은 예외)은 막을 수 없다. 대신 알 수 있는 만큼 원인을 plugin-log.txt에 남기고,
+        // 기록할 틈도 없는 강제 종료는 plugin-sessions 기록이 남는 것으로 다음 시작 때 알린다. 플러그인을 로드한 실행만 대상이다.
+
+        /// <summary>App 시작 시 한 번. 종료 경로 감시를 건다.</summary>
+        public static void InstallExitHooks(Application app)
+        {
+            app.SessionEnding += (sender, args) => _sessionEnding = true;
+            AppDomain.CurrentDomain.UnhandledException += (sender, args) =>
+            {
+                var exception = args.ExceptionObject as Exception;
+                var owner = exception != null ? FindPluginId(exception) : null;
+                RecordExit(string.Format("처리되지 않은 예외로 종료 ({0}): {1}",
+                    owner != null ? "플러그인 " + owner : "본체 또는 알 수 없음",
+                    exception != null ? exception.ToString() : Convert.ToString(args.ExceptionObject)));
+            };
+            AppDomain.CurrentDomain.ProcessExit += (sender, args) =>
+            {
+                // 정상 종료는 Application.Exit(OnApplicationExit)를 먼저 거친다. 그 없이 여기 왔으면 Environment.Exit 같은 즉시 종료다.
+                if (_orderlyExit)
+                    return;
+                var owner = FindPluginId(new StackTrace());
+                RecordExit("WPF 종료 절차 없이 프로세스가 끝남(Environment.Exit 등). 호출한 플러그인: " + (owner ?? "스택에서 찾지 못함"));
+            };
+        }
+
+        /// <summary>사용자가 ⋯ 메뉴 > 종료 등으로 직접 끝낼 때 메인 창이 부른다.</summary>
+        public static void MarkUserRequestedExit()
+        {
+            _userRequestedExit = true;
+        }
+
+        /// <summary>Application.Exit에서 부른다. 사용자·OS가 끝낸 게 아니면 코드(Application.Shutdown)가 끝낸 것이다.</summary>
+        public static void OnApplicationExit()
+        {
+            _orderlyExit = true;
+            if (_userRequestedExit || _sessionEnding)
+            {
+                lock (SessionGate)
+                {
+                    if (_session == null) return;
+                    try { PluginSessionLog.Delete(SessionDirectory, _session.ProcessId); } catch (Exception) { }
+                    _session = null;
+                }
+                return;
+            }
+            // Application.Shutdown은 호출 후 나중에 처리되어 이 시점 스택에는 호출자가 없다 — 로드된 플러그인을 용의자로만 남긴다.
+            RecordExit("사용자 종료가 아닌 코드에서 Application.Shutdown이 호출됨. 호출자는 알 수 없음(로드된 플러그인 목록 참고)");
+        }
+
+        /// <summary>이전 실행 중 플러그인을 로드한 채 정상 종료되지 않은 기록이 있으면 로그에 남기고 알린다.</summary>
+        public static void ReportPreviousAbnormalExits()
+        {
+            List<PluginSessionRecord> stale;
+            try
+            {
+                stale = PluginSessionLog.TakeStale(SessionDirectory, IsSameProcessRunning);
+            }
+            catch (Exception)
+            {
+                return;
+            }
+            if (stale.Count == 0)
+                return;
+
+            var text = string.Join("\n\n", stale.Select(PluginSessionLog.Describe));
+            TryAppendLog("이전 실행이 정상 종료되지 않음\n" + text);
+            MessageBox.Show("플러그인을 로드한 이전 실행이 정상적으로 종료되지 않았습니다.\n\n" + text + "\n\n로그: " + LogPath,
+                "플러그인", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+
+        private static bool IsSameProcessRunning(PluginSessionRecord record)
+        {
+            try
+            {
+                using (var process = Process.GetProcessById(record.ProcessId))
+                    return Math.Abs((process.StartTime.ToUniversalTime() - record.StartedAtUtc).TotalSeconds) < 2;
+            }
+            catch (Exception)
+            {
+                return false; // 없는 pid(ArgumentException) 또는 접근 불가 — 같은 사용자의 Folderss라면 접근 가능하다
+            }
+        }
+
+        private static void RecordLoaded(string id)
+        {
+            lock (SessionGate)
+            {
+                if (_session == null)
+                {
+                    using (var current = Process.GetCurrentProcess())
+                        _session = new PluginSessionRecord { ProcessId = current.Id, StartedAtUtc = current.StartTime.ToUniversalTime() };
+                }
+                _session.Plugins.Add(id);
+                TryWriteSession();
+            }
+        }
+
+        private static void RecordExit(string reason)
+        {
+            lock (SessionGate)
+            {
+                if (_session == null)
+                    return; // 플러그인을 로드하지 않은 실행
+                // 처음 알아낸 원인을 남긴다(예: 처리되지 않은 예외 뒤에 종료 처리가 이어져도 예외 쪽이 더 구체적이다).
+                if (_session.ExitReason == null)
+                    _session.ExitReason = reason;
+                TryWriteSession();
+                TryAppendLog(reason + "\n로드된 플러그인: " + string.Join(", ", _session.Plugins));
+            }
+        }
+
+        // 진단 기록 실패는 플러그인 실행이나 종료를 막을 이유가 아니라서 넘어간다(종료 중에는 알릴 방법도 없다).
+        private static void TryWriteSession()
+        {
+            try { PluginSessionLog.Write(SessionDirectory, _session); } catch (Exception) { }
+        }
+
+        private static void TryAppendLog(string message)
+        {
+            try { PluginSessionLog.AppendLog(LogPath, message); } catch (Exception) { }
         }
 
         /// <summary>플러그인 팝업 창을 연다. 실패하면 메시지만 보이고 끝낸다.</summary>
@@ -139,10 +278,10 @@ namespace Folderss.Services
             if (assembly == null)
                 return false;
 
+            TryAppendLog("플러그인 " + DescribeOwner(assembly) + "의 처리되지 않은 UI 예외(본체는 계속 실행): " + exception);
             if (ReportedAssemblies.Add(assembly))
             {
-                var context = AssemblyLoadContext.GetLoadContext(assembly) as PluginLoadContext;
-                ShowError(context?.PluginId ?? assembly.GetName().Name,
+                ShowError(DescribeOwner(assembly),
                     "플러그인에서 오류가 발생했습니다. 이 플러그인의 이후 오류는 표시하지 않습니다. 문제가 계속되면 플러그인을 제거하세요.",
                     Describe(exception));
             }
@@ -153,14 +292,40 @@ namespace Folderss.Services
         {
             for (var ex = exception; ex != null; ex = ex.InnerException)
             {
-                foreach (var frame in new StackTrace(ex).GetFrames())
-                {
-                    var assembly = frame.GetMethod()?.DeclaringType?.Assembly;
-                    if (assembly != null && AssemblyLoadContext.GetLoadContext(assembly) is PluginLoadContext)
-                        return assembly;
-                }
+                var assembly = FindPluginAssembly(new StackTrace(ex));
+                if (assembly != null)
+                    return assembly;
             }
             return null;
+        }
+
+        private static Assembly FindPluginAssembly(StackTrace trace)
+        {
+            foreach (var frame in trace.GetFrames())
+            {
+                var assembly = frame.GetMethod()?.DeclaringType?.Assembly;
+                if (assembly != null && AssemblyLoadContext.GetLoadContext(assembly) is PluginLoadContext)
+                    return assembly;
+            }
+            return null;
+        }
+
+        private static string FindPluginId(Exception exception)
+        {
+            return DescribeOwner(FindPluginAssembly(exception));
+        }
+
+        private static string FindPluginId(StackTrace trace)
+        {
+            return DescribeOwner(FindPluginAssembly(trace));
+        }
+
+        private static string DescribeOwner(Assembly assembly)
+        {
+            if (assembly == null)
+                return null;
+            var context = AssemblyLoadContext.GetLoadContext(assembly) as PluginLoadContext;
+            return context?.PluginId ?? assembly.GetName().Name;
         }
 
         private static string Describe(Exception ex)
@@ -253,6 +418,12 @@ namespace Folderss.Services
         public string GetSetting(string key) { return _settings.Get(key); }
         public void SetSetting(string key, string value) { _settings.Set(key, value); }
         public IReadOnlyDictionary<string, string> GetAllSettings() { return _settings.GetAll(); }
+
+        public IReadOnlyDictionary<string, string> GetAppSettings()
+        {
+            return PluginAppSettings.Build(ThemeManager.CurrentTheme.ToString(), GitSettingsService.Load(),
+                DiffSettingsService.Load(), ConsoleSettingsService.Load());
+        }
 
         public IFolderPanel CreateFolderPanel(string path)
         {

@@ -513,7 +513,7 @@ namespace Folderss
             TrySave(failures, "테마", "theme.txt", ThemeManager.SaveCurrentTheme);
             TrySave(failures, "Git", "git-settings.xml", () => GitSettingsService.Save(_workingGit));
             TrySave(failures, "비교", "diff-settings.xml", () => DiffSettingsService.Save(_workingDiff));
-            foreach (var page in _pluginPages.Where(p => p.ViewCreated))
+            foreach (var page in _pluginPages.Where(p => p.Page != null && p.ViewCreated))
                 TrySave(failures, "플러그인: " + page.Title, page.PluginId, page.Page.Save);
             SavedGitSettings = _workingGit.Clone();
             SavedDiffSettings = _workingDiff.Clone();
@@ -810,26 +810,36 @@ namespace Folderss
         private readonly List<PluginPageEntry> _pluginPages = new List<PluginPageEntry>();
 
         /// <summary>
-        /// 플러그인 목록을 채우고, 설정 탭이 있다고 선언한(plugin.json hasSettings) 플러그인을 로드해 탭을 붙인다.
-        /// 플러그인 코드(로드·Title·CreateView) 실패는 그 탭/행에만 표시하고 설정 창은 계속 연다.
+        /// 플러그인 목록을 채우고 설정 탭을 붙인다. 설정 창은 플러그인을 로드하지 않는다 — 로드는 사용자가 ⋯ 메뉴에서 실행할 때만.
+        /// 이번 실행에서 이미 실행한 플러그인은 등록한 탭을, 아직 실행하지 않았고 plugin.json에 hasSettings가 있으면
+        /// plugin.json 이름으로 안내 탭만 붙인다. 플러그인 코드(Title·CreateView) 실패는 그 탭에만 표시한다.
         /// </summary>
         private void InitializePluginPages()
         {
-            var items = RefreshPluginList();
-            foreach (var row in items.Where(r => r.Manifest.HasSettings))
+            foreach (var row in RefreshPluginList())
             {
-                string error;
-                var loaded = PluginManager.TryLoad(row.Manifest, out error);
-                if (loaded == null)
+                var loaded = PluginManager.GetLoaded(row.Manifest.Id);
+                if (loaded != null)
                 {
-                    row.Status = "로드 실패: " + error;
-                    continue;
+                    foreach (var page in loaded.Host.SettingsPages)
+                        AddPluginPage(row.Manifest, page);
                 }
-                row.Status = "로드됨";
-                foreach (var page in loaded.Host.SettingsPages)
-                    AddPluginPage(row.Manifest, page);
+                else if (row.Manifest.HasSettings)
+                {
+                    AddPluginPlaceholder(row.Manifest);
+                }
             }
-            PluginList.Items.Refresh();
+        }
+
+        private void AddPluginPlaceholder(PluginManifest manifest)
+        {
+            var text = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Text = "이 플러그인은 아직 실행되지 않았습니다.\n\n플러그인은 ⋯ 메뉴 > 플러그인에서 실행할 때만 로드됩니다. " +
+                       "한 번 실행한 뒤 설정 창을 다시 열면 이 탭에서 설정할 수 있습니다."
+            };
+            AddPluginPanel(new PluginPageEntry { PluginId = manifest.Id, Title = manifest.DisplayName }, text, manifest.Id);
         }
 
         private void AddPluginPage(PluginManifest manifest, IPluginSettingsPage page)
@@ -852,8 +862,13 @@ namespace Folderss
                 view = new TextBlock { Text = "플러그인 설정 화면을 만들지 못했습니다.\n\n" + ex.GetType().Name + ": " + ex.Message, TextWrapping = TextWrapping.Wrap };
             }
 
+            AddPluginPanel(entry, view, manifest.Id);
+        }
+
+        private void AddPluginPanel(PluginPageEntry entry, FrameworkElement view, string toolTip)
+        {
             entry.Panel = new Border { Margin = new Thickness(24, 16, 24, 16), Child = view, Visibility = Visibility.Collapsed };
-            entry.NavItem = new ListBoxItem { Content = new TextBlock { Text = entry.Title }, ToolTip = manifest.Id };
+            entry.NavItem = new ListBoxItem { Content = new TextBlock { Text = entry.Title }, ToolTip = toolTip };
             ContentHost.Children.Add(entry.Panel);
             TabNav.Items.Add(entry.NavItem);
             _pluginPages.Add(entry);

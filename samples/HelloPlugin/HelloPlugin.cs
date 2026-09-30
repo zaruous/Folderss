@@ -22,9 +22,27 @@ namespace HelloPlugin
             var header = new TextBlock { Margin = new Thickness(8), Text = panel.CurrentPath };
             panel.PathChanged += (sender, args) => header.Text = panel.CurrentPath;
 
+            // 본체 설정(읽기 전용) 예
+            string theme;
+            _manager.GetAppSettings().TryGetValue("theme", out theme);
+            var info = new TextBlock { Margin = new Thickness(8, 0, 8, 8), Text = "본체 테마: " + theme };
+
+            // 종료 감지 확인용: 누르면 본체가 끝나고 plugin-log.txt에 기록된다 (다음 시작 때 알림).
+            var tests = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 8, 8) };
+            var shutdown = new Button { Content = "테스트: Application.Shutdown", Margin = new Thickness(0, 0, 6, 0) };
+            shutdown.Click += (sender, args) => Application.Current.Shutdown();
+            var exit = new Button { Content = "테스트: Environment.Exit" };
+            exit.Click += (sender, args) => System.Environment.Exit(3);
+            tests.Children.Add(shutdown);
+            tests.Children.Add(exit);
+
             var root = new DockPanel();
             DockPanel.SetDock(header, Dock.Top);
+            DockPanel.SetDock(info, Dock.Top);
+            DockPanel.SetDock(tests, Dock.Top);
             root.Children.Add(header);
+            root.Children.Add(info);
+            root.Children.Add(tests);
             root.Children.Add(panel.View);
             return root;
         }

@@ -1045,6 +1045,9 @@ namespace Folderss
                 }
             }
 
+            // 여기까지 오면 본체가 스스로 끝내는 정상 종료다(취소 가능한 확인을 모두 지남). 플러그인 종료 감지가 이것과 구분한다.
+            PluginManager.MarkUserRequestedExit();
+
             // If the window is hidden, the visible layout was already saved before Hide().
             // Serializing the unloaded visual state again can overwrite that last good layout.
             if (IsVisible)

@@ -20,7 +20,7 @@ namespace Folderss.Services
         public string Assembly { get; set; }
         /// <summary><c>IFolderssPlugin</c>을 구현한 형식의 전체 이름.</summary>
         public string Type { get; set; }
-        /// <summary>true면 설정 창을 열 때 플러그인을 로드해 설정 탭을 받는다.</summary>
+        /// <summary>true면 아직 실행하지 않은 플러그인도 설정 창에 안내 탭을 보인다 (로드는 하지 않음).</summary>
         public bool HasSettings { get; set; }
 
         /// <summary>등록된 zip 경로 (파일에서 읽지 않음).</summary>

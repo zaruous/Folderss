@@ -41,6 +41,9 @@
     <Compile Include="..\..\Folderss\Services\DiffHtmlReport.cs" Link="Linked\DiffHtmlReport.cs" />
     <Compile Include="..\..\Folderss\Services\PluginPackage.cs" Link="Linked\PluginPackage.cs" />
     <Compile Include="..\..\Folderss\Services\PluginSettingsStore.cs" Link="Linked\PluginSettingsStore.cs" />
+    <Compile Include="..\..\Folderss\Services\PluginAppSettings.cs" Link="Linked\PluginAppSettings.cs" />
+    <Compile Include="..\..\Folderss\Services\PluginSessionRecord.cs" Link="Linked\PluginSessionRecord.cs" />
+    <Compile Include="..\..\Folderss\Services\ConsoleSettingsService.cs" Link="Linked\ConsoleSettingsService.cs" />
   </ItemGroup>
 
   <ItemGroup>

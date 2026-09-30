@@ -40,6 +40,15 @@ namespace Folderss.Plugins
         /// <summary>플러그인 설정 전체(복사본).</summary>
         IReadOnlyDictionary<string, string> GetAllSettings();
 
+        /// <summary>
+        /// 본체(Folderss) 설정의 읽기 전용 복사본. 호출할 때마다 저장된 값을 새로 읽는다. 다른 플러그인의 설정은 들어 있지 않다.
+        /// 키: theme, git.executablePath, git.baseFolderMode, git.pullMode, git.scanDepth, git.excludedFolders(줄바꿈 구분),
+        /// git.logLimit, git.logAllBranches, diff.ignoreWhitespace, diff.fallbackEncoding, diff.viewMode, diff.toolMode,
+        /// diff.toolPath, diff.toolArguments, console.preferredProfileKey, console.fontSize.
+        /// 값은 문자열이며 bool은 "true"/"false", 선택 값은 이름(예: "FastForwardOnly")이다.
+        /// </summary>
+        IReadOnlyDictionary<string, string> GetAppSettings();
+
         /// <summary>본체와 같은 폴더 패널을 새로 만든다. 파일을 열면 메인 창의 뷰어 탭으로 열린다.</summary>
         IFolderPanel CreateFolderPanel(string path);
 

@@ -15,7 +15,33 @@
 3. 플러그인 로드가 실패해도 메인 애플리케이션은 죽으면 안 된다.
 4. 플러그인이 필요하면 플러그인 매니저로 설정 팝업에 탭을 추가할 수 있다.
 
+### 3차 요청 (2026-09-30)
+
+1. 애플리케이션에 설정된 정보를 읽기 전용으로, 필요 시 참고할 수 있게 제공한다. 다른 플러그인의 설정은 제외.
+2. 메뉴 이름은 플러그인이 설정한 정보(plugin.json)만으로 만들고, 실제 로드는 사용자가 플러그인을 직접 실행하는 시점에 한다.
+3. (한계 인지)
+4. 팝업 방식 유지.
+5. 플러그인이 메인 프로세스를 죽이려는 경우 막을 수 있는지, 불가능하면 종료 감지·로깅이 가능한지 확인한다.
+
 ## 원인 분석 또는 설계
+
+### 3차 설계
+- **본체 설정**: `GetAppSettings()` — 키를 명시한 문자열 사전(테마, Git, 비교, 콘솔 스칼라 값). 리플렉션 자동 노출은 속성 이름 변경이 플러그인을
+  깨고 새 민감 값이 자동 노출되는 위험이 있어 쓰지 않았다. 열기 프로그램·단축키·뷰어 매핑·콘솔 사용자 프로필은 넣지 않았다(필요 시 추가).
+  다른 플러그인 설정은 API로 주지 않는다. 단, 같은 권한의 코드라 파일을 직접 읽는 것은 막을 수 없다.
+- **로드 시점**: 2차의 "설정 창을 열 때 hasSettings 플러그인 로드"를 없앴다. 설정 탭은 이번 실행에서 이미 실행한 플러그인만, 아직이면 plugin.json 이름의 안내 탭.
+- **종료를 막을 수 있는가** (같은 프로세스 기준):
+
+  | 종료 경로 | 막기 | 감지·기록 |
+  |---|---|---|
+  | 메인 창 `Close()` | 이미 트레이 숨기기라 종료 안 됨 | 불필요 |
+  | `Application.Shutdown()` | 불가(취소 불가한 종료) | 가능 — 사용자 종료 표시 없이 `Exit` 도달. 호출자는 스택에 안 남아 로드된 플러그인을 용의자로 기록 |
+  | `Environment.Exit()` | 불가 | 가능 — `ProcessExit`가 `Exit` 없이 옴. 스택에서 플러그인 판별(최선) |
+  | 별도 스레드 처리되지 않은 예외 | 불가(.NET Core는 종료 강제) | 가능 — `UnhandledException`에서 예외 스택으로 판별 |
+  | UI 스레드 예외 | 가능(2차에서 구현) | 가능 |
+  | `Process.Kill`·`FailFast`·스택 오버플로·네이티브 크래시·`TerminateProcess` | 불가 | 그 순간은 불가. 다음 시작 때 남은 기록으로 "비정상 종료 + 로드된 플러그인" 감지 |
+
+  완전히 막으려면 플러그인을 별도 프로세스에서 실행해야 하는데, 그러면 WPF 폴더 패널을 플러그인 화면에 직접 넣을 수 없어 이번 요구와 맞지 않는다.
 
 ### 형식: .NET DLL + 계약 DLL
 - WPF 폴더 패널(`FolderBrowser`)을 플러그인 화면에 넣으려면 같은 프로세스의 WPF 코드여야 한다(HTML/WebView2 플러그인은 불가).
@@ -44,6 +70,14 @@
 - `SettingsWindow`: `플러그인` 탭(목록·찾기·제거), 플러그인 설정 탭 동적 추가, 저장 시 `TrySave`로 플러그인 `Save` 호출.
 - `samples/HelloPlugin`: 설정한 시작 폴더로 폴더 패널 팝업 + 시작 폴더 설정 탭. 빌드 시 `HelloPlugin.zip` 생성.
 
+### 3차
+- 계약 `IPluginManager.GetAppSettings()` 추가 (인터페이스는 본체만 구현하므로 기존 플러그인 호환).
+- `PluginAppSettings`(키 목록), `PluginSessionRecord`/`PluginSessionLog`(기록·수거·로그) 신규.
+- `PluginManager`: `GetLoaded`, `InstallExitHooks`, `MarkUserRequestedExit`, `OnApplicationExit`, `ReportPreviousAbnormalExits`, 처리한 UI 예외도 로그.
+- `App`: 종료 감시 설치, `OnExit`, 시작 후(ApplicationIdle) 이전 비정상 종료 알림. `MainWindow.Window_Closing`: 확인을 지난 정상 종료 표시.
+- `SettingsWindow`: 플러그인 로드 제거, 이미 로드한 플러그인 탭 / 안내 탭.
+- `HelloPlugin`: 본체 테마 표시, 종료 감지 확인용 `Application.Shutdown`·`Environment.Exit` 버튼.
+
 ## 변경 파일
 
 - `Folderss.PluginContract/` (신규), `Folderss.sln`, `Folderss/Folderss.csproj`
@@ -52,6 +86,7 @@
 - `samples/HelloPlugin/` (신규)
 - `tests/Folderss.SearchTests/PluginPackageTests.cs` (신규), `Folderss.SearchTests.csproj`
 - `README.md`, `docs/architecture.md`, `CLAUDE.md`, `AGENTS.md`
+- 3차: `Folderss/Services/PluginAppSettings.cs`, `PluginSessionRecord.cs` (신규), `tests/Folderss.SearchTests/PluginSessionTests.cs` (신규)
 
 ## 검증
 
@@ -66,7 +101,17 @@
   4. ⋯ 메뉴 > 플러그인 > Hello 플러그인 → 팝업에 그 폴더 패널, 파일 더블클릭 시 메인 창 뷰어 탭으로 열림
   5. 잘못된 zip(plugin.json 없음, type 오타)을 넣어도 메시지만 뜨고 앱 유지
 
+- 3차: `dotnet test` 124 통과, 1 건너뜀(기존). 추가 6개(종료 기록 수거·삭제·설명, 로그, 본체 설정 키 목록). Linux 빌드 새 오류 없음, HelloPlugin 빌드 성공.
+- **3차 Windows 확인 필요**:
+  1. HelloPlugin을 실행하기 전 설정 창 → `Hello 플러그인` 안내 탭만 보이고 로드되지 않음(목록 상태 비어 있음)
+  2. 실행 후 설정 창을 다시 열면 실제 설정 탭, 팝업에 `본체 테마: <현재 테마>`
+  3. 팝업의 `테스트: Environment.Exit` → 종료 → 다시 시작하면 경고(원인: WPF 종료 절차 없이…, 호출한 플러그인: sample.hello 또는 "스택에서 찾지 못함"), `plugin-log.txt` 기록
+  4. `테스트: Application.Shutdown` → 같은 방식으로 "Application.Shutdown이 호출됨" 알림
+  5. 작업 관리자로 Folderss 강제 종료 → 다시 시작하면 "기록 없음 — 강제 종료로 추정" 알림
+  6. 플러그인 실행 후 ⋯ > 종료로 정상 종료 → 다시 시작해도 알림 없음
+
 ## 변경 이력
 
 - 2026-09-30: 요청 접수, 설계 제안(형식 A/B, 폴더 패널 노출 방식 질의)
 - 2026-09-30: 2차 요청 반영해 구현, Ready for Verification
+- 2026-09-30: 3차 요청(본체 설정 읽기 전용, 실행 시점 로드, 종료 감지·로깅) 반영, Ready for Verification
