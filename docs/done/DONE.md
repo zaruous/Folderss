@@ -11,6 +11,8 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ## 미릴리스
 
+- `Controls/FolderBrowser.xaml.cs` — 폴더 트리 우클릭 시 트리가 접히던 버그 수정. 원인은 클릭 토글이 아니라 셸 컨텍스트 메뉴 후 `RefreshTreeAfterShellAction`이 부모의 자식 노드를 새로 만들면서(루트면 트리 전체 재생성) 펼침 상태가 사라진 것. 새로고침 전 펼친 경로를 모아(`CollectExpandedPaths`) 새로고침 후 다시 펼침(`RestoreExpandedPaths`). 이름이 바뀐 폴더는 경로가 달라져 접힌 상태로 남음.
+
 ### WebView2 초기화 실패 시 앱 크래시 방지 (#30)
 
 - `Viewers/MarkdownViewer`·`TextViewer`·`MonacoViewer` — `CoreWebView2Environment.CreateAsync`/`EnsureCoreWebView2Async`를 기존 try/catch 안으로 옮김. 절전·장시간 유휴 후 처음 로드되는 뷰어에서 `RPC_E_DISCONNECTED`(COMException)가 `async void OnLoaded`로 올라가 앱 전체가 종료되던 문제를 해당 뷰어의 오류 표시로 대체.
