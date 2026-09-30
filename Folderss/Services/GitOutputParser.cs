@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Text.RegularExpressions;
 using Folderss.Models;
 
 namespace Folderss.Services
@@ -140,6 +141,94 @@ namespace Folderss.Services
                 });
             }
             return commits;
+        }
+
+        private static readonly Regex HunkHeader = new Regex(@"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", RegexOptions.Compiled);
+
+        /// <summary>
+        /// unified diff 텍스트를 줄 단위로 분류하고 변경 전/후 줄 번호를 붙인다.
+        /// "---"/"+++"는 hunk 밖일 때만 헤더로 본다 — hunk 안에서 "--"로 시작하는 줄이 지워지면 "---…"가 되기 때문.
+        /// <paramref name="maxLines"/>를 넘으면 자르고 생략 안내 줄을 붙인다.
+        /// </summary>
+        public static List<GitDiffLine> ParseDiff(string diff, int maxLines = int.MaxValue)
+        {
+            var lines = new List<GitDiffLine>();
+            var text = (diff ?? string.Empty).Replace("\r\n", "\n");
+            if (text.EndsWith("\n", StringComparison.Ordinal))
+                text = text.Substring(0, text.Length - 1);
+            if (text.Length == 0)
+                return lines;
+
+            var raw = text.Split('\n');
+            var inHunk = false;
+            var combined = false;   // 충돌 파일의 combined diff(@@@): 앞 두 글자가 부모별 표시, 줄 번호 없음
+            int oldLine = 0, newLine = 0;
+            for (var i = 0; i < raw.Length; i++)
+            {
+                if (lines.Count >= maxLines)
+                {
+                    lines.Add(new GitDiffLine
+                    {
+                        Kind = GitDiffLineKind.Meta,
+                        Text = string.Format("… 너무 길어 이하 {0}줄은 표시하지 않습니다.", raw.Length - i)
+                    });
+                    break;
+                }
+
+                var line = raw[i];
+                var entry = new GitDiffLine { Text = line };
+
+                if (line.StartsWith("diff ", StringComparison.Ordinal))
+                {
+                    inHunk = false;
+                    entry.Kind = GitDiffLineKind.Header;
+                }
+                else if (line.StartsWith("@@", StringComparison.Ordinal))
+                {
+                    var match = HunkHeader.Match(line);
+                    inHunk = true;
+                    combined = !match.Success;
+                    entry.Kind = GitDiffLineKind.Hunk;
+                    if (match.Success)
+                    {
+                        oldLine = int.Parse(match.Groups[1].Value, CultureInfo.InvariantCulture);
+                        newLine = int.Parse(match.Groups[2].Value, CultureInfo.InvariantCulture);
+                    }
+                }
+                else if (!inHunk)
+                {
+                    entry.Kind = GitDiffLineKind.Header;
+                }
+                else if (line.StartsWith("\\", StringComparison.Ordinal))
+                {
+                    entry.Kind = GitDiffLineKind.Meta;
+                }
+                else if (combined)
+                {
+                    var marks = line.Length >= 2 ? line.Substring(0, 2) : line;
+                    entry.Kind = marks.Contains('+') ? GitDiffLineKind.Added
+                        : marks.Contains('-') ? GitDiffLineKind.Removed
+                        : GitDiffLineKind.Context;
+                }
+                else if (line.StartsWith("+", StringComparison.Ordinal))
+                {
+                    entry.Kind = GitDiffLineKind.Added;
+                    entry.NewLine = newLine++;
+                }
+                else if (line.StartsWith("-", StringComparison.Ordinal))
+                {
+                    entry.Kind = GitDiffLineKind.Removed;
+                    entry.OldLine = oldLine++;
+                }
+                else
+                {
+                    entry.Kind = GitDiffLineKind.Context;
+                    entry.OldLine = oldLine++;
+                    entry.NewLine = newLine++;
+                }
+                lines.Add(entry);
+            }
+            return lines;
         }
 
         /// <summary><c>git for-each-ref</c> + <see cref="BranchFormat"/> 출력을 해석한다. 원격 HEAD 별칭은 뺀다.</summary>

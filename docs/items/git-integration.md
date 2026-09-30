@@ -17,6 +17,15 @@
   - Git 기능 자체도 별도 팝업 창(`GitWindow`, 비모달)으로 연다(Q2 → 별도 창).
   - `옵션…` 대화상자(`GitOptionsWindow`)에서 기준 폴더 규칙(Q1), pull 방식(Q4), 탐색 깊이·제외 폴더(Q5), 로그 개수·범위를 고른다.
 
+### 추가 요구사항 (2026-09-30)
+
+- git diff와 **로컬 ↔ 원격(upstream) 차이 비교**를 Git 창에 넣는다.
+  - 변경 사항: 파일 선택 시 diff (작업 트리 ↔ 인덱스 / 인덱스 ↔ HEAD / 추적 안 되는 새 파일 전체).
+  - 원격 비교 탭: 보낼 커밋(`@{u}..HEAD`)·받을 커밋(`HEAD..@{u}`) 목록과 커밋별 diff, 보낼/받을 변경 전체 diff(merge-base 기준 `...`),
+    커밋 안 한 수정까지 포함한 작업 트리 ↔ upstream diff, 이 저장소만 fetch 후 다시 비교.
+  - 로그: 커밋 선택 시 그 커밋의 diff.
+- 표시 방식(가정): unified diff를 줄 번호·추가/삭제 색으로 보이는 창 안 읽기 전용 뷰. 좌우 나란히 보기는 이번 범위 밖.
+
 ### 기능 (제안)
 
 1. `⋯ 메뉴 > Git 저장소 보기…`를 누르면 기준 폴더(아래 "기준 폴더 결정") 아래를 백그라운드로 훑어 Git 저장소 목록을 만든다.
@@ -40,7 +49,7 @@
 ### 범위 밖 (1차)
 
 - merge/rebase/cherry-pick/stash, **충돌 해결 UI**, 강제 푸시, 태그·원격 관리, clone, 서브모듈 update.
-- 파일 diff 보기 — `docs/아이디어.md`의 "Monaco 기반 Diff 뷰어"와 묶는 것이 맞다.
+- ~~파일 diff 보기~~ → 2026-09-30 추가 요구사항으로 범위에 포함(아래). 좌우 나란히(side-by-side) Monaco diff는 여전히 `docs/아이디어.md` 후속.
 - `FolderBrowser` 목록의 Git 상태 오버레이 — `docs/아이디어.md` "Git 작업 트리 상태 오버레이"(이 항목의 `GitCommandRunner`·파서를 재사용할 수 있음).
 
 ## 기준 폴더 결정 (가정 — 미결 Q1)
@@ -180,6 +189,9 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
 | R9 | 줄바꿈·인코딩(커밋 메시지 한글, `i18n.commitEncoding` 비 UTF-8 설정) | 메시지 깨짐 | 파일로 전달, 저장소 설정은 건드리지 않음 |
 | R10 | 워크트리/서브모듈 `.git` 파일, WSL 경로(`\\wsl$`) | 잘못된 루트·느린 I/O | `.git` 파일도 루트로 인정, WSL 경로는 1차 비지원으로 명시 |
 | R11 | 범위 팽창 — 그래프·diff·충돌 해결까지 가면 사실상 Git 클라이언트 | 일정·품질 | 단계 분리, 범위 밖 작업은 "콘솔에서 열기"로 위임 |
+| R12 | diff 인코딩 — git 출력을 UTF-8로 읽으므로 CP949 등 비 UTF-8 파일은 한글이 깨져 보임 | 내용 오독 | 1차는 안내만. 바이트로 받아 줄 단위 UTF-8 실패 시 CP949 재해석은 후속 후보 |
+| R13 | 거대 diff(수십 MB 생성 파일·minified) | 메모리·30초 타임아웃 | 표시는 2만 줄로 자름. 출력 자체는 전부 읽으므로 극단적인 경우 타임아웃 |
+| R14 | 원격 비교가 오래된 상태 | fetch 전 원격 추적 브랜치 기준이라 "받을 커밋 0"이 실제와 다를 수 있음 | 요약 문구로 명시 + `fetch 후 비교` 버튼 |
 
 ## 미결 사항 (사용자 확인 필요)
 
@@ -228,6 +240,16 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
 - 수정: `Folderss/MainWindow.xaml`(메뉴), `Folderss/MainWindow.xaml.cs`(`ShowGit_Click`, `CountModifiedDocumentsUnder`),
   `tests/Folderss.SearchTests/Folderss.SearchTests.csproj`(소스 링크), `README.md`, `docs/architecture.md`
 
+## 구현 내용 — diff·원격 비교 (2026-09-30)
+
+- `Controls/GitDiffView`: 가상화 ListBox로 줄마다 변경 전/후 줄 번호와 추가(반투명 초록)·삭제(반투명 빨강) 배경. 테마 키를 새로 만들지 않고
+  반투명 색을 깔아 어두운·밝은 테마 모두에서 읽히게 했다. 2만 줄 초과는 생략 안내. `BeginLoad`/`Complete` 요청 번호로 늦게 온 결과 무시. `Ctrl+C` 복사.
+- `GitOutputParser.ParseDiff`: 헤더/hunk/문맥/추가/삭제/메타 분류와 줄 번호. hunk 밖 `---`/`+++`만 헤더, combined diff(`@@@`)는 두 글자 표시로 분류.
+- `GitDiffCommands`: 명령 인수 한 곳(`--no-color --no-ext-diff -M`). 추적 안 됨은 `diff --no-index -- /dev/null <p>`(종료 코드 1 허용).
+  병합 커밋은 첫 부모 기준 `diff <p1> <hash>`, 최초 커밋은 `show --format=`.
+- `GitWindow`: 변경 사항 탭을 "왼쪽 목록(변경됨/스테이지됨) + 오른쪽 diff"로 재배치, `원격 비교` 탭 추가, 로그 탭 아래에 커밋 diff.
+  상태를 새로 읽어 목록이 바뀌면 옛 diff를 비운다. upstream 없음·detached·upstream gone은 요약 문구로 알리고 비교 버튼을 끈다.
+
 ## 검증
 
 - `dotnet test tests/Folderss.SearchTests` (Linux, git 2.43): 전체 48개 중 통과 47, 건너뜀 1(기존 권한 테스트). 신규 `GitTests` 11개 통과 —
@@ -235,10 +257,13 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
   실제 git으로 init→add(pathspec stdin)→commit(-F)→status/branch/log 왕복, 저장소 아닌 폴더에서 실패가 예외 아닌 stderr로 오는지.
 - 앱 빌드: Linux에서 `-p:EnableWindowsTargeting=true`로 XAML 마크업 컴파일·C# 컴파일 확인. 신규 파일 오류·경고 없음
   (고의 오류 삽입으로 신규 파일이 실제 컴파일 대상임을 확인). 기존 `ConsolePanel.xaml.cs(58)` 터미널 컨트롤 참조 오류 1건은 Linux 환경 한계로 기존에도 발생.
-- **미검증 (Windows 수동 확인 필요)**: 창 레이아웃·테마 색, 실제 조작 흐름, GCM HTTPS push, SSH(agent 없음) push가 멈추지 않고 타임아웃/오류로 끝나는지,
+- diff 추가분: `GitTests` 5개 추가, 전체 53개 중 통과 52·건너뜀 1(기존). 파서(헤더 vs hunk 안 `---`/`+++`, 줄 번호, 메타, 바이너리, combined, 자르기),
+  실제 git으로 작업 트리/스테이지/추적 안 됨 diff, bare 원격 + 클론 2개로 보낼·받을 커밋과 방향별 diff가 서로 섞이지 않는지, 작업 트리 ↔ upstream, 최초·일반 커밋 diff.
+- **미검증 (Windows 수동 확인 필요)**: diff 색·줄 번호 표시, 긴 diff 스크롤 성능, 창 레이아웃·테마 색, 실제 조작 흐름, GCM HTTPS push, SSH(agent 없음) push가 멈추지 않고 타임아웃/오류로 끝나는지,
   드라이브 루트 확인 창, 미저장 탭 경고.
 
 ## 변경 이력
 
 - 2026-09-29: 요청 접수, 설계서 초안 작성(상태 Todo). 구현 전 미결 사항 확인 필요.
 - 2026-09-29: git 필수 설치 확정, 선택지를 옵션 대화상자로 구현. `GitWindow`·`GitOptionsWindow`·서비스 4종·테스트 추가(그래프 제외). 상태 Ready for Verification.
+- 2026-09-30: diff·원격 비교 요구 추가. 변경 사항 파일 diff, 원격 비교 탭(보낼/받을 커밋·방향별 diff·작업 트리 ↔ upstream), 로그 커밋 diff 구현. 테스트 5개 추가.

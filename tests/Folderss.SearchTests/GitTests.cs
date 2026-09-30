@@ -1,3 +1,4 @@
+using Folderss.Models;
 using Folderss.Services;
 using System;
 using System.IO;
@@ -247,6 +248,170 @@ namespace Folderss.SearchTests
 
             Assert.False(result.Success);
             Assert.Contains("not a git repository", result.StdErr, StringComparison.OrdinalIgnoreCase);
+        }
+
+        // ── diff 파서 ───────────────────────────────────────────────────────────
+
+        [Fact]
+        public void ParseDiff_ClassifiesLines_AndNumbersOldNew_TreatingDashesInsideHunkAsContent()
+        {
+            var diff = string.Join("\n",
+                "diff --git a/a.txt b/a.txt",
+                "index 111..222 100644",
+                "--- a/a.txt",
+                "+++ b/a.txt",
+                "@@ -10,3 +10,3 @@ section",
+                " keep",
+                "--- 지운 줄이 --로 시작",
+                "+++ 추가한 줄이 ++로 시작",
+                " keep2",
+                "\\ No newline at end of file",
+                "diff --git a/bin.dat b/bin.dat",
+                "Binary files a/bin.dat and b/bin.dat differ",
+                "");
+
+            var lines = GitOutputParser.ParseDiff(diff);
+
+            Assert.Equal(new[]
+            {
+                GitDiffLineKind.Header, GitDiffLineKind.Header, GitDiffLineKind.Header, GitDiffLineKind.Header,
+                GitDiffLineKind.Hunk, GitDiffLineKind.Context, GitDiffLineKind.Removed, GitDiffLineKind.Added,
+                GitDiffLineKind.Context, GitDiffLineKind.Meta, GitDiffLineKind.Header, GitDiffLineKind.Header
+            }, lines.Select(l => l.Kind));
+            Assert.Equal((10, 10), (lines[5].OldLine.Value, lines[5].NewLine.Value));
+            Assert.Equal(11, lines[6].OldLine);
+            Assert.Null(lines[6].NewLine);
+            Assert.Equal(11, lines[7].NewLine);
+            Assert.Null(lines[7].OldLine);
+            Assert.Equal((12, 12), (lines[8].OldLine.Value, lines[8].NewLine.Value));
+        }
+
+        [Fact]
+        public void ParseDiff_CombinedConflictDiff_ClassifiesByTwoColumnMarks_WithoutNumbers()
+        {
+            var diff = "diff --cc c.txt\n@@@ -1,1 -1,1 +1,5 @@@\n  same\n++<<<<<<< HEAD\n +ours\n- theirs\n";
+
+            var lines = GitOutputParser.ParseDiff(diff);
+
+            Assert.Equal(new[] { GitDiffLineKind.Header, GitDiffLineKind.Hunk, GitDiffLineKind.Context,
+                GitDiffLineKind.Added, GitDiffLineKind.Added, GitDiffLineKind.Removed }, lines.Select(l => l.Kind));
+            Assert.All(lines, l => Assert.Null(l.NewLine));
+        }
+
+        [Fact]
+        public void ParseDiff_TruncatesAtMaxLines_WithNotice()
+        {
+            var diff = string.Join("\n", Enumerable.Range(0, 10).Select(i => "line" + i));
+
+            var lines = GitOutputParser.ParseDiff(diff, 4);
+
+            Assert.Equal(5, lines.Count);
+            Assert.Equal(GitDiffLineKind.Meta, lines[4].Kind);
+            Assert.Contains("6줄", lines[4].Text);
+            Assert.Empty(GitOutputParser.ParseDiff(""));
+        }
+
+        // ── 실제 git: diff와 upstream 비교 ───────────────────────────────────────
+
+        private async Task<string> InitRepoAsync(string name)
+        {
+            var repo = P(name);
+            Directory.CreateDirectory(repo);
+            Assert.True((await Git(repo, "init", "-b", "main")).Success);
+            await Git(repo, "config", "user.name", "t");
+            await Git(repo, "config", "user.email", "t@example.com");
+            await Git(repo, "config", "commit.gpgsign", "false");
+            await Git(repo, "config", "core.autocrlf", "false");
+            return repo;
+        }
+
+        private static async Task CommitAllAsync(string repo, string message)
+        {
+            Assert.True((await Git(repo, "add", "-A")).Success);
+            var commit = await Git(repo, "commit", "-q", "-m", message);
+            Assert.True(commit.Success, commit.StdErr);
+        }
+
+        private static Task<GitResult> Run(string repo, System.Collections.Generic.List<string> args) =>
+            GitCommandRunner.RunAsync(repo, args, GitCommandRunner.QueryTimeout, CancellationToken.None, readOnly: true);
+
+        [SkippableFact]
+        public async Task RealGit_WorkTreeStagedAndUntrackedDiffs()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("diffrepo");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "one\ntwo\n");
+            await CommitAllAsync(repo, "init");
+
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "one\nTWO\n");
+            var work = GitOutputParser.ParseDiff((await Run(repo, GitDiffCommands.WorkTree("a.txt"))).StdOut);
+            Assert.Contains(work, l => l.Kind == GitDiffLineKind.Removed && l.Text == "-two" && l.OldLine == 2);
+            Assert.Contains(work, l => l.Kind == GitDiffLineKind.Added && l.Text == "+TWO" && l.NewLine == 2);
+
+            await Git(repo, "add", "a.txt");
+            Assert.Empty((await Run(repo, GitDiffCommands.WorkTree("a.txt"))).StdOut);
+            var staged = GitOutputParser.ParseDiff((await Run(repo, GitDiffCommands.Staged("a.txt", null))).StdOut);
+            Assert.Contains(staged, l => l.Text == "+TWO");
+
+            File.WriteAllText(Path.Combine(repo, "새 파일.txt"), "hello\n");
+            var untrackedResult = await Run(repo, GitDiffCommands.Untracked("새 파일.txt"));
+            Assert.Equal(1, untrackedResult.ExitCode);   // --no-index: 차이 있음 = 1
+            Assert.True(GitDiffCommands.IsSuccess(untrackedResult, noIndex: true));
+            Assert.False(GitDiffCommands.IsSuccess(untrackedResult, noIndex: false));
+            Assert.Contains(GitOutputParser.ParseDiff(untrackedResult.StdOut), l => l.Text == "+hello" && l.NewLine == 1);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CompareWithUpstream_OutgoingIncomingAndWorkTree()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+
+            // 원격(bare) + 두 클론: other가 push한 커밋은 local이 받을 것, local 커밋은 보낼 것.
+            var remote = P("remote.git");
+            Assert.True((await Git(null, "init", "--bare", "-b", "main", remote)).Success);
+            var seed = await InitRepoAsync("seed");
+            File.WriteAllText(Path.Combine(seed, "f.txt"), "base\n");
+            await CommitAllAsync(seed, "base");
+            await Git(seed, "remote", "add", "origin", remote);
+            Assert.True((await Git(seed, "push", "-u", "origin", "main")).Success);
+
+            var local = P("local");
+            Assert.True((await Git(null, "clone", "-q", remote, local)).Success);
+            await Git(local, "config", "user.name", "t");
+            await Git(local, "config", "user.email", "t@example.com");
+            await Git(local, "config", "commit.gpgsign", "false");
+
+            File.WriteAllText(Path.Combine(seed, "incoming.txt"), "from remote\n");
+            await CommitAllAsync(seed, "원격 커밋");
+            Assert.True((await Git(seed, "push")).Success);
+
+            File.WriteAllText(Path.Combine(local, "outgoing.txt"), "from local\n");
+            await CommitAllAsync(local, "로컬 커밋");
+            Assert.True((await Git(local, "fetch")).Success);
+
+            var outgoing = GitOutputParser.ParseLog((await Run(local, GitDiffCommands.LogRange(GitDiffCommands.Upstream, "HEAD", 100))).StdOut);
+            var incoming = GitOutputParser.ParseLog((await Run(local, GitDiffCommands.LogRange("HEAD", GitDiffCommands.Upstream, 100))).StdOut);
+            Assert.Equal("로컬 커밋", outgoing.Single().Subject);
+            Assert.Equal("원격 커밋", incoming.Single().Subject);
+
+            var pushDiff = (await Run(local, GitDiffCommands.Range(GitDiffCommands.Upstream + "...HEAD"))).StdOut;
+            var pullDiff = (await Run(local, GitDiffCommands.Range("HEAD..." + GitDiffCommands.Upstream))).StdOut;
+            Assert.Contains("outgoing.txt", pushDiff);
+            Assert.DoesNotContain("incoming.txt", pushDiff);
+            Assert.Contains("incoming.txt", pullDiff);
+            Assert.DoesNotContain("outgoing.txt", pullDiff);
+
+            // 작업 트리 ↔ upstream: 커밋 안 한 수정도 포함된다.
+            File.WriteAllText(Path.Combine(local, "f.txt"), "edited\n");
+            var workVsUpstream = (await Run(local, GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream))).StdOut;
+            Assert.Contains("+edited", workVsUpstream);
+
+            // 커밋 diff: 일반 커밋은 첫 부모 기준, 최초 커밋은 빈 트리 기준.
+            var root = GitOutputParser.ParseLog((await Git(local, "log", "-z", "--reverse", GitOutputParser.LogFormat)).StdOut).First();
+            var rootDiff = (await Run(local, GitDiffCommands.Commit(root.Hash, root.Parents))).StdOut;
+            Assert.Contains("+base", rootDiff);
+            var head = outgoing.Single();
+            Assert.Contains("+from local", (await Run(local, GitDiffCommands.Commit(head.Hash, head.Parents))).StdOut);
         }
     }
 }

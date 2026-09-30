@@ -10,6 +10,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using Folderss.Controls;
 using Folderss.Models;
 using Folderss.Services;
 
@@ -342,7 +343,8 @@ namespace Folderss
             var tag = (SectionNav.SelectedItem as ListBoxItem)?.Tag as string;
             ChangesSection.Visibility = tag == "Changes" ? Visibility.Visible : Visibility.Collapsed;
             BranchesSection.Visibility = tag == "Branches" ? Visibility.Visible : Visibility.Collapsed;
-            LogList.Visibility = tag == "Log" ? Visibility.Visible : Visibility.Collapsed;
+            RemoteSection.Visibility = tag == "Remote" ? Visibility.Visible : Visibility.Collapsed;
+            LogSection.Visibility = tag == "Log" ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ClearDetail()
@@ -351,12 +353,22 @@ namespace Folderss
             StagedList.ItemsSource = null;
             BranchList.ItemsSource = null;
             LogList.ItemsSource = null;
+            OutgoingList.ItemsSource = null;
+            IncomingList.ItemsSource = null;
             UnstagedHeader.Text = "변경됨";
             StagedHeader.Text = "스테이지됨";
+            OutgoingHeader.Text = "보낼 커밋 (push)";
+            IncomingHeader.Text = "받을 커밋 (pull)";
+            RemoteSummaryText.Text = string.Empty;
+            ChangesDiff.Clear();
+            RemoteDiff.Clear();
+            LogDiff.Clear();
         }
 
         private void ShowChanges(RepositoryRow row)
         {
+            // 목록을 새로 만들면 선택이 풀리므로, 옛 diff가 남아 현재 상태처럼 보이지 않게 비운다.
+            ChangesDiff.Clear();
             var snapshot = row?.Snapshot;
             if (snapshot == null)
             {
@@ -441,6 +453,191 @@ namespace Folderss
                 else if (row.Snapshot?.HeadOid != null)
                     AppendResult(row.Info, logResult);
             }
+
+            await LoadRemoteAsync(row, token);
+        }
+
+        // ── diff ────────────────────────────────────────────────────────────
+
+        /// <summary>선택 저장소에서 diff 명령을 돌려 <paramref name="view"/>에 보인다. 조회 전용이라 진행 중 잠금과 무관하게 돈다.</summary>
+        private async Task LoadDiffAsync(GitDiffView view, string title, IEnumerable<string> args, bool noIndex = false,
+            string emptyMessage = "차이가 없습니다.")
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+
+            var request = view.BeginLoad(title);
+            try
+            {
+                var result = await GitCommandRunner.RunAsync(row.RootPath, args, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                if (GitDiffCommands.IsSuccess(result, noIndex))
+                {
+                    view.Complete(request, result.StdOut, emptyMessage);
+                }
+                else if (view.Fail(request, FirstLine(result.StdErr) ?? "차이를 읽지 못했습니다."))
+                {
+                    AppendResult(row.Info, result);
+                }
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // async void 이벤트에서 부르므로 여기서 막는다.
+                view.Fail(request, ex.Message);
+            }
+        }
+
+        private async void UnstagedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (UnstagedList.SelectedItems.Count != 1)
+            {
+                if (UnstagedList.IsKeyboardFocusWithin)
+                    ChangesDiff.Clear(UnstagedList.SelectedItems.Count == 0 ? "파일을 선택하면 차이를 보여 줍니다." : "파일 하나를 선택하면 차이를 보여 줍니다.");
+                return;
+            }
+
+            var entry = (GitStatusEntry)UnstagedList.SelectedItem;
+            if (entry.IsUntracked)
+            {
+                if (entry.Path.EndsWith("/", StringComparison.Ordinal))
+                {
+                    ChangesDiff.Clear("추적 안 되는 폴더입니다. 폴더 안 파일은 스테이지한 뒤 볼 수 있습니다.");
+                    return;
+                }
+                await LoadDiffAsync(ChangesDiff, "추적 안 됨 (새 파일): " + entry.Path, GitDiffCommands.Untracked(entry.Path), noIndex: true);
+                return;
+            }
+
+            await LoadDiffAsync(ChangesDiff,
+                (entry.IsConflicted ? "충돌 (작업 트리): " : "작업 트리 ↔ 인덱스: ") + entry.Path,
+                GitDiffCommands.WorkTree(entry.Path));
+        }
+
+        private async void StagedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (StagedList.SelectedItems.Count != 1)
+            {
+                if (StagedList.IsKeyboardFocusWithin)
+                    ChangesDiff.Clear(StagedList.SelectedItems.Count == 0 ? "파일을 선택하면 차이를 보여 줍니다." : "파일 하나를 선택하면 차이를 보여 줍니다.");
+                return;
+            }
+
+            var entry = (GitStatusEntry)StagedList.SelectedItem;
+            await LoadDiffAsync(ChangesDiff, "인덱스 ↔ HEAD (커밋될 내용): " + entry.Path,
+                GitDiffCommands.Staged(entry.Path, entry.OriginalPath));
+        }
+
+        private async void LogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            await ShowCommitDiffAsync(LogDiff, LogList.SelectedItem as GitCommitInfo);
+        }
+
+        private async void RemoteCommitList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var list = (ListBox)sender;
+            if (!list.IsKeyboardFocusWithin && list.SelectedItem == null)
+                return;
+            await ShowCommitDiffAsync(RemoteDiff, list.SelectedItem as GitCommitInfo);
+        }
+
+        private Task ShowCommitDiffAsync(GitDiffView view, GitCommitInfo commit)
+        {
+            if (commit == null)
+            {
+                view.Clear("커밋을 선택하면 변경을 보여 줍니다.");
+                return Task.CompletedTask;
+            }
+
+            var basis = commit.Parents.Length == 0 ? "최초 커밋" : commit.Parents.Length > 1 ? "병합 커밋 — 첫 부모 기준" : null;
+            var title = string.Format("{0}  {1}  ({2}, {3}{4})", commit.ShortHash, commit.Subject, commit.Author, commit.TimeText,
+                basis == null ? string.Empty : ", " + basis);
+            return LoadDiffAsync(view, title, GitDiffCommands.Commit(commit.Hash, commit.Parents));
+        }
+
+        // ── 원격 비교 ────────────────────────────────────────────────────────
+
+        private const int RemoteLogLimit = 500;
+
+        /// <summary>현재 브랜치와 upstream의 차이(보낼/받을 커밋)를 읽는다. 원격 추적 브랜치 기준이라 최신은 fetch 뒤에 보인다.</summary>
+        private async Task LoadRemoteAsync(RepositoryRow row, CancellationToken token)
+        {
+            var snapshot = row.Snapshot;
+            OutgoingList.ItemsSource = null;
+            IncomingList.ItemsSource = null;
+            RemoteDiff.Clear("커밋을 선택하거나 위 버튼으로 전체 차이를 보세요.");
+
+            var hasUpstream = snapshot != null && !snapshot.IsDetached && snapshot.Upstream != null;
+            OutgoingDiffButton.IsEnabled = hasUpstream;
+            IncomingDiffButton.IsEnabled = hasUpstream;
+            WorkTreeDiffButton.IsEnabled = hasUpstream;
+
+            if (snapshot == null)
+                return;
+            if (snapshot.IsDetached)
+            {
+                RemoteSummaryText.Text = "detached HEAD 상태라 비교할 upstream이 없습니다.";
+                return;
+            }
+            if (snapshot.Upstream == null)
+            {
+                RemoteSummaryText.Text = string.Format("'{0}' 브랜치에 upstream이 없습니다. push하면 설정할 수 있습니다.", snapshot.Branch);
+                return;
+            }
+
+            RemoteSummaryText.Text = "비교 중…";
+            var outgoingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange(GitDiffCommands.Upstream, "HEAD", RemoteLogLimit),
+                GitCommandRunner.QueryTimeout, token, readOnly: true);
+            var incomingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange("HEAD", GitDiffCommands.Upstream, RemoteLogLimit),
+                GitCommandRunner.QueryTimeout, token, readOnly: true);
+            var outgoing = await outgoingTask;
+            var incoming = await incomingTask;
+
+            if (!ReferenceEquals(row, SelectedRow))
+                return;
+
+            if (!outgoing.Success || !incoming.Success)
+            {
+                // 원격에서 브랜치가 지워졌거나(upstream gone) 아직 fetch 전인 경우.
+                RemoteSummaryText.Text = string.Format("{0} 와(과) 비교할 수 없습니다: {1}", snapshot.Upstream,
+                    FirstLine(outgoing.Success ? incoming.StdErr : outgoing.StdErr) ?? "알 수 없는 오류");
+                OutgoingDiffButton.IsEnabled = IncomingDiffButton.IsEnabled = WorkTreeDiffButton.IsEnabled = false;
+                return;
+            }
+
+            var outgoingCommits = GitOutputParser.ParseLog(outgoing.StdOut);
+            var incomingCommits = GitOutputParser.ParseLog(incoming.StdOut);
+            OutgoingList.ItemsSource = outgoingCommits;
+            IncomingList.ItemsSource = incomingCommits;
+            OutgoingHeader.Text = string.Format("보낼 커밋 (push) — {0}{1}개", outgoingCommits.Count, outgoingCommits.Count >= RemoteLogLimit ? "+" : string.Empty);
+            IncomingHeader.Text = string.Format("받을 커밋 (pull) — {0}{1}개", incomingCommits.Count, incomingCommits.Count >= RemoteLogLimit ? "+" : string.Empty);
+            RemoteSummaryText.Text = string.Format("{0} ↔ {1}   (원격 상태는 마지막 fetch 기준입니다. 최신으로 비교하려면 'fetch 후 비교')",
+                snapshot.Branch, snapshot.Upstream);
+        }
+
+        private async void FetchSelected_Click(object sender, RoutedEventArgs e)
+        {
+            await RunOnSelectedAsync("fetch 중…", new[] { "fetch", "--prune" }, GitCommandRunner.NetworkTimeout);
+        }
+
+        private async void OutgoingDiff_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadDiffAsync(RemoteDiff, "보낼 변경 전체: upstream과 갈라진 뒤 로컬에서 커밋한 변경 (@{u}...HEAD)",
+                GitDiffCommands.Range(GitDiffCommands.Upstream + "...HEAD"), emptyMessage: "보낼 변경이 없습니다.");
+        }
+
+        private async void IncomingDiff_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadDiffAsync(RemoteDiff, "받을 변경 전체: 갈라진 뒤 upstream에 커밋된 변경 (HEAD...@{u})",
+                GitDiffCommands.Range("HEAD..." + GitDiffCommands.Upstream), emptyMessage: "받을 변경이 없습니다.");
+        }
+
+        private async void WorkTreeVsUpstream_Click(object sender, RoutedEventArgs e)
+        {
+            await LoadDiffAsync(RemoteDiff, "작업 트리 ↔ upstream: 커밋 안 한 수정 포함, 추적 안 되는 파일 제외 (@{u})",
+                GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream), emptyMessage: "로컬 작업 트리와 upstream이 같습니다.");
         }
 
         /// <summary>선택 저장소에 쓰기 명령을 실행하고, 끝나면 상태·브랜치·로그를 다시 읽는다.</summary>

@@ -17,6 +17,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser       — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
 │   ├── FavoritesPanel      — 즐겨찾기 패널 (그룹, 폴더·파일 즐겨찾기)
+│   ├── GitDiffView         — Git 창의 읽기 전용 diff 뷰 (줄 번호, 추가·삭제 색)
 │   ├── SearchPanel         — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 토글)
 │   ├── ConsolePanel        — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel      — 드라이브별 디스크 사용량 패널 (가로바, GB 단위)
@@ -42,7 +43,8 @@ Folderss/
 │   ├── FilePreviewService      — 텍스트·이미지 미리보기 + 메타데이터 (링크 대상 포함)
 │   ├── GitRepositoryScanner    — 기준 폴더 아래(와 위) Git 저장소 탐색 (중첩·워크트리·서브모듈)
 │   ├── GitCommandRunner        — git CLI 실행 (인수 목록 전달, 타임아웃·취소, UTF-8)
-│   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref` 기계용 출력 파서
+│   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref`·unified diff 출력 파서
+│   ├── GitDiffCommands         — diff·upstream 비교 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService      — Git 창 옵션 저장 (pull 방식, 탐색 깊이·제외 폴더 등)
 │   ├── IgnoreRuleSet           — .gitignore/.folderssignore 규칙 매처 (목록 ignore 필터)
 │   ├── DockLayoutService       — AvalonDock 레이아웃 저장·복원 (XML)
@@ -197,13 +199,16 @@ tests/
 - 선택한 저장소 하나에 대해:
   - **변경 사항**: 변경됨/스테이지됨 목록, 개별·전체 스테이지/언스테이지, 커밋(`Ctrl+Enter`). 더블클릭하면 내장 뷰어로 열기.
   - **브랜치**: 로컬·원격 브랜치 목록, 전환(원격은 추적 브랜치 생성), 새 브랜치, 병합된 브랜치 삭제(`-d`만).
-  - **로그**: 최근 커밋(해시·제목·참조·작성자·날짜).
+  - **원격 비교**: 현재 브랜치 ↔ upstream의 보낼 커밋(push)·받을 커밋(pull) 목록, 방향별 전체 diff, 커밋 안 한 수정까지 포함한 작업 트리 ↔ upstream diff. 원격 상태는 마지막 fetch 기준이며 `fetch 후 비교`로 갱신.
+  - **로그**: 최근 커밋(해시·제목·참조·작성자·날짜), 선택한 커밋의 diff(병합 커밋은 첫 부모 기준).
+  - diff는 변경 전/후 줄 번호와 추가(초록)·삭제(빨강) 배경으로 표시하며, `Ctrl+C`로 선택한 줄을 복사합니다. 변경 사항 목록에서 파일을 고르면 작업 트리 ↔ 인덱스, 스테이지됨은 인덱스 ↔ HEAD, 추적 안 되는 파일은 전체 내용을 추가로 보입니다.
   - 툴바 `pull`/`push`: upstream이 없으면 확인 후 `push -u`. 강제 푸시는 없습니다.
 - 여러 저장소에 한꺼번에 하는 동작은 `다시 찾기`(상태 조회)와 `전체 fetch`뿐입니다.
 - 브랜치 전환·pull 전에 그 저장소 파일을 저장하지 않은 문서 탭이 있으면 경고합니다.
 - 모든 git 명령과 오류 메시지는 창 아래 출력 영역에 남습니다. 인증은 사용자의 git 설정(Git Credential Manager, ssh-agent)을 그대로 쓰며, 응답이 없으면 5분 뒤 중단됩니다.
 - `옵션…` 대화상자: 기준 폴더 규칙, pull 방식(fast-forward만 / 병합 / rebase / git 설정 따름), 탐색 깊이·제외 폴더, 로그 개수·전체 브랜치 포함.
-- 범위 밖: 충돌 해결, merge/rebase/stash 명령, diff 보기, 브랜치 그래프 — 필요하면 `콘솔`에서 처리합니다.
+- diff는 git 출력을 UTF-8로 읽습니다. UTF-8이 아닌 파일(CP949 등)은 한글이 깨져 보일 수 있고, 20,000줄을 넘으면 뒤는 생략합니다.
+- 범위 밖: 충돌 해결, merge/rebase/stash 명령, 좌우 나란히(side-by-side) diff, 브랜치 그래프 — 필요하면 `콘솔`에서 처리합니다.
 
 ## 디스크 사용량
 

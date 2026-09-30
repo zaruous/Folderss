@@ -88,6 +88,31 @@ namespace Folderss.Models
 
         public string ShortHash => Hash == null ? string.Empty : Hash.Substring(0, Math.Min(7, Hash.Length));
         public string TimeText => Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
+        public string ListText => ShortHash + "  " + Subject;
+    }
+
+    public enum GitDiffLineKind
+    {
+        /// <summary>파일 헤더(diff --git, index, ---/+++, rename, Binary files…)와 첫 파일 앞의 머리말.</summary>
+        Header,
+        Hunk,
+        Context,
+        Added,
+        Removed,
+        /// <summary>"\ No newline at end of file", 생략 안내 등.</summary>
+        Meta
+    }
+
+    public sealed class GitDiffLine
+    {
+        public GitDiffLineKind Kind { get; set; }
+        public string Text { get; set; }
+
+        /// <summary>변경 전 줄 번호(삭제·문맥 줄). 없으면 null.</summary>
+        public int? OldLine { get; set; }
+
+        /// <summary>변경 후 줄 번호(추가·문맥 줄). 없으면 null.</summary>
+        public int? NewLine { get; set; }
     }
 
     public sealed class GitBranchInfo
