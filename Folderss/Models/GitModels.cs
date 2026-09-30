@@ -297,6 +297,25 @@ namespace Folderss.Models
         public int? NewLine { get; set; }
     }
 
+    /// <summary><c>git stash list</c>의 항목 하나.</summary>
+    public sealed class GitStashInfo
+    {
+        /// <summary>stash@{n}. 삭제하면 뒤 번호가 당겨지므로 작업마다 목록을 다시 읽는다.</summary>
+        public string Ref { get; set; }
+        public string Hash { get; set; }
+        public string[] Parents { get; set; } = Array.Empty<string>();
+        public DateTimeOffset Time { get; set; }
+
+        /// <summary>"WIP on main: abc1234 제목" 또는 "On main: 메시지".</summary>
+        public string Subject { get; set; }
+
+        /// <summary>추적 안 되는 파일을 함께 저장했는지(<c>-u</c>로 만들면 부모가 셋).</summary>
+        public bool HasUntracked => Parents.Length >= 3;
+
+        public string DisplayText => string.Format("{0}  {1}  {2}{3}", Ref, Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm"), Subject,
+            HasUntracked ? "  [새 파일 포함]" : string.Empty);
+    }
+
     /// <summary><c>git worktree list --porcelain</c>의 항목 하나.</summary>
     public sealed class GitWorktreeInfo
     {

@@ -102,7 +102,7 @@ namespace Folderss
             _settings = (settings ?? new GitSettings()).Clone();
             GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
 
-            foreach (var view in new[] { ChangesDiff, RemoteDiff, LogDiff })
+            foreach (var view in new[] { ChangesDiff, RemoteDiff, LogDiff, StashDiff })
             {
                 view.ExternalToolRequested += DiffView_ExternalToolRequested;
                 view.ViewModeChanged += DiffView_ViewModeChanged;
@@ -372,6 +372,7 @@ namespace Folderss
             RemoteSection.Visibility = tag == "Remote" ? Visibility.Visible : Visibility.Collapsed;
             LogSection.Visibility = tag == "Log" ? Visibility.Visible : Visibility.Collapsed;
             WorktreesSection.Visibility = tag == "Worktrees" ? Visibility.Visible : Visibility.Collapsed;
+            StashSection.Visibility = tag == "Stash" ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ClearDetail()
@@ -386,6 +387,8 @@ namespace Folderss
             BranchList.ItemsSource = null;
             WorktreeList.ItemsSource = null;
             _worktrees = new List<GitWorktreeInfo>();
+            StashList.ItemsSource = null;
+            StashDiff.Clear("stash를 선택하면 변경을 보여 줍니다.");
             LogList.ItemsSource = null;
             OutgoingList.ItemsSource = null;
             IncomingList.ItemsSource = null;
@@ -519,6 +522,7 @@ namespace Folderss
 
             await LoadRemoteAsync(row, token);
             await LoadWorktreesAsync(row, token);
+            await LoadStashesAsync(row, token);
         }
 
         // ── diff ────────────────────────────────────────────────────────────
@@ -1441,6 +1445,173 @@ namespace Folderss
                 });
         }
 
+        // ── stash ─────────────────────────────────────────────────────────────
+
+        private GitStashInfo SelectedStash => StashList.SelectedItem as GitStashInfo;
+
+        private async Task LoadStashesAsync(RepositoryRow row, CancellationToken token)
+        {
+            var result = await GitCommandRunner.RunAsync(row.RootPath, GitStashCommands.List, GitCommandRunner.QueryTimeout, token, readOnly: true);
+            if (!ReferenceEquals(row, SelectedRow))
+                return;
+            if (!result.Success)
+            {
+                AppendResult(row.Info, result);
+                return;
+            }
+            StashList.ItemsSource = GitOutputParser.ParseStashes(result.StdOut);
+            StashDiff.Clear("stash를 선택하면 변경을 보여 줍니다.");
+        }
+
+        private async void StashList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            var stash = SelectedStash;
+            StashApplyButton.IsEnabled = StashApplyOptionsButton.IsEnabled = StashDropButton.IsEnabled = stash != null;
+            if (stash == null)
+                return;
+
+            // stash 커밋의 첫 부모(만든 시점의 HEAD) 기준 diff = 추적 파일 변경. 새 파일(-u)은 세 번째 부모에 따로 있다.
+            var request = GitDiffCommands.Commit(stash.Hash, stash.Parents.Take(1).ToArray(), _settings.IgnoreWhitespace);
+            request.Title = stash.Ref + "  " + stash.Subject;
+            await LoadDiffAsync(StashDiff, request);
+
+            if (stash.HasUntracked && ReferenceEquals(stash, SelectedStash))
+            {
+                try
+                {
+                    var files = await GitCommandRunner.RunAsync(SelectedRow.RootPath, GitStashCommands.UntrackedFiles(stash.Hash),
+                        GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                    if (files.Success && ReferenceEquals(stash, SelectedStash))
+                    {
+                        var names = GitOutputParser.ParseNulList(files.StdOut);
+                        request.Title = string.Format("{0}  {1}   (+ 새 파일 {2}개: {3}{4})", stash.Ref, stash.Subject, names.Count,
+                            string.Join(", ", names.Take(5)), names.Count > 5 ? " …" : string.Empty);
+                        await LoadDiffAsync(StashDiff, request);
+                    }
+                }
+                catch (Exception ex) when (!(ex is OperationCanceledException))
+                {
+                    AppendOutput("stash의 새 파일 목록을 읽지 못했습니다: " + ex.Message);
+                }
+                catch (OperationCanceledException)
+                {
+                }
+            }
+        }
+
+        /// <summary>변경 사항 목록에서 고른 파일(평면·트리 모두, 변경됨·스테이지됨 합쳐 중복 제거).</summary>
+        private List<string> SelectedChangePaths()
+        {
+            return SelectedChangeEntries(UnstagedList, UnstagedTree)
+                .Concat(SelectedChangeEntries(StagedList, StagedTree))
+                .SelectMany(entry => string.IsNullOrEmpty(entry.OriginalPath) ? new[] { entry.Path } : new[] { entry.Path, entry.OriginalPath })
+                .Distinct(StringComparer.Ordinal)
+                .ToList();
+        }
+
+        private async void StashPush_Click(object sender, RoutedEventArgs e)
+        {
+            await StashPushAsync(new GitStashPushOptions(), null);
+        }
+
+        private async void StashPushOptions_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedRow?.Snapshot == null)
+                return;
+            var paths = SelectedChangePaths();
+            var dialog = new GitStashPushDialog(paths.Count) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+
+            // 고른 파일에 새 파일(추적 안 됨)이 있는데 -u를 끄면 git이 "알 수 없는 경로"로 거부하므로 미리 알린다.
+            var selectedUntracked = SelectedChangeEntries(UnstagedList, UnstagedTree).Any(entry => entry.IsUntracked);
+            if (dialog.SelectedOnly && selectedUntracked && !dialog.Options.IncludeUntracked)
+            {
+                MessageBox.Show(this, "고른 파일에 새 파일(추적 안 됨)이 있습니다. '추적 안 되는 새 파일도 함께 (-u)'를 켜고 다시 하세요.",
+                    "stash", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            await StashPushAsync(dialog.Options, dialog.SelectedOnly ? paths : null);
+        }
+
+        private async Task StashPushAsync(GitStashPushOptions options, List<string> paths)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null)
+                return;
+            if (snapshot.Entries.Count == 0)
+            {
+                MessageBox.Show(this, "stash에 넣을 변경이 없습니다.", "stash", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (!ConfirmNoUnsavedDocuments("stash 저장(작업 트리 되돌림)"))
+                return;
+
+            var stdin = paths == null ? null : string.Join("\0", paths) + "\0";
+            await RunOnSelectedAsync("stash 저장 중…", GitStashCommands.Push(options, usePathspecStdin: paths != null), GitCommandRunner.QueryTimeout, stdin);
+        }
+
+        private async void StashApply_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = SelectedStash;
+            if (stash == null || !ConfirmNoUnsavedDocuments("stash 적용"))
+                return;
+            await RunStashApplyAsync(stash, GitStashApplyMode.Apply, false, null);
+        }
+
+        private async void StashApplyOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = SelectedStash;
+            if (stash == null)
+                return;
+            var dialog = new GitStashApplyDialog(stash, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true || !ConfirmNoUnsavedDocuments("stash 적용"))
+                return;
+            await RunStashApplyAsync(stash, dialog.Mode, dialog.RestoreIndex, dialog.BranchName);
+        }
+
+        private Task RunStashApplyAsync(GitStashInfo stash, GitStashApplyMode mode, bool restoreIndex, string branchName)
+        {
+            var status = mode == GitStashApplyMode.Pop ? "stash 꺼내는 중…" : mode == GitStashApplyMode.Branch ? "stash를 새 브랜치로 꺼내는 중…" : "stash 적용 중…";
+            return RunOnSelectedAsync(status, GitStashCommands.Apply(stash.Ref, mode, restoreIndex, branchName), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (!result.Success && mode != GitStashApplyMode.Branch)
+                        AppendOutput("적용 중 충돌이 났다면 충돌 파일을 해결하세요. stash는 삭제되지 않고 남아 있습니다" +
+                                     (mode == GitStashApplyMode.Pop ? "(pop이어도 충돌 시에는 남김)." : "."));
+                });
+        }
+
+        private async void StashDrop_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = SelectedStash;
+            if (stash == null)
+                return;
+            if (MessageBox.Show(this, string.Format("{0}을(를) 삭제할까요?\n{1}\n\n삭제한 stash는 되살리기 어렵습니다.", stash.Ref, stash.Subject),
+                    "stash 삭제", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+            await RunOnSelectedAsync("stash 삭제 중…", GitStashCommands.Drop(stash.Ref), GitCommandRunner.QueryTimeout);
+        }
+
+        private async void StashDropOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var count = (StashList.ItemsSource as List<GitStashInfo>)?.Count ?? 0;
+            if (SelectedRow == null || count == 0)
+                return;
+            var stash = SelectedStash;
+            var dialog = new GitForceConfirmDialog("stash 삭제 옵션",
+                stash != null ? "선택한 stash를 삭제합니다: " + stash.Ref + "  " + stash.Subject : "stash를 고르지 않았습니다. 아래를 켜면 모두 삭제합니다.",
+                string.Format("모든 stash {0}개 삭제 (git stash clear)", count),
+                "모든 stash가 지워지며 되살리기 어렵습니다.",
+                "삭제") { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            if (dialog.Force)
+                await RunOnSelectedAsync("모든 stash 삭제 중…", GitStashCommands.Clear, GitCommandRunner.QueryTimeout);
+            else if (stash != null)
+                await RunOnSelectedAsync("stash 삭제 중…", GitStashCommands.Drop(stash.Ref), GitCommandRunner.QueryTimeout);
+        }
+
         private async void WorktreePrune_Click(object sender, RoutedEventArgs e)
         {
             await RunOnSelectedAsync("워킹트리 기록 정리 중…", GitRefCommands.WorktreePrune, GitCommandRunner.QueryTimeout);
@@ -1720,7 +1891,7 @@ namespace Folderss
                 if (previous.DiffViewMode != _settings.DiffViewMode)
                 {
                     // 기본 보기가 바뀌면 세 diff 창 모두 새 기본값으로 맞춘다(창에서 따로 바꿔 둔 값은 덮어씀).
-                    ChangesDiff.ViewMode = RemoteDiff.ViewMode = LogDiff.ViewMode = _settings.DiffViewMode;
+                    ChangesDiff.ViewMode = RemoteDiff.ViewMode = LogDiff.ViewMode = StashDiff.ViewMode = _settings.DiffViewMode;
                 }
 
                 if (previous.LogLimit != _settings.LogLimit || previous.LogAllBranches != _settings.LogAllBranches

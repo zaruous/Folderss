@@ -1234,5 +1234,101 @@ namespace Folderss.SearchTests
             Assert.True((await RunArgs(repo, GitRefCommands.WorktreeRemove(wt, force: true))).Success);
             Assert.False(Directory.Exists(wt));
         }
+
+        // ── stash ──────────────────────────────────────────────────────────────
+
+        private static async Task<System.Collections.Generic.List<GitStashInfo>> StashesAsync(string repo) =>
+            GitOutputParser.ParseStashes((await RunArgs(repo, GitStashCommands.List)).StdOut);
+
+        [SkippableFact]
+        public async Task RealGit_StashPush_Options_AndList()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (repo, _, _) = await TwoCommitRepoAsync("stash-push");
+
+            // 기본: 추적 파일 변경만, 새 파일은 남는다
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "edited\n");
+            File.WriteAllText(Path.Combine(repo, "new.txt"), "n\n");
+            Assert.True((await RunArgs(repo, GitStashCommands.Push(new GitStashPushOptions()))).Success);
+            Assert.Equal("two\n", File.ReadAllText(Path.Combine(repo, "f.txt")));
+            Assert.True(File.Exists(Path.Combine(repo, "new.txt")));
+
+            // -u + 메시지: 새 파일까지 치운다
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "edited2\n");
+            Assert.True((await RunArgs(repo, GitStashCommands.Push(new GitStashPushOptions { Message = "한글 메시지", IncludeUntracked = true }))).Success);
+            Assert.False(File.Exists(Path.Combine(repo, "new.txt")));
+
+            var list = await StashesAsync(repo);
+            Assert.Equal(2, list.Count);
+            Assert.Equal("stash@{0}", list[0].Ref);
+            Assert.Contains("한글 메시지", list[0].Subject);
+            Assert.True(list[0].HasUntracked);
+            Assert.False(list[1].HasUntracked);
+            Assert.StartsWith("WIP on main", list[1].Subject);
+            Assert.Equal(new[] { "new.txt" }, GitOutputParser.ParseNulList((await RunArgs(repo, GitStashCommands.UntrackedFiles(list[0].Hash))).StdOut));
+
+            // --keep-index: 스테이지한 변경은 작업 트리에 남는다
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "staged\n");
+            await Git(repo, "add", "f.txt");
+            Assert.True((await RunArgs(repo, GitStashCommands.Push(new GitStashPushOptions { KeepIndex = true }))).Success);
+            Assert.Equal("staged\n", File.ReadAllText(Path.Combine(repo, "f.txt")));
+
+            // 선택한 파일만(pathspec을 표준 입력으로)
+            await Git(repo, "reset", "-q", "--hard");
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "keep me\n");
+            Directory.CreateDirectory(Path.Combine(repo, "d"));
+            File.WriteAllText(Path.Combine(repo, "d", "g.txt"), "g\n");
+            await Git(repo, "add", "d/g.txt");
+            await Git(repo, "commit", "-q", "-m", "g");
+            File.WriteAllText(Path.Combine(repo, "d", "g.txt"), "stash only this\n");
+            var only = await GitCommandRunner.RunAsync(repo, GitStashCommands.Push(new GitStashPushOptions(), usePathspecStdin: true),
+                GitCommandRunner.QueryTimeout, CancellationToken.None, standardInput: "d/g.txt\0");
+            Assert.True(only.Success, only.StdErr);
+            Assert.Equal("keep me\n", File.ReadAllText(Path.Combine(repo, "f.txt")));   // 고르지 않은 파일은 그대로
+            Assert.Equal("g\n", File.ReadAllText(Path.Combine(repo, "d", "g.txt")));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_StashApplyPopBranchDropClear()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (repo, _, _) = await TwoCommitRepoAsync("stash-apply");
+
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "staged\n");
+            await Git(repo, "add", "f.txt");
+            await RunArgs(repo, GitStashCommands.Push(new GitStashPushOptions { Message = "s1" }));
+
+            // apply --index: 스테이지 상태까지 복원, stash는 남음
+            Assert.True((await RunArgs(repo, GitStashCommands.Apply("stash@{0}", GitStashApplyMode.Apply, restoreIndex: true))).Success);
+            Assert.True((await StatusAsync(repo)).Entries.Single().IsStaged);
+            Assert.Single(await StashesAsync(repo));
+
+            // pop(스테이지 복원 없이): 변경은 작업 트리로, stash는 삭제
+            await Git(repo, "reset", "-q", "--hard");
+            Assert.True((await RunArgs(repo, GitStashCommands.Apply("stash@{0}", GitStashApplyMode.Pop, restoreIndex: false))).Success);
+            var status = await StatusAsync(repo);
+            Assert.False(status.Entries.Single().IsStaged);
+            Assert.Empty(await StashesAsync(repo));
+
+            // branch: 새 브랜치로 꺼내고 stash 삭제
+            await RunArgs(repo, GitStashCommands.Push(new GitStashPushOptions { Message = "s2" }));
+            Assert.True((await RunArgs(repo, GitStashCommands.Apply("stash@{0}", GitStashApplyMode.Branch, false, "from-stash"))).Success);
+            Assert.Equal("from-stash", (await StatusAsync(repo)).Branch);
+            Assert.Equal("staged\n", File.ReadAllText(Path.Combine(repo, "f.txt")));
+            Assert.Empty(await StashesAsync(repo));
+
+            // drop / clear
+            await Git(repo, "reset", "-q", "--hard");
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "a\n");
+            await RunArgs(repo, GitStashCommands.Push(new GitStashPushOptions { Message = "a" }));
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "b\n");
+            await RunArgs(repo, GitStashCommands.Push(new GitStashPushOptions { Message = "b" }));
+            Assert.True((await RunArgs(repo, GitStashCommands.Drop("stash@{0}"))).Success);
+            var remaining = await StashesAsync(repo);
+            Assert.Contains("a", remaining.Single().Subject);                 // 뒤 번호가 당겨짐
+            Assert.Equal("stash@{0}", remaining.Single().Ref);
+            Assert.True((await RunArgs(repo, GitStashCommands.Clear)).Success);
+            Assert.Empty(await StashesAsync(repo));
+        }
     }
 }

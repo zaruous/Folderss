@@ -509,4 +509,80 @@ namespace Folderss
             Update();
         }
     }
+
+    /// <summary>stash 저장 옵션(▾): 메시지, 새 파일 포함, 스테이지 유지, 선택한 파일만.</summary>
+    public sealed class GitStashPushDialog : GitDialogBase
+    {
+        private readonly TextBox _message;
+        private readonly CheckBox _untracked;
+        private readonly CheckBox _keepIndex;
+        private readonly CheckBox _selectedOnly;
+
+        public GitStashPushOptions Options => new GitStashPushOptions
+        {
+            Message = _message.Text,
+            IncludeUntracked = _untracked.IsChecked == true,
+            KeepIndex = _keepIndex.IsChecked == true
+        };
+
+        public bool SelectedOnly => _selectedOnly.IsChecked == true;
+
+        /// <param name="selectedCount">변경 사항 목록에서 고른 파일 수(0이면 "선택한 파일만"을 끈다).</param>
+        public GitStashPushDialog(int selectedCount) : base("stash 저장 옵션", 480)
+        {
+            AddText("변경을 stash에 넣고 작업 트리를 마지막 커밋 상태로 되돌립니다.");
+            AddLabel("메시지 (비우면 git 기본: WIP on <브랜치>)");
+            _message = new TextBox();
+            Body.Children.Add(_message);
+            _untracked = AddCheck("추적 안 되는 새 파일도 함께 (-u)", false);
+            _keepIndex = AddCheck("스테이지된 변경은 작업 트리에 그대로 두기 (--keep-index)", false);
+            _selectedOnly = AddCheck(selectedCount > 0 ? string.Format("변경 사항에서 고른 파일 {0}개만", selectedCount) : "변경 사항에서 고른 파일만 (고른 파일 없음)", false);
+            _selectedOnly.IsEnabled = selectedCount > 0;
+            AddText(".gitignore에 걸린 파일은 넣지 않습니다.", secondary: true, top: 8);
+            AddButtons("저장");
+            Loaded += (s, e) => _message.Focus();
+        }
+    }
+
+    /// <summary>stash 적용 옵션(▾): 적용 / 적용 후 삭제 / 새 브랜치로, 스테이지 상태 복원.</summary>
+    public sealed class GitStashApplyDialog : GitDialogBase
+    {
+        private readonly RadioButton _apply;
+        private readonly RadioButton _pop;
+        private readonly RadioButton _branch;
+        private readonly TextBox _branchName;
+        private readonly CheckBox _index;
+        private readonly Func<string, Task<string>> _validateName;
+
+        public GitStashApplyMode Mode => _pop.IsChecked == true ? GitStashApplyMode.Pop : _branch.IsChecked == true ? GitStashApplyMode.Branch : GitStashApplyMode.Apply;
+        public bool RestoreIndex => _index.IsChecked == true;
+        public string BranchName => _branchName.Text.Trim();
+
+        public GitStashApplyDialog(GitStashInfo stash, Func<string, Task<string>> validateName) : base("stash 적용 옵션", 500)
+        {
+            _validateName = validateName;
+            AddText(stash.Ref + "  " + stash.Subject);
+            _apply = AddRadio("stash", "적용 (apply) — stash는 남겨 둠", null, true);
+            _pop = AddRadio("stash", "적용 후 삭제 (pop)", "충돌이 나면 git이 stash를 지우지 않고 남깁니다.", false);
+            _branch = AddRadio("stash", "새 브랜치로 꺼내기 (stash branch)",
+                "stash를 만든 커밋에서 새 브랜치를 만들어 전환하고 적용합니다. 지금 브랜치가 많이 바뀌어 충돌할 때 안전합니다. 성공하면 stash는 삭제됩니다.", false);
+            _branchName = new TextBox { Margin = new Thickness(20, 4, 0, 0), IsEnabled = false };
+            Body.Children.Add(_branchName);
+            _index = AddCheck("스테이지 상태까지 되살리기 (--index)", false);
+
+            _branch.Checked += (s, e) => { _branchName.IsEnabled = true; _index.IsEnabled = false; };
+            _apply.Checked += (s, e) => { _branchName.IsEnabled = false; _index.IsEnabled = true; };
+            _pop.Checked += (s, e) => { _branchName.IsEnabled = false; _index.IsEnabled = true; };
+            AddButtons("실행");
+        }
+
+        protected override Task<string> ValidateAsync()
+        {
+            if (Mode != GitStashApplyMode.Branch)
+                return Task.FromResult<string>(null);
+            if (BranchName.Length == 0)
+                return Task.FromResult("새 브랜치 이름을 입력하세요.");
+            return _validateName(BranchName);
+        }
+    }
 }

@@ -32,6 +32,7 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
+│   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
@@ -278,6 +279,9 @@ Folderss/
 - ▾ 옵션: 기본 버튼은 `new GitXxxOptions()`(또는 설정값)로 바로 실행하고, 옆 `OptionArrowButton`이 `GitPullDialog`/`GitPushDialog`/
   `GitFetchDialog`/`GitCommitOptionsDialog`/`GitForceConfirmDialog`를 열어 고른 옵션을 같은 `GitSyncCommands`/`GitRefCommands` 함수에 넘긴다.
   강제 옵션은 `GitForceConfirmDialog`(기본 꺼짐, 켜면 경고·확인 체크 필요). 강제 푸시는 두지 않는다.
+- stash: `stash list -z --format=%gd%x1f%H%x1f%P%x1f%at%x1f%gs`(`ParseStashes`, 부모 3개 = `-u`로 새 파일 포함). diff는 stash 커밋 ↔ 첫 부모
+  (`GitDiffCommands.Commit`), 새 파일은 `ls-tree <hash>^3` 목록을 제목에 표시. 작업 참조는 `stash@{n}`이라 작업마다 목록을 다시 읽는다.
+  저장·적용은 작업 트리를 바꾸므로 `ConfirmNoUnsavedDocuments`. 고른 파일만 저장은 pathspec을 표준 입력으로(새 파일이 섞였는데 `-u`가 꺼져 있으면 미리 안내).
 - 변경 없는 파일: `변경 없는 파일 보기`를 켜면 `ls-files -z --cached`에서 상태 목록(경로·이름 변경 전 경로)을 뺀 것을
   `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
   BOM 규칙으로 읽어 `GitDiffView.ShowLines`로 줄 번호와 함께 보인다(10MB 초과·바이너리는 안내만). 상태를 다시 읽을 때마다 다시 계산.

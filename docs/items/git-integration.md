@@ -69,6 +69,10 @@
 - 원칙: "여러 옵션이 가능하면 대화상자로 선택". 단 버튼 자체는 기본 동작으로 바로 실행하고, **옆의 추가 옵션 버튼(▾)을 누를 때만** 옵션 팝업.
 - 가정(확인 필요): 로컬만 영향 있는 강제 옵션(`branch -D`, `worktree remove --force`)은 경고·확인 체크 후 허용, 강제 푸시는 넣지 않음.
 
+### 추가 요구사항 (2026-09-30, 10차)
+
+- stash 기능. ▾ 규칙에 따라 버튼은 기본 동작, 옵션은 ▾ 대화상자.
+
 ### 기능 (제안)
 
 1. `⋯ 메뉴 > Git 저장소 보기…`를 누르면 기준 폴더(아래 "기준 폴더 결정") 아래를 백그라운드로 훑어 Git 저장소 목록을 만든다.
@@ -367,6 +371,12 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
 - `GitWindow`: `OptionArrowButton` 스타일의 ▾를 전체 fetch·pull·push·커밋·브랜치 삭제·fetch 후 비교·워킹트리 제거 옆에 추가. 기본 버튼 동작은 이전과 같다.
 - 지침 반영: `CLAUDE.md`/`AGENTS.md` "선택지가 여러 개인 기능은 대화상자로"에 ▾ 규칙과 강제 옵션 규칙 추가.
 
+## 구현 내용 — stash (2026-09-30, 10차)
+
+- `GitStashCommands`(+`GitStashPushOptions`, `GitStashApplyMode`), `GitOutputParser.ParseStashes`, `GitStashInfo`.
+- `GitDialogs.cs`: `GitStashPushDialog`(메시지·`-u`·`--keep-index`·고른 파일만), `GitStashApplyDialog`(apply/pop/branch + `--index`, 브랜치 이름 검사).
+- `GitWindow`: `stash` 탭(목록·diff·저장/적용/삭제 + 각 ▾), 변경 사항 탭 머리에 `stash 저장`+▾. 모두 삭제는 `GitForceConfirmDialog`.
+
 ## 검증
 
 - `dotnet test tests/Folderss.SearchTests` (Linux, git 2.43): 전체 48개 중 통과 47, 건너뜀 1(기존 권한 테스트). 신규 `GitTests` 11개 통과 —
@@ -395,7 +405,9 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
 - 9차 추가분: `GitTests` 4개 추가 — 실제 git(bare 원격 + 클론 2개)으로 갈라진 브랜치에서 ff-only 실패/병합 커밋/rebase 일직선,
   dirty 작업 트리에서 rebase 거부 → `--autostash`로 성공·변경 복원, push `-u`·`--follow-tags`, fetch `--tags`·prune 켜고 끄기·`--all`,
   amend(메시지 유지·해시 변경), 스테이지 없는 커밋 거부·`--allow-empty`+`-s`, `branch -d` 거부→`-D`, dirty 워킹트리 제거 거부→`--force`. 전체 85개 중 통과 84·건너뜀 1.
-- **미검증 (Windows 수동 확인 필요)**: ▾ 버튼 배치·옵션 대화상자, reset·브랜치·체크아웃·워킹트리 대화상자 배치·동작, 상태 아이콘, 상태 배지 색·정렬, 변경 없는 파일 목록·미리보기, diff 보기 모드 전환, 트리 보기 전환·폴더 스테이지, 그래프 선이 행 사이에서 이어져 보이는지(ListViewItem 템플릿 여백), 설정 창 Git 탭 배치, 실제 WinMerge/Beyond Compare/VS Code 실행(특히 Windows 경로의 셸 해석), diff 색·줄 번호 표시, 긴 diff 스크롤 성능, 창 레이아웃·테마 색, 실제 조작 흐름, GCM HTTPS push, SSH(agent 없음) push가 멈추지 않고 타임아웃/오류로 끝나는지,
+- 10차 추가분: `GitTests` 2개 추가 — 실제 git으로 기본 저장(새 파일은 남음)·`-u`+한글 메시지·목록 파싱(참조·메시지·새 파일 여부·`^3` 파일 목록)·
+  `--keep-index`·고른 파일만(pathspec stdin), `apply --index`(스테이지 복원·stash 유지)·pop·`stash branch`·drop 후 번호 당김·clear. 전체 87개 중 통과 86·건너뜀 1.
+- **미검증 (Windows 수동 확인 필요)**: stash 탭·대화상자, ▾ 버튼 배치·옵션 대화상자, reset·브랜치·체크아웃·워킹트리 대화상자 배치·동작, 상태 아이콘, 상태 배지 색·정렬, 변경 없는 파일 목록·미리보기, diff 보기 모드 전환, 트리 보기 전환·폴더 스테이지, 그래프 선이 행 사이에서 이어져 보이는지(ListViewItem 템플릿 여백), 설정 창 Git 탭 배치, 실제 WinMerge/Beyond Compare/VS Code 실행(특히 Windows 경로의 셸 해석), diff 색·줄 번호 표시, 긴 diff 스크롤 성능, 창 레이아웃·테마 색, 실제 조작 흐름, GCM HTTPS push, SSH(agent 없음) push가 멈추지 않고 타임아웃/오류로 끝나는지,
   드라이브 루트 확인 창, 미저장 탭 경고.
 
 ## 변경 이력
@@ -413,3 +425,4 @@ CLAUDE.md 규칙 준수: `+ 새 패널` 앞에 삽입 후 끝으로 재정렬, �
 - 2026-09-30: 상태 표시를 아이콘으로 교체.
 - 2026-09-30: reset(대화상자로 모드 선택)·브랜치 생성/체크아웃 대화상자·워킹트리(생성·목록·제거·prune) 추가. 테스트 4개 추가.
 - 2026-09-30: 기본 버튼 + ▾ 옵션 대화상자(pull·push·fetch·커밋·브랜치 삭제·워킹트리 제거), 지침에 규칙 추가. 테스트 4개 추가.
+- 2026-09-30: stash(저장·목록·diff·적용/pop/브랜치로·삭제/모두 삭제) 추가. 테스트 2개 추가.

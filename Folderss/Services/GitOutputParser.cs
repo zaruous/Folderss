@@ -297,6 +297,28 @@ namespace Folderss.Services
             return lines;
         }
 
+        /// <summary><c>git stash list -z</c> + <see cref="GitStashCommands.List"/> 형식 출력을 해석한다.</summary>
+        public static List<GitStashInfo> ParseStashes(string output)
+        {
+            var list = new List<GitStashInfo>();
+            foreach (var record in (output ?? string.Empty).Split('\0'))
+            {
+                var fields = record.Trim('\n', '\r').Split(FieldSeparator);
+                if (fields.Length < 5 || fields[0].Length == 0)
+                    continue;
+                long.TryParse(fields[3], NumberStyles.Integer, CultureInfo.InvariantCulture, out var unixTime);
+                list.Add(new GitStashInfo
+                {
+                    Ref = fields[0],
+                    Hash = fields[1],
+                    Parents = fields[2].Length == 0 ? Array.Empty<string>() : fields[2].Split(' '),
+                    Time = DateTimeOffset.FromUnixTimeSeconds(unixTime),
+                    Subject = string.Join(FieldSeparator.ToString(), fields, 4, fields.Length - 4)
+                });
+            }
+            return list;
+        }
+
         /// <summary>
         /// <c>git worktree list --porcelain</c> 출력을 해석한다. 항목은 빈 줄로 구분되고, 경로는 Windows에서도 슬래시로 나온다.
         /// </summary>

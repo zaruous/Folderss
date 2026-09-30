@@ -228,6 +228,7 @@
                     <ListBoxItem Tag="Remote" Padding="14,6">원격 비교</ListBoxItem>
                     <ListBoxItem Tag="Log" Padding="14,6">로그</ListBoxItem>
                     <ListBoxItem Tag="Worktrees" Padding="14,6">워킹트리</ListBoxItem>
+                    <ListBoxItem Tag="Stash" Padding="14,6">stash</ListBoxItem>
                 </ListBox>
 
                 <!-- 변경 사항: 왼쪽 목록(변경됨/스테이지됨), 오른쪽 선택 파일 diff -->
@@ -264,8 +265,9 @@
                                       Cursor="SizeNS"
                                       ToolTip="끌어서 변경됨·스테이지됨 목록 높이를 조절합니다"/>
 
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="2,0,0,6">
+                        <WrapPanel Grid.Row="0" Orientation="Horizontal" Margin="2,0,0,6">
                             <CheckBox x:Name="ChangesTreeToggle"
+                                      VerticalAlignment="Center"
                                       Content="트리로 보기"
                                       Foreground="{DynamicResource PrimaryText}"
                                       Click="ChangesTreeToggle_Click"
@@ -273,10 +275,15 @@
                             <CheckBox x:Name="UnchangedToggle"
                                       Margin="14,0,0,0"
                                       Content="변경 없는 파일 보기"
+                                      VerticalAlignment="Center"
                                       Foreground="{DynamicResource PrimaryText}"
                                       Click="UnchangedToggle_Click"
                                       ToolTip="추적 중이고 바뀌지 않은 파일(git ls-files 중 변경 목록에 없는 것)을 아래 목록에 보입니다. 선택하면 내용을 봅니다."/>
-                        </StackPanel>
+                            <Button Content="stash 저장" Margin="14,0,0,0" Padding="8,3" Click="StashPush_Click"
+                                    ToolTip="추적 중인 파일의 변경을 stash에 넣고 작업 트리를 되돌립니다 (git stash push)"/>
+                            <Button Style="{StaticResource OptionArrowButton}" Padding="4,3" Margin="-2,0,0,0" Click="StashPushOptions_Click"
+                                    ToolTip="stash 저장 옵션… (메시지, 새 파일 포함, 스테이지 유지, 고른 파일만)"/>
+                        </WrapPanel>
 
                         <GridSplitter x:Name="UnchangedSplitter"
                                       Grid.Row="4"
@@ -451,6 +458,38 @@
                     <GridSplitter Grid.Row="1" Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>
 
                     <controls:GitDiffView x:Name="RemoteDiff" Grid.Row="1" Grid.Column="2"/>
+                </Grid>
+
+                <!-- stash: 목록(위)·선택한 stash의 diff(아래) -->
+                <Grid x:Name="StashSection" Grid.Row="1" Margin="6" Visibility="Collapsed">
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="*" MinHeight="60"/>
+                        <RowDefinition Height="5"/>
+                        <RowDefinition Height="2*" MinHeight="80"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
+                        <Button Content="stash 저장" Click="StashPush_Click"
+                                ToolTip="추적 중인 파일의 변경을 stash에 넣고 작업 트리를 되돌립니다"/>
+                        <Button Style="{StaticResource OptionArrowButton}" Click="StashPushOptions_Click"
+                                ToolTip="stash 저장 옵션… (메시지, 새 파일 포함, 스테이지 유지, 고른 파일만)"/>
+                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
+                        <Button x:Name="StashApplyButton" Content="적용" Click="StashApply_Click" IsEnabled="False"
+                                ToolTip="선택한 stash를 작업 트리에 적용합니다 (stash는 남김, git stash apply)"/>
+                        <Button x:Name="StashApplyOptionsButton" Style="{StaticResource OptionArrowButton}" Click="StashApplyOptions_Click" IsEnabled="False"
+                                ToolTip="적용 옵션… (적용 후 삭제 pop, 새 브랜치로 꺼내기, 스테이지 상태 복원)"/>
+                        <Button x:Name="StashDropButton" Content="삭제" Click="StashDrop_Click" IsEnabled="False"
+                                ToolTip="선택한 stash를 삭제합니다 (git stash drop)"/>
+                        <Button Style="{StaticResource OptionArrowButton}" Click="StashDropOptions_Click"
+                                ToolTip="삭제 옵션… (모든 stash 삭제)"/>
+                    </StackPanel>
+                    <ListBox x:Name="StashList" Grid.Row="1"
+                             FontFamily="Consolas"
+                             DisplayMemberPath="DisplayText"
+                             SelectionChanged="StashList_SelectionChanged"
+                             MouseDoubleClick="StashApply_Click"/>
+                    <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <controls:GitDiffView x:Name="StashDiff" Grid.Row="3" Margin="0,4,0,0"/>
                 </Grid>
 
                 <!-- 워킹트리: 목록·추가·제거·prune -->
