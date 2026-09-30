@@ -664,6 +664,114 @@ namespace Folderss
             ChangesDiff.Clear();
         }
 
+        // ── 끌어 놓기: 변경됨 → 스테이지됨 = 스테이지, 스테이지됨 → 변경됨 = 언스테이지 ─────
+
+        private const string ChangeDragFormat = "Folderss.GitChangeDrag";
+
+        private sealed class ChangeDragData
+        {
+            public bool FromStaged { get; set; }
+            public List<GitStatusEntry> Entries { get; set; }
+        }
+
+        private Point? _dragStart;
+        private ListBoxItem _pendingSingleSelect;
+
+        private void ChangeDrag_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            _dragStart = null;
+            _pendingSingleSelect = null;
+            var source = e.OriginalSource as DependencyObject;
+
+            if (sender is ListBox list)
+            {
+                // 항목 위에서만 끌기 시작(스크롤바·빈 곳 제외).
+                if (!(ItemsControl.ContainerFromElement(list, source) is ListBoxItem item))
+                    return;
+                _dragStart = e.GetPosition(this);
+                // 여러 개 선택한 상태에서 선택된 항목을 누르면 ListBox가 곧바로 그 하나만 남긴다 —
+                // 끌기로 여러 개를 옮길 수 있게 선택 변경을 놓을 때까지 미룬다.
+                if (e.ClickCount == 1 && Keyboard.Modifiers == ModifierKeys.None && item.IsSelected && list.SelectedItems.Count > 1)
+                {
+                    _pendingSingleSelect = item;
+                    item.Focus();
+                    e.Handled = true;
+                }
+                return;
+            }
+
+            // 트리: 노드 위에서만(스크롤바 제외). 선택은 TreeView가 누를 때 바꾼다.
+            for (var node = source; node != null && !(node is TreeView); node = System.Windows.Media.VisualTreeHelper.GetParent(node))
+            {
+                if (node is System.Windows.Controls.Primitives.ScrollBar)
+                    return;
+                if (node is TreeViewItem)
+                {
+                    _dragStart = e.GetPosition(this);
+                    return;
+                }
+            }
+        }
+
+        private void ChangeDrag_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
+        {
+            // 끌지 않고 놓았으면 미뤄 둔 "그 항목만 선택"을 한다.
+            if (_pendingSingleSelect != null && sender is ListBox list)
+            {
+                var item = _pendingSingleSelect;
+                list.UnselectAll();
+                item.IsSelected = true;
+            }
+            _dragStart = null;
+            _pendingSingleSelect = null;
+        }
+
+        private void ChangeDrag_PreviewMouseMove(object sender, MouseEventArgs e)
+        {
+            if (_dragStart == null || e.LeftButton != MouseButtonState.Pressed)
+                return;
+            var delta = e.GetPosition(this) - _dragStart.Value;
+            if (Math.Abs(delta.X) < SystemParameters.MinimumHorizontalDragDistance
+                && Math.Abs(delta.Y) < SystemParameters.MinimumVerticalDragDistance)
+                return;
+
+            _dragStart = null;
+            _pendingSingleSelect = null;
+            var fromStaged = ReferenceEquals(sender, StagedList) || ReferenceEquals(sender, StagedTree);
+            var entries = fromStaged ? SelectedChangeEntries(StagedList, StagedTree) : SelectedChangeEntries(UnstagedList, UnstagedTree);
+            if (entries.Count == 0 || _busyCount > 0)
+                return;
+
+            var data = new DataObject(ChangeDragFormat, new ChangeDragData { FromStaged = fromStaged, Entries = entries });
+            DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Move);
+        }
+
+        /// <summary>반대쪽 목록에서 온 끌기만 받는다(같은 목록·다른 프로그램의 파일은 거부).</summary>
+        private ChangeDragData AcceptedDrag(object target, DragEventArgs e)
+        {
+            var data = e.Data.GetDataPresent(ChangeDragFormat) ? e.Data.GetData(ChangeDragFormat) as ChangeDragData : null;
+            var toStaged = ReferenceEquals(target, StagedDropArea);
+            return data != null && data.FromStaged != toStaged && _busyCount == 0 ? data : null;
+        }
+
+        private void ChangeDrop_DragOver(object sender, DragEventArgs e)
+        {
+            e.Effects = AcceptedDrag(sender, e) != null ? DragDropEffects.Move : DragDropEffects.None;
+            e.Handled = true;
+        }
+
+        private async void ChangeDrop_Drop(object sender, DragEventArgs e)
+        {
+            var data = AcceptedDrag(sender, e);
+            e.Handled = true;
+            if (data == null)
+                return;
+            if (data.FromStaged)
+                await UnstageAsync(data.Entries);
+            else
+                await StageAsync(data.Entries);
+        }
+
         // ── 보기 상태 저장(트리 보기·분할선 위치) ─────────────────────────────
 
         private void ApplyWindowState(GitWindowState state)
@@ -1029,7 +1137,11 @@ namespace Folderss
 
         private async void Stage_Click(object sender, RoutedEventArgs e)
         {
-            var entries = SelectedChangeEntries(UnstagedList, UnstagedTree);
+            await StageAsync(SelectedChangeEntries(UnstagedList, UnstagedTree));
+        }
+
+        private async Task StageAsync(List<GitStatusEntry> entries)
+        {
             if (entries.Count == 0)
                 return;
             await RunOnSelectedAsync("스테이지 중…",
@@ -1062,7 +1174,11 @@ namespace Folderss
 
         private async void Unstage_Click(object sender, RoutedEventArgs e)
         {
-            var entries = SelectedChangeEntries(StagedList, StagedTree);
+            await UnstageAsync(SelectedChangeEntries(StagedList, StagedTree));
+        }
+
+        private async Task UnstageAsync(List<GitStatusEntry> entries)
+        {
             if (entries.Count == 0 || SelectedRow?.Snapshot == null)
                 return;
 

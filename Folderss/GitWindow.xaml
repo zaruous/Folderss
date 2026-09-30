@@ -328,16 +328,22 @@
                                 </StackPanel>
                                 <TextBlock x:Name="UnstagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="변경됨"/>
                             </DockPanel>
-                            <Grid>
+                            <Grid x:Name="UnstagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" Drop="ChangeDrop_Drop">
                                 <ListBox x:Name="UnstagedList"
                                          SelectionMode="Extended"
+                                         PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
+                                         PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"
+                                         PreviewMouseMove="ChangeDrag_PreviewMouseMove"
                                          FontFamily="Consolas"
                                          ItemTemplate="{StaticResource GitEntryTemplate}"
                                          SelectionChanged="UnstagedList_SelectionChanged"
                                          MouseDoubleClick="ChangeList_MouseDoubleClick"
-                                         ToolTip="선택하면 오른쪽에 작업 트리 ↔ 인덱스 차이를 보입니다. 더블클릭하면 파일을 엽니다."/>
+                                         ToolTip="선택하면 오른쪽에 작업 트리 ↔ 인덱스 차이를 보입니다. 더블클릭하면 파일을 엽니다. 스테이지됨으로 끌어 놓으면 스테이지합니다."/>
                                 <TreeView x:Name="UnstagedTree"
                                           Visibility="Collapsed"
+                                          PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
+                                          PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"
+                                          PreviewMouseMove="ChangeDrag_PreviewMouseMove"
                                           Style="{StaticResource GitChangeTreeStyle}"
                                           SelectedItemChanged="UnstagedTree_SelectedItemChanged"
                                           MouseDoubleClick="ChangeTree_MouseDoubleClick"/>
@@ -352,16 +358,22 @@
                                 </StackPanel>
                                 <TextBlock x:Name="StagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="스테이지됨"/>
                             </DockPanel>
-                            <Grid>
+                            <Grid x:Name="StagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" Drop="ChangeDrop_Drop">
                                 <ListBox x:Name="StagedList"
                                          SelectionMode="Extended"
+                                         PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
+                                         PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"
+                                         PreviewMouseMove="ChangeDrag_PreviewMouseMove"
                                          FontFamily="Consolas"
                                          ItemTemplate="{StaticResource GitEntryTemplate}"
                                          SelectionChanged="StagedList_SelectionChanged"
                                          MouseDoubleClick="ChangeList_MouseDoubleClick"
-                                         ToolTip="선택하면 오른쪽에 인덱스 ↔ HEAD 차이(커밋될 내용)를 보입니다."/>
+                                         ToolTip="선택하면 오른쪽에 인덱스 ↔ HEAD 차이(커밋될 내용)를 보입니다. 변경됨으로 끌어 놓으면 언스테이지합니다."/>
                                 <TreeView x:Name="StagedTree"
                                           Visibility="Collapsed"
+                                          PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
+                                          PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"
+                                          PreviewMouseMove="ChangeDrag_PreviewMouseMove"
                                           Style="{StaticResource GitChangeTreeStyle}"
                                           SelectedItemChanged="StagedTree_SelectedItemChanged"
                                           MouseDoubleClick="ChangeTree_MouseDoubleClick"/>

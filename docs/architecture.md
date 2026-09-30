@@ -284,6 +284,10 @@ Folderss/
 - 되돌리기: `되돌리기…`(변경됨 목록)는 버린 변경을 복구할 수 없어 곧바로 `GitRestoreDialog`(확인 체크 필수)를 연다. git은 경로 하나라도
   모르면 명령 전체를 거부하고, 일부 경우 파일을 지우거나 비우므로 `GitRestoreCommands.ExclusionReason`이 모드별로 뺀다 — 새 파일, `add -N`(빈 파일이 됨),
   작업 트리 모드의 충돌(git 거부), HEAD 모드의 HEAD에 없는 경로(A/R/C, 충돌 UA/AA — 디스크에서 삭제됨). 실행 전 `ConfirmNoUnsavedDocuments`.
+- 끌어 놓기: 변경됨/스테이지됨 목록·트리의 Preview 마우스 이벤트로 끌기를 시작하고(`ChangeDragFormat`, 앱 안 전용 형식),
+  반대쪽 영역(`UnstagedDropArea`/`StagedDropArea`)에 놓으면 버튼과 같은 `StageAsync`/`UnstageAsync`를 부른다. 같은 목록·외부 파일·작업 중이면 거부.
+  여러 개 선택한 상태에서 선택된 항목을 누르면 ListBox가 즉시 그 하나만 남기므로, 그 경우 선택 변경을 마우스를 놓을 때까지 미룬다.
+  작업 트리 되돌리기(변경 버리기)는 끌어 놓기에 두지 않는다(실수로 놓으면 복구 불가).
 - 보기 상태: `트리로 보기` 클릭과 변경 사항 탭의 두 분할선 `DragCompleted`마다 `%LOCALAPPDATA%\Folderss\git-window.xml`에 저장, 창 생성 시 복원.
   읽기 실패는 기본값, 저장 실패는 출력 창에 표시. 변경 없는 파일 목록의 분할선은 저장하지 않는다(보일 때만 있는 행).
 - stash: `stash list -z --format=%gd%x1f%H%x1f%P%x1f%at%x1f%gs`(`ParseStashes`, 부모 3개 = `-u`로 새 파일 포함). diff는 stash 커밋 ↔ 첫 부모
