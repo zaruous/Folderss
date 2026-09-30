@@ -13,6 +13,16 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 - `Controls/FolderBrowser.xaml.cs` — 폴더 트리 우클릭 시 트리가 접히던 버그 수정. 원인은 클릭 토글이 아니라 셸 컨텍스트 메뉴 후 `RefreshTreeAfterShellAction`이 부모의 자식 노드를 새로 만들면서(루트면 트리 전체 재생성) 펼침 상태가 사라진 것. 새로고침 전 펼친 경로를 모아(`CollectExpandedPaths`) 새로고침 후 다시 펼침(`RestoreExpandedPaths`). 이름이 바뀐 폴더는 경로가 달라져 접힌 상태로 남음.
 
+### WebView2 초기화 실패 시 앱 크래시 방지 (#30)
+
+- `Viewers/MarkdownViewer`·`TextViewer`·`MonacoViewer` — `CoreWebView2Environment.CreateAsync`/`EnsureCoreWebView2Async`를 기존 try/catch 안으로 옮김. 절전·장시간 유휴 후 처음 로드되는 뷰어에서 `RPC_E_DISCONNECTED`(COMException)가 `async void OnLoaded`로 올라가 앱 전체가 종료되던 문제를 해당 뷰어의 오류 표시로 대체.
+- 원인(브라우저 프로세스 연결 끊김) 자체는 해결하지 않음. 탭을 다시 열면 새로 초기화됨. 이미 초기화된 뷰어의 `ExecuteScriptAsync` 경로와 `ProcessFailed` 미처리는 남아 있음.
+
+### PR 테스트 빌드 + preview 버전 표기
+
+- `.github/workflows/pr-build.yml` (신규) — PR마다 Release publish 후 Actions 아티팩트(7일)로 업로드. 빌드 때만 `AssemblyInfo.cs`에 `AssemblyInformationalVersion("<버전>-preview.pr<번호>+<sha7>")`를 추가하고, `Folderss.dll` ProductVersion으로 반영 여부를 검사.
+- `AboutWindow.cs` — `AssemblyInformationalVersion`이 있으면 우선 표시. 일반·릴리스 빌드에는 이 특성이 없으므로 표시 변화 없음. 업데이트 비교(`UpdateService`)는 숫자 `AssemblyVersion`을 그대로 사용.
+
 ---
 
 ## v1.7.0 (2026-09-23)

@@ -1,0 +1,57 @@
+name: PR Build
+
+on:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      # 정보 창에 "1.7.0-preview.pr31+abc1234"처럼 표시. 숫자 버전(업데이트 비교용)은 건드리지 않는다.
+      - name: Set preview version
+        shell: pwsh
+        env:
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          $file = "Folderss/Properties/AssemblyInfo.cs"
+          $content = Get-Content $file -Raw
+          if ($content -notmatch 'AssemblyVersion\("(\d+)\.(\d+)\.(\d+)') { throw "AssemblyVersion not found" }
+          $base = "$($Matches[1]).$($Matches[2]).$($Matches[3])"
+          $id = if ($env:PR_NUMBER) { "pr$env:PR_NUMBER" } else { "run$env:GITHUB_RUN_NUMBER" }
+          $ver = "$base-preview.$id+$($env:HEAD_SHA.Substring(0, 7))"
+          Add-Content $file "[assembly: AssemblyInformationalVersion(`"$ver`")]"
+          Write-Host "Preview version: $ver"
+
+      - name: Restore
+        run: dotnet restore .\Folderss.sln
+
+      - name: Publish
+        run: dotnet publish .\Folderss\Folderss.csproj -c Release -o artifacts/Folderss-test --nologo
+
+      - name: Verify preview version
+        shell: pwsh
+        run: |
+          $pv = (Get-Item artifacts/Folderss-test/Folderss.dll).VersionInfo.ProductVersion
+          Write-Host "Folderss.dll ProductVersion: $pv"
+          if ($pv -notmatch '-preview\.') { throw "preview version not embedded" }
+
+      - name: Upload test build
+        uses: actions/upload-artifact@v4
+        with:
+          name: Folderss-test-${{ github.event.pull_request.number || github.run_number }}-${{ github.sha }}
+          path: artifacts/Folderss-test
+          retention-days: 7

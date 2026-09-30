@@ -70,9 +70,18 @@ namespace Folderss.Viewers
 
         private async System.Threading.Tasks.Task InitializeWebViewAsync()
         {
+            // 절전/장시간 유휴 후 WebView2 브라우저 프로세스가 끊긴 상태에서 초기화하면
+            // RPC_E_DISCONNECTED(COMException)가 난다. async void OnLoaded에서 올라가면 앱 전체가
+            // 종료되므로 여기서 잡아 이 뷰어에만 오류를 표시한다.
             try
             {
                 CoreWebView2Environment.GetAvailableBrowserVersionString();
+
+                var env = await CoreWebView2Environment.CreateAsync(null,
+                    Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                        "Folderss", "WebView2Cache"));
+
+                await WebView.EnsureCoreWebView2Async(env);
             }
             catch (Exception ex)
             {
@@ -81,12 +90,6 @@ namespace Folderss.Viewers
                 ErrorText.Visibility = Visibility.Visible;
                 return;
             }
-
-            var env = await CoreWebView2Environment.CreateAsync(null,
-                Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-                    "Folderss", "WebView2Cache"));
-
-            await WebView.EnsureCoreWebView2Async(env);
 
             WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "folderss-viewer", ResourcesPath,

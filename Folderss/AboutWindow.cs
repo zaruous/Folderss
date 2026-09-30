@@ -63,6 +63,12 @@ namespace Folderss
 
         private static string GetVersionText()
         {
+            // PR 테스트 빌드(pr-build.yml)만 AssemblyInformationalVersion을 넣어 preview 표기를 한다.
+            var informational = Assembly.GetExecutingAssembly()
+                .GetCustomAttribute<AssemblyInformationalVersionAttribute>();
+            if (!string.IsNullOrWhiteSpace(informational?.InformationalVersion))
+                return informational.InformationalVersion;
+
             var version = Assembly.GetExecutingAssembly().GetName().Version;
             if (version == null)
                 return string.Empty;
