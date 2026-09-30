@@ -965,5 +965,138 @@ namespace Folderss.SearchTests
             Assert.Equal("새 파일", node.StatusLabel);
             Assert.Equal("c", node.LabelText);
         }
+
+        // ── reset · 브랜치 · 체크아웃 · 워킹트리 ───────────────────────────────
+
+        private async Task<(string repo, string first, string second)> TwoCommitRepoAsync(string name)
+        {
+            var repo = await InitRepoAsync(name);
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "one\n");
+            await CommitAllAsync(repo, "first");
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "two\n");
+            await CommitAllAsync(repo, "second");
+            var log = GitOutputParser.ParseLog((await Git(repo, "log", "-z", GitOutputParser.LogFormat)).StdOut);
+            return (repo, log[1].Hash, log[0].Hash);
+        }
+
+        private static async Task<GitStatusSnapshot> StatusAsync(string repo) =>
+            GitOutputParser.ParseStatusV2((await Git(repo, GitOutputParser.StatusArguments)).StdOut);
+
+        private static Task<GitResult> RunArgs(string repo, System.Collections.Generic.IEnumerable<string> args) =>
+            GitCommandRunner.RunAsync(repo, args, GitCommandRunner.QueryTimeout, CancellationToken.None);
+
+        [SkippableFact]
+        public async Task RealGit_ResetModes_MoveHead_AndKeepOrDropChanges()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+
+            var (soft, softFirst, _) = await TwoCommitRepoAsync("reset-soft");
+            Assert.True((await RunArgs(soft, GitRefCommands.Reset(GitResetMode.Soft, softFirst))).Success);
+            var s1 = await StatusAsync(soft);
+            Assert.Equal(softFirst, s1.HeadOid);
+            Assert.True(s1.Entries.Single().IsStaged);                       // 변경은 스테이지에 남음
+
+            var (mixed, mixedFirst, _) = await TwoCommitRepoAsync("reset-mixed");
+            Assert.True((await RunArgs(mixed, GitRefCommands.Reset(GitResetMode.Mixed, mixedFirst))).Success);
+            var s2 = await StatusAsync(mixed);
+            Assert.False(s2.Entries.Single().IsStaged);                      // 스테이지는 풀리고
+            Assert.Equal("two\n", File.ReadAllText(Path.Combine(mixed, "f.txt")));   // 작업 트리는 그대로
+
+            var (hard, hardFirst, _) = await TwoCommitRepoAsync("reset-hard");
+            File.WriteAllText(Path.Combine(hard, "f.txt"), "uncommitted\n");
+            Assert.True((await RunArgs(hard, GitRefCommands.Reset(GitResetMode.Hard, hardFirst))).Success);
+            Assert.Empty((await StatusAsync(hard)).Entries);                 // 커밋 안 한 변경까지 사라짐
+            Assert.Equal("one\n", File.ReadAllText(Path.Combine(hard, "f.txt")));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CreateBranchFromCommit_WithOrWithoutSwitch_AndDetachedCheckout()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (repo, first, second) = await TwoCommitRepoAsync("branches");
+
+            Assert.True((await RunArgs(repo, GitRefCommands.CheckBranchName("feature/ok"))).Success);
+            Assert.False((await RunArgs(repo, GitRefCommands.CheckBranchName("-bad"))).Success);
+            Assert.False((await RunArgs(repo, GitRefCommands.CheckBranchName("bad name"))).Success);
+
+            // 전환 없이: 현재 브랜치는 그대로, 새 브랜치는 첫 커밋을 가리킴
+            Assert.True((await RunArgs(repo, GitRefCommands.CreateBranch("from-first", first, switchAfter: false))).Success);
+            Assert.Equal("main", (await StatusAsync(repo)).Branch);
+            Assert.Equal(first, (await Git(repo, "rev-parse", "from-first")).StdOut.Trim());
+
+            // 전환하며: 새 브랜치로 옮겨가고 HEAD가 시작점
+            Assert.True((await RunArgs(repo, GitRefCommands.CreateBranch("switched", first, switchAfter: true))).Success);
+            var status = await StatusAsync(repo);
+            Assert.Equal("switched", status.Branch);
+            Assert.Equal(first, status.HeadOid);
+
+            // 시작점 비움 = 현재 HEAD
+            Assert.True((await RunArgs(repo, GitRefCommands.CreateBranch("here", null, switchAfter: false))).Success);
+            Assert.Equal(first, (await Git(repo, "rev-parse", "here")).StdOut.Trim());
+
+            // detached
+            Assert.True((await RunArgs(repo, GitRefCommands.CheckoutDetached(second))).Success);
+            status = await StatusAsync(repo);
+            Assert.True(status.IsDetached);
+            Assert.Equal(second, status.HeadOid);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_Worktree_AddListRemovePrune()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (repo, first, _) = await TwoCommitRepoAsync("wt-main");
+            await Git(repo, "branch", "existing");
+
+            var newWt = P("wt new");        // 공백 있는 경로
+            var existingWt = P("wt-existing");
+            Assert.True((await RunArgs(repo, GitRefCommands.WorktreeAdd(newWt, "wt-branch", first))).Success);
+            Assert.True((await RunArgs(repo, GitRefCommands.WorktreeAdd(existingWt, null, "existing"))).Success);
+            // 같은 브랜치는 두 곳에서 체크아웃할 수 없다.
+            Assert.False((await RunArgs(repo, GitRefCommands.WorktreeAdd(P("wt-dup"), null, "existing"))).Success);
+
+            var list = GitOutputParser.ParseWorktrees((await RunArgs(repo, GitRefCommands.WorktreeList)).StdOut);
+            Assert.Equal(3, list.Count);
+            Assert.True(list[0].IsMain);
+            Assert.Equal("main", list[0].Branch);
+            var added = list.Single(w => w.Branch == "wt-branch");
+            Assert.Equal(Path.GetFullPath(newWt), Path.GetFullPath(added.Path));
+            Assert.Equal(first, added.Head);
+            Assert.True(File.Exists(Path.Combine(newWt, ".git")));          // 워킹트리는 .git 파일 → 탐색기가 저장소로 인식
+
+            // 변경이 있으면 제거 거부, 없으면 제거
+            File.WriteAllText(Path.Combine(existingWt, "dirty.txt"), "x");
+            Assert.False((await RunArgs(repo, GitRefCommands.WorktreeRemove(existingWt))).Success);
+            Assert.True((await RunArgs(repo, GitRefCommands.WorktreeRemove(newWt))).Success);
+            Assert.False(Directory.Exists(newWt));
+
+            // 폴더를 직접 지우면 prunable → prune으로 정리
+            foreach (var f in Directory.EnumerateFiles(existingWt, "*", SearchOption.AllDirectories))
+                File.SetAttributes(f, FileAttributes.Normal);
+            Directory.Delete(existingWt, true);
+            list = GitOutputParser.ParseWorktrees((await RunArgs(repo, GitRefCommands.WorktreeList)).StdOut);
+            Assert.True(list.Single(w => w.Branch == "existing").IsPrunable);
+            Assert.True((await RunArgs(repo, GitRefCommands.WorktreePrune)).Success);
+            Assert.Single(GitOutputParser.ParseWorktrees((await RunArgs(repo, GitRefCommands.WorktreeList)).StdOut));
+        }
+
+        [Fact]
+        public void ParseWorktrees_ReadsAllFlags()
+        {
+            var output = "worktree C:/repo\nHEAD aaaa\nbranch refs/heads/main\n\n" +
+                         "worktree C:/wt/det\nHEAD bbbbbbbbbb\ndetached\nlocked reason\n\n" +
+                         "worktree C:/gone\nHEAD cccc\nbranch refs/heads/x\nprunable gitdir file points to non-existent location\n\n";
+
+            var list = GitOutputParser.ParseWorktrees(output);
+
+            Assert.Equal(3, list.Count);
+            Assert.True(list[0].IsMain && !list[1].IsMain);
+            Assert.Equal("main", list[0].Branch);
+            Assert.True(list[1].IsDetached && list[1].IsLocked);
+            Assert.Null(list[1].Branch);
+            Assert.Contains("(detached @bbbbbbb)", list[1].DisplayText);
+            Assert.True(list[2].IsPrunable);
+            Assert.Contains("prune", list[2].DisplayText);
+        }
     }
 }

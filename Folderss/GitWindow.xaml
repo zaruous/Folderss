@@ -213,6 +213,7 @@
                     <ListBoxItem Tag="Branches" Padding="14,6">브랜치</ListBoxItem>
                     <ListBoxItem Tag="Remote" Padding="14,6">원격 비교</ListBoxItem>
                     <ListBoxItem Tag="Log" Padding="14,6">로그</ListBoxItem>
+                    <ListBoxItem Tag="Worktrees" Padding="14,6">워킹트리</ListBoxItem>
                 </ListBox>
 
                 <!-- 변경 사항: 왼쪽 목록(변경됨/스테이지됨), 오른쪽 선택 파일 diff -->
@@ -428,16 +429,48 @@
                     <controls:GitDiffView x:Name="RemoteDiff" Grid.Row="1" Grid.Column="2"/>
                 </Grid>
 
-                <!-- 로그: 위 커밋 목록, 아래 선택 커밋 diff -->
+                <!-- 워킹트리: 목록·추가·제거·prune -->
+                <DockPanel x:Name="WorktreesSection" Grid.Row="1" Margin="6" Visibility="Collapsed">
+                    <StackPanel DockPanel.Dock="Top" Orientation="Horizontal">
+                        <Button Content="새 워킹트리…" Click="WorktreeAdd_Click"
+                                ToolTip="다른 폴더에 이 저장소의 작업 트리를 하나 더 만듭니다 (새 브랜치 / 기존 브랜치)"/>
+                        <Button Content="저장소 목록에서 보기" Click="WorktreeOpen_Click"
+                                ToolTip="선택한 워킹트리를 왼쪽 저장소 목록에서 선택합니다 (없으면 추가). 더블클릭과 같습니다"/>
+                        <Button Content="제거" Click="WorktreeRemove_Click"
+                                ToolTip="워킹트리 폴더와 기록을 지웁니다. 커밋 안 한 변경이 있으면 git이 거부합니다 (강제 제거 없음)"/>
+                        <Button Content="prune" Click="WorktreePrune_Click"
+                                ToolTip="폴더가 이미 지워진 워킹트리의 기록을 정리합니다 (git worktree prune)"/>
+                    </StackPanel>
+                    <TextBlock DockPanel.Dock="Bottom" Margin="2,6,0,0" TextWrapping="Wrap" FontSize="12"
+                               Foreground="{DynamicResource SecondaryText}"
+                               Text="같은 브랜치는 두 워킹트리에서 동시에 체크아웃할 수 없습니다. 워킹트리 폴더는 탐색기에서 지우지 말고 '제거'를 쓰세요 (지웠다면 prune)."/>
+                    <ListBox x:Name="WorktreeList"
+                             FontFamily="Consolas"
+                             DisplayMemberPath="DisplayText"
+                             MouseDoubleClick="WorktreeList_MouseDoubleClick"/>
+                </DockPanel>
+
+                                <!-- 로그: 위 커밋 목록, 아래 선택 커밋 diff -->
                 <Grid x:Name="LogSection" Grid.Row="1" Margin="6" Visibility="Collapsed">
                     <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*" MinHeight="80"/>
                         <RowDefinition Height="5"/>
                         <RowDefinition Height="*" MinHeight="80"/>
                     </Grid.RowDefinitions>
-                    <ListView x:Name="LogList" Grid.Row="0"
+                    <!-- 선택한 커밋에 대한 작업. 각 버튼은 선택 대화상자를 연다. 목록 우클릭 메뉴도 같다. -->
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,4">
+                        <Button x:Name="LogResetButton" Content="이 커밋으로 reset…" Click="LogReset_Click" IsEnabled="False"
+                                ToolTip="현재 브랜치를 선택한 커밋으로 되돌립니다 (soft / mixed / hard 선택)"/>
+                        <Button x:Name="LogBranchButton" Content="여기서 브랜치…" Click="LogBranch_Click" IsEnabled="False"
+                                ToolTip="선택한 커밋에서 새 브랜치를 만듭니다 (전환 여부 선택)"/>
+                        <Button x:Name="LogCheckoutButton" Content="체크아웃…" Click="LogCheckout_Click" IsEnabled="False"
+                                ToolTip="선택한 커밋으로 작업 트리를 옮깁니다 (새 브랜치로 / detached 선택)"/>
+                    </StackPanel>
+                    <ListView x:Name="LogList" Grid.Row="1"
                               SelectionMode="Single"
                               SelectionChanged="LogList_SelectionChanged"
+                              ContextMenuOpening="LogList_ContextMenuOpening"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling">
                         <!-- 그래프 선이 행 사이에서 끊기지 않도록 행 높이를 고정하고 안쪽 여백·테두리를 없앤다. -->
@@ -451,6 +484,15 @@
                                 <Setter Property="VerticalContentAlignment" Value="Stretch"/>
                             </Style>
                         </ListView.ItemContainerStyle>
+                        <ListView.ContextMenu>
+                            <ContextMenu>
+                                <MenuItem Header="이 커밋으로 reset…" Click="LogReset_Click"/>
+                                <MenuItem Header="여기서 브랜치…" Click="LogBranch_Click"/>
+                                <MenuItem Header="체크아웃…" Click="LogCheckout_Click"/>
+                                <Separator/>
+                                <MenuItem Header="해시 복사" Click="LogCopyHash_Click"/>
+                            </ContextMenu>
+                        </ListView.ContextMenu>
                         <ListView.View>
                             <GridView>
                                 <GridViewColumn x:Name="GraphColumn" Header="그래프" Width="40">
@@ -468,8 +510,8 @@
                             </GridView>
                         </ListView.View>
                     </ListView>
-                    <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="Transparent"/>
-                    <controls:GitDiffView x:Name="LogDiff" Grid.Row="2" Margin="0,4,0,0"/>
+                    <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" Background="Transparent"/>
+                    <controls:GitDiffView x:Name="LogDiff" Grid.Row="3" Margin="0,4,0,0"/>
                 </Grid>
             </Grid>
         </Grid>

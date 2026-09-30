@@ -357,6 +357,7 @@ namespace Folderss
             BranchesSection.Visibility = tag == "Branches" ? Visibility.Visible : Visibility.Collapsed;
             RemoteSection.Visibility = tag == "Remote" ? Visibility.Visible : Visibility.Collapsed;
             LogSection.Visibility = tag == "Log" ? Visibility.Visible : Visibility.Collapsed;
+            WorktreesSection.Visibility = tag == "Worktrees" ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ClearDetail()
@@ -369,6 +370,8 @@ namespace Folderss
             UnchangedTree.ItemsSource = null;
             UnchangedHeader.Text = "변경 없음";
             BranchList.ItemsSource = null;
+            WorktreeList.ItemsSource = null;
+            _worktrees = new List<GitWorktreeInfo>();
             LogList.ItemsSource = null;
             OutgoingList.ItemsSource = null;
             IncomingList.ItemsSource = null;
@@ -501,6 +504,7 @@ namespace Folderss
             }
 
             await LoadRemoteAsync(row, token);
+            await LoadWorktreesAsync(row, token);
         }
 
         // ── diff ────────────────────────────────────────────────────────────
@@ -799,6 +803,7 @@ namespace Folderss
 
         private async void LogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            LogResetButton.IsEnabled = LogBranchButton.IsEnabled = LogCheckoutButton.IsEnabled = LogList.SelectedItem != null;
             await ShowCommitDiffAsync(LogDiff, LogList.SelectedItem as GitCommitInfo);
         }
 
@@ -1108,20 +1113,256 @@ namespace Folderss
             if (SelectedRow == null)
                 return;
 
-            var prompt = new PromptWindow("새 브랜치", "새 브랜치 이름을 입력하세요. 현재 커밋에서 만들고 전환합니다.") { Owner = this };
-            if (prompt.ShowDialog() != true)
+            // 브랜치 목록에서 고른 브랜치가 있으면 그것을 기본 시작점으로.
+            var selected = BranchList.SelectedItem as GitBranchInfo;
+            await CreateBranchWithDialogAsync(null, selected != null && !selected.IsCurrent ? selected.Name : null);
+        }
+
+        /// <summary>시작점 후보: 현재 HEAD, (있으면) 로그에서 고른 커밋, 로컬 브랜치, 원격 브랜치.</summary>
+        private List<GitDialogBase.Choice> StartPointChoices(GitCommitInfo commit)
+        {
+            var head = SelectedRow?.Snapshot?.BranchDisplay;
+            var choices = new List<GitDialogBase.Choice>
+            {
+                new GitDialogBase.Choice { Text = "현재 HEAD" + (string.IsNullOrEmpty(head) ? string.Empty : " (" + head + ")"), Value = null }
+            };
+            if (commit != null)
+                choices.Add(new GitDialogBase.Choice { Text = "커밋 " + commit.ShortHash + "  " + commit.Subject, Value = commit.Hash });
+            foreach (var branch in _branches.Where(b => !b.IsCurrent))
+                choices.Add(new GitDialogBase.Choice { Text = (branch.IsRemote ? "원격 " : "브랜치 ") + branch.Name, Value = branch.Name });
+            return choices;
+        }
+
+        /// <summary>git 규칙(check-ref-format)으로 브랜치 이름 검사. 쓸 수 있으면 null.</summary>
+        private async Task<string> ValidateBranchNameAsync(string name)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return "저장소를 선택하세요.";
+            var result = await GitCommandRunner.RunAsync(row.RootPath, GitRefCommands.CheckBranchName(name), GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+            if (!result.Success)
+                return "브랜치 이름으로 쓸 수 없습니다: " + name + "\n(공백, ~ ^ : ? * [ \\, '-'로 시작, '..' 등은 쓸 수 없습니다)";
+            if (_branches.Any(b => !b.IsRemote && b.Name == name))
+                return "같은 이름의 브랜치가 이미 있습니다: " + name;
+            return null;
+        }
+
+        private async Task CreateBranchWithDialogAsync(GitCommitInfo commit, string preferredStart)
+        {
+            var choices = StartPointChoices(commit);
+            var index = commit != null ? 1 : Math.Max(0, choices.FindIndex(c => c.Value != null && c.Value == preferredStart));
+            var dialog = new GitBranchDialog(choices, index, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            if (dialog.SwitchAfter && !ConfirmNoUnsavedDocuments("브랜치를 전환"))
+                return;
+            await RunOnSelectedAsync(dialog.SwitchAfter ? "브랜치 만들고 전환하는 중…" : "브랜치 만드는 중…",
+                GitRefCommands.CreateBranch(dialog.BranchName, dialog.StartPoint, dialog.SwitchAfter), GitCommandRunner.QueryTimeout);
+        }
+
+        // ── 로그: reset · 브랜치 · 체크아웃 ───────────────────────────────────
+
+        private GitCommitInfo SelectedCommit => LogList.SelectedItem as GitCommitInfo;
+
+        private void LogList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            // 커밋을 고르지 않았거나 작업 중이면 메뉴를 열지 않는다.
+            if (SelectedCommit == null || _busyCount > 0)
+                e.Handled = true;
+        }
+
+        private async void LogReset_Click(object sender, RoutedEventArgs e)
+        {
+            var commit = SelectedCommit;
+            var snapshot = SelectedRow?.Snapshot;
+            if (commit == null || snapshot == null)
                 return;
 
-            var name = prompt.Value.Trim();
-            if (name.Length == 0)
+            var uncommitted = snapshot.Entries.Count(entry => !entry.IsUntracked);
+            var dialog = new GitResetDialog(commit, snapshot.IsDetached ? "detached HEAD" : snapshot.Branch, uncommitted) { Owner = this };
+            if (dialog.ShowDialog() != true)
                 return;
-            // '-'로 시작하면 옵션으로 해석되므로 막는다. 나머지 이름 규칙은 git(check-ref-format)이 검사한다.
-            if (name.StartsWith("-", StringComparison.Ordinal))
+            if (dialog.Mode == GitResetMode.Hard && !ConfirmNoUnsavedDocuments("hard reset"))
+                return;
+
+            await RunOnSelectedAsync("reset 중…", GitRefCommands.Reset(dialog.Mode, commit.Hash), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (result.Success)
+                        AppendOutput("되돌린 커밋은 git reflog로 찾을 수 있습니다. 이전 위치로 돌아가려면 reflog의 해시로 다시 reset하세요.");
+                });
+        }
+
+        private async void LogBranch_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedCommit != null)
+                await CreateBranchWithDialogAsync(SelectedCommit, null);
+        }
+
+        private async void LogCheckout_Click(object sender, RoutedEventArgs e)
+        {
+            var commit = SelectedCommit;
+            if (commit == null)
+                return;
+            var dialog = new GitCheckoutDialog(commit, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            if (!ConfirmNoUnsavedDocuments("체크아웃"))
+                return;
+
+            var args = dialog.NewBranchName != null
+                ? GitRefCommands.CreateBranch(dialog.NewBranchName, commit.Hash, switchAfter: true)
+                : GitRefCommands.CheckoutDetached(commit.Hash);
+            await RunOnSelectedAsync("체크아웃 중…", args, GitCommandRunner.QueryTimeout);
+        }
+
+        private void LogCopyHash_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedCommit == null)
+                return;
+            try
             {
-                MessageBox.Show(this, "브랜치 이름은 '-'로 시작할 수 없습니다.", "새 브랜치", MessageBoxButton.OK, MessageBoxImage.Warning);
+                Clipboard.SetText(SelectedCommit.Hash);
+            }
+            catch (System.Runtime.InteropServices.COMException)
+            {
+                // 다른 프로그램이 클립보드를 잡고 있으면 조용히 실패한다.
+            }
+        }
+
+        // ── 워킹트리 ──────────────────────────────────────────────────────────
+
+        private List<GitWorktreeInfo> _worktrees = new List<GitWorktreeInfo>();
+
+        private async Task LoadWorktreesAsync(RepositoryRow row, CancellationToken token)
+        {
+            var result = await GitCommandRunner.RunAsync(row.RootPath, GitRefCommands.WorktreeList, GitCommandRunner.QueryTimeout, token, readOnly: true);
+            if (!ReferenceEquals(row, SelectedRow))
+                return;
+            if (!result.Success)
+            {
+                AppendResult(row.Info, result);
                 return;
             }
-            await RunOnSelectedAsync("브랜치 만드는 중…", new[] { "switch", "-c", name }, GitCommandRunner.QueryTimeout);
+            _worktrees = GitOutputParser.ParseWorktrees(result.StdOut);
+            WorktreeList.ItemsSource = _worktrees;
+        }
+
+        private static string NormalizePath(string path)
+        {
+            return Path.GetFullPath(path).TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
+        }
+
+        /// <summary>저장소 목록에서 경로가 같은 행을 찾고, 없으면 만들어 넣는다(상태도 읽음).</summary>
+        private RepositoryRow EnsureRepositoryRow(string path)
+        {
+            var normalized = NormalizePath(path);
+            var row = _rows.FirstOrDefault(r => string.Equals(NormalizePath(r.RootPath), normalized, StringComparison.OrdinalIgnoreCase));
+            if (row != null)
+                return row;
+
+            var relative = Path.GetRelativePath(_basePath, normalized);
+            row = new RepositoryRow(new GitRepositoryInfo
+            {
+                RootPath = normalized,
+                DisplayPath = relative.StartsWith("..", StringComparison.Ordinal) || Path.IsPathRooted(relative) ? normalized : relative,
+                IsGitFile = File.Exists(Path.Combine(normalized, ".git"))
+            });
+            _rows.Add(row);
+            _ = RefreshStatusSafeAsync(row);
+            return row;
+        }
+
+        private async Task RefreshStatusSafeAsync(RepositoryRow row)
+        {
+            try
+            {
+                await RefreshStatusAsync(row, _lifetime.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("상태를 읽지 못했습니다: " + ex.Message);
+            }
+        }
+
+        private async void WorktreeAdd_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+
+            // 다른 워킹트리에서 이미 체크아웃한 브랜치는 고를 수 없게 뺀다(git도 거부).
+            var used = new HashSet<string>(_worktrees.Where(w => w.Branch != null).Select(w => w.Branch), StringComparer.Ordinal);
+            var free = _branches.Where(b => !b.IsRemote && !used.Contains(b.Name))
+                .Select(b => new GitDialogBase.Choice { Text = b.Name, Value = b.Name }).ToList();
+            var dialog = new GitWorktreeDialog(row.RootPath, StartPointChoices(SelectedCommit), free, ValidateBranchNameAsync) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+
+            var path = dialog.WorktreePath;
+            await RunOnSelectedAsync("워킹트리 만드는 중…", GitRefCommands.WorktreeAdd(path, dialog.NewBranch, dialog.Commitish), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (result.Success)
+                        EnsureRepositoryRow(path);
+                });
+        }
+
+        private void WorktreeOpen_Click(object sender, RoutedEventArgs e)
+        {
+            var worktree = WorktreeList.SelectedItem as GitWorktreeInfo;
+            if (worktree == null || worktree.IsBare || worktree.IsPrunable)
+                return;
+            RepoList.SelectedItem = EnsureRepositoryRow(worktree.Path);
+        }
+
+        private void WorktreeList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            WorktreeOpen_Click(sender, e);
+        }
+
+        private async void WorktreeRemove_Click(object sender, RoutedEventArgs e)
+        {
+            var worktree = WorktreeList.SelectedItem as GitWorktreeInfo;
+            if (worktree == null)
+                return;
+            if (worktree.IsMain)
+            {
+                MessageBox.Show(this, "주 작업 트리는 제거할 수 없습니다.", "워킹트리 제거", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (worktree.IsPrunable)
+            {
+                MessageBox.Show(this, "폴더가 이미 없습니다. 'prune'으로 기록을 정리하세요.", "워킹트리 제거", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var unsaved = _countModifiedDocumentsUnder(worktree.Path);
+            if (MessageBox.Show(this,
+                    string.Format("워킹트리 폴더를 지웁니다:\n{0}\n\n커밋 안 한 변경이 있으면 git이 거부합니다(강제 제거 없음). 브랜치는 지우지 않습니다.{1}\n계속할까요?",
+                        worktree.Path, unsaved > 0 ? string.Format("\n\n⚠ 이 폴더의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.", unsaved) : string.Empty),
+                    "워킹트리 제거", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+
+            var path = worktree.Path;
+            await RunOnSelectedAsync("워킹트리 제거 중…", GitRefCommands.WorktreeRemove(path), GitCommandRunner.QueryTimeout,
+                onDone: result =>
+                {
+                    if (!result.Success)
+                        return;
+                    var normalized = NormalizePath(path);
+                    var stale = _rows.FirstOrDefault(r => string.Equals(NormalizePath(r.RootPath), normalized, StringComparison.OrdinalIgnoreCase));
+                    if (stale != null && !ReferenceEquals(stale, SelectedRow))
+                        _rows.Remove(stale);
+                });
+        }
+
+        private async void WorktreePrune_Click(object sender, RoutedEventArgs e)
+        {
+            await RunOnSelectedAsync("워킹트리 기록 정리 중…", GitRefCommands.WorktreePrune, GitCommandRunner.QueryTimeout);
         }
 
         private async void DeleteBranch_Click(object sender, RoutedEventArgs e)

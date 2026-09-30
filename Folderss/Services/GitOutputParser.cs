@@ -297,6 +297,47 @@ namespace Folderss.Services
             return lines;
         }
 
+        /// <summary>
+        /// <c>git worktree list --porcelain</c> 출력을 해석한다. 항목은 빈 줄로 구분되고, 경로는 Windows에서도 슬래시로 나온다.
+        /// </summary>
+        public static List<GitWorktreeInfo> ParseWorktrees(string output)
+        {
+            var list = new List<GitWorktreeInfo>();
+            GitWorktreeInfo current = null;
+            foreach (var raw in (output ?? string.Empty).Split('\n'))
+            {
+                var line = raw.TrimEnd('\r');
+                if (line.Length == 0)
+                {
+                    current = null;
+                    continue;
+                }
+
+                var space = line.IndexOf(' ');
+                var key = space < 0 ? line : line.Substring(0, space);
+                var value = space < 0 ? string.Empty : line.Substring(space + 1);
+                if (key == "worktree")
+                {
+                    current = new GitWorktreeInfo { Path = value, IsMain = list.Count == 0 };
+                    list.Add(current);
+                    continue;
+                }
+                if (current == null)
+                    continue;
+
+                switch (key)
+                {
+                    case "HEAD": current.Head = value; break;
+                    case "branch": current.Branch = value.StartsWith("refs/heads/", StringComparison.Ordinal) ? value.Substring("refs/heads/".Length) : value; break;
+                    case "detached": current.IsDetached = true; break;
+                    case "bare": current.IsBare = true; break;
+                    case "locked": current.IsLocked = true; break;
+                    case "prunable": current.IsPrunable = true; break;
+                }
+            }
+            return list;
+        }
+
         /// <summary><c>git for-each-ref</c> + <see cref="BranchFormat"/> 출력을 해석한다. 원격 HEAD 별칭은 뺀다.</summary>
         public static List<GitBranchInfo> ParseBranches(string output)
         {

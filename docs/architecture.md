@@ -32,6 +32,7 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
+│   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
 │   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
@@ -64,6 +65,7 @@ Folderss/
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
+├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
@@ -268,6 +270,10 @@ Folderss/
   `Kind`는 목록 쪽 코드(Y 또는 X)로 정해지고 `GitStatusIcon` 스타일(GitWindow.xaml, ContentControl 템플릿의 Border+Path)이
   12×12 벡터 도형·색을 고른다(`Stretch=None`, 이미지 파일 없음, 상태 이름은 툴팁). Path `Data` 문자열은 실행 시 해석되므로 고칠 때 문법 주의. 변경됨은 수정·새 파일을 경로순으로 섞고 충돌만 위.
   목록 제목은 `GitStatusEntry.Summarize`("수정 3 · 새 파일 2"). 작업 트리 쪽 이름 변경은 git이 감지하지 않으므로 삭제 + 새 파일로 보인다.
+- reset·브랜치·체크아웃·워킹트리: 인수는 `GitRefCommands` 한 곳. 선택은 `GitDialogs.cs`의 대화상자가 받는다(`GitDialogBase.ValidateAsync`로
+  닫기 전 비동기 검사 — 브랜치 이름은 `git check-ref-format --branch`). 작업 트리를 바꾸는 것(hard reset, 전환·체크아웃)은 실행 전
+  `ConfirmNoUnsavedDocuments`. 워킹트리 목록은 `worktree list --porcelain`(`ParseWorktrees`)으로 상세를 읽을 때 함께 읽고, 추가하면
+  `EnsureRepositoryRow`로 저장소 목록에 넣는다(워킹트리는 `.git` 파일이라 탐색기도 원래 찾는다). 강제 옵션(`reset`은 모드 선택, `worktree remove --force`, `branch -D`)은 없다.
 - 변경 없는 파일: `변경 없는 파일 보기`를 켜면 `ls-files -z --cached`에서 상태 목록(경로·이름 변경 전 경로)을 뺀 것을
   `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
   BOM 규칙으로 읽어 `GitDiffView.ShowLines`로 줄 번호와 함께 보인다(10MB 초과·바이너리는 안내만). 상태를 다시 읽을 때마다 다시 계산.

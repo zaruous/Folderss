@@ -297,6 +297,35 @@ namespace Folderss.Models
         public int? NewLine { get; set; }
     }
 
+    /// <summary><c>git worktree list --porcelain</c>의 항목 하나.</summary>
+    public sealed class GitWorktreeInfo
+    {
+        public string Path { get; set; }
+        public string Head { get; set; }
+
+        /// <summary>체크아웃한 브랜치 이름(refs/heads/ 제외). detached·bare면 null.</summary>
+        public string Branch { get; set; }
+        public bool IsDetached { get; set; }
+        public bool IsBare { get; set; }
+        public bool IsLocked { get; set; }
+
+        /// <summary>폴더가 없어져 prune 대상인지.</summary>
+        public bool IsPrunable { get; set; }
+
+        /// <summary>목록의 첫 항목 = 주 작업 트리(제거 불가).</summary>
+        public bool IsMain { get; set; }
+
+        public string DisplayText
+        {
+            get
+            {
+                var head = IsBare ? "(bare)" : IsDetached ? "(detached @" + (Head ?? string.Empty).Substring(0, System.Math.Min(7, (Head ?? string.Empty).Length)) + ")" : Branch;
+                var flags = (IsMain ? "  [주 작업 트리]" : string.Empty) + (IsLocked ? "  [잠김]" : string.Empty) + (IsPrunable ? "  [폴더 없음 — prune 대상]" : string.Empty);
+                return head + "    " + Path + flags;
+            }
+        }
+    }
+
     public sealed class GitBranchInfo
     {
         /// <summary>표시·명령용 이름 (예: main, origin/main).</summary>
