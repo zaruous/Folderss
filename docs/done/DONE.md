@@ -9,6 +9,12 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## 미릴리스
+
+- `Controls/FolderBrowser.xaml.cs` — 폴더 트리 우클릭 시 트리가 접히던 버그 수정. 원인은 클릭 토글이 아니라 셸 컨텍스트 메뉴 후 `RefreshTreeAfterShellAction`이 부모의 자식 노드를 새로 만들면서(루트면 트리 전체 재생성) 펼침 상태가 사라진 것. 새로고침 전 펼친 경로를 모아(`CollectExpandedPaths`) 새로고침 후 다시 펼침(`RestoreExpandedPaths`). 이름이 바뀐 폴더는 경로가 달라져 접힌 상태로 남음.
+
+---
+
 ## v1.7.0 (2026-09-23)
 
 ### 설정 저장 안정성 개선 (`docs/items/settings-save-reliability.md`)

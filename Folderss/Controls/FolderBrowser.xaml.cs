@@ -1745,15 +1745,50 @@ namespace Folderss.Controls
 
         private void RefreshTreeAfterShellAction(TreeViewItem item)
         {
+            // 우클릭(셸 메뉴) 후 새로고침해도 펼침 상태가 접히지 않도록 보존
+            var expandedPaths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            CollectExpandedPaths(FolderTree, expandedPaths);
+
             var parent = item == null ? null : ItemsControl.ItemsControlFromItemContainer(item) as TreeViewItem;
             if (parent == null)
             {
                 RebuildFolderTree();
+                RestoreExpandedPaths(FolderTree, expandedPaths);
                 return;
             }
 
             ReloadTreeChildren(parent);
+            RestoreExpandedPaths(parent, expandedPaths);
             SelectTreePath(CurrentPath);
+        }
+
+        private static void CollectExpandedPaths(ItemsControl owner, HashSet<string> expandedPaths)
+        {
+            foreach (var childObject in owner.Items)
+            {
+                var child = childObject as TreeViewItem;
+                var path = child == null ? null : child.Tag as string;
+                if (path == null || !child.IsExpanded)
+                    continue;
+
+                expandedPaths.Add(path);
+                CollectExpandedPaths(child, expandedPaths);
+            }
+        }
+
+        private void RestoreExpandedPaths(ItemsControl owner, HashSet<string> expandedPaths)
+        {
+            foreach (var childObject in owner.Items.Cast<object>().ToList())
+            {
+                var child = childObject as TreeViewItem;
+                var path = child == null ? null : child.Tag as string;
+                if (path == null || !expandedPaths.Contains(path))
+                    continue;
+
+                EnsureTreeChildrenLoaded(child);
+                child.IsExpanded = true;
+                RestoreExpandedPaths(child, expandedPaths);
+            }
         }
 
         private void CloseTreeView_Click(object sender, RoutedEventArgs e)
