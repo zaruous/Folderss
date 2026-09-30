@@ -15,6 +15,31 @@
         FontSize="13"
         Loaded="Window_Loaded"
         Closed="Window_Closed">
+    <Window.Resources>
+        <!-- 변경 사항 트리 보기(변경됨·스테이지됨 공용). 기본은 모두 펼침. -->
+        <Style x:Key="GitChangeTreeStyle" TargetType="TreeView">
+            <Setter Property="FontFamily" Value="Consolas"/>
+            <Setter Property="Background" Value="{DynamicResource PanelBackground}"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="ItemContainerStyle">
+                <Setter.Value>
+                    <Style TargetType="TreeViewItem">
+                        <Setter Property="IsExpanded" Value="True"/>
+                        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+                        <Setter Property="ToolTip" Value="{Binding Path}"/>
+                    </Style>
+                </Setter.Value>
+            </Setter>
+            <Setter Property="ItemTemplate">
+                <Setter.Value>
+                    <HierarchicalDataTemplate ItemsSource="{Binding Children}">
+                        <TextBlock Text="{Binding DisplayText}"/>
+                    </HierarchicalDataTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
     <Grid>
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto"/>
@@ -123,12 +148,21 @@
 
                     <Grid Grid.Column="0">
                         <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto"/>
                             <RowDefinition Height="*"/>
                             <RowDefinition Height="8"/>
                             <RowDefinition Height="*"/>
                         </Grid.RowDefinitions>
 
-                        <DockPanel Grid.Row="0">
+                        <CheckBox x:Name="ChangesTreeToggle"
+                                  Grid.Row="0"
+                                  Margin="2,0,0,6"
+                                  Content="트리로 보기"
+                                  Foreground="{DynamicResource PrimaryText}"
+                                  Click="ChangesTreeToggle_Click"
+                                  ToolTip="변경 파일을 폴더별로 묶어 봅니다. 폴더를 선택해 스테이지/언스테이지하면 그 아래 전체가 대상입니다."/>
+
+                        <DockPanel Grid.Row="1">
                             <DockPanel DockPanel.Dock="Top">
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                                     <Button x:Name="StageButton" Content="스테이지 ↓" Click="Stage_Click"/>
@@ -137,16 +171,23 @@
                                 </StackPanel>
                                 <TextBlock x:Name="UnstagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="변경됨"/>
                             </DockPanel>
-                            <ListBox x:Name="UnstagedList"
-                                     SelectionMode="Extended"
-                                     FontFamily="Consolas"
-                                     DisplayMemberPath="DisplayText"
-                                     SelectionChanged="UnstagedList_SelectionChanged"
-                                     MouseDoubleClick="ChangeList_MouseDoubleClick"
-                                     ToolTip="선택하면 오른쪽에 작업 트리 ↔ 인덱스 차이를 보입니다. 더블클릭하면 파일을 엽니다."/>
+                            <Grid>
+                                <ListBox x:Name="UnstagedList"
+                                         SelectionMode="Extended"
+                                         FontFamily="Consolas"
+                                         DisplayMemberPath="DisplayText"
+                                         SelectionChanged="UnstagedList_SelectionChanged"
+                                         MouseDoubleClick="ChangeList_MouseDoubleClick"
+                                         ToolTip="선택하면 오른쪽에 작업 트리 ↔ 인덱스 차이를 보입니다. 더블클릭하면 파일을 엽니다."/>
+                                <TreeView x:Name="UnstagedTree"
+                                          Visibility="Collapsed"
+                                          Style="{StaticResource GitChangeTreeStyle}"
+                                          SelectedItemChanged="UnstagedTree_SelectedItemChanged"
+                                          MouseDoubleClick="ChangeTree_MouseDoubleClick"/>
+                            </Grid>
                         </DockPanel>
 
-                        <DockPanel Grid.Row="2">
+                        <DockPanel Grid.Row="3">
                             <DockPanel DockPanel.Dock="Top">
                                 <StackPanel Orientation="Horizontal" DockPanel.Dock="Right">
                                     <Button x:Name="UnstageButton" Content="↑ 언스테이지" Click="Unstage_Click"/>
@@ -154,13 +195,20 @@
                                 </StackPanel>
                                 <TextBlock x:Name="StagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="스테이지됨"/>
                             </DockPanel>
-                            <ListBox x:Name="StagedList"
-                                     SelectionMode="Extended"
-                                     FontFamily="Consolas"
-                                     DisplayMemberPath="DisplayText"
-                                     SelectionChanged="StagedList_SelectionChanged"
-                                     MouseDoubleClick="ChangeList_MouseDoubleClick"
-                                     ToolTip="선택하면 오른쪽에 인덱스 ↔ HEAD 차이(커밋될 내용)를 보입니다."/>
+                            <Grid>
+                                <ListBox x:Name="StagedList"
+                                         SelectionMode="Extended"
+                                         FontFamily="Consolas"
+                                         DisplayMemberPath="DisplayText"
+                                         SelectionChanged="StagedList_SelectionChanged"
+                                         MouseDoubleClick="ChangeList_MouseDoubleClick"
+                                         ToolTip="선택하면 오른쪽에 인덱스 ↔ HEAD 차이(커밋될 내용)를 보입니다."/>
+                                <TreeView x:Name="StagedTree"
+                                          Visibility="Collapsed"
+                                          Style="{StaticResource GitChangeTreeStyle}"
+                                          SelectedItemChanged="StagedTree_SelectedItemChanged"
+                                          MouseDoubleClick="ChangeTree_MouseDoubleClick"/>
+                            </Grid>
                         </DockPanel>
                     </Grid>
 

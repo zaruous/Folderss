@@ -48,6 +48,49 @@ namespace Folderss.Models
         }
     }
 
+    /// <summary>
+    /// 변경 사항 트리 보기의 노드. <see cref="Entry"/>가 있으면 파일, 없으면 폴더.
+    /// 자식이 폴더 하나뿐인 폴더 체인은 한 노드로 합친다(<c>src/app/core</c>).
+    /// </summary>
+    public sealed class GitChangeNode
+    {
+        public string Name { get; set; }
+
+        /// <summary>저장소 기준 폴더 경로(슬래시 구분). 파일 노드는 파일 경로.</summary>
+        public string Path { get; set; }
+        public GitStatusEntry Entry { get; set; }
+        public List<GitChangeNode> Children { get; } = new List<GitChangeNode>();
+
+        public bool IsFolder => Entry == null;
+
+        /// <summary>이 노드 아래(자신 포함) 파일 항목 전부.</summary>
+        public IEnumerable<GitStatusEntry> Entries
+        {
+            get
+            {
+                if (Entry != null)
+                {
+                    yield return Entry;
+                    yield break;
+                }
+                foreach (var child in Children)
+                    foreach (var entry in child.Entries)
+                        yield return entry;
+            }
+        }
+
+        public string DisplayText
+        {
+            get
+            {
+                if (IsFolder)
+                    return string.Format("📁 {0}  ({1})", Name, Entries.Count());
+                var mark = Entry.IsUntracked ? "? " : Entry.IsConflicted ? "! " : string.Format("{0}{1}", Entry.IndexState, Entry.WorkTreeState);
+                return mark + " " + Name + (string.IsNullOrEmpty(Entry.OriginalPath) ? string.Empty : "  ← " + Entry.OriginalPath);
+            }
+        }
+    }
+
     public sealed class GitStatusSnapshot
     {
         public string Branch { get; set; }

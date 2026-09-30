@@ -360,6 +360,8 @@ namespace Folderss
         {
             UnstagedList.ItemsSource = null;
             StagedList.ItemsSource = null;
+            UnstagedTree.ItemsSource = null;
+            StagedTree.ItemsSource = null;
             BranchList.ItemsSource = null;
             LogList.ItemsSource = null;
             OutgoingList.ItemsSource = null;
@@ -383,6 +385,8 @@ namespace Folderss
             {
                 UnstagedList.ItemsSource = null;
                 StagedList.ItemsSource = null;
+                UnstagedTree.ItemsSource = null;
+                StagedTree.ItemsSource = null;
                 return;
             }
 
@@ -397,6 +401,8 @@ namespace Folderss
 
             UnstagedList.ItemsSource = unstaged;
             StagedList.ItemsSource = staged;
+            UnstagedTree.ItemsSource = GitChangeTree.Build(unstaged);
+            StagedTree.ItemsSource = GitChangeTree.Build(staged);
             UnstagedHeader.Text = string.Format("변경됨 ({0})", unstaged.Count);
             StagedHeader.Text = string.Format("스테이지됨 ({0})", staged.Count);
         }
@@ -542,7 +548,11 @@ namespace Folderss
                 return;
             }
 
-            var entry = (GitStatusEntry)UnstagedList.SelectedItem;
+            await ShowUnstagedDiffAsync((GitStatusEntry)UnstagedList.SelectedItem);
+        }
+
+        private async Task ShowUnstagedDiffAsync(GitStatusEntry entry)
+        {
             if (entry.IsUntracked)
             {
                 if (entry.Path.EndsWith("/", StringComparison.Ordinal))
@@ -568,9 +578,70 @@ namespace Folderss
                 return;
             }
 
-            var entry = (GitStatusEntry)StagedList.SelectedItem;
-            await LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.Staged(entry.Path, entry.OriginalPath, _settings.IgnoreWhitespace),
+            await ShowStagedDiffAsync((GitStatusEntry)StagedList.SelectedItem);
+        }
+
+        private Task ShowStagedDiffAsync(GitStatusEntry entry)
+        {
+            return LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.Staged(entry.Path, entry.OriginalPath, _settings.IgnoreWhitespace),
                 "인덱스 ↔ HEAD (커밋될 내용): " + entry.Path));
+        }
+
+        // ── 변경 사항 트리 보기 ──────────────────────────────────────────────
+
+        private bool IsChangesTreeMode => ChangesTreeToggle.IsChecked == true;
+
+        private void ChangesTreeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var tree = IsChangesTreeMode;
+            UnstagedList.Visibility = StagedList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            UnstagedTree.Visibility = StagedTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            // 두 보기의 선택은 따로라, 전환하면 오른쪽 diff가 어느 선택의 것인지 헷갈리지 않게 비운다.
+            UnstagedList.UnselectAll();
+            StagedList.UnselectAll();
+            ChangesDiff.Clear();
+        }
+
+        private async void UnstagedTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = UnstagedTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+            {
+                ChangesDiff.Clear(string.Format("폴더 {0} — 파일 {1}개. 스테이지하면 이 폴더 아래 전체가 대상입니다.", node.Path, node.Entries.Count()));
+                return;
+            }
+            await ShowUnstagedDiffAsync(node.Entry);
+        }
+
+        private async void StagedTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = StagedTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+            {
+                ChangesDiff.Clear(string.Format("폴더 {0} — 파일 {1}개. 언스테이지하면 이 폴더 아래 전체가 대상입니다.", node.Path, node.Entries.Count()));
+                return;
+            }
+            await ShowStagedDiffAsync(node.Entry);
+        }
+
+        private void ChangeTree_MouseDoubleClick(object sender, MouseButtonEventArgs e)
+        {
+            // 폴더 더블클릭은 TreeView 기본 동작(접기/펴기)에 맡기고, 파일만 연다.
+            var node = (sender as TreeView)?.SelectedItem as GitChangeNode;
+            if (node?.Entry != null)
+                OpenEntry(node.Entry);
+        }
+
+        /// <summary>스테이지/언스테이지 대상: 평면 보기는 선택한 항목들, 트리 보기는 선택한 노드(폴더면 그 아래 전체).</summary>
+        private List<GitStatusEntry> SelectedChangeEntries(ListBox list, TreeView tree)
+        {
+            if (IsChangesTreeMode)
+                return (tree.SelectedItem as GitChangeNode)?.Entries.ToList() ?? new List<GitStatusEntry>();
+            return list.SelectedItems.Cast<GitStatusEntry>().ToList();
         }
 
         private async void LogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -728,7 +799,7 @@ namespace Folderss
 
         private async void Stage_Click(object sender, RoutedEventArgs e)
         {
-            var entries = UnstagedList.SelectedItems.Cast<GitStatusEntry>().ToList();
+            var entries = SelectedChangeEntries(UnstagedList, UnstagedTree);
             if (entries.Count == 0)
                 return;
             await RunOnSelectedAsync("스테이지 중…",
@@ -743,7 +814,7 @@ namespace Folderss
 
         private async void Unstage_Click(object sender, RoutedEventArgs e)
         {
-            var entries = StagedList.SelectedItems.Cast<GitStatusEntry>().ToList();
+            var entries = SelectedChangeEntries(StagedList, StagedTree);
             if (entries.Count == 0 || SelectedRow?.Snapshot == null)
                 return;
 
@@ -829,7 +900,12 @@ namespace Folderss
 
         private void ChangeList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
-            var entry = (sender as ListBox)?.SelectedItem as GitStatusEntry;
+            if ((sender as ListBox)?.SelectedItem is GitStatusEntry entry)
+                OpenEntry(entry);
+        }
+
+        private void OpenEntry(GitStatusEntry entry)
+        {
             var row = SelectedRow;
             if (entry == null || row == null || _openFile == null)
                 return;

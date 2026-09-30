@@ -47,6 +47,7 @@ Folderss/
 │   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref`·unified diff 출력 파서
 │   ├── GitDiffCommands         — diff·upstream 비교 명령 인수 (UI·테스트 공용)
 │   ├── GitGraphLayout          — 부모 해시로 브랜치 그래프 레인 계산
+│   ├── GitChangeTree           — 변경 파일 목록을 폴더 트리로 묶기
 │   ├── GitEncodingDiff         — UTF-16/32(BOM) 파일을 텍스트로 다시 비교
 │   ├── GitSettingsService      — Git 창 옵션 저장 (pull 방식, 탐색 깊이·제외 폴더 등)
 │   ├── IgnoreRuleSet           — .gitignore/.folderssignore 규칙 매처 (목록 ignore 필터)
@@ -199,7 +200,7 @@ tests/
 - 왼쪽 목록: 저장소별 상대 경로, 브랜치, upstream 대비 ↑ahead/↓behind, 변경·충돌 수. 기준 폴더를 품은 상위 저장소는 `▲`로 맨 위에 표시.
 - 탐색은 중첩 저장소·워크트리·서브모듈(`.git` 파일)까지 찾고, 링크 폴더와 제외 폴더(`node_modules`, `bin`, `obj` 등)에는 들어가지 않습니다.
 - 선택한 저장소 하나에 대해:
-  - **변경 사항**: 변경됨/스테이지됨 목록, 개별·전체 스테이지/언스테이지, 커밋(`Ctrl+Enter`). 더블클릭하면 내장 뷰어로 열기.
+  - **변경 사항**: 변경됨/스테이지됨 목록, 개별·전체 스테이지/언스테이지, 커밋(`Ctrl+Enter`). 더블클릭하면 내장 뷰어로 열기. `트리로 보기`로 평면 목록 ↔ 폴더 트리 전환(한 자식 폴더 체인은 `src/app`처럼 합침, 폴더를 골라 스테이지/언스테이지하면 그 아래 전체).
   - **브랜치**: 로컬·원격 브랜치 목록, 전환(원격은 추적 브랜치 생성), 새 브랜치, 병합된 브랜치 삭제(`-d`만).
   - **원격 비교**: 현재 브랜치 ↔ upstream의 보낼 커밋(push)·받을 커밋(pull) 목록, 방향별 전체 diff, 커밋 안 한 수정까지 포함한 작업 트리 ↔ upstream diff. 원격 상태는 마지막 fetch 기준이며 `fetch 후 비교`로 갱신.
   - **로그**: 브랜치 그래프(레인별 색, 병합 커밋은 속이 빈 점)와 최근 커밋(해시·제목·참조·작성자·날짜), 선택한 커밋의 diff(병합 커밋은 첫 부모 기준).

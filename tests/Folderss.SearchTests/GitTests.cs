@@ -753,5 +753,58 @@ namespace Folderss.SearchTests
             Assert.Contains("diff --git a/a.txt b/a.txt", output);
             Assert.Contains("--- a/a.txt", output);
         }
+
+        // ── 변경 사항 트리 보기 ─────────────────────────────────────────────────
+
+        private static GitStatusEntry E(string path, char x = 'M', char y = '.') => new GitStatusEntry { Path = path, IndexState = x, WorkTreeState = y };
+
+        private static string Dump(System.Collections.Generic.IEnumerable<GitChangeNode> nodes, string indent = "") =>
+            string.Concat(nodes.Select(n => indent + n.Name + (n.IsFolder ? "/" : "") + "\n" + Dump(n.Children, indent + "  ")));
+
+        [Fact]
+        public void ChangeTree_GroupsByFolder_FoldersFirst_AndCompactsSingleFolderChains()
+        {
+            var tree = GitChangeTree.Build(new[]
+            {
+                E("README.md"),
+                E("src/app/core/A.cs"),
+                E("src/app/core/B.cs"),
+                E("src/app/ui/View.xaml"),
+                E("docs/guide/한글.md"),
+                E("Zeta.txt"),
+                new GitStatusEntry { Path = "newdir/", IsUntracked = true }
+            });
+
+            Assert.Equal(
+                "docs/guide/\n" +          // docs → guide 한 줄로 합침
+                "  한글.md\n" +
+                "src/app/\n" +             // src → app 은 합치고, app 아래에서 core/ui로 갈라짐
+                "  core/\n" +
+                "    A.cs\n" +
+                "    B.cs\n" +
+                "  ui/\n" +
+                "    View.xaml\n" +
+                "newdir/\n" +              // 추적 안 되는 폴더는 파일 항목(폴더 노드 아님)
+                "README.md\n" +
+                "Zeta.txt\n", Dump(tree));
+
+            var src = tree.Single(n => n.Name == "src/app");
+            Assert.Equal("src/app", src.Path);
+            Assert.Equal(3, src.Entries.Count());                       // 폴더 스테이지 대상 = 아래 전체
+            Assert.Contains("(3)", src.DisplayText);
+            Assert.False(tree.Single(n => n.Name == "newdir/").IsFolder);
+        }
+
+        [Fact]
+        public void ChangeTree_RenameShowsOriginal_AndEmptyInputGivesEmptyTree()
+        {
+            var tree = GitChangeTree.Build(new[] { new GitStatusEntry { Path = "b/new.cs", OriginalPath = "a/old.cs", IndexState = 'R' } });
+            var leaf = tree.Single().Children.Single();
+            Assert.Equal("new.cs", leaf.Name);
+            Assert.Contains("← a/old.cs", leaf.DisplayText);
+            Assert.StartsWith("R.", leaf.DisplayText);
+
+            Assert.Empty(GitChangeTree.Build(new GitStatusEntry[0]));
+        }
     }
 }
