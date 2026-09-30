@@ -328,7 +328,7 @@
                                 </StackPanel>
                                 <TextBlock x:Name="UnstagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="변경됨"/>
                             </DockPanel>
-                            <Grid x:Name="UnstagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" Drop="ChangeDrop_Drop">
+                            <Grid x:Name="UnstagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" DragLeave="ChangeDrop_DragLeave" Drop="ChangeDrop_Drop">
                                 <ListBox x:Name="UnstagedList"
                                          SelectionMode="Extended"
                                          PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
@@ -347,6 +347,15 @@
                                           Style="{StaticResource GitChangeTreeStyle}"
                                           SelectedItemChanged="UnstagedTree_SelectedItemChanged"
                                           MouseDoubleClick="ChangeTree_MouseDoubleClick"/>
+                                <!-- 끌어 놓기 대상 강조: 받을 수 있는 끌기가 위에 있을 때만 보인다(입력은 아래 목록으로 통과). -->
+                                <Border x:Name="UnstagedDropHighlight" Visibility="Collapsed" IsHitTestVisible="False"
+                                        BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}">
+                                    <Grid>
+                                        <Border Background="{DynamicResource AccentBrush}" Opacity="0.12"/>
+                                        <TextBlock Text="여기에 놓으면 언스테이지" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                    </Grid>
+                                </Border>
                             </Grid>
                         </DockPanel>
 
@@ -358,7 +367,7 @@
                                 </StackPanel>
                                 <TextBlock x:Name="StagedHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="스테이지됨"/>
                             </DockPanel>
-                            <Grid x:Name="StagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" Drop="ChangeDrop_Drop">
+                            <Grid x:Name="StagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" DragLeave="ChangeDrop_DragLeave" Drop="ChangeDrop_Drop">
                                 <ListBox x:Name="StagedList"
                                          SelectionMode="Extended"
                                          PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
@@ -377,6 +386,15 @@
                                           Style="{StaticResource GitChangeTreeStyle}"
                                           SelectedItemChanged="StagedTree_SelectedItemChanged"
                                           MouseDoubleClick="ChangeTree_MouseDoubleClick"/>
+                                <!-- 끌어 놓기 대상 강조: 받을 수 있는 끌기가 위에 있을 때만 보인다(입력은 아래 목록으로 통과). -->
+                                <Border x:Name="StagedDropHighlight" Visibility="Collapsed" IsHitTestVisible="False"
+                                        BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}">
+                                    <Grid>
+                                        <Border Background="{DynamicResource AccentBrush}" Opacity="0.12"/>
+                                        <TextBlock Text="여기에 놓으면 스테이지" HorizontalAlignment="Center" VerticalAlignment="Center"
+                                                   FontWeight="SemiBold" Foreground="{DynamicResource AccentBrush}"/>
+                                    </Grid>
+                                </Border>
                             </Grid>
                         </DockPanel>
                     </Grid>

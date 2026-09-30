@@ -743,7 +743,31 @@ namespace Folderss
                 return;
 
             var data = new DataObject(ChangeDragFormat, new ChangeDragData { FromStaged = fromStaged, Entries = entries });
-            DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Move);
+            try
+            {
+                DragDrop.DoDragDrop((DependencyObject)sender, data, DragDropEffects.Move);
+            }
+            finally
+            {
+                // 창 밖에 놓거나 Esc로 취소하면 DragLeave가 안 올 수 있어 끝날 때 항상 지운다.
+                ShowDropHighlight(null);
+            }
+        }
+
+        /// <summary>강조할 영역(null이면 모두 끔).</summary>
+        private void ShowDropHighlight(object target)
+        {
+            UnstagedDropHighlight.Visibility = ReferenceEquals(target, UnstagedDropArea) ? Visibility.Visible : Visibility.Collapsed;
+            StagedDropHighlight.Visibility = ReferenceEquals(target, StagedDropArea) ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ChangeDrop_DragLeave(object sender, DragEventArgs e)
+        {
+            // 영역 안의 자식 사이를 옮겨 다닐 때도 DragLeave가 오므로, 포인터가 실제로 영역을 벗어났을 때만 끈다.
+            var area = (FrameworkElement)sender;
+            var point = e.GetPosition(area);
+            if (point.X < 0 || point.Y < 0 || point.X >= area.ActualWidth || point.Y >= area.ActualHeight)
+                ShowDropHighlight(null);
         }
 
         /// <summary>반대쪽 목록에서 온 끌기만 받는다(같은 목록·다른 프로그램의 파일은 거부).</summary>
@@ -756,7 +780,9 @@ namespace Folderss
 
         private void ChangeDrop_DragOver(object sender, DragEventArgs e)
         {
-            e.Effects = AcceptedDrag(sender, e) != null ? DragDropEffects.Move : DragDropEffects.None;
+            var accepted = AcceptedDrag(sender, e) != null;
+            e.Effects = accepted ? DragDropEffects.Move : DragDropEffects.None;
+            ShowDropHighlight(accepted ? sender : null);
             e.Handled = true;
         }
 
@@ -764,6 +790,7 @@ namespace Folderss
         {
             var data = AcceptedDrag(sender, e);
             e.Handled = true;
+            ShowDropHighlight(null);
             if (data == null)
                 return;
             if (data.FromStaged)
