@@ -458,7 +458,18 @@ namespace Folderss
             {
                 // 커밋이 하나도 없는 저장소의 log 실패는 정상이므로 출력하지 않는다.
                 if (logResult.Success)
-                    LogList.ItemsSource = GitOutputParser.ParseLog(logResult.StdOut);
+                {
+                    var commits = GitOutputParser.ParseLog(logResult.StdOut);
+                    var graph = GitGraphLayout.Compute(commits);
+                    var maxLanes = 1;
+                    for (var i = 0; i < commits.Count; i++)
+                    {
+                        commits[i].Graph = graph[i];
+                        maxLanes = Math.Max(maxLanes, graph[i].LaneCount);
+                    }
+                    GraphColumn.Width = GitGraphCell.WidthFor(maxLanes);
+                    LogList.ItemsSource = commits;
+                }
                 else if (row.Snapshot?.HeadOid != null)
                     AppendResult(row.Info, logResult);
             }
@@ -478,11 +489,14 @@ namespace Folderss
             var request = view.BeginLoad(diff);
             try
             {
+                var fallback = ResolveFallbackEncoding();
                 var result = await GitCommandRunner.RunAsync(row.RootPath, diff.Arguments, GitCommandRunner.QueryTimeout, _lifetime.Token,
-                    readOnly: true, fallbackEncoding: ResolveFallbackEncoding());
+                    readOnly: true, fallbackEncoding: fallback);
                 if (GitDiffCommands.IsSuccess(result, diff.NoIndex))
                 {
-                    view.Complete(request, result.StdOut, diff.EmptyMessage);
+                    // UTF-16/32(BOM) 파일은 git이 바이너리로 보이므로 BOM으로 읽어 텍스트로 다시 비교해 끼운다.
+                    var text = await GitEncodingDiff.ExpandAsync(row.RootPath, diff, result.StdOut, _settings.IgnoreWhitespace, fallback, _lifetime.Token);
+                    view.Complete(request, text, diff.EmptyMessage);
                 }
                 else if (view.Fail(request, FirstLine(result.StdErr) ?? "차이를 읽지 못했습니다."))
                 {

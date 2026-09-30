@@ -19,6 +19,16 @@ namespace Folderss.Services
 
         /// <summary>true면 폴더 비교(<c>-d</c>)로 한 번에 연다 — 여러 파일이 걸린 커밋·범위 비교.</summary>
         public bool ExternalDirDiff { get; set; }
+
+        /// <summary>
+        /// 변경 전/후 내용의 출처. <see cref="GitDiffCommands.WorkTreeSide"/>(작업 트리 파일), <see cref="GitDiffCommands.IndexSide"/>(인덱스),
+        /// 리비전(예: HEAD, 해시), null(빈 쪽). UTF-16 등 git이 바이너리로 보는 BOM 파일을 직접 다시 비교할 때 쓴다.
+        /// </summary>
+        public string OldSide { get; set; }
+        public string NewSide { get; set; }
+
+        /// <summary><c>A...B</c> 비교처럼 변경 전 쪽이 두 리비전의 merge-base일 때 그 두 리비전. 아니면 null.</summary>
+        public string[] OldSideMergeBaseOf { get; set; }
     }
 
     /// <summary>
@@ -30,6 +40,14 @@ namespace Folderss.Services
         /// <summary>현재 브랜치의 upstream. 인수 목록으로 넘기므로 셸 해석 걱정이 없다.</summary>
         public const string Upstream = "@{u}";
 
+        public const string WorkTreeSide = "<worktree>";
+        public const string IndexSide = ":";
+
+        /// <summary>
+        /// 모든 diff에 붙이는 인수. 경로 접두사를 a/·b/로 고정해 사용자 설정(diff.noprefix, diff.mnemonicPrefix)과 무관하게 해석한다.
+        /// </summary>
+        private static readonly string[] Common = { "--no-color", "--no-ext-diff", "-M", "--src-prefix=a/", "--dst-prefix=b/" };
+
         /// <summary><c>-c difftool.&lt;이름&gt;.cmd=…</c>로 등록하는 임시 도구 이름. 사용자 git 설정은 바꾸지 않는다.</summary>
         public const string CustomToolName = "folderss";
 
@@ -37,7 +55,7 @@ namespace Folderss.Services
         {
             var args = new List<string> { "diff" };
             args.AddRange(leading);
-            args.AddRange(new[] { "--no-color", "--no-ext-diff", "-M" });
+            args.AddRange(Common);
             if (ignoreWhitespace)
                 args.Add("-w");
             args.AddRange(selector);
@@ -58,7 +76,9 @@ namespace Folderss.Services
             return new GitDiffRequest
             {
                 Arguments = Diff(ignoreWhitespace, new string[0], selector),
-                ExternalSelector = selector
+                ExternalSelector = selector,
+                OldSide = IndexSide,
+                NewSide = WorkTreeSide
             };
         }
 
@@ -71,7 +91,9 @@ namespace Folderss.Services
             return new GitDiffRequest
             {
                 Arguments = Diff(ignoreWhitespace, new[] { "--cached" }, selector),
-                ExternalSelector = external
+                ExternalSelector = external,
+                OldSide = "HEAD",
+                NewSide = IndexSide
             };
         }
 
@@ -84,7 +106,8 @@ namespace Folderss.Services
             return new GitDiffRequest
             {
                 Arguments = Diff(ignoreWhitespace, new[] { "--no-index" }, PathSelector("/dev/null", path)),
-                NoIndex = true
+                NoIndex = true,
+                NewSide = WorkTreeSide
             };
         }
 
@@ -92,12 +115,28 @@ namespace Folderss.Services
         public static GitDiffRequest Range(string range, bool ignoreWhitespace = false)
         {
             var selector = new List<string> { range, "--" };
-            return new GitDiffRequest
+            var request = new GitDiffRequest
             {
                 Arguments = Diff(ignoreWhitespace, new string[0], selector),
                 ExternalSelector = selector,
                 ExternalDirDiff = true
             };
+            var threeDot = range.IndexOf("...", System.StringComparison.Ordinal);
+            if (threeDot >= 0)
+            {
+                // A...B = merge-base(A, B) ↔ B
+                var left = range.Substring(0, threeDot);
+                var right = range.Substring(threeDot + 3);
+                request.OldSideMergeBaseOf = new[] { left.Length == 0 ? "HEAD" : left, right.Length == 0 ? "HEAD" : right };
+                request.NewSide = right.Length == 0 ? "HEAD" : right;
+            }
+            else
+            {
+                var twoDot = range.IndexOf("..", System.StringComparison.Ordinal);
+                request.OldSide = twoDot >= 0 ? range.Substring(0, twoDot) : range;
+                request.NewSide = twoDot >= 0 ? range.Substring(twoDot + 2) : WorkTreeSide;
+            }
+            return request;
         }
 
         /// <summary>작업 트리(커밋 안 한 변경 포함, 추적 파일만) ↔ 리비전.</summary>
@@ -108,7 +147,9 @@ namespace Folderss.Services
             {
                 Arguments = Diff(ignoreWhitespace, new string[0], selector),
                 ExternalSelector = selector,
-                ExternalDirDiff = true
+                ExternalDirDiff = true,
+                OldSide = revision,
+                NewSide = WorkTreeSide
             };
         }
 
@@ -117,12 +158,13 @@ namespace Folderss.Services
         {
             if (parents == null || parents.Length == 0)
             {
-                var args = new List<string> { "show", "--format=", "--no-color", "--no-ext-diff", "-M" };
+                var args = new List<string> { "show", "--format=" };
+                args.AddRange(Common);
                 if (ignoreWhitespace)
                     args.Add("-w");
                 args.Add(hash);
                 args.Add("--");
-                return new GitDiffRequest { Arguments = args };
+                return new GitDiffRequest { Arguments = args, NewSide = hash };
             }
 
             var selector = new List<string> { parents[0], hash, "--" };
@@ -130,7 +172,9 @@ namespace Folderss.Services
             {
                 Arguments = Diff(ignoreWhitespace, new string[0], selector),
                 ExternalSelector = selector,
-                ExternalDirDiff = true
+                ExternalDirDiff = true,
+                OldSide = parents[0],
+                NewSide = hash
             };
         }
 

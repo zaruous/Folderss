@@ -7,6 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
+│   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
 │   ├── GitDiffView.xaml/.cs        — Git 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
@@ -31,6 +32,8 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
+│   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
+│   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
 │   ├── GitDiffCommands.cs          — diff·upstream 비교 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml) + 외부 비교 도구 프리셋
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
@@ -249,8 +252,15 @@ Folderss/
   `MainWindow.OpenSettings(gitWindow, "Git")`를 부른다. 저장하면 `SavedGitSettings`(파일 저장 실패여도 이번 실행 값)를
   `MainWindow._gitSettings`에 두고 열린 모든 `GitWindow.ApplySettings`에 알린다 — git 경로가 바뀌면 재확인+재탐색, 탐색 옵션이면 재탐색,
   표시 옵션이면 상세만 다시 읽음. `GitCommandRunner.ConfiguredGitPath`는 정적이라 마지막으로 반영한 설정이 모든 창에 적용된다.
-- 인코딩: diff만 `RunAsync(fallbackEncoding:)`로 바이트를 받아 `GitTextDecoder.Decode`가 줄 단위로 UTF-8(엄격) → 실패 시 대체 인코딩.
-  `CodePagesEncodingProvider` 등록이 필요하다(정적 생성자). 상태·로그·브랜치 출력은 UTF-8 그대로.
+- 인코딩 규칙: BOM(매직넘버)이 있으면 그 인코딩, 없으면 UTF-8(`GitTextDecoder.DetectBom`/`DecodeFile`). 대체 인코딩(기본 없음)은
+  BOM 없는 내용에서 엄격 UTF-8로 안 읽히는 줄에만 쓴다(`Decode`, `CodePagesEncodingProvider` 등록 필요). 상태·로그·브랜치 출력은 UTF-8 그대로.
+  UTF-16/32 파일은 git이 NUL 때문에 바이너리로 보므로 `GitEncodingDiff.ExpandAsync`가 "Binary files a/X and b/Y differ" 줄을 찾아
+  `GitDiffRequest.OldSide/NewSide`(작업 트리 / 인덱스 `:` / 리비전, `A...B`는 merge-base)에서 양쪽 바이트를 읽고(`cat-file blob`, `rawOutput`)
+  한쪽이라도 UTF-16/32 BOM이면 UTF-8 임시 파일 두 개를 `diff --no-index`로 비교해 그 줄을 헤더+hunk로 바꾼다. BOM 없는 진짜 바이너리·10MB 초과는 그대로.
+  모든 diff에 `--src-prefix=a/ --dst-prefix=b/`를 붙여 사용자 `diff.noprefix` 설정이 경로 해석을 깨지 않게 한다.
+- 브랜치 그래프: `GitGraphLayout.Compute`(topo 순서 커밋 + 부모) → 행마다 점 레인과 선분(Y: 0 위/1 가운데/2 아래). 레인은 "기다리는 해시" 배열이며
+  점에 모이는 레인은 끝나고, 첫 부모는 같은 레인, 나머지 부모는 기존 레인 또는 빈 레인. `GitGraphCell`이 그리며 로그 ListView는 행 높이 22·Padding 0으로
+  행 사이 선이 끊기지 않게 한다. 로그 개수 제한으로 목록 밖 부모를 기다리는 레인은 아래로 이어진 채 끝난다.
 - 외부 비교 도구: `GitDiffRequest.ExternalSelector`가 있는 비교만 `git difftool --no-prompt [--dir-diff]`로 연다(커밋·범위는 폴더 비교).
   직접 지정은 `-c difftool.folderss.cmd=<BuildToolCommand>` + `--tool=folderss`로 이번 실행에만 등록 — `{left}`/`{right}`는 항상
   `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,

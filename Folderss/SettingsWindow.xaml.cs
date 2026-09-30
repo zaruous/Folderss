@@ -77,9 +77,9 @@ namespace Folderss
 
         private static readonly (GitFallbackEncoding Value, string Text)[] GitEncodingChoices =
         {
-            (GitFallbackEncoding.SystemAnsi, "시스템 기본 코드 페이지 (한국어 Windows: CP949)"),
+            (GitFallbackEncoding.None, "사용 안 함 — BOM 없으면 UTF-8 (기본)"),
             (GitFallbackEncoding.Cp949, "CP949 (EUC-KR)"),
-            (GitFallbackEncoding.None, "사용 안 함 (UTF-8로만 읽기)")
+            (GitFallbackEncoding.SystemAnsi, "시스템 기본 코드 페이지 (한국어 Windows: CP949)")
         };
 
         private static readonly (GitDiffToolMode Value, string Text)[] GitDiffToolChoices =

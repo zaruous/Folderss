@@ -18,6 +18,7 @@ Folderss/
 │   ├── FolderBrowser       — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금 포함)
 │   ├── FavoritesPanel      — 즐겨찾기 패널 (그룹, 폴더·파일 즐겨찾기)
 │   ├── GitDiffView         — Git 창의 읽기 전용 diff 뷰 (줄 번호, 추가·삭제 색)
+│   ├── GitGraphCell        — 로그 목록 한 행의 브랜치 그래프 그리기
 │   ├── SearchPanel         — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 토글)
 │   ├── ConsolePanel        — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel      — 드라이브별 디스크 사용량 패널 (가로바, GB 단위)
@@ -45,6 +46,8 @@ Folderss/
 │   ├── GitCommandRunner        — git CLI 실행 (인수 목록 전달, 타임아웃·취소, UTF-8)
 │   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref`·unified diff 출력 파서
 │   ├── GitDiffCommands         — diff·upstream 비교 명령 인수 (UI·테스트 공용)
+│   ├── GitGraphLayout          — 부모 해시로 브랜치 그래프 레인 계산
+│   ├── GitEncodingDiff         — UTF-16/32(BOM) 파일을 텍스트로 다시 비교
 │   ├── GitSettingsService      — Git 창 옵션 저장 (pull 방식, 탐색 깊이·제외 폴더 등)
 │   ├── IgnoreRuleSet           — .gitignore/.folderssignore 규칙 매처 (목록 ignore 필터)
 │   ├── DockLayoutService       — AvalonDock 레이아웃 저장·복원 (XML)
@@ -199,14 +202,14 @@ tests/
   - **변경 사항**: 변경됨/스테이지됨 목록, 개별·전체 스테이지/언스테이지, 커밋(`Ctrl+Enter`). 더블클릭하면 내장 뷰어로 열기.
   - **브랜치**: 로컬·원격 브랜치 목록, 전환(원격은 추적 브랜치 생성), 새 브랜치, 병합된 브랜치 삭제(`-d`만).
   - **원격 비교**: 현재 브랜치 ↔ upstream의 보낼 커밋(push)·받을 커밋(pull) 목록, 방향별 전체 diff, 커밋 안 한 수정까지 포함한 작업 트리 ↔ upstream diff. 원격 상태는 마지막 fetch 기준이며 `fetch 후 비교`로 갱신.
-  - **로그**: 최근 커밋(해시·제목·참조·작성자·날짜), 선택한 커밋의 diff(병합 커밋은 첫 부모 기준).
+  - **로그**: 브랜치 그래프(레인별 색, 병합 커밋은 속이 빈 점)와 최근 커밋(해시·제목·참조·작성자·날짜), 선택한 커밋의 diff(병합 커밋은 첫 부모 기준).
   - diff는 변경 전/후 줄 번호와 추가(초록)·삭제(빨강) 배경으로 표시하며, `Ctrl+C`로 선택한 줄을 복사합니다. 변경 사항 목록에서 파일을 고르면 작업 트리 ↔ 인덱스, 스테이지됨은 인덱스 ↔ HEAD, 추적 안 되는 파일은 전체 내용을 추가로 보입니다.
   - 툴바 `pull`/`push`: upstream이 없으면 확인 후 `push -u`. 강제 푸시는 없습니다.
 - 여러 저장소에 한꺼번에 하는 동작은 `다시 찾기`(상태 조회)와 `전체 fetch`뿐입니다.
 - 브랜치 전환·pull 전에 그 저장소 파일을 저장하지 않은 문서 탭이 있으면 경고합니다.
 - 모든 git 명령과 오류 메시지는 창 아래 출력 영역에 남습니다. 인증은 사용자의 git 설정(Git Credential Manager, ssh-agent)을 그대로 쓰며, 응답이 없으면 5분 뒤 중단됩니다.
 - diff 창의 `외부 도구로 비교`는 같은 비교를 WinMerge·Beyond Compare·VS Code 등으로 엽니다(`git difftool`). 파일은 파일끼리, 커밋·원격 비교는 폴더 비교로 한 번에 엽니다. 추적 안 되는 파일과 최초 커밋은 지원하지 않습니다.
-- diff는 UTF-8로 읽고, UTF-8이 아닌 줄만 대체 인코딩(기본: 시스템 코드 페이지, 한국어 Windows는 CP949)으로 다시 읽습니다. 20,000줄을 넘으면 뒤는 생략합니다.
+- 인코딩: 파일에 BOM(매직넘버)이 있으면 그 인코딩(UTF-8/UTF-16/UTF-32), 없으면 **UTF-8**로 읽습니다. UTF-16/32 파일은 git이 바이너리로 보므로 양쪽을 BOM으로 읽어 텍스트로 다시 비교해 보여 줍니다(10MB 이하). 설정에서 대체 인코딩(CP949 등)을 켜면 BOM 없는 파일 중 UTF-8로 읽히지 않는 줄만 그 인코딩으로 다시 읽습니다. 20,000줄을 넘으면 뒤는 생략합니다.
 
 ### Git 설정 (`설정 > Git`, Git 창의 `설정…` 버튼)
 
@@ -218,12 +221,12 @@ tests/
 | 탐색 깊이·제외 폴더 | 6, `node_modules bin obj .vs packages` | 폴더 이름 기준, 대/소문자 무시 |
 | 로그 | 300개, 전체 브랜치 | 10~5000개 |
 | 공백 무시 | 끔 | 내장 diff에 `-w` |
-| 대체 인코딩 | 시스템 코드 페이지 | CP949 / 사용 안 함 |
+| 대체 인코딩 | 사용 안 함 (BOM 없으면 UTF-8) | CP949 / 시스템 코드 페이지 |
 | 외부 비교 도구 | 사용 안 함 | git 설정의 difftool / 직접 지정(실행 파일 + 인수, 프리셋: WinMerge·Beyond Compare·VS Code·KDiff3·Meld) |
 
 - 직접 지정 인수의 `{left}`·`{right}`는 비교할 두 파일(또는 폴더)로 바뀝니다. 도구는 **창을 닫을 때까지 종료되지 않아야** 합니다 — git이 도구 종료 뒤 임시 파일을 지웁니다(VS Code는 `--wait`, WinMerge는 단일 인스턴스 옵션을 끄세요).
 - 사용자 `.gitconfig`는 바꾸지 않습니다. 직접 지정 도구는 실행할 때만 `-c difftool.folderss.cmd=…`로 등록합니다.
-- 범위 밖: 충돌 해결, merge/rebase/stash 명령, 좌우 나란히(side-by-side) diff, 브랜치 그래프 — 필요하면 `콘솔`에서 처리합니다.
+- 범위 밖: 충돌 해결, merge/rebase/stash 명령, 좌우 나란히(side-by-side) diff — 필요하면 `콘솔`에서 처리합니다.
 
 ## 디스크 사용량
 

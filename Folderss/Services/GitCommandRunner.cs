@@ -14,6 +14,9 @@ namespace Folderss.Services
     {
         public int ExitCode { get; set; }
         public string StdOut { get; set; } = string.Empty;
+
+        /// <summary><c>rawOutput</c>로 실행했을 때의 표준 출력 바이트(파일 내용 그대로). 그 외에는 null.</summary>
+        public byte[] StdOutBytes { get; set; }
         public string StdErr { get; set; } = string.Empty;
         public string CommandLine { get; set; }
         public bool TimedOut { get; set; }
@@ -109,9 +112,10 @@ namespace Folderss.Services
         /// <param name="standardInput">표준 입력으로 보낼 내용(예: <c>--pathspec-from-file=-</c>).</param>
         /// <param name="fallbackEncoding">지정하면 표준 출력을 바이트로 받아 UTF-8로 읽히지 않는 줄만 이 인코딩으로 해석한다(diff용).</param>
         /// <param name="throttle">false면 동시 실행 제한을 받지 않는다 — 사용자가 닫을 때까지 떠 있는 외부 비교 도구용.</param>
+        /// <param name="rawOutput">true면 표준 출력을 해석하지 않고 <see cref="GitResult.StdOutBytes"/>에 담는다(<c>cat-file blob</c>용).</param>
         public static async Task<GitResult> RunAsync(string repository, IEnumerable<string> arguments, TimeSpan timeout,
             CancellationToken cancellationToken, bool readOnly = false, string standardInput = null,
-            Encoding fallbackEncoding = null, bool throttle = true)
+            Encoding fallbackEncoding = null, bool throttle = true, bool rawOutput = false)
         {
             var git = FindGit();
             if (git == null)
@@ -158,9 +162,12 @@ namespace Folderss.Services
                 using (var process = new Process { StartInfo = startInfo })
                 {
                     process.Start();
-                    var stdoutTask = fallbackEncoding == null
-                        ? process.StandardOutput.ReadToEndAsync()
-                        : ReadDecodedAsync(process.StandardOutput.BaseStream, fallbackEncoding);
+                    var rawTask = rawOutput ? ReadBytesAsync(process.StandardOutput.BaseStream) : null;
+                    var stdoutTask = rawOutput
+                        ? Task.FromResult(string.Empty)
+                        : fallbackEncoding == null
+                            ? process.StandardOutput.ReadToEndAsync()
+                            : ReadDecodedAsync(process.StandardOutput.BaseStream, fallbackEncoding);
                     var stderrTask = process.StandardError.ReadToEndAsync();
 
                     try
@@ -194,6 +201,8 @@ namespace Folderss.Services
                     }
 
                     result.StdOut = await stdoutTask.ConfigureAwait(false);
+                    if (rawTask != null)
+                        result.StdOutBytes = await rawTask.ConfigureAwait(false);
                     result.StdErr = await stderrTask.ConfigureAwait(false);
                     if (result.TimedOut)
                     {
@@ -216,10 +225,15 @@ namespace Folderss.Services
 
         private static async Task<string> ReadDecodedAsync(Stream stream, Encoding fallbackEncoding)
         {
+            return GitTextDecoder.Decode(await ReadBytesAsync(stream).ConfigureAwait(false), fallbackEncoding);
+        }
+
+        private static async Task<byte[]> ReadBytesAsync(Stream stream)
+        {
             using (var buffer = new MemoryStream())
             {
                 await stream.CopyToAsync(buffer).ConfigureAwait(false);
-                return GitTextDecoder.Decode(buffer.ToArray(), fallbackEncoding);
+                return buffer.ToArray();
             }
         }
 
@@ -232,6 +246,8 @@ namespace Folderss.Services
     }
 
     /// <summary>
+    /// 파일 인코딩 판정 규칙: BOM(매직넘버)이 있으면 그 인코딩, 없으면 UTF-8.
+    /// UTF-8로 읽히지 않는 줄만 선택적으로 대체 인코딩(CP949 등)으로 다시 읽는다(기본은 대체 없음).
     /// git이 내보낸 바이트(파일 내용 그대로)를 줄 단위로 해석한다. UTF-8로 올바른 줄은 UTF-8로, 아닌 줄만 대체 인코딩으로 읽는다.
     /// 한국어 Windows의 오래된 소스(CP949)가 diff에서 깨지는 문제용. 줄 구분 0x0A는 CP949 두 번째 바이트(0x41 이상)와 겹치지 않는다.
     /// </summary>
@@ -258,6 +274,74 @@ namespace Folderss.Services
                     return codePage == 65001 ? null : Encoding.GetEncoding(codePage);
                 default:
                     return null;
+            }
+        }
+
+        /// <summary>
+        /// BOM으로 인코딩을 판정한다. 없으면 null. UTF-32를 UTF-16보다 먼저 본다(FF FE 00 00).
+        /// 돌려주는 인코딩은 잘못된 바이트에서 예외 대신 대체 문자를 쓴다.
+        /// </summary>
+        public static Encoding DetectBom(byte[] bytes, out int bomLength)
+        {
+            bomLength = 0;
+            if (bytes == null)
+                return null;
+            if (bytes.Length >= 4 && bytes[0] == 0xFF && bytes[1] == 0xFE && bytes[2] == 0 && bytes[3] == 0)
+            {
+                bomLength = 4;
+                return new UTF32Encoding(false, true);
+            }
+            if (bytes.Length >= 4 && bytes[0] == 0 && bytes[1] == 0 && bytes[2] == 0xFE && bytes[3] == 0xFF)
+            {
+                bomLength = 4;
+                return new UTF32Encoding(true, true);
+            }
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF)
+            {
+                bomLength = 3;
+                return new UTF8Encoding(true);
+            }
+            if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE)
+            {
+                bomLength = 2;
+                return new UnicodeEncoding(false, true);
+            }
+            if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF)
+            {
+                bomLength = 2;
+                return new UnicodeEncoding(true, true);
+            }
+            return null;
+        }
+
+        /// <summary>
+        /// UTF-16/UTF-32 BOM인지. 이런 파일은 NUL 바이트 때문에 git이 바이너리로 보고 줄 diff를 만들지 않는다.
+        /// </summary>
+        public static bool HasWideBom(byte[] bytes)
+        {
+            var encoding = DetectBom(bytes, out _);
+            return encoding is UnicodeEncoding || encoding is UTF32Encoding;
+        }
+
+        /// <summary>파일 내용 전체를 규칙대로 읽는다: BOM이 있으면 그 인코딩(BOM 제외), 없으면 UTF-8(+선택적 대체).</summary>
+        public static string DecodeFile(byte[] bytes, Encoding fallbackEncoding)
+        {
+            var encoding = DetectBom(bytes, out var bomLength);
+            if (encoding == null)
+                return Decode(bytes, fallbackEncoding);
+            // BOM 인코딩은 예외 없이 잘못된 바이트를 대체 문자로 바꾸는 인스턴스다(DetectBom 참고).
+            return encoding.GetString(bytes, bomLength, bytes.Length - bomLength);
+        }
+
+        public static string DescribeBom(byte[] bytes)
+        {
+            var encoding = DetectBom(bytes, out _);
+            switch (encoding)
+            {
+                case UTF32Encoding _: return bytes[0] == 0xFF ? "UTF-32 LE" : "UTF-32 BE";
+                case UnicodeEncoding _: return bytes[0] == 0xFF ? "UTF-16 LE" : "UTF-16 BE";
+                case UTF8Encoding _: return "UTF-8 (BOM)";
+                default: return "UTF-8";
             }
         }
 

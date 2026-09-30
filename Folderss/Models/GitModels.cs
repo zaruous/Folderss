@@ -89,6 +89,40 @@ namespace Folderss.Models
         public string ShortHash => Hash == null ? string.Empty : Hash.Substring(0, Math.Min(7, Hash.Length));
         public string TimeText => Time.ToLocalTime().ToString("yyyy-MM-dd HH:mm");
         public string ListText => ShortHash + "  " + Subject;
+
+        /// <summary>브랜치 그래프 한 행. 로그 목록에서만 채운다.</summary>
+        public GitGraphRow Graph { get; set; }
+    }
+
+    /// <summary>그래프 한 행의 선분. Y는 0=행 위, 1=가운데(커밋 점), 2=행 아래. 색은 도착 레인 기준.</summary>
+    public struct GitGraphSegment
+    {
+        public int FromLane;
+        public int FromY;
+        public int ToLane;
+        public int ToY;
+
+        public GitGraphSegment(int fromLane, int fromY, int toLane, int toY)
+        {
+            FromLane = fromLane;
+            FromY = fromY;
+            ToLane = toLane;
+            ToY = toY;
+        }
+
+        public override string ToString() => string.Format("{0}:{1}->{2}:{3}", FromLane, FromY, ToLane, ToY);
+    }
+
+    public sealed class GitGraphRow
+    {
+        /// <summary>커밋 점이 놓이는 레인.</summary>
+        public int NodeLane { get; set; }
+
+        /// <summary>이 행에서 쓰는 레인 수(그리기 폭 계산용).</summary>
+        public int LaneCount { get; set; }
+
+        public bool IsMerge { get; set; }
+        public List<GitGraphSegment> Segments { get; } = new List<GitGraphSegment>();
     }
 
     public enum GitDiffLineKind

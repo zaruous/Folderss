@@ -36,7 +36,10 @@ namespace Folderss.Services
         Custom
     }
 
-    /// <summary>diff 출력 중 UTF-8로 읽히지 않는 줄을 다시 해석할 인코딩.</summary>
+    /// <summary>
+    /// 파일 인코딩은 BOM이 있으면 그 인코딩, 없으면 UTF-8이다. 이 값은 BOM 없는 파일에서 UTF-8로 읽히지 않는 줄만
+    /// 다시 해석할 대체 인코딩이다(기본: 사용 안 함).
+    /// </summary>
     public enum GitFallbackEncoding
     {
         /// <summary>Windows 시스템 ANSI 코드 페이지(한국어 Windows는 CP949).</summary>
@@ -59,7 +62,7 @@ namespace Folderss.Services
 
         /// <summary>내장 diff에서 공백만 바뀐 줄을 무시한다(<c>-w</c>).</summary>
         public bool IgnoreWhitespace { get; set; }
-        public GitFallbackEncoding FallbackEncoding { get; set; } = GitFallbackEncoding.SystemAnsi;
+        public GitFallbackEncoding FallbackEncoding { get; set; } = GitFallbackEncoding.None;
 
         public GitDiffToolMode DiffToolMode { get; set; } = GitDiffToolMode.None;
         public string DiffToolPath { get; set; } = string.Empty;

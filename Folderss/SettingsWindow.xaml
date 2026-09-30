@@ -738,10 +738,10 @@
 
                         <TextBlock Style="{StaticResource GitSection}" Text="diff"/>
                         <CheckBox x:Name="GitIgnoreWhitespaceCheck" Content="공백만 바뀐 줄 무시 (-w, 내장 diff에만 적용)"/>
-                        <TextBlock Style="{StaticResource GitLabel}" Text="UTF-8이 아닌 줄의 대체 인코딩"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="BOM 없는 파일에서 UTF-8이 아닌 줄의 대체 인코딩"/>
                         <ComboBox x:Name="GitFallbackEncodingCombo" HorizontalAlignment="Left" MinWidth="320"/>
                         <TextBlock Style="{StaticResource GitHint}"
-                                   Text="UTF-8로 읽히지 않는 줄만 이 인코딩으로 다시 읽습니다. 한국어 Windows의 오래된 소스(CP949/EUC-KR)가 diff에서 깨지는 문제를 막습니다."/>
+                                   Text="인코딩 판정: BOM(매직넘버)이 있으면 그 인코딩(UTF-8/UTF-16/UTF-32), 없으면 UTF-8. 여기서 고른 인코딩은 BOM 없는 파일 중 UTF-8로 읽히지 않는 줄에만 쓰입니다(오래된 CP949 소스용). UTF-16/32 파일은 git이 바이너리로 보므로 양쪽을 BOM으로 읽어 텍스트로 다시 비교합니다."/>
 
                         <TextBlock Style="{StaticResource GitSection}" Text="외부 비교 도구"/>
                         <TextBlock Style="{StaticResource GitLabel}" Text="사용 방식"/>

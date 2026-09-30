@@ -573,7 +573,7 @@ namespace Folderss.SearchTests
             // 파일이 없으면 기본값.
             var defaults = GitSettingsService.Load(P("none.xml"));
             Assert.Equal(GitDiffToolMode.None, defaults.DiffToolMode);
-            Assert.Equal(GitFallbackEncoding.SystemAnsi, defaults.FallbackEncoding);
+            Assert.Equal(GitFallbackEncoding.None, defaults.FallbackEncoding);   // BOM 없으면 UTF-8이 기본
         }
 
         [Fact]
@@ -588,6 +588,170 @@ namespace Folderss.SearchTests
             {
                 GitCommandRunner.ConfiguredGitPath = string.Empty;
             }
+        }
+
+        // ── 브랜치 그래프 ───────────────────────────────────────────────────────
+
+        private static GitCommitInfo C(string hash, params string[] parents) => new GitCommitInfo { Hash = hash, Parents = parents };
+
+        private static string Segs(GitGraphRow row) =>
+            string.Join(" ", row.Segments.Select(s => s.ToString()).OrderBy(x => x, StringComparer.Ordinal));
+
+        [Fact]
+        public void Graph_Linear_StaysInLaneZero()
+        {
+            var rows = GitGraphLayout.Compute(new[] { C("c", "b"), C("b", "a"), C("a") });
+
+            Assert.All(rows, r => Assert.Equal(0, r.NodeLane));
+            Assert.Equal("0:1->0:2", Segs(rows[0]));            // 브랜치 끝: 위에서 오는 선 없음
+            Assert.Equal("0:0->0:1 0:1->0:2", Segs(rows[1]));
+            Assert.Equal("0:0->0:1", Segs(rows[2]));            // 최초 커밋: 아래로 가는 선 없음
+            Assert.All(rows, r => Assert.Equal(1, r.LaneCount));
+        }
+
+        [Fact]
+        public void Graph_BranchAndMerge_OpensSecondLane_AndJoinsBack()
+        {
+            //   m (병합: 첫 부모 x, 둘째 부모 f)
+            //   f (feature, 부모 base)
+            //   x (main, 부모 base)
+            //   base
+            var rows = GitGraphLayout.Compute(new[] { C("m", "x", "f"), C("f", "base"), C("x", "base"), C("base") });
+
+            Assert.True(rows[0].IsMerge);
+            Assert.Equal(0, rows[0].NodeLane);
+            Assert.Equal("0:1->0:2 0:1->1:2", Segs(rows[0]));           // 두 부모로 갈라짐
+            Assert.Equal(1, rows[1].NodeLane);                          // f는 둘째 레인
+            Assert.Equal("0:0->0:2 1:0->1:1 1:1->1:2", Segs(rows[1]));  // main 레인은 지나감
+            Assert.Equal(0, rows[2].NodeLane);
+            Assert.Equal("0:0->0:1 0:1->0:2 1:0->1:2", Segs(rows[2]));
+            Assert.Equal(0, rows[3].NodeLane);
+            Assert.Equal("0:0->0:1 1:0->0:1", Segs(rows[3]));           // 두 레인이 base로 모임
+            Assert.Equal(2, rows[1].LaneCount);
+        }
+
+        [Fact]
+        public void Graph_TwoTips_AndOctopusMerge_AndTruncatedParent()
+        {
+            // 서로 다른 두 브랜치 끝(t1, t2), 세 부모 병합 o, 목록 밖 부모(missing)
+            var rows = GitGraphLayout.Compute(new[] { C("t1", "o"), C("t2", "missing"), C("o", "p1", "p2", "p3"), C("p1"), C("p2"), C("p3") });
+
+            Assert.Equal(0, rows[0].NodeLane);
+            Assert.Equal(1, rows[1].NodeLane);                  // 둘째 끝은 새 레인
+            Assert.Equal("0:0->0:2 1:1->1:2", Segs(rows[1]));
+            Assert.Equal(0, rows[2].NodeLane);
+            Assert.Equal(3, rows[2].Segments.Count(s => s.FromY == GitGraphLayout.Center));   // 부모 셋으로
+            // 목록 밖 부모를 기다리는 레인은 끝까지 아래로 이어진다.
+            Assert.All(rows.Skip(2), r => Assert.Contains(r.Segments, s => s.FromLane == 1 && s.ToLane == 1 && s.ToY == GitGraphLayout.Bottom));
+        }
+
+        [SkippableFact]
+        public async Task Graph_RealGitLog_EveryParentLineReachesItsCommit()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("graphrepo");
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "0\n");
+            await CommitAllAsync(repo, "c0");
+            await Git(repo, "switch", "-q", "-c", "feature");
+            File.WriteAllText(Path.Combine(repo, "g.txt"), "1\n");
+            await CommitAllAsync(repo, "f1");
+            await Git(repo, "switch", "-q", "main");
+            File.WriteAllText(Path.Combine(repo, "f.txt"), "2\n");
+            await CommitAllAsync(repo, "m1");
+            Assert.True((await Git(repo, "merge", "-q", "--no-edit", "feature")).Success);
+
+            var commits = GitOutputParser.ParseLog((await Git(repo, "log", "--topo-order", "-z", "--all", GitOutputParser.LogFormat)).StdOut);
+            var rows = GitGraphLayout.Compute(commits);
+
+            Assert.Equal(4, rows.Count);
+            Assert.True(rows[0].IsMerge);
+            // 연결성: 행 i가 아래로 내린 선은 모두 다음 행 위에서 받는다(끊긴 선 없음).
+            for (var i = 0; i < rows.Count - 1; i++)
+            {
+                var down = rows[i].Segments.Where(s => s.ToY == GitGraphLayout.Bottom).Select(s => s.ToLane).Distinct().OrderBy(x => x);
+                var up = rows[i + 1].Segments.Where(s => s.FromY == GitGraphLayout.Top).Select(s => s.FromLane).Distinct().OrderBy(x => x);
+                Assert.Equal(down, up);
+            }
+        }
+
+        // ── BOM 판정·UTF-16 파일 diff ───────────────────────────────────────────
+
+        [Fact]
+        public void DetectBom_AllKinds_AndNoBomMeansUtf8()
+        {
+            Assert.Equal("UTF-8 (BOM)", GitTextDecoder.DescribeBom(new byte[] { 0xEF, 0xBB, 0xBF, 0x41 }));
+            Assert.Equal("UTF-16 LE", GitTextDecoder.DescribeBom(new byte[] { 0xFF, 0xFE, 0x41, 0 }));
+            Assert.Equal("UTF-16 BE", GitTextDecoder.DescribeBom(new byte[] { 0xFE, 0xFF, 0, 0x41 }));
+            Assert.Equal("UTF-32 LE", GitTextDecoder.DescribeBom(new byte[] { 0xFF, 0xFE, 0, 0, 0x41, 0, 0, 0 }));
+            Assert.Equal("UTF-32 BE", GitTextDecoder.DescribeBom(new byte[] { 0, 0, 0xFE, 0xFF, 0, 0, 0, 0x41 }));
+            Assert.Equal("UTF-8", GitTextDecoder.DescribeBom(System.Text.Encoding.UTF8.GetBytes("한글")));
+
+            Assert.True(GitTextDecoder.HasWideBom(new byte[] { 0xFF, 0xFE, 0x41, 0 }));
+            Assert.False(GitTextDecoder.HasWideBom(new byte[] { 0xEF, 0xBB, 0xBF }));
+
+            var utf16 = new System.Text.UnicodeEncoding(false, true);
+            var bytes = utf16.GetPreamble().Concat(utf16.GetBytes("가나\n")).ToArray();
+            Assert.Equal("가나\n", GitTextDecoder.DecodeFile(bytes, null));                       // BOM 제외하고 UTF-16으로
+            Assert.Equal("한글", GitTextDecoder.DecodeFile(System.Text.Encoding.UTF8.GetBytes("한글"), null));   // BOM 없음 → UTF-8
+            Assert.Equal("A", GitTextDecoder.DecodeFile(new byte[] { 0xEF, 0xBB, 0xBF, 0x41 }, null)); // UTF-8 BOM 제거
+        }
+
+        private static byte[] Utf16(string text)
+        {
+            var encoding = new System.Text.UnicodeEncoding(false, true);
+            return encoding.GetPreamble().Concat(encoding.GetBytes(text)).ToArray();
+        }
+
+        [SkippableFact]
+        public async Task RealGit_Utf16BomFile_IsReDiffedAsText_ButRealBinaryStaysBinary()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("utf16repo");
+            File.WriteAllBytes(Path.Combine(repo, "u16.txt"), Utf16("첫째\r\n둘째\r\n"));
+            File.WriteAllBytes(Path.Combine(repo, "bin.dat"), new byte[] { 0, 1, 2, 3, 0 });
+            await CommitAllAsync(repo, "init");
+            File.WriteAllBytes(Path.Combine(repo, "u16.txt"), Utf16("첫째\r\n바뀜\r\n"));
+            File.WriteAllBytes(Path.Combine(repo, "bin.dat"), new byte[] { 0, 9, 9, 9, 0 });
+
+            // 작업 트리 diff (파일 하나)
+            var request = GitDiffCommands.WorkTree("u16.txt");
+            var raw = (await Run(repo, request)).StdOut;
+            Assert.Contains("Binary files a/u16.txt and b/u16.txt differ", raw);   // git 자체는 바이너리로 봄
+            var expanded = await GitEncodingDiff.ExpandAsync(repo, request, raw, false, null, CancellationToken.None);
+            var lines = GitOutputParser.ParseDiff(expanded);
+            Assert.Contains(lines, l => l.Kind == GitDiffLineKind.Removed && l.Text.TrimEnd('\r') == "-둘째" && l.OldLine == 2);
+            Assert.Contains(lines, l => l.Kind == GitDiffLineKind.Added && l.Text.TrimEnd('\r') == "+바뀜" && l.NewLine == 2);
+            Assert.Contains(lines, l => l.Text.Contains("UTF-16 LE"));
+
+            // 진짜 바이너리는 그대로
+            var binRequest = GitDiffCommands.WorkTree("bin.dat");
+            var binRaw = (await Run(repo, binRequest)).StdOut;
+            Assert.Equal(binRaw, await GitEncodingDiff.ExpandAsync(repo, binRequest, binRaw, false, null, CancellationToken.None));
+
+            // 커밋 diff (여러 파일, 리비전 blob에서 읽기): 스테이지 → 커밋 뒤 커밋 diff에서도 텍스트로 보인다.
+            await CommitAllAsync(repo, "change");
+            var head = GitOutputParser.ParseLog((await Git(repo, "log", "-z", "-n", "1", GitOutputParser.LogFormat)).StdOut).Single();
+            var commitRequest = GitDiffCommands.Commit(head.Hash, head.Parents);
+            var commitRaw = (await Run(repo, commitRequest)).StdOut;
+            var commitExpanded = await GitEncodingDiff.ExpandAsync(repo, commitRequest, commitRaw, false, null, CancellationToken.None);
+            Assert.Contains(GitOutputParser.ParseDiff(commitExpanded), l => l.Text.TrimEnd('\r') == "+바뀜");
+            Assert.Contains("Binary files a/bin.dat and b/bin.dat differ", commitExpanded);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_UserNoPrefixConfig_DoesNotBreakPaths()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("noprefix");
+            await Git(repo, "config", "diff.noprefix", "true");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "1\n");
+            await CommitAllAsync(repo, "init");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "2\n");
+
+            var output = (await Run(repo, GitDiffCommands.WorkTree("a.txt"))).StdOut;
+
+            Assert.Contains("diff --git a/a.txt b/a.txt", output);
+            Assert.Contains("--- a/a.txt", output);
         }
     }
 }

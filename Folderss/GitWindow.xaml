@@ -258,9 +258,28 @@
                     <ListView x:Name="LogList" Grid.Row="0"
                               SelectionMode="Single"
                               SelectionChanged="LogList_SelectionChanged"
-                              VirtualizingPanel.IsVirtualizing="True">
+                              VirtualizingPanel.IsVirtualizing="True"
+                              VirtualizingPanel.VirtualizationMode="Recycling">
+                        <!-- 그래프 선이 행 사이에서 끊기지 않도록 행 높이를 고정하고 안쪽 여백·테두리를 없앤다. -->
+                        <ListView.ItemContainerStyle>
+                            <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                                <Setter Property="Height" Value="22"/>
+                                <Setter Property="MinHeight" Value="0"/>
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0"/>
+                                <Setter Property="BorderThickness" Value="0"/>
+                                <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                            </Style>
+                        </ListView.ItemContainerStyle>
                         <ListView.View>
                             <GridView>
+                                <GridViewColumn x:Name="GraphColumn" Header="그래프" Width="40">
+                                    <GridViewColumn.CellTemplate>
+                                        <DataTemplate>
+                                            <controls:GitGraphCell Row="{Binding Graph}" Margin="-6,0,-6,0" VerticalAlignment="Stretch"/>
+                                        </DataTemplate>
+                                    </GridViewColumn.CellTemplate>
+                                </GridViewColumn>
                                 <GridViewColumn Header="해시" Width="80" DisplayMemberBinding="{Binding ShortHash}"/>
                                 <GridViewColumn Header="제목" Width="380" DisplayMemberBinding="{Binding Subject}"/>
                                 <GridViewColumn Header="참조" Width="170" DisplayMemberBinding="{Binding Refs}"/>
