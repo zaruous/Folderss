@@ -16,58 +16,80 @@
         Loaded="Window_Loaded"
         Closed="Window_Closed">
     <Window.Resources>
-        <!-- 상태 배지: 목록 기준 상태(수정·새 파일·삭제…)를 글자와 색으로. 색은 테마와 무관한 중간 톤에 반투명 배경. -->
-        <Style x:Key="GitStatusBadge" TargetType="TextBlock">
-            <Setter Property="MinWidth" Value="58"/>
-            <Setter Property="Margin" Value="0,0,8,0"/>
-            <Setter Property="Padding" Value="4,0"/>
-            <Setter Property="TextAlignment" Value="Center"/>
-            <Setter Property="FontFamily" Value="{DynamicResource AppFontFamily}"/>
-            <Setter Property="FontSize" Value="11"/>
+        <!--
+            상태 아이콘: 목록 기준 상태를 12×12 벡터 도형으로(이미지 파일 없음, 테마와 무관한 중간 톤 색).
+            Stretch=None이라 좌표가 그대로 그려진다 — 선만 있는 도형(−)도 찌그러지지 않는다. 상태 이름은 툴팁.
+        -->
+        <Style x:Key="GitStatusIcon" TargetType="ContentControl">
+            <Setter Property="Focusable" Value="False"/>
             <Setter Property="VerticalAlignment" Value="Center"/>
-            <Setter Property="Text" Value="{Binding StatusLabel}"/>
-            <Setter Property="Foreground" Value="#D19A66"/>
-            <Setter Property="Background" Value="#26D19A66"/>
-            <Style.Triggers>
-                <DataTrigger Binding="{Binding Kind}" Value="{x:Null}">
-                    <Setter Property="Visibility" Value="Collapsed"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Kind}" Value="Untracked">
-                    <Setter Property="Foreground" Value="#6CBF4F"/>
-                    <Setter Property="Background" Value="#2698C379"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Kind}" Value="Added">
-                    <Setter Property="Foreground" Value="#6CBF4F"/>
-                    <Setter Property="Background" Value="#2698C379"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Kind}" Value="Deleted">
-                    <Setter Property="Foreground" Value="#E06C75"/>
-                    <Setter Property="Background" Value="#26E06C75"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Kind}" Value="Renamed">
-                    <Setter Property="Foreground" Value="#4C9AFF"/>
-                    <Setter Property="Background" Value="#264C9AFF"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Kind}" Value="Copied">
-                    <Setter Property="Foreground" Value="#4C9AFF"/>
-                    <Setter Property="Background" Value="#264C9AFF"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Kind}" Value="Conflict">
-                    <Setter Property="Foreground" Value="#FF5555"/>
-                    <Setter Property="Background" Value="#33FF5555"/>
-                    <Setter Property="FontWeight" Value="Bold"/>
-                </DataTrigger>
-                <DataTrigger Binding="{Binding Kind}" Value="Unchanged">
-                    <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
-                    <Setter Property="Background" Value="Transparent"/>
-                </DataTrigger>
-            </Style.Triggers>
+            <Setter Property="Margin" Value="0,0,8,0"/>
+            <Setter Property="ToolTip" Value="{Binding StatusLabel}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ContentControl">
+                        <Border x:Name="Box" Width="18" Height="18" CornerRadius="3" Background="#26D19A66">
+                            <Path x:Name="Glyph"
+                                  Width="12" Height="12"
+                                  Stretch="None"
+                                  HorizontalAlignment="Center" VerticalAlignment="Center"
+                                  StrokeThickness="1.6"
+                                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" StrokeLineJoin="Round"
+                                  Stroke="#D19A66"
+                                  Data="M2,10 L2,8 L8,2 L10,4 L4,10 Z M7,3 L9,5"/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Kind}" Value="{x:Null}">
+                                <Setter TargetName="Box" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Untracked">
+                                <Setter TargetName="Box" Property="Background" Value="#2698C379"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="#6CBF4F"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="M6,1 A5,5 0 1 1 5.99,1 Z M6,3.5 L6,8.5 M3.5,6 L8.5,6"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Added">
+                                <Setter TargetName="Box" Property="Background" Value="#2698C379"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="#6CBF4F"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="M6,2 L6,10 M2,6 L10,6"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Deleted">
+                                <Setter TargetName="Box" Property="Background" Value="#26E06C75"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="#E06C75"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="M2,6 L10,6"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Renamed">
+                                <Setter TargetName="Box" Property="Background" Value="#264C9AFF"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="#4C9AFF"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="M2,6 L10,6 M7,3 L10,6 L7,9"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Copied">
+                                <Setter TargetName="Box" Property="Background" Value="#264C9AFF"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="#4C9AFF"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="M2,6 L10,6 M7,3 L10,6 L7,9"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="TypeChanged">
+                                <Setter TargetName="Glyph" Property="Data" Value="M6,1 L11,6 L6,11 L1,6 Z"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Conflict">
+                                <Setter TargetName="Box" Property="Background" Value="#33FF5555"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="#FF5555"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="M6,1 L11,11 L1,11 Z M6,5 L6,7.5 M6,9.3 L6,9.4"/>
+                            </DataTrigger>
+                            <DataTrigger Binding="{Binding Kind}" Value="Unchanged">
+                                <Setter TargetName="Box" Property="Background" Value="Transparent"/>
+                                <Setter TargetName="Glyph" Property="Stroke" Value="{DynamicResource SecondaryText}"/>
+                                <Setter TargetName="Glyph" Property="Data" Value="M2,6 L5,9 L10,3"/>
+                            </DataTrigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
         </Style>
 
-        <!-- 평면 목록 한 줄: [상태] 경로 -->
+        <!-- 평면 목록 한 줄: [상태 아이콘] 경로 -->
         <DataTemplate x:Key="GitEntryTemplate">
             <StackPanel Orientation="Horizontal" ToolTip="{Binding Path}">
-                <TextBlock Style="{StaticResource GitStatusBadge}"/>
+                <ContentControl Style="{StaticResource GitStatusIcon}"/>
                 <TextBlock Text="{Binding PathText}" FontFamily="Consolas" VerticalAlignment="Center"/>
             </StackPanel>
         </DataTemplate>
@@ -91,7 +113,7 @@
                 <Setter.Value>
                     <HierarchicalDataTemplate ItemsSource="{Binding Children}">
                         <StackPanel Orientation="Horizontal">
-                            <TextBlock Style="{StaticResource GitStatusBadge}"/>
+                            <ContentControl Style="{StaticResource GitStatusIcon}"/>
                             <TextBlock Text="{Binding LabelText}" VerticalAlignment="Center"/>
                         </StackPanel>
                     </HierarchicalDataTemplate>

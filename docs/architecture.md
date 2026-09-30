@@ -265,7 +265,8 @@ Folderss/
 - 상태 조회는 `GitOutputParser.StatusArguments`(`--untracked-files=all`)로 새 폴더 안 파일을 하나씩 받는다(폴더 한 줄로 접지 않음 —
   add할 파일을 고를 수 있게). 대가로 무시되지 않은 거대한 새 폴더(빌드 산출물 등)가 있으면 항목이 많아지고 status가 느려진다.
 - 상태 배지: 같은 파일이 변경됨·스테이지됨 양쪽에 있을 수 있어(MM, AM) `ShowChanges`가 `GitStatusEntry.ForSide(WorkTree|Index)` 사본을 만든다.
-  `Kind`는 목록 쪽 코드(Y 또는 X)로 정해지고 `GitStatusBadge` 스타일(GitWindow.xaml)이 글자·색을 입힌다. 변경됨은 수정·새 파일을 경로순으로 섞고 충돌만 위.
+  `Kind`는 목록 쪽 코드(Y 또는 X)로 정해지고 `GitStatusIcon` 스타일(GitWindow.xaml, ContentControl 템플릿의 Border+Path)이
+  12×12 벡터 도형·색을 고른다(`Stretch=None`, 이미지 파일 없음, 상태 이름은 툴팁). Path `Data` 문자열은 실행 시 해석되므로 고칠 때 문법 주의. 변경됨은 수정·새 파일을 경로순으로 섞고 충돌만 위.
   목록 제목은 `GitStatusEntry.Summarize`("수정 3 · 새 파일 2"). 작업 트리 쪽 이름 변경은 git이 감지하지 않으므로 삭제 + 새 파일로 보인다.
 - 변경 없는 파일: `변경 없는 파일 보기`를 켜면 `ls-files -z --cached`에서 상태 목록(경로·이름 변경 전 경로)을 뺀 것을
   `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
