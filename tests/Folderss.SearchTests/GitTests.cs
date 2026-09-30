@@ -497,6 +497,33 @@ namespace Folderss.SearchTests
             Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.Untracked("n.txt"), GitDiffToolMode.Custom, "t.exe", null));
             Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.Commit("h", new string[0]), GitDiffToolMode.Custom, "t.exe", null));
             Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.WorkTree("a.txt"), GitDiffToolMode.None, "t.exe", null));
+
+            // 두 파일 비교: 저장소 없이 --no-index로 원본 경로를 그대로 넘긴다(폴더 비교 아님).
+            var files = GitDiffCommands.ExternalTool(GitDiffCommands.Files(@"C:\a b\x.txt", @"D:\y.txt"), GitDiffToolMode.GitConfig, null, null);
+            Assert.Equal(new[] { "difftool", "--no-prompt", "--no-index", "--", @"C:\a b\x.txt", @"D:\y.txt" }, files);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CustomDifftool_ComparesTwoFilesOutsideRepository()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null || OperatingSystem.IsWindows(), "셸 스크립트 도구로 검증 — 리눅스·맥 전용");
+            var outDir = P("files tool");
+            Directory.CreateDirectory(outDir);
+            var left = Path.Combine(outDir, "왼쪽 파일.txt");
+            var right = Path.Combine(outDir, "right.txt");
+            File.WriteAllText(left, "L\n");
+            File.WriteAllText(right, "R\n");
+            var script = Path.Combine(outDir, "tool.sh");
+            File.WriteAllText(script, "#!/bin/sh\necho \"$1|$2\" > \"" + outDir + "/args.txt\"\n");
+            System.Diagnostics.Process.Start("chmod", new[] { "+x", script }).WaitForExit();
+
+            var request = GitDiffCommands.Files(left, right);
+            var args = GitDiffCommands.ExternalTool(request, GitDiffToolMode.Custom, script, null);
+            var run = await GitCommandRunner.RunAsync(null, args, GitCommandRunner.QueryTimeout, CancellationToken.None, throttle: false);
+            // --no-index는 차이가 있으면 difftool도 종료 코드 1이다.
+            Assert.True(GitDiffCommands.IsSuccess(run, request.NoIndex), run.StdErr);
+            // 임시 복사본이 아니라 원래 파일 경로를 받는다(도구에서 고치면 원본이 바뀜).
+            Assert.Equal(left + "|" + right, File.ReadAllText(Path.Combine(outDir, "args.txt")).Trim());
         }
 
         [SkippableFact]
@@ -546,13 +573,7 @@ namespace Folderss.SearchTests
                 ScanDepth = 3,
                 ExcludedFolders = new System.Collections.Generic.List<string> { "dist", "out" },
                 LogLimit = 50,
-                LogAllBranches = false,
-                IgnoreWhitespace = true,
-                FallbackEncoding = GitFallbackEncoding.Cp949,
-                DiffViewMode = GitDiffViewMode.FullFile,
-                DiffToolMode = GitDiffToolMode.Custom,
-                DiffToolPath = @"C:\Program Files\WinMerge\WinMergeU.exe",
-                DiffToolArguments = "-e -u \"{left}\" \"{right}\""
+                LogAllBranches = false
             };
 
             GitSettingsService.Save(original, path);
@@ -565,6 +586,29 @@ namespace Folderss.SearchTests
             Assert.Equal(new[] { "dist", "out" }, loaded.ExcludedFolders);
             Assert.Equal(50, loaded.LogLimit);
             Assert.False(loaded.LogAllBranches);
+
+            // 파일이 없으면 기본값.
+            var defaults = GitSettingsService.Load(P("none.xml"));
+            Assert.Equal(GitSettingsService.DefaultScanDepth, defaults.ScanDepth);
+        }
+
+        [Fact]
+        public void DiffSettings_RoundTrip_AndDefaults()
+        {
+            var path = P("diff-settings.xml");
+            var original = new DiffSettings
+            {
+                IgnoreWhitespace = true,
+                FallbackEncoding = GitFallbackEncoding.Cp949,
+                DiffViewMode = GitDiffViewMode.FullFile,
+                DiffToolMode = GitDiffToolMode.Custom,
+                DiffToolPath = @"C:\Program Files\WinMerge\WinMergeU.exe",
+                DiffToolArguments = "-e -u \"{left}\" \"{right}\""
+            };
+
+            DiffSettingsService.Save(original, path);
+            var loaded = DiffSettingsService.Load(path, P("no-git-settings.xml"));
+
             Assert.True(loaded.IgnoreWhitespace);
             Assert.Equal(GitFallbackEncoding.Cp949, loaded.FallbackEncoding);
             Assert.Equal(GitDiffViewMode.FullFile, loaded.DiffViewMode);
@@ -572,10 +616,32 @@ namespace Folderss.SearchTests
             Assert.Equal(original.DiffToolPath, loaded.DiffToolPath);
             Assert.Equal(original.DiffToolArguments, loaded.DiffToolArguments);
 
-            // 파일이 없으면 기본값.
-            var defaults = GitSettingsService.Load(P("none.xml"));
+            var defaults = DiffSettingsService.Load(P("none.xml"), P("none-git.xml"));
             Assert.Equal(GitDiffToolMode.None, defaults.DiffToolMode);
             Assert.Equal(GitFallbackEncoding.None, defaults.FallbackEncoding);   // BOM 없으면 UTF-8이 기본
+            Assert.Equal(DiffSettingsService.DefaultDiffToolArguments, defaults.DiffToolArguments);
+        }
+
+        [Fact]
+        public void DiffSettings_WithoutOwnFile_MigratesFromLegacyGitSettings()
+        {
+            // 이전 버전은 diff 옵션을 git-settings.xml에 저장했다.
+            var legacy = P("git-settings.xml");
+            File.WriteAllText(legacy,
+                "<git gitPath=\"\" ignoreWhitespace=\"True\" fallbackEncoding=\"SystemAnsi\" diffView=\"Context10\">" +
+                "<diffTool mode=\"GitConfig\" path=\"C:\\bc.exe\" arguments=\"-x {left} {right}\" /></git>");
+
+            var migrated = DiffSettingsService.Load(P("diff-settings.xml"), legacy);
+            Assert.True(migrated.IgnoreWhitespace);
+            Assert.Equal(GitFallbackEncoding.SystemAnsi, migrated.FallbackEncoding);
+            Assert.Equal(GitDiffViewMode.Context10, migrated.DiffViewMode);
+            Assert.Equal(GitDiffToolMode.GitConfig, migrated.DiffToolMode);
+            Assert.Equal(@"C:\bc.exe", migrated.DiffToolPath);
+            Assert.Equal("-x {left} {right}", migrated.DiffToolArguments);
+
+            // 자체 파일이 생기면 옛 값은 더 읽지 않는다.
+            DiffSettingsService.Save(new DiffSettings(), P("diff-settings.xml"));
+            Assert.False(DiffSettingsService.Load(P("diff-settings.xml"), legacy).IgnoreWhitespace);
         }
 
         [Fact]
@@ -738,6 +804,61 @@ namespace Folderss.SearchTests
             var commitExpanded = await GitEncodingDiff.ExpandAsync(repo, commitRequest, commitRaw, false, null, CancellationToken.None);
             Assert.Contains(GitOutputParser.ParseDiff(commitExpanded), l => l.Text.TrimEnd('\r') == "+바뀜");
             Assert.Contains("Binary files a/bin.dat and b/bin.dat differ", commitExpanded);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CompareTwoFiles_OutsideRepository()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            // 저장소가 아닌 폴더, 공백·한글이 든 경로
+            var left = P("비교 왼쪽", "설정 파일.txt");
+            var right = P("비교 오른쪽", "설정 파일.txt");
+            Directory.CreateDirectory(Path.GetDirectoryName(left));
+            Directory.CreateDirectory(Path.GetDirectoryName(right));
+            File.WriteAllText(left, "one\ntwo\nthree\n");
+            File.WriteAllText(right, "one\nTWO\nthree\n");
+
+            var request = GitDiffCommands.Files(left, right);
+            var result = await Run(null, request);
+            Assert.True(GitDiffCommands.IsSuccess(result, request.NoIndex), result.StdErr);
+            var lines = GitOutputParser.ParseDiff(result.StdOut);
+            Assert.Contains(lines, l => l.Kind == GitDiffLineKind.Removed && l.Text == "-two" && l.OldLine == 2);
+            Assert.Contains(lines, l => l.Kind == GitDiffLineKind.Added && l.Text == "+TWO" && l.NewLine == 2);
+
+            // 전체 파일 보기 모드는 --no-index에도 적용된다
+            var full = await Run(null, GitDiffCommands.WithViewMode(request.Arguments, GitDiffViewMode.FullFile));
+            Assert.Contains(GitOutputParser.ParseDiff(full.StdOut), l => l.Kind == GitDiffLineKind.Context && l.Text == " three");
+
+            // 같은 내용이면 종료 코드 0, 출력 없음
+            File.WriteAllText(right, "one\ntwo\nthree\n");
+            var same = await Run(null, GitDiffCommands.Files(left, right));
+            Assert.Equal(0, same.ExitCode);
+            Assert.Empty(same.StdOut);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CompareTwoFiles_Utf16BomIsReDiffedAsText()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var left = P("a.txt");
+            var right = P("b.txt");
+            File.WriteAllBytes(left, Utf16("첫째\r\n둘째\r\n"));
+            File.WriteAllText(right, "첫째\r\n바뀜\r\n");   // 한쪽은 UTF-8
+
+            var request = GitDiffCommands.Files(left, right);
+            var raw = (await Run(null, request)).StdOut;
+            Assert.Contains("Binary files ", raw);   // git 자체는 바이너리로 봄
+            var expanded = await GitEncodingDiff.ExpandFilesAsync(left, right, raw, false, null, CancellationToken.None);
+            var lines = GitOutputParser.ParseDiff(expanded);
+            Assert.Contains(lines, l => l.Kind == GitDiffLineKind.Removed && l.Text.TrimEnd('\r') == "-둘째" && l.OldLine == 2);
+            Assert.Contains(lines, l => l.Kind == GitDiffLineKind.Added && l.Text.TrimEnd('\r') == "+바뀜" && l.NewLine == 2);
+            Assert.Contains(lines, l => l.Text.Contains("UTF-16 LE"));
+
+            // BOM 없는 진짜 바이너리는 그대로
+            File.WriteAllBytes(left, new byte[] { 0, 1, 2, 0 });
+            File.WriteAllBytes(right, new byte[] { 0, 9, 9, 0 });
+            var binRaw = (await Run(null, GitDiffCommands.Files(left, right))).StdOut;
+            Assert.Equal(binRaw, await GitEncodingDiff.ExpandFilesAsync(left, right, binRaw, false, null, CancellationToken.None));
         }
 
         [SkippableFact]

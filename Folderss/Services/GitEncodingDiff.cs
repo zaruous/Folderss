@@ -68,6 +68,35 @@ namespace Folderss.Services
             var newBytes = newPath == null ? new byte[0] : await ReadSideAsync(root, newSide, newPath, token);
             if (oldBytes == null || newBytes == null)
                 return null;
+            return await DiffDecodedAsync(oldBytes, newBytes, oldPath == null ? null : "a/" + oldPath, newPath == null ? null : "b/" + newPath,
+                ignoreWhitespace, fallbackEncoding, viewMode, token);
+        }
+
+        /// <summary>
+        /// 폴더 패널에서 고른 두 파일(<see cref="GitDiffCommands.Files"/>)용. <c>--no-index</c> 출력의 경로는 git이 앞의 <c>/</c>를 떼는 등
+        /// 원래 경로로 되돌릴 수 없어서, 출력에서 경로를 읽지 않고 받은 두 파일을 직접 읽는다. 바꿀 것이 없으면 <paramref name="diffText"/>를 그대로 돌려준다.
+        /// </summary>
+        public static async Task<string> ExpandFilesAsync(string oldFile, string newFile, string diffText,
+            bool ignoreWhitespace, Encoding fallbackEncoding, CancellationToken token,
+            GitDiffViewMode viewMode = GitDiffViewMode.ChangesOnly)
+        {
+            if (string.IsNullOrEmpty(diffText) || diffText.IndexOf("Binary files ", StringComparison.Ordinal) < 0)
+                return diffText;
+            var oldBytes = ReadFile(oldFile);
+            var newBytes = ReadFile(newFile);
+            if (oldBytes == null || newBytes == null)
+                return diffText;
+            return await DiffDecodedAsync(oldBytes, newBytes, oldFile, newFile, ignoreWhitespace, fallbackEncoding, viewMode, token)
+                   ?? diffText;
+        }
+
+        /// <summary>
+        /// 한쪽이라도 UTF-16/32 BOM이면 두 내용을 UTF-8 임시 파일로 바꿔 다시 비교한 헤더+hunk를 돌려준다. 아니면(진짜 바이너리) null.
+        /// 표시 이름이 null이면 그쪽은 없는 파일(<c>/dev/null</c>)이다.
+        /// </summary>
+        private static async Task<string> DiffDecodedAsync(byte[] oldBytes, byte[] newBytes, string oldLabel, string newLabel,
+            bool ignoreWhitespace, Encoding fallbackEncoding, GitDiffViewMode viewMode, CancellationToken token)
+        {
             // 한쪽이라도 UTF-16/32 BOM이어야 "텍스트인데 바이너리로 보인" 경우다. 둘 다 아니면 진짜 바이너리.
             if (!GitTextDecoder.HasWideBom(oldBytes) && !GitTextDecoder.HasWideBom(newBytes))
                 return null;
@@ -94,19 +123,34 @@ namespace Folderss.Services
                     return null;
 
                 var header = string.Format("# 인코딩: {0} → {1} (BOM으로 판정, 텍스트로 다시 비교)",
-                    oldPath == null ? "(없음)" : GitTextDecoder.DescribeBom(oldBytes),
-                    newPath == null ? "(없음)" : GitTextDecoder.DescribeBom(newBytes));
+                    oldLabel == null ? "(없음)" : GitTextDecoder.DescribeBom(oldBytes),
+                    newLabel == null ? "(없음)" : GitTextDecoder.DescribeBom(newBytes));
                 var hunkStart = result.StdOut.IndexOf("\n@@", StringComparison.Ordinal);
                 if (hunkStart < 0)
                     return header + "\n# 내용은 같습니다 (인코딩·BOM·줄바꿈만 다름)";
 
-                return header + "\n--- " + (oldPath == null ? "/dev/null" : "a/" + oldPath)
-                     + "\n+++ " + (newPath == null ? "/dev/null" : "b/" + newPath)
+                return header + "\n--- " + (oldLabel ?? "/dev/null")
+                     + "\n+++ " + (newLabel ?? "/dev/null")
                      + result.StdOut.Substring(hunkStart).TrimEnd('\n');
             }
             finally
             {
                 try { Directory.Delete(tempDir, true); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        /// <summary>작업 트리 파일 바이트. 너무 크거나 못 읽으면 null.</summary>
+        private static byte[] ReadFile(string full)
+        {
+            try
+            {
+                if (new FileInfo(full).Length > MaxBytes)
+                    return null;
+                return File.ReadAllBytes(full);
+            }
+            catch (IOException)
+            {
+                return null;
             }
         }
 
@@ -121,16 +165,7 @@ namespace Folderss.Services
                 var full = Path.Combine(root, path.Replace('/', Path.DirectorySeparatorChar));
                 if (!File.Exists(full))
                     return new byte[0];
-                if (new FileInfo(full).Length > MaxBytes)
-                    return null;
-                try
-                {
-                    return File.ReadAllBytes(full);
-                }
-                catch (IOException)
-                {
-                    return null;
-                }
+                return ReadFile(full);
             }
 
             var spec = side == GitDiffCommands.IndexSide ? ":" + path : side + ":" + path;

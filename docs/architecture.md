@@ -8,7 +8,7 @@ Folderss/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
-│   ├── GitDiffView.xaml/.cs        — Git 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
+│   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
@@ -40,8 +40,10 @@ Folderss/
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
 │   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
-│   ├── GitDiffCommands.cs          — diff·upstream 비교 명령 인수 (UI·테스트 공용)
-│   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml) + 외부 비교 도구 프리셋
+│   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
+│   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
+│   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
+│   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
 │   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
@@ -71,6 +73,9 @@ Folderss/
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
+├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, 이름·위치 헤더, 좌우 바꾸기, GitDiffView + `git diff --no-index`), 코드로 구성
+├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
+├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── AboutWindow.cs                  — 정보 창
@@ -255,9 +260,13 @@ Folderss/
   `GitOutputParser.ParseDiff`는 hunk 밖의 `---`/`+++`만 헤더로 보고(hunk 안 `--`로 시작하는 줄 삭제 오판 방지), 충돌 파일 combined diff(`@@@`)는
   앞 두 글자로 분류하고 줄 번호를 매기지 않는다. `GitDiffView`는 `BeginLoad`가 준 번호로만 `Complete`해 빠른 연속 선택의 늦은 결과를 버린다.
   원격 비교는 원격 추적 브랜치 기준이라 fetch 전에는 오래된 상태다(요약 문구로 알림).
-- 설정: `SettingsWindow`의 Git 탭(`GitPanel`)이 유일한 편집 화면이다(별도 옵션 대화상자 없음). Git 창의 `설정…`은
-  `MainWindow.OpenSettings(gitWindow, "Git")`를 부른다. 저장하면 `SavedGitSettings`(파일 저장 실패여도 이번 실행 값)를
-  `MainWindow._gitSettings`에 두고 열린 모든 `GitWindow.ApplySettings`에 알린다 — git 경로가 바뀌면 재확인+재탐색, 탐색 옵션이면 재탐색,
+- 설정: `SettingsWindow`의 Git 탭(`GitPanel`, git-settings.xml)과 비교 탭(`DiffPanel`, diff-settings.xml)이 편집 화면이다(별도 옵션 대화상자 없음).
+  diff 보기·공백 무시·대체 인코딩·외부 도구는 `DiffSettings`로 분리돼 Git 창·두 파일 비교 창·HTML 보고서가 함께 쓴다.
+  `DiffSettingsService.Load`는 diff-settings.xml이 없으면 옛 git-settings.xml의 같은 값(루트 속성 `ignoreWhitespace`·`fallbackEncoding`·`diffView`,
+  `diffTool` 요소)을 읽어 이관한다 — 한 번 저장하면 새 파일만 읽는다(`GitSettingsService.Save`는 더 이상 그 값을 쓰지 않음).
+  Git 창의 `설정…`은 `MainWindow.OpenSettings(gitWindow, "Git")`, 외부 도구 미지정 안내는 `"Diff"` 탭을 연다. 저장하면 `SavedGitSettings`·`SavedDiffSettings`
+  (파일 저장 실패여도 이번 실행 값)를 `MainWindow._gitSettings`·`_diffSettings`에 두고 열린 모든 `GitWindow.ApplySettings(git, diff)`와
+  `FileCompareWindow.ApplySettings(diff)`에 알린다 — git 경로가 바뀌면 재확인+재탐색, 탐색 옵션이면 재탐색,
   표시 옵션이면 상세만 다시 읽음. `GitCommandRunner.ConfiguredGitPath`는 정적이라 마지막으로 반영한 설정이 모든 창에 적용된다.
 - 인코딩 규칙: BOM(매직넘버)이 있으면 그 인코딩, 없으면 UTF-8(`GitTextDecoder.DetectBom`/`DecodeFile`). 대체 인코딩(기본 없음)은
   BOM 없는 내용에서 엄격 UTF-8로 안 읽히는 줄에만 쓴다(`Decode`, `CodePagesEncodingProvider` 등록 필요). 상태·로그·브랜치 출력은 UTF-8 그대로.
@@ -307,6 +316,20 @@ Folderss/
   직접 지정은 `-c difftool.folderss.cmd=<BuildToolCommand>` + `--tool=folderss`로 이번 실행에만 등록 — `{left}`/`{right}`는 항상
   `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,
   동시 실행 제한 밖(`throttle: false`), 창 수명 토큰 미사용(Git 창을 닫아도 도구는 유지). 2초 안에 끝나면 "바로 종료" 안내.
+- 두 파일 비교: 폴더 패널에서 파일 두 개(폴더 제외)를 고르고 우클릭하면 셸 메뉴 맨 위에 `선택한 두 파일 비교`가 붙고, ⋯ 메뉴 `두 파일 비교…`도 같다
+  (`FolderBrowser.GetSelectedFilePair` — 목록에 보이는 순서로 왼쪽/오른쪽, 파일 두 개가 아니면 null). `MainWindow.OpenFileCompare`가 `FileCompareWindow`를 연다 —
+  Git diff 경로를 그대로 재사용한다: `GitDiffCommands.Files`(`diff --no-index -- <왼쪽> <오른쪽>`, 저장소·형상 관리 불필요) → `GitDiffView`.
+  창 위쪽에 양쪽 파일 이름(굵게)과 위치(폴더)를 보이고 `⇄ 좌우 바꾸기`로 두 경로를 바꿔 다시 읽는다. `--no-index` 출력의 경로는 git이 앞의 `/`를 떼는 등
+  원래 경로로 되돌릴 수 없어, UTF-16 BOM 재비교는 `GitEncodingDiff.ExpandAsync`(저장소 상대 경로) 대신 받은 두 경로를 직접 읽는
+  `ExpandFilesAsync`로 한다. `GitDiffView`의 보기 모드 상자는 `NoIndex && OldSide == null`(추적 안 됨 = 전체 추가)일 때만 숨긴다.
+  외부 도구는 `git difftool --no-index -- <왼쪽> <오른쪽>`(임시 복사본이 아니라 원래 파일을 넘김, 차이 있으면 종료 코드 1이 정상). git이 없으면 오류 문구만 보인다.
+- 외부 도구 실행 공용: `DiffToolLauncher.RunAsync`가 미지정·실행 파일 없음·git 설정 difftool 없음 안내와 실행을 맡는다. 결과 표시는 호출 측
+  (Git 창은 출력 창, 두 파일 비교 창은 메시지 상자). 성공 판정은 `GitDiffCommands.IsSuccess(result, request.NoIndex)` + stderr 없음.
+- HTML 보고서: `GitDiffView.TextLoader`(호스트가 설정 — 요청과 범위를 받아 diff 텍스트를 돌려주고 실패는 예외)가 있으면 `HTML 보고서…` 버튼이 보인다.
+  `DiffReportExporter`: `DiffReportDialog`(배치 양옆/한 줄 × 범위 변경점만/앞뒤 10줄/전체 파일, 처음 범위 = 지금 보기 모드) → 그 범위로 다시 읽기
+  → 저장 위치 → UTF-8 저장 → (선택) 기본 브라우저. 보고서 범위가 화면과 다를 수 있어 화면 줄을 재사용하지 않고 호스트가 다시 실행한다.
+  `DiffHtmlReport.PairRows`는 연속 삭제 묶음과 뒤따르는 추가 묶음을 순서대로 짝짓고(남는 쪽은 빈 칸), 추가 뒤 삭제는 새 묶음으로 본다.
+  최대 `DiffHtmlReport.MaxLines`(10만) 줄, 넘으면 파서가 안내 줄을 붙인다. Git 창은 `LoadReportTextAsync`(선택 저장소 기준), 두 파일 비교 창은 화면과 같은 로더.
 - 브랜치 전환·pull 전 `MainWindow.CountModifiedDocumentsUnder(repo)`로 그 저장소 파일의 미저장 뷰어 탭을 세어 경고한다.
 - 회귀 테스트: `tests/Folderss.SearchTests/GitTests.cs`(탐색, 파서, 실제 git 왕복 — git 없으면 건너뜀).
 

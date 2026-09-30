@@ -103,6 +103,8 @@
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
                             <MenuItem Header="탐색기로 열기" Click="OpenInExplorer_Click"/>
+                            <MenuItem Header="두 파일 비교…" Click="CompareFiles_Click"
+                                      ToolTip="현재 폴더 패널에서 선택한 파일 두 개를 비교합니다 (목록 위쪽 파일이 왼쪽). 저장소 밖 파일도 됩니다."/>
                             <MenuItem Header="Git 저장소…" Click="ShowGit_Click"
                                       ToolTip="선택한 폴더(없으면 현재 폴더) 아래의 Git 저장소를 찾아 상태·스테이지·커밋·브랜치·로그·pull/push를 다룹니다."/>
                             <MenuItem Header="테마">

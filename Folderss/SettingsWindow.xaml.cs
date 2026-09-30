@@ -59,7 +59,13 @@ namespace Folderss
         /// <summary>저장을 누른 뒤의 Git 설정(파일 저장이 실패해도 이번 실행에는 적용할 값). 저장 전이면 null.</summary>
         public GitSettings SavedGitSettings { get; private set; }
 
+        /// <summary>저장을 누른 뒤의 비교(diff) 설정. 저장 전이면 null.</summary>
+        public DiffSettings SavedDiffSettings { get; private set; }
+
+        private readonly DiffSettings _workingDiff;
+
         private const int GitTabIndex = 5;
+        private const int DiffTabIndex = 6;
 
         private static readonly (GitBaseFolderMode Value, string Text)[] GitBaseFolderChoices =
         {
@@ -75,21 +81,21 @@ namespace Folderss
             (GitPullMode.UseGitConfig, "git 설정 따름 (pull.rebase / pull.ff)")
         };
 
-        private static readonly (GitFallbackEncoding Value, string Text)[] GitEncodingChoices =
+        private static readonly (GitFallbackEncoding Value, string Text)[] DiffEncodingChoices =
         {
             (GitFallbackEncoding.None, "사용 안 함 — BOM 없으면 UTF-8 (기본)"),
             (GitFallbackEncoding.Cp949, "CP949 (EUC-KR)"),
             (GitFallbackEncoding.SystemAnsi, "시스템 기본 코드 페이지 (한국어 Windows: CP949)")
         };
 
-        private static readonly (GitDiffViewMode Value, string Text)[] GitDiffViewChoices =
+        private static readonly (GitDiffViewMode Value, string Text)[] DiffViewChoices =
         {
             (GitDiffViewMode.ChangesOnly, "변경점만 (git 기본 문맥, 보통 3줄)"),
             (GitDiffViewMode.Context10, "변경점 + 앞뒤 10줄"),
             (GitDiffViewMode.FullFile, "전체 파일 (변경 줄은 색으로 표시)")
         };
 
-        private static readonly (GitDiffToolMode Value, string Text)[] GitDiffToolChoices =
+        private static readonly (GitDiffToolMode Value, string Text)[] DiffToolChoices =
         {
             (GitDiffToolMode.None, "사용 안 함 (내장 diff만)"),
             (GitDiffToolMode.GitConfig, "git 설정의 difftool 사용"),
@@ -98,7 +104,8 @@ namespace Folderss
 
         public SettingsWindow(KeyBindingService service) : this(service, new ViewerConfigService()) { }
 
-        public SettingsWindow(KeyBindingService service, ViewerConfigService viewerConfig, GitSettings gitSettings = null)
+        public SettingsWindow(KeyBindingService service, ViewerConfigService viewerConfig, GitSettings gitSettings = null,
+            DiffSettings diffSettings = null)
         {
             _service = service;
             _viewerConfig = viewerConfig;
@@ -130,6 +137,7 @@ namespace Folderss
 
             _originalTheme = ThemeManager.CurrentTheme;
             _workingGit = (gitSettings ?? GitSettingsService.Load()).Clone();
+            _workingDiff = (diffSettings ?? DiffSettingsService.Load()).Clone();
 
             InitializeComponent();
             DataContext = this;
@@ -158,6 +166,7 @@ namespace Folderss
             _initializingTheme = false;
 
             InitializeGitPanel();
+            InitializeDiffPanel();
 
             TabNav.SelectedIndex = 0;
         }
@@ -187,14 +196,20 @@ namespace Folderss
             GitExcludedBox.Text = string.Join(Environment.NewLine, _workingGit.ExcludedFolders);
             GitLogLimitBox.Text = _workingGit.LogLimit.ToString();
             GitLogAllCheck.IsChecked = _workingGit.LogAllBranches;
-            FillCombo(GitDiffViewModeCombo, GitDiffViewChoices.Select(c => c.Text), Array.FindIndex(GitDiffViewChoices, c => c.Value == _workingGit.DiffViewMode));
-            GitIgnoreWhitespaceCheck.IsChecked = _workingGit.IgnoreWhitespace;
-            FillCombo(GitFallbackEncodingCombo, GitEncodingChoices.Select(c => c.Text), Array.FindIndex(GitEncodingChoices, c => c.Value == _workingGit.FallbackEncoding));
-            FillCombo(GitDiffToolPresetCombo, GitSettingsService.DiffToolPresets.Select(p => p.Name), 0);
-            GitDiffToolPathBox.Text = _workingGit.DiffToolPath;
-            GitDiffToolArgsBox.Text = _workingGit.DiffToolArguments;
-            FillCombo(GitDiffToolModeCombo, GitDiffToolChoices.Select(c => c.Text), Array.FindIndex(GitDiffToolChoices, c => c.Value == _workingGit.DiffToolMode));
-            UpdateGitDiffToolPanels();
+        }
+
+        // ── 비교(diff) ──────────────────────────────────────────────────────
+
+        private void InitializeDiffPanel()
+        {
+            FillCombo(DiffViewModeCombo, DiffViewChoices.Select(c => c.Text), Array.FindIndex(DiffViewChoices, c => c.Value == _workingDiff.DiffViewMode));
+            DiffIgnoreWhitespaceCheck.IsChecked = _workingDiff.IgnoreWhitespace;
+            FillCombo(DiffFallbackEncodingCombo, DiffEncodingChoices.Select(c => c.Text), Array.FindIndex(DiffEncodingChoices, c => c.Value == _workingDiff.FallbackEncoding));
+            FillCombo(DiffToolPresetCombo, DiffSettingsService.DiffToolPresets.Select(p => p.Name), 0);
+            DiffToolPathBox.Text = _workingDiff.DiffToolPath;
+            DiffToolArgsBox.Text = _workingDiff.DiffToolArguments;
+            FillCombo(DiffToolModeCombo, DiffToolChoices.Select(c => c.Text), Array.FindIndex(DiffToolChoices, c => c.Value == _workingDiff.DiffToolMode));
+            UpdateDiffToolPanels();
         }
 
         private static void FillCombo(ComboBox combo, IEnumerable<string> items, int selectedIndex)
@@ -203,29 +218,29 @@ namespace Folderss
             combo.SelectedIndex = Math.Max(0, selectedIndex);
         }
 
-        private void GitDiffToolModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private void DiffToolModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
-            UpdateGitDiffToolPanels();
+            UpdateDiffToolPanels();
         }
 
-        private void UpdateGitDiffToolPanels()
+        private void UpdateDiffToolPanels()
         {
-            if (GitCustomToolPanel == null || GitConfigToolHint == null)
+            if (DiffCustomToolPanel == null || DiffGitConfigToolHint == null)
                 return;
-            var mode = GitDiffToolChoices[Math.Max(0, GitDiffToolModeCombo.SelectedIndex)].Value;
-            GitCustomToolPanel.Visibility = mode == GitDiffToolMode.Custom ? Visibility.Visible : Visibility.Collapsed;
-            GitConfigToolHint.Visibility = mode == GitDiffToolMode.GitConfig ? Visibility.Visible : Visibility.Collapsed;
+            var mode = DiffToolChoices[Math.Max(0, DiffToolModeCombo.SelectedIndex)].Value;
+            DiffCustomToolPanel.Visibility = mode == GitDiffToolMode.Custom ? Visibility.Visible : Visibility.Collapsed;
+            DiffGitConfigToolHint.Visibility = mode == GitDiffToolMode.GitConfig ? Visibility.Visible : Visibility.Collapsed;
         }
 
-        private void GitDiffToolPresetApply_Click(object sender, RoutedEventArgs e)
+        private void DiffToolPresetApply_Click(object sender, RoutedEventArgs e)
         {
-            var index = GitDiffToolPresetCombo.SelectedIndex;
+            var index = DiffToolPresetCombo.SelectedIndex;
             if (index < 0)
                 return;
-            var preset = GitSettingsService.DiffToolPresets[index];
+            var preset = DiffSettingsService.DiffToolPresets[index];
             var path = preset.ResolvePath();
-            GitDiffToolPathBox.Text = path;
-            GitDiffToolArgsBox.Text = preset.Arguments;
+            DiffToolPathBox.Text = path;
+            DiffToolArgsBox.Text = preset.Arguments;
             if (!File.Exists(path) || !string.IsNullOrEmpty(preset.Note))
             {
                 MessageBox.Show(this,
@@ -242,11 +257,11 @@ namespace Folderss
                 GitPathBox.Text = dlg.FileName;
         }
 
-        private void GitDiffToolBrowse_Click(object sender, RoutedEventArgs e)
+        private void DiffToolBrowse_Click(object sender, RoutedEventArgs e)
         {
             var dlg = new OpenFileDialog { Title = "비교 도구 실행 파일 선택", Filter = "실행 파일 (*.exe)|*.exe|모든 파일 (*.*)|*.*", CheckFileExists = true };
             if (dlg.ShowDialog(this) == true)
-                GitDiffToolPathBox.Text = dlg.FileName;
+                DiffToolPathBox.Text = dlg.FileName;
         }
 
         private bool GitSettingsError(string message, Control focus)
@@ -280,11 +295,6 @@ namespace Folderss
             if (excluded.Any(name => name.IndexOfAny(new[] { '\\', '/' }) >= 0))
                 return GitSettingsError("제외 폴더에는 경로가 아니라 폴더 이름만 적으세요 (예: node_modules).", GitExcludedBox);
 
-            var toolMode = GitDiffToolChoices[Math.Max(0, GitDiffToolModeCombo.SelectedIndex)].Value;
-            var toolPath = GitDiffToolPathBox.Text.Trim().Trim('"');
-            if (toolMode == GitDiffToolMode.Custom && !File.Exists(toolPath))
-                return GitSettingsError("외부 비교 도구 실행 파일이 없습니다. 경로를 지정하거나 사용 방식을 바꾸세요.", GitDiffToolPathBox);
-
             _workingGit.GitExecutablePath = gitPath;
             _workingGit.BaseFolderMode = GitBaseFolderChoices[Math.Max(0, GitBaseFolderCombo.SelectedIndex)].Value;
             _workingGit.PullMode = GitPullChoices[Math.Max(0, GitPullModeCombo.SelectedIndex)].Value;
@@ -292,12 +302,30 @@ namespace Folderss
             _workingGit.ExcludedFolders = excluded;
             _workingGit.LogLimit = logLimit;
             _workingGit.LogAllBranches = GitLogAllCheck.IsChecked == true;
-            _workingGit.DiffViewMode = GitDiffViewChoices[Math.Max(0, GitDiffViewModeCombo.SelectedIndex)].Value;
-            _workingGit.IgnoreWhitespace = GitIgnoreWhitespaceCheck.IsChecked == true;
-            _workingGit.FallbackEncoding = GitEncodingChoices[Math.Max(0, GitFallbackEncodingCombo.SelectedIndex)].Value;
-            _workingGit.DiffToolMode = toolMode;
-            _workingGit.DiffToolPath = toolPath;
-            _workingGit.DiffToolArguments = GitDiffToolArgsBox.Text.Trim();
+            return true;
+        }
+
+        /// <summary>비교 탭 입력을 검증해 <see cref="_workingDiff"/>에 반영한다. 잘못된 값이 있으면 비교 탭을 열고 false.</summary>
+        private bool TryCollectDiffSettings()
+        {
+            var toolMode = DiffToolChoices[Math.Max(0, DiffToolModeCombo.SelectedIndex)].Value;
+            var toolPath = DiffToolPathBox.Text.Trim().Trim('"');
+            if (toolMode == GitDiffToolMode.Custom && !File.Exists(toolPath))
+            {
+                MessageBox.Show(this, "외부 비교 도구 실행 파일이 없습니다. 경로를 지정하거나 사용 방식을 바꾸세요.", "비교 설정 오류",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+                TabNav.SelectedIndex = DiffTabIndex;
+                DiffToolPathBox.Focus();
+                DiffToolPathBox.SelectAll();
+                return false;
+            }
+
+            _workingDiff.DiffViewMode = DiffViewChoices[Math.Max(0, DiffViewModeCombo.SelectedIndex)].Value;
+            _workingDiff.IgnoreWhitespace = DiffIgnoreWhitespaceCheck.IsChecked == true;
+            _workingDiff.FallbackEncoding = DiffEncodingChoices[Math.Max(0, DiffFallbackEncodingCombo.SelectedIndex)].Value;
+            _workingDiff.DiffToolMode = toolMode;
+            _workingDiff.DiffToolPath = toolPath;
+            _workingDiff.DiffToolArguments = DiffToolArgsBox.Text.Trim();
             return true;
         }
 
@@ -314,6 +342,7 @@ namespace Folderss
             OpenWithPanel.Visibility  = tag == "OpenWith"  ? Visibility.Visible : Visibility.Collapsed;
             ConsolePanel.Visibility   = tag == "Console"   ? Visibility.Visible : Visibility.Collapsed;
             GitPanel.Visibility       = tag == "Git"       ? Visibility.Visible : Visibility.Collapsed;
+            DiffPanel.Visibility      = tag == "Diff"      ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void AddViewer_Click(object sender, RoutedEventArgs e)
@@ -449,7 +478,7 @@ namespace Folderss
                 return;
             }
 
-            if (!TryCollectGitSettings())
+            if (!TryCollectGitSettings() || !TryCollectDiffSettings())
                 return;
 
             _workingConsoleSettings.FontSize = fontSize;
@@ -469,7 +498,9 @@ namespace Folderss
             TrySave(failures, "콘솔", "console-settings.xml", () => ConsoleSettingsService.Save(_workingConsoleSettings));
             TrySave(failures, "테마", "theme.txt", ThemeManager.SaveCurrentTheme);
             TrySave(failures, "Git", "git-settings.xml", () => GitSettingsService.Save(_workingGit));
+            TrySave(failures, "비교", "diff-settings.xml", () => DiffSettingsService.Save(_workingDiff));
             SavedGitSettings = _workingGit.Clone();
+            SavedDiffSettings = _workingDiff.Clone();
 
             if (failures.Count > 0)
             {

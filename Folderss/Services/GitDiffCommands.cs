@@ -14,6 +14,10 @@ namespace Folderss.Services
         public bool NoIndex { get; set; }
         public string EmptyMessage { get; set; } = "차이가 없습니다.";
 
+        /// <summary>HTML 보고서에 보일 왼쪽/오른쪽 이름(두 파일 비교의 전체 경로). null이면 보고서는 diff 헤더의 경로만 보인다.</summary>
+        public string OldLabel { get; set; }
+        public string NewLabel { get; set; }
+
         /// <summary><c>git difftool</c> 뒤에 붙일 비교 대상 인수.</summary>
         public List<string> ExternalSelector { get; set; }
 
@@ -107,6 +111,28 @@ namespace Folderss.Services
             {
                 Arguments = Diff(ignoreWhitespace, new[] { "--no-index" }, PathSelector("/dev/null", path)),
                 NoIndex = true,
+                NewSide = WorkTreeSide
+            };
+        }
+
+        /// <summary>
+        /// 폴더 패널에서 고른 임의의 두 파일(저장소 밖이어도 됨). 절대 경로를 그대로 넘긴다. 차이가 있으면 종료 코드 1(<see cref="IsSuccess"/>).
+        /// 양쪽 모두 파일이 있으므로 <see cref="GitDiffRequest.OldSide"/>를 비우지 않는다 — 보기 모드를 고를 수 있게.
+        /// 외부 도구는 <c>git difftool --no-index</c>로 연다(저장소 불필요).
+        /// UTF-16 BOM 재비교는 저장소 상대 경로를 쓰는 <see cref="GitEncodingDiff.ExpandAsync"/>가 아니라 <see cref="GitEncodingDiff.ExpandFilesAsync"/>로 한다.
+        /// </summary>
+        public static GitDiffRequest Files(string oldFile, string newFile, bool ignoreWhitespace = false)
+        {
+            var selector = PathSelector(oldFile, newFile);
+            var external = new List<string> { "--no-index" };
+            external.AddRange(selector);
+            return new GitDiffRequest
+            {
+                Arguments = Diff(ignoreWhitespace, new[] { "--no-index" }, selector),
+                // difftool --no-index는 임시 복사본이 아니라 원래 두 파일을 도구에 넘긴다(종료 코드 1 = 차이 있음).
+                ExternalSelector = external,
+                NoIndex = true,
+                OldSide = WorkTreeSide,
                 NewSide = WorkTreeSide
             };
         }
@@ -247,7 +273,7 @@ namespace Folderss.Services
         {
             // Git for Windows의 bash에서 안전한 형태(C:/Program Files/…)로 바꾼다. 역슬래시는 Windows 경로 구분자로만 쓰인다고 본다.
             var exe = "'" + (toolPath ?? string.Empty).Trim().Trim('"').Replace('\\', '/').Replace("'", "'\\''") + "'";
-            var template = string.IsNullOrWhiteSpace(toolArguments) ? GitSettingsService.DefaultDiffToolArguments : toolArguments.Trim();
+            var template = string.IsNullOrWhiteSpace(toolArguments) ? DiffSettingsService.DefaultDiffToolArguments : toolArguments.Trim();
             template = template.Replace("\"{left}\"", "{left}").Replace("\"{right}\"", "{right}");
             if (!template.Contains("{left}") && !template.Contains("{right}"))
                 template += " {left} {right}";

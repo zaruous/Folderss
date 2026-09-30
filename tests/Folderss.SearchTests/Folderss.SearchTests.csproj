@@ -29,6 +29,7 @@
     <Compile Include="..\..\Folderss\Services\GitCommandRunner.cs" Link="Linked\GitCommandRunner.cs" />
     <Compile Include="..\..\Folderss\Services\GitDiffCommands.cs" Link="Linked\GitDiffCommands.cs" />
     <Compile Include="..\..\Folderss\Services\GitSettingsService.cs" Link="Linked\GitSettingsService.cs" />
+    <Compile Include="..\..\Folderss\Services\DiffSettingsService.cs" Link="Linked\DiffSettingsService.cs" />
     <Compile Include="..\..\Folderss\Services\GitGraphLayout.cs" Link="Linked\GitGraphLayout.cs" />
     <Compile Include="..\..\Folderss\Services\GitChangeTree.cs" Link="Linked\GitChangeTree.cs" />
     <Compile Include="..\..\Folderss\Services\GitRefCommands.cs" Link="Linked\GitRefCommands.cs" />
@@ -37,6 +38,7 @@
     <Compile Include="..\..\Folderss\Services\GitRestoreCommands.cs" Link="Linked\GitRestoreCommands.cs" />
     <Compile Include="..\..\Folderss\Services\GitWindowStateService.cs" Link="Linked\GitWindowStateService.cs" />
     <Compile Include="..\..\Folderss\Services\GitEncodingDiff.cs" Link="Linked\GitEncodingDiff.cs" />
+    <Compile Include="..\..\Folderss\Services\DiffHtmlReport.cs" Link="Linked\DiffHtmlReport.cs" />
   </ItemGroup>
 
   <ItemGroup>

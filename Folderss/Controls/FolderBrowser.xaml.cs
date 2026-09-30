@@ -52,6 +52,8 @@ namespace Folderss.Controls
         public event EventHandler Activated;
         public event EventHandler PathChanged;
         public event EventHandler<string> FileOpenRequested;
+        /// <summary>파일 두 개를 골라 "선택한 두 파일 비교"를 눌렀다. 목록 순서대로 [왼쪽(변경 전), 오른쪽(변경 후)].</summary>
+        public event EventHandler<string[]> CompareFilesRequested;
 
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
@@ -63,6 +65,18 @@ namespace Folderss.Controls
         public FileSystemItem SelectedItem
         {
             get { return FileList.SelectedItem as FileSystemItem; }
+        }
+
+        /// <summary>
+        /// 파일 두 개(폴더 제외)만 골랐으면 [왼쪽, 오른쪽] 경로, 아니면 null. 선택 순서가 아니라 목록에 보이는 순서로 정한다.
+        /// 우클릭 메뉴와 ⋯ 메뉴의 "두 파일 비교"가 같은 규칙을 쓴다.
+        /// </summary>
+        public string[] GetSelectedFilePair()
+        {
+            var selected = SelectedItems;
+            if (selected.Count != 2 || selected.Any(item => item.IsDirectory))
+                return null;
+            return selected.OrderBy(item => FileList.Items.IndexOf(item)).Select(item => item.FullPath).ToArray();
         }
 
         public IList<FileSystemItem> SelectedItems
@@ -1214,6 +1228,16 @@ namespace Folderss.Controls
                     };
                 })
                 .ToList();
+
+            var pair = GetSelectedFilePair();
+            if (pair != null)
+            {
+                customItems.Insert(0, new ShellContextMenuService.CustomMenuItem
+                {
+                    Label = "선택한 두 파일 비교",
+                    Invoke = () => CompareFilesRequested?.Invoke(this, pair)
+                });
+            }
 
             var screenPoint = PointToScreen(e.GetPosition(this));
             try
