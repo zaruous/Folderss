@@ -32,6 +32,7 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
+│   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
 │   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
@@ -274,6 +275,9 @@ Folderss/
   닫기 전 비동기 검사 — 브랜치 이름은 `git check-ref-format --branch`). 작업 트리를 바꾸는 것(hard reset, 전환·체크아웃)은 실행 전
   `ConfirmNoUnsavedDocuments`. 워킹트리 목록은 `worktree list --porcelain`(`ParseWorktrees`)으로 상세를 읽을 때 함께 읽고, 추가하면
   `EnsureRepositoryRow`로 저장소 목록에 넣는다(워킹트리는 `.git` 파일이라 탐색기도 원래 찾는다). 강제 옵션(`reset`은 모드 선택, `worktree remove --force`, `branch -D`)은 없다.
+- ▾ 옵션: 기본 버튼은 `new GitXxxOptions()`(또는 설정값)로 바로 실행하고, 옆 `OptionArrowButton`이 `GitPullDialog`/`GitPushDialog`/
+  `GitFetchDialog`/`GitCommitOptionsDialog`/`GitForceConfirmDialog`를 열어 고른 옵션을 같은 `GitSyncCommands`/`GitRefCommands` 함수에 넘긴다.
+  강제 옵션은 `GitForceConfirmDialog`(기본 꺼짐, 켜면 경고·확인 체크 필요). 강제 푸시는 두지 않는다.
 - 변경 없는 파일: `변경 없는 파일 보기`를 켜면 `ls-files -z --cached`에서 상태 목록(경로·이름 변경 전 경로)을 뺀 것을
   `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
   BOM 규칙으로 읽어 `GitDiffView.ShowLines`로 줄 번호와 함께 보인다(10MB 초과·바이너리는 안내만). 상태를 다시 읽을 때마다 다시 계산.

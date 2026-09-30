@@ -49,6 +49,7 @@ Folderss/
 │   ├── GitGraphLayout          — 부모 해시로 브랜치 그래프 레인 계산
 │   ├── GitChangeTree           — 변경 파일 목록을 폴더 트리로 묶기
 │   ├── GitRefCommands          — reset·브랜치·체크아웃·워킹트리 명령 인수
+│   ├── GitSyncCommands         — pull·push·fetch·커밋·브랜치 삭제 옵션과 명령 인수
 │   ├── GitEncodingDiff         — UTF-16/32(BOM) 파일을 텍스트로 다시 비교
 │   ├── GitSettingsService      — Git 창 옵션 저장 (pull 방식, 탐색 깊이·제외 폴더 등)
 │   ├── IgnoreRuleSet           — .gitignore/.folderssignore 규칙 매처 (목록 ignore 필터)
@@ -211,6 +212,7 @@ tests/
   - diff 창 제목 줄에서 보기 모드를 고릅니다: **변경점만**(git 기본 문맥, 보통 3줄) / **문맥 10줄** / **전체 파일**(파일 전체에서 바뀐 줄만 색으로 표시). 기본값은 설정 > Git.
   - diff는 변경 전/후 줄 번호와 추가(초록)·삭제(빨강) 배경으로 표시하며, `Ctrl+C`로 선택한 줄을 복사합니다. 변경 사항 목록에서 파일을 고르면 작업 트리 ↔ 인덱스, 스테이지됨은 인덱스 ↔ HEAD, 추적 안 되는 파일은 전체 내용을 추가로 보입니다.
   - 툴바 `pull`/`push`: upstream이 없으면 확인 후 `push -u`. 강제 푸시는 없습니다.
+  - **버튼 옆 `▾`를 누르면 옵션 대화상자**가 열립니다(버튼 자체는 기본 옵션으로 바로 실행): pull(fast-forward만/병합/rebase/git 설정, `--autostash`), push(원격, upstream 설정, `--follow-tags`), fetch(`--prune`, `--all`, `--tags`), 커밋(`--amend` — 메시지 비우면 직전 메시지 유지·push된 커밋이면 경고, `-s`, `--allow-empty`), 브랜치 삭제(강제 `-D`), 워킹트리 제거(강제 `--force`). 강제 옵션은 경고와 확인 체크를 거쳐야 실행됩니다.
 - 여러 저장소에 한꺼번에 하는 동작은 `다시 찾기`(상태 조회)와 `전체 fetch`뿐입니다.
 - 브랜치 전환·pull 전에 그 저장소 파일을 저장하지 않은 문서 탭이 있으면 경고합니다.
 - 모든 git 명령과 오류 메시지는 창 아래 출력 영역에 남습니다. 인증은 사용자의 git 설정(Git Credential Manager, ssh-agent)을 그대로 쓰며, 응답이 없으면 5분 뒤 중단됩니다.

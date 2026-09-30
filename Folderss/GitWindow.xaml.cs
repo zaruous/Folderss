@@ -219,8 +219,9 @@ namespace Folderss
             FetchAllButton.IsEnabled = idle && _rows.Count > 0;
             OptionsButton.IsEnabled = idle;
             CancelButton.IsEnabled = !idle;
-            PullButton.IsEnabled = idle && hasRepo;
-            PushButton.IsEnabled = idle && hasRepo;
+            PullButton.IsEnabled = PullOptionsButton.IsEnabled = idle && hasRepo;
+            PushButton.IsEnabled = PushOptionsButton.IsEnabled = idle && hasRepo;
+            FetchAllOptionsButton.IsEnabled = idle && _rows.Count > 0;
             DetailRoot.IsEnabled = idle && hasRepo;
         }
 
@@ -325,13 +326,26 @@ namespace Folderss
 
         private async void FetchAll_Click(object sender, RoutedEventArgs e)
         {
+            await FetchAllAsync(new GitFetchOptions());
+        }
+
+        private async void FetchAllOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new GitFetchDialog(string.Format("목록의 저장소 {0}개 모두에서 fetch합니다.", _rows.Count)) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await FetchAllAsync(dialog.Options);
+        }
+
+        private async Task FetchAllAsync(GitFetchOptions options)
+        {
             var rows = _rows.ToList();
+            var args = GitSyncCommands.Fetch(options);
             await RunBusyAsync(string.Format("fetch 중… ({0}개)", rows.Count), async token =>
             {
                 var failed = 0;
                 await Task.WhenAll(rows.Select(async row =>
                 {
-                    var result = await GitCommandRunner.RunAsync(row.RootPath, new[] { "fetch", "--prune" }, GitCommandRunner.NetworkTimeout, token);
+                    var result = await GitCommandRunner.RunAsync(row.RootPath, args, GitCommandRunner.NetworkTimeout, token);
                     AppendResult(row.Info, result);
                     if (!result.Success)
                         failed++;
@@ -891,7 +905,16 @@ namespace Folderss
 
         private async void FetchSelected_Click(object sender, RoutedEventArgs e)
         {
-            await RunOnSelectedAsync("fetch 중…", new[] { "fetch", "--prune" }, GitCommandRunner.NetworkTimeout);
+            await RunOnSelectedAsync("fetch 중…", GitSyncCommands.Fetch(new GitFetchOptions()), GitCommandRunner.NetworkTimeout);
+        }
+
+        private async void FetchSelectedOptions_Click(object sender, RoutedEventArgs e)
+        {
+            if (SelectedRow == null)
+                return;
+            var dialog = new GitFetchDialog("이 저장소에서 fetch한 뒤 다시 비교합니다: " + SelectedRow.Info.DisplayPath) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await RunOnSelectedAsync("fetch 중…", GitSyncCommands.Fetch(dialog.Options), GitCommandRunner.NetworkTimeout);
         }
 
         private async void OutgoingDiff_Click(object sender, RoutedEventArgs e)
@@ -1012,18 +1035,44 @@ namespace Folderss
 
         private async void Commit_Click(object sender, RoutedEventArgs e)
         {
+            await CommitAsync(new GitCommitOptions());
+        }
+
+        private async void CommitOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            if (row?.Snapshot == null || _busyCount > 0)
+                return;
+
+            // 직전 커밋 제목과 push 여부(upstream에 이미 있는지 = 보낼 커밋이 0개)
+            string lastSubject = null;
+            if (row.Snapshot.HeadOid != null)
+            {
+                var last = await GitCommandRunner.RunAsync(row.RootPath, new[] { "log", "-1", "--format=%s" }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                lastSubject = last.Success ? last.StdOut.Trim() : null;
+            }
+            var headPushed = row.Snapshot.Upstream != null && row.Snapshot.Ahead == 0;
+            var dialog = new GitCommitOptionsDialog(lastSubject, headPushed, string.IsNullOrWhiteSpace(CommitMessageBox.Text)) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await CommitAsync(dialog.Options);
+        }
+
+        private async Task CommitAsync(GitCommitOptions options)
+        {
             var snapshot = SelectedRow?.Snapshot;
             if (snapshot == null || _busyCount > 0)
                 return;
 
             var message = CommitMessageBox.Text;
-            if (string.IsNullOrWhiteSpace(message))
+            // amend는 메시지가 비면 직전 메시지를 그대로 쓴다.
+            if (string.IsNullOrWhiteSpace(message) && !options.Amend)
             {
                 MessageBox.Show(this, "커밋 메시지를 입력하세요.", "커밋", MessageBoxButton.OK, MessageBoxImage.Information);
                 CommitMessageBox.Focus();
                 return;
             }
-            if (snapshot.StagedCount == 0)
+            // amend(메시지만 고치기)와 빈 커밋은 스테이지된 변경이 없어도 된다.
+            if (snapshot.StagedCount == 0 && !options.Amend && !options.AllowEmpty)
             {
                 MessageBox.Show(this, "스테이지된 변경이 없습니다.", "커밋", MessageBoxButton.OK, MessageBoxImage.Information);
                 return;
@@ -1034,12 +1083,14 @@ namespace Folderss
                 return;
             }
 
-            // 메시지는 UTF-8 임시 파일로 넘긴다(여러 줄·따옴표·한글 안전, 편집기 안 뜸).
-            var messageFile = Path.Combine(Path.GetTempPath(), "folderss-commit-" + Guid.NewGuid().ToString("N") + ".txt");
+            // 메시지는 UTF-8 임시 파일로 넘긴다(여러 줄·따옴표·한글 안전, 편집기 안 뜸). amend + 빈 메시지면 파일 없이 --no-edit.
+            var keepMessage = options.Amend && string.IsNullOrWhiteSpace(message);
+            var messageFile = keepMessage ? null : Path.Combine(Path.GetTempPath(), "folderss-commit-" + Guid.NewGuid().ToString("N") + ".txt");
             try
             {
-                File.WriteAllText(messageFile, message.Replace("\r\n", "\n"), new UTF8Encoding(false));
-                await RunOnSelectedAsync("커밋 중…", new[] { "commit", "-F", messageFile }, GitCommandRunner.NetworkTimeout,
+                if (messageFile != null)
+                    File.WriteAllText(messageFile, message.Replace("\r\n", "\n"), new UTF8Encoding(false));
+                await RunOnSelectedAsync(options.Amend ? "직전 커밋 고치는 중…" : "커밋 중…", GitSyncCommands.Commit(messageFile, options), GitCommandRunner.NetworkTimeout,
                     onDone: result =>
                     {
                         if (result.Success)
@@ -1052,7 +1103,10 @@ namespace Folderss
             }
             finally
             {
-                try { File.Delete(messageFile); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                if (messageFile != null)
+                {
+                    try { File.Delete(messageFile); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+                }
             }
         }
 
@@ -1326,29 +1380,56 @@ namespace Folderss
 
         private async void WorktreeRemove_Click(object sender, RoutedEventArgs e)
         {
-            var worktree = WorktreeList.SelectedItem as GitWorktreeInfo;
+            var worktree = RemovableWorktree();
             if (worktree == null)
                 return;
+
+            var unsaved = _countModifiedDocumentsUnder(worktree.Path);
+            if (MessageBox.Show(this,
+                    string.Format("워킹트리 폴더를 지웁니다:\n{0}\n\n커밋 안 한 변경이 있으면 git이 거부합니다(강제 제거는 ▾ 옵션). 브랜치는 지우지 않습니다.{1}\n계속할까요?",
+                        worktree.Path, unsaved > 0 ? string.Format("\n\n⚠ 이 폴더의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.", unsaved) : string.Empty),
+                    "워킹트리 제거", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+            await RemoveWorktreeAsync(worktree.Path, force: false);
+        }
+
+        private async void WorktreeRemoveOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var worktree = RemovableWorktree();
+            if (worktree == null)
+                return;
+            var unsaved = _countModifiedDocumentsUnder(worktree.Path);
+            var dialog = new GitForceConfirmDialog("워킹트리 제거 옵션",
+                "워킹트리 폴더를 지웁니다(브랜치는 남김):\n" + worktree.Path + (unsaved > 0 ? string.Format("\n\n⚠ 이 폴더의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.", unsaved) : string.Empty),
+                "커밋 안 한 변경이 있어도 강제 제거 (--force)",
+                "그 워킹트리의 커밋 안 한 변경과 추적 안 되는 파일이 모두 삭제되며 복구할 수 없습니다.",
+                "제거") { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await RemoveWorktreeAsync(worktree.Path, dialog.Force);
+        }
+
+        /// <summary>제거할 수 있는 워킹트리인지 확인하고 안 되면 이유를 알린다.</summary>
+        private GitWorktreeInfo RemovableWorktree()
+        {
+            var worktree = WorktreeList.SelectedItem as GitWorktreeInfo;
+            if (worktree == null)
+                return null;
             if (worktree.IsMain)
             {
                 MessageBox.Show(this, "주 작업 트리는 제거할 수 없습니다.", "워킹트리 제거", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                return null;
             }
             if (worktree.IsPrunable)
             {
                 MessageBox.Show(this, "폴더가 이미 없습니다. 'prune'으로 기록을 정리하세요.", "워킹트리 제거", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                return null;
             }
+            return worktree;
+        }
 
-            var unsaved = _countModifiedDocumentsUnder(worktree.Path);
-            if (MessageBox.Show(this,
-                    string.Format("워킹트리 폴더를 지웁니다:\n{0}\n\n커밋 안 한 변경이 있으면 git이 거부합니다(강제 제거 없음). 브랜치는 지우지 않습니다.{1}\n계속할까요?",
-                        worktree.Path, unsaved > 0 ? string.Format("\n\n⚠ 이 폴더의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.", unsaved) : string.Empty),
-                    "워킹트리 제거", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
-                return;
-
-            var path = worktree.Path;
-            await RunOnSelectedAsync("워킹트리 제거 중…", GitRefCommands.WorktreeRemove(path), GitCommandRunner.QueryTimeout,
+        private async Task RemoveWorktreeAsync(string path, bool force)
+        {
+            await RunOnSelectedAsync(force ? "워킹트리 강제 제거 중…" : "워킹트리 제거 중…", GitRefCommands.WorktreeRemove(path, force), GitCommandRunner.QueryTimeout,
                 onDone: result =>
                 {
                     if (!result.Success)
@@ -1365,32 +1446,73 @@ namespace Folderss
             await RunOnSelectedAsync("워킹트리 기록 정리 중…", GitRefCommands.WorktreePrune, GitCommandRunner.QueryTimeout);
         }
 
-        private async void DeleteBranch_Click(object sender, RoutedEventArgs e)
+        /// <summary>삭제할 수 있는 로컬 브랜치인지 확인하고 안 되면 이유를 알린다.</summary>
+        private GitBranchInfo DeletableBranch()
         {
             var branch = BranchList.SelectedItem as GitBranchInfo;
             if (branch == null)
-                return;
+                return null;
             if (branch.IsRemote)
             {
                 MessageBox.Show(this, "원격 브랜치는 여기서 삭제하지 않습니다.", "브랜치 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                return null;
             }
             if (branch.IsCurrent)
             {
                 MessageBox.Show(this, "현재 브랜치는 삭제할 수 없습니다.", "브랜치 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
+                return null;
             }
+            return branch;
+        }
+
+        private async void DeleteBranch_Click(object sender, RoutedEventArgs e)
+        {
+            var branch = DeletableBranch();
+            if (branch == null)
+                return;
             if (MessageBox.Show(this,
-                    string.Format("로컬 브랜치 '{0}'을(를) 삭제할까요?\n병합되지 않은 브랜치는 git이 거부합니다(강제 삭제 없음).", branch.Name),
+                    string.Format("로컬 브랜치 '{0}'을(를) 삭제할까요?\n병합되지 않은 브랜치는 git이 거부합니다(강제 삭제는 ▾ 옵션).", branch.Name),
                     "브랜치 삭제", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
                 return;
 
-            await RunOnSelectedAsync("브랜치 삭제 중…", new[] { "branch", "-d", "--", branch.Name }, GitCommandRunner.QueryTimeout);
+            await RunOnSelectedAsync("브랜치 삭제 중…", GitSyncCommands.DeleteBranch(branch.Name, force: false), GitCommandRunner.QueryTimeout);
+        }
+
+        private async void DeleteBranchOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var branch = DeletableBranch();
+            if (branch == null)
+                return;
+            var dialog = new GitForceConfirmDialog("브랜치 삭제 옵션",
+                string.Format("로컬 브랜치 '{0}'을(를) 삭제합니다. 기본은 병합된 브랜치만 지웁니다(git branch -d).", branch.Name),
+                "병합 안 된 커밋이 있어도 강제 삭제 (git branch -D)",
+                "병합 안 된 커밋은 어느 브랜치에서도 가리키지 않게 되어 git reflog로만 찾을 수 있습니다.",
+                "삭제") { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            await RunOnSelectedAsync(dialog.Force ? "브랜치 강제 삭제 중…" : "브랜치 삭제 중…",
+                GitSyncCommands.DeleteBranch(branch.Name, dialog.Force), GitCommandRunner.QueryTimeout);
         }
 
         // ── pull / push ─────────────────────────────────────────────────────
 
         private async void Pull_Click(object sender, RoutedEventArgs e)
+        {
+            await PullAsync(new GitPullOptions { Mode = _settings.PullMode });
+        }
+
+        private async void PullOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null)
+                return;
+            var dialog = new GitPullDialog(string.Format("'{0}' ← {1}", snapshot.BranchDisplay, snapshot.Upstream ?? "upstream 없음"),
+                new GitPullOptions { Mode = _settings.PullMode }) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await PullAsync(dialog.Options);
+        }
+
+        private async Task PullAsync(GitPullOptions options)
         {
             var snapshot = SelectedRow?.Snapshot;
             if (snapshot == null)
@@ -1403,20 +1525,12 @@ namespace Folderss
             if (!ConfirmNoUnsavedDocuments("pull"))
                 return;
 
-            var args = new List<string> { "pull" };
-            switch (_settings.PullMode)
-            {
-                case GitPullMode.FastForwardOnly: args.Add("--ff-only"); break;
-                case GitPullMode.Merge: args.Add("--no-rebase"); break;
-                case GitPullMode.Rebase: args.Add("--rebase"); break;
-            }
-
-            await RunOnSelectedAsync("pull 중…", args, GitCommandRunner.NetworkTimeout, onDone: result =>
+            await RunOnSelectedAsync("pull 중…", GitSyncCommands.Pull(options), GitCommandRunner.NetworkTimeout, onDone: result =>
             {
                 if (result.Success)
                     return;
-                if (_settings.PullMode == GitPullMode.FastForwardOnly)
-                    AppendOutput("fast-forward로 받을 수 없습니다(로컬과 원격이 갈라짐). 옵션에서 pull 방식을 바꾸거나 콘솔에서 병합하세요.");
+                if (options.Mode == GitPullMode.FastForwardOnly)
+                    AppendOutput("fast-forward로 받을 수 없습니다(로컬과 원격이 갈라짐). pull 옆 ▾에서 병합·rebase를 고르거나 콘솔에서 병합하세요.");
                 else
                     AppendOutput("병합·rebase가 중간에 멈췄다면 충돌을 콘솔/IDE에서 해결하세요 (git status로 확인, 취소는 git merge --abort / git rebase --abort).");
             });
@@ -1441,30 +1555,59 @@ namespace Folderss
             }
 
             // upstream이 없으면 원격을 골라 -u로 연결한다. 원격이 여러 개면 origin 우선, 없으면 첫 번째.
-            GitResult remotes;
-            try
-            {
-                remotes = await GitCommandRunner.RunAsync(row.RootPath, new[] { "remote" }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
-            }
-            catch (Exception ex)
-            {
-                if (!(ex is OperationCanceledException))
-                    AppendOutput("오류: " + ex.Message);
+            var names = await GetRemotesAsync(row);
+            if (names == null)
                 return;
-            }
-            var names = remotes.StdOut.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).ToList();
-            if (names.Count == 0)
-            {
-                MessageBox.Show(this, "이 저장소에 원격(remote)이 없습니다. 콘솔에서 git remote add로 먼저 등록하세요.", "push", MessageBoxButton.OK, MessageBoxImage.Information);
-                return;
-            }
             var remote = names.Contains("origin") ? "origin" : names[0];
             if (MessageBox.Show(this,
                     string.Format("'{0}' 브랜치에 upstream이 없습니다.\n{1}/{0}(으)로 push하고 upstream으로 설정할까요?", snapshot.Branch, remote),
                     "push", MessageBoxButton.YesNo, MessageBoxImage.Question) != MessageBoxResult.Yes)
                 return;
 
-            await RunOnSelectedAsync("push 중…", new[] { "push", "-u", remote, snapshot.Branch }, GitCommandRunner.NetworkTimeout);
+            await RunOnSelectedAsync("push 중…",
+                GitSyncCommands.Push(new GitPushOptions { Remote = remote, Branch = snapshot.Branch, SetUpstream = true }), GitCommandRunner.NetworkTimeout);
+        }
+
+        /// <summary>원격 이름 목록. 없거나 못 읽으면 알리고 null.</summary>
+        private async Task<List<string>> GetRemotesAsync(RepositoryRow row)
+        {
+            GitResult remotes;
+            try
+            {
+                remotes = await GitCommandRunner.RunAsync(row.RootPath, GitSyncCommands.Remotes, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+            }
+            catch (Exception ex)
+            {
+                if (!(ex is OperationCanceledException))
+                    AppendOutput("오류: " + ex.Message);
+                return null;
+            }
+            var names = remotes.StdOut.Split('\n').Select(line => line.Trim()).Where(line => line.Length > 0).ToList();
+            if (names.Count == 0)
+            {
+                MessageBox.Show(this, "이 저장소에 원격(remote)이 없습니다. 콘솔에서 git remote add로 먼저 등록하세요.", "push", MessageBoxButton.OK, MessageBoxImage.Information);
+                return null;
+            }
+            return names;
+        }
+
+        private async void PushOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            var snapshot = row?.Snapshot;
+            if (snapshot == null)
+                return;
+            if (snapshot.IsDetached || string.IsNullOrEmpty(snapshot.Branch))
+            {
+                MessageBox.Show(this, "현재 브랜치가 없어(detached HEAD) push할 수 없습니다.", "push", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var remotes = await GetRemotesAsync(row);
+            if (remotes == null)
+                return;
+            var dialog = new GitPushDialog(snapshot.Branch, snapshot.Upstream, remotes) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await RunOnSelectedAsync("push 중…", GitSyncCommands.Push(dialog.Options), GitCommandRunner.NetworkTimeout);
         }
 
         // ── 외부 비교 도구 ─────────────────────────────────────────────────────

@@ -16,6 +16,14 @@
         Loaded="Window_Loaded"
         Closed="Window_Closed">
     <Window.Resources>
+        <!-- 기본 동작 버튼 옆의 ▾: 누를 때만 옵션 대화상자를 연다(버튼 자체는 기본 옵션으로 바로 실행). -->
+        <Style x:Key="OptionArrowButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+            <Setter Property="Content" Value="▾"/>
+            <Setter Property="Padding" Value="5,7"/>
+            <Setter Property="Margin" Value="-2,3,3,3"/>
+            <Setter Property="MinWidth" Value="0"/>
+        </Style>
+
         <!--
             상태 아이콘: 목록 기준 상태를 12×12 벡터 도형으로(이미지 파일 없음, 테마와 무관한 중간 톤 색).
             Stretch=None이라 좌표가 그대로 그려진다 — 선만 있는 도형(−)도 찌그러지지 않는다. 상태 이름은 툴팁.
@@ -141,11 +149,17 @@
                             ToolTip="기준 폴더 아래 저장소를 다시 찾고 상태를 읽습니다"/>
                     <Button x:Name="FetchAllButton" Content="⇣ 전체 fetch" Click="FetchAll_Click"
                             ToolTip="목록의 모든 저장소에서 git fetch --prune을 실행합니다 (작업 트리는 바뀌지 않음)"/>
+                    <Button x:Name="FetchAllOptionsButton" Style="{StaticResource OptionArrowButton}" Click="FetchAllOptions_Click"
+                            ToolTip="전체 fetch 옵션… (prune, 모든 원격, 태그)"/>
                     <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
                     <Button x:Name="PullButton" Content="⇣ pull" Click="Pull_Click"
-                            ToolTip="선택한 저장소만 pull (방식은 옵션에서 선택)"/>
+                            ToolTip="선택한 저장소만 pull (설정 > Git의 방식으로 바로 실행)"/>
+                    <Button x:Name="PullOptionsButton" Style="{StaticResource OptionArrowButton}" Click="PullOptions_Click"
+                            ToolTip="pull 옵션… (fast-forward만 / 병합 / rebase, 변경 임시 보관)"/>
                     <Button x:Name="PushButton" Content="⇡ push" Click="Push_Click"
                             ToolTip="선택한 저장소만 push (강제 푸시 없음)"/>
+                    <Button x:Name="PushOptionsButton" Style="{StaticResource OptionArrowButton}" Click="PushOptions_Click"
+                            ToolTip="push 옵션… (원격, upstream 설정, 태그)"/>
                     <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
                     <Button x:Name="OptionsButton" Content="설정…" Click="Options_Click"
                             ToolTip="설정 창의 Git 탭을 엽니다 (git 경로, pull 방식, 탐색, diff·외부 비교 도구)"/>
@@ -350,6 +364,12 @@
                     <controls:GitDiffView x:Name="ChangesDiff" Grid.Column="2"/>
 
                     <DockPanel Grid.Row="1" Grid.ColumnSpan="3" Margin="0,8,0,0">
+                        <Button x:Name="CommitOptionsButton"
+                                DockPanel.Dock="Right"
+                                VerticalAlignment="Bottom"
+                                Style="{StaticResource OptionArrowButton}"
+                                Click="CommitOptions_Click"
+                                ToolTip="커밋 옵션… (직전 커밋 고치기, Signed-off-by, 빈 커밋)"/>
                         <Button x:Name="CommitButton"
                                 DockPanel.Dock="Right"
                                 VerticalAlignment="Bottom"
@@ -376,6 +396,8 @@
                                 ToolTip="현재 커밋에서 새 브랜치를 만들고 전환합니다"/>
                         <Button x:Name="DeleteBranchButton" Content="삭제" Click="DeleteBranch_Click"
                                 ToolTip="병합된 로컬 브랜치만 삭제합니다 (git branch -d)"/>
+                        <Button Style="{StaticResource OptionArrowButton}" Click="DeleteBranchOptions_Click"
+                                ToolTip="삭제 옵션… (병합 안 된 브랜치 강제 삭제)"/>
                     </StackPanel>
                     <ListBox x:Name="BranchList"
                              FontFamily="Consolas"
@@ -400,6 +422,8 @@
                         <WrapPanel>
                             <Button x:Name="FetchSelectedButton" Content="⇣ fetch 후 비교" Click="FetchSelected_Click"
                                     ToolTip="이 저장소만 git fetch --prune 한 뒤 다시 비교합니다 (작업 트리는 바뀌지 않음)"/>
+                            <Button Style="{StaticResource OptionArrowButton}" Click="FetchSelectedOptions_Click"
+                                    ToolTip="fetch 옵션… (prune, 모든 원격, 태그)"/>
                             <Button x:Name="OutgoingDiffButton" Content="보낼 변경 전체" Click="OutgoingDiff_Click"
                                     ToolTip="git diff @{u}...HEAD — push하면 원격에 더해질 변경"/>
                             <Button x:Name="IncomingDiffButton" Content="받을 변경 전체" Click="IncomingDiff_Click"
@@ -437,7 +461,9 @@
                         <Button Content="저장소 목록에서 보기" Click="WorktreeOpen_Click"
                                 ToolTip="선택한 워킹트리를 왼쪽 저장소 목록에서 선택합니다 (없으면 추가). 더블클릭과 같습니다"/>
                         <Button Content="제거" Click="WorktreeRemove_Click"
-                                ToolTip="워킹트리 폴더와 기록을 지웁니다. 커밋 안 한 변경이 있으면 git이 거부합니다 (강제 제거 없음)"/>
+                                ToolTip="워킹트리 폴더와 기록을 지웁니다. 커밋 안 한 변경이 있으면 git이 거부합니다"/>
+                        <Button Style="{StaticResource OptionArrowButton}" Click="WorktreeRemoveOptions_Click"
+                                ToolTip="제거 옵션… (커밋 안 한 변경까지 강제 제거)"/>
                         <Button Content="prune" Click="WorktreePrune_Click"
                                 ToolTip="폴더가 이미 지워진 워킹트리의 기록을 정리합니다 (git worktree prune)"/>
                     </StackPanel>

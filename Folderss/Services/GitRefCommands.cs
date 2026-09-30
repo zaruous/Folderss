@@ -68,10 +68,18 @@ namespace Folderss.Services
             return args;
         }
 
-        /// <summary>워킹트리 제거. 커밋 안 한 변경이 있으면 git이 거부한다(강제 제거는 제공하지 않음).</summary>
-        public static List<string> WorktreeRemove(string path)
+        /// <summary>
+        /// 워킹트리 제거. 기본은 커밋 안 한 변경이 있으면 git이 거부한다.
+        /// <paramref name="force"/>면 그 변경까지 지운다(<c>--force</c>, 되돌릴 수 없음 — ▾ 옵션에서 경고·확인 후에만).
+        /// </summary>
+        public static List<string> WorktreeRemove(string path, bool force = false)
         {
-            return new List<string> { "worktree", "remove", "--", path };
+            var args = new List<string> { "worktree", "remove" };
+            if (force)
+                args.Add("--force");
+            args.Add("--");
+            args.Add(path);
+            return args;
         }
 
         /// <summary>폴더가 지워진 워킹트리의 기록을 정리한다.</summary>

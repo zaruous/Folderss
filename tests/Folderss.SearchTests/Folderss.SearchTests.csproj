@@ -32,6 +32,7 @@
     <Compile Include="..\..\Folderss\Services\GitGraphLayout.cs" Link="Linked\GitGraphLayout.cs" />
     <Compile Include="..\..\Folderss\Services\GitChangeTree.cs" Link="Linked\GitChangeTree.cs" />
     <Compile Include="..\..\Folderss\Services\GitRefCommands.cs" Link="Linked\GitRefCommands.cs" />
+    <Compile Include="..\..\Folderss\Services\GitSyncCommands.cs" Link="Linked\GitSyncCommands.cs" />
     <Compile Include="..\..\Folderss\Services\GitEncodingDiff.cs" Link="Linked\GitEncodingDiff.cs" />
   </ItemGroup>
 

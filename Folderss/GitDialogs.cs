@@ -352,4 +352,161 @@ namespace Folderss
             return Commitish == null ? "기존 브랜치를 고르세요." : null;
         }
     }
+
+    /// <summary>pull 옵션(▾). 방식 기본값은 설정 > Git.</summary>
+    public sealed class GitPullDialog : GitDialogBase
+    {
+        private readonly RadioButton[] _modes;
+        private readonly CheckBox _autoStash;
+
+        private static readonly (GitPullMode Mode, string Text, string Hint)[] Modes =
+        {
+            (GitPullMode.FastForwardOnly, "fast-forward만 (--ff-only)", "갈라졌으면 아무것도 바꾸지 않고 실패합니다. 가장 안전합니다."),
+            (GitPullMode.Merge, "병합 (--no-rebase)", "갈라졌으면 병합 커밋을 만듭니다. 충돌 나면 병합 중 상태로 남습니다."),
+            (GitPullMode.Rebase, "rebase (--rebase)", "내 커밋을 받아 온 커밋 위로 다시 쌓습니다. 충돌 나면 rebase 중 상태로 남습니다."),
+            (GitPullMode.UseGitConfig, "git 설정 따름", "옵션 없이 git pull (pull.rebase / pull.ff 설정 적용).")
+        };
+
+        public GitPullOptions Options => new GitPullOptions
+        {
+            Mode = Modes[Array.FindIndex(_modes, r => r.IsChecked == true)].Mode,
+            AutoStash = _autoStash.IsChecked == true
+        };
+
+        public GitPullDialog(string branchText, GitPullOptions defaults) : base("pull 옵션", 500)
+        {
+            AddText(branchText);
+            AddLabel("방식");
+            _modes = Modes.Select(m => AddRadio("pull", m.Text, m.Hint, m.Mode == defaults.Mode)).ToArray();
+            _autoStash = AddCheck("커밋 안 한 변경을 잠시 보관했다가 되돌리기 (--autostash)", defaults.AutoStash);
+            AddText("병합·rebase에서 작업 트리가 깨끗하지 않아 거부될 때 씁니다. 되돌릴 때 충돌이 나면 변경은 stash에 남습니다.", secondary: true, top: 2);
+            AddButtons("pull");
+        }
+    }
+
+    /// <summary>push 옵션(▾): 원격, upstream 설정, 태그. 강제 푸시는 없다.</summary>
+    public sealed class GitPushDialog : GitDialogBase
+    {
+        private readonly ComboBox _remote;
+        private readonly CheckBox _upstream;
+        private readonly CheckBox _tags;
+        private readonly string _branch;
+
+        public GitPushOptions Options => new GitPushOptions
+        {
+            Remote = _remote.SelectedItem as string,
+            Branch = _branch,
+            SetUpstream = _upstream.IsChecked == true,
+            FollowTags = _tags.IsChecked == true
+        };
+
+        public GitPushDialog(string branch, string upstream, IList<string> remotes) : base("push 옵션", 480)
+        {
+            _branch = branch;
+            AddText(string.Format("브랜치 '{0}'을(를) 보냅니다. 현재 upstream: {1}", branch, upstream ?? "없음"));
+            AddLabel("원격");
+            var defaultRemote = upstream != null && upstream.Contains('/') ? upstream.Substring(0, upstream.IndexOf('/')) : remotes.Contains("origin") ? "origin" : remotes.FirstOrDefault();
+            _remote = new ComboBox { ItemsSource = remotes, SelectedItem = defaultRemote };
+            Body.Children.Add(_remote);
+            _upstream = AddCheck("이 원격 브랜치를 upstream으로 설정 (-u)", upstream == null);
+            _tags = AddCheck("보내는 커밋의 주석 태그도 함께 (--follow-tags)", false);
+            AddText("강제 푸시는 원격의 다른 사람 커밋을 덮어쓸 수 있어 이 앱에서 제공하지 않습니다.", secondary: true, top: 10);
+            AddButtons("push");
+        }
+
+        protected override Task<string> ValidateAsync()
+        {
+            return Task.FromResult(_remote.SelectedItem == null ? "원격을 고르세요." : null);
+        }
+    }
+
+    /// <summary>fetch 옵션(▾): prune, 전체 원격, 태그.</summary>
+    public sealed class GitFetchDialog : GitDialogBase
+    {
+        private readonly CheckBox _prune;
+        private readonly CheckBox _all;
+        private readonly CheckBox _tags;
+
+        public GitFetchOptions Options => new GitFetchOptions
+        {
+            Prune = _prune.IsChecked == true,
+            AllRemotes = _all.IsChecked == true,
+            Tags = _tags.IsChecked == true
+        };
+
+        public GitFetchDialog(string target) : base("fetch 옵션", 460)
+        {
+            var defaults = new GitFetchOptions();
+            AddText(target);
+            _prune = AddCheck("원격에서 지워진 브랜치 정리 (--prune)", defaults.Prune);
+            _all = AddCheck("모든 원격에서 받기 (--all)", defaults.AllRemotes);
+            _tags = AddCheck("모든 태그 받기 (--tags)", defaults.Tags);
+            AddText("fetch는 작업 트리를 바꾸지 않습니다.", secondary: true, top: 10);
+            AddButtons("fetch");
+        }
+    }
+
+    /// <summary>커밋 옵션(▾): amend, sign-off, 빈 커밋.</summary>
+    public sealed class GitCommitOptionsDialog : GitDialogBase
+    {
+        private readonly CheckBox _amend;
+        private readonly CheckBox _signOff;
+        private readonly CheckBox _allowEmpty;
+
+        public GitCommitOptions Options => new GitCommitOptions
+        {
+            Amend = _amend.IsChecked == true,
+            SignOff = _signOff.IsChecked == true,
+            AllowEmpty = _allowEmpty.IsChecked == true
+        };
+
+        /// <param name="headPushed">직전 커밋이 이미 upstream에 있는지(amend하면 원격과 갈라짐).</param>
+        public GitCommitOptionsDialog(string lastSubject, bool headPushed, bool messageEmpty) : base("커밋 옵션", 500)
+        {
+            _amend = AddCheck("직전 커밋 고치기 (--amend)", false);
+            var amendHint = AddText(string.Format("직전 커밋 \"{0}\"에 스테이지된 변경을 합칩니다.{1}", lastSubject ?? "(없음)",
+                messageEmpty ? " 메시지 칸이 비어 있으면 직전 메시지를 그대로 씁니다." : " 메시지 칸의 내용으로 메시지를 바꿉니다."), secondary: true, top: 2);
+            amendHint.Margin = new Thickness(20, 2, 0, 0);
+            var pushedWarning = AddText("⚠ 직전 커밋은 이미 push되었습니다. 고치면 원격과 갈라져 강제 푸시가 필요해집니다(이 앱은 강제 푸시를 하지 않음).", warning: true, top: 4);
+            pushedWarning.Visibility = Visibility.Collapsed;
+            _amend.Checked += (s, e) => pushedWarning.Visibility = headPushed ? Visibility.Visible : Visibility.Collapsed;
+            _amend.Unchecked += (s, e) => pushedWarning.Visibility = Visibility.Collapsed;
+            _amend.IsEnabled = lastSubject != null;
+
+            _signOff = AddCheck("Signed-off-by 줄 추가 (-s)", false);
+            _allowEmpty = AddCheck("변경 없이도 커밋 (--allow-empty)", false);
+            AddButtons("커밋");
+        }
+    }
+
+    /// <summary>되돌릴 수 없는 강제 옵션의 확인: 경고 문구 + 확인 체크를 해야 실행 버튼이 켜진다.</summary>
+    public sealed class GitForceConfirmDialog : GitDialogBase
+    {
+        private readonly CheckBox _force;
+        private readonly CheckBox _confirm;
+
+        /// <summary>강제 옵션을 켰는지. 끄고 확인하면 일반(안전한) 동작.</summary>
+        public bool Force => _force.IsChecked == true;
+
+        public GitForceConfirmDialog(string title, string description, string forceText, string warning, string okText) : base(title, 500)
+        {
+            AddText(description);
+            _force = AddCheck(forceText, false);
+            var warningText = AddText("⚠ " + warning, warning: true, top: 6);
+            _confirm = AddCheck("되돌릴 수 없다는 것을 이해했습니다", false);
+            var ok = AddButtons(okText);
+
+            void Update()
+            {
+                var force = _force.IsChecked == true;
+                warningText.Visibility = _confirm.Visibility = force ? Visibility.Visible : Visibility.Collapsed;
+                ok.IsEnabled = !force || _confirm.IsChecked == true;
+            }
+            _force.Checked += (s, e) => Update();
+            _force.Unchecked += (s, e) => Update();
+            _confirm.Checked += (s, e) => Update();
+            _confirm.Unchecked += (s, e) => Update();
+            Update();
+        }
+    }
 }

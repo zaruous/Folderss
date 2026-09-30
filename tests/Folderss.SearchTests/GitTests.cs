@@ -1098,5 +1098,141 @@ namespace Folderss.SearchTests
             Assert.True(list[2].IsPrunable);
             Assert.Contains("prune", list[2].DisplayText);
         }
+
+        // ── ▾ 옵션: pull · push · fetch · 커밋 · 강제 삭제 ──────────────────────
+
+        /// <summary>bare 원격 + 두 클론(a, b). 둘 다 main이 origin/main을 추적한다.</summary>
+        private async Task<(string remote, string a, string b)> RemoteWithTwoClonesAsync(string name)
+        {
+            var remote = P(name + ".git");
+            Assert.True((await Git(null, "init", "--bare", "-b", "main", remote)).Success);
+            var a = P(name + "-a");
+            var b = P(name + "-b");
+            Assert.True((await Git(null, "clone", "-q", remote, a)).Success);
+            foreach (var repo in new[] { a })
+            {
+                await Git(repo, "config", "user.name", "t");
+                await Git(repo, "config", "user.email", "t@example.com");
+                await Git(repo, "config", "commit.gpgsign", "false");
+            }
+            await Git(a, "switch", "-q", "-c", "main");
+            File.WriteAllText(Path.Combine(a, "f.txt"), "base\n");
+            await CommitAllAsync(a, "base");
+            Assert.True((await Git(a, "push", "-q", "-u", "origin", "main")).Success);
+            Assert.True((await Git(null, "clone", "-q", remote, b)).Success);
+            await Git(b, "config", "user.name", "t");
+            await Git(b, "config", "user.email", "t@example.com");
+            await Git(b, "config", "commit.gpgsign", "false");
+            return (remote, a, b);
+        }
+
+        /// <summary>a와 b가 서로 다른 커밋을 해서 갈라진 상태를 만든다(b가 먼저 push).</summary>
+        private async Task DivergeAsync(string a, string b)
+        {
+            File.WriteAllText(Path.Combine(b, "b.txt"), "from b\n");
+            await CommitAllAsync(b, "b commit");
+            Assert.True((await Git(b, "push", "-q")).Success);
+            File.WriteAllText(Path.Combine(a, "a.txt"), "from a\n");
+            await CommitAllAsync(a, "a commit");
+        }
+
+        private static Task<GitResult> RunNet(string repo, System.Collections.Generic.IEnumerable<string> args) =>
+            GitCommandRunner.RunAsync(repo, args, GitCommandRunner.NetworkTimeout, CancellationToken.None);
+
+        [SkippableFact]
+        public async Task RealGit_PullModes_OnDivergedBranches_AndAutoStash()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+
+            var (_, a1, b1) = await RemoteWithTwoClonesAsync("pull-ff");
+            await DivergeAsync(a1, b1);
+            Assert.False((await RunNet(a1, GitSyncCommands.Pull(new GitPullOptions { Mode = GitPullMode.FastForwardOnly }))).Success);
+
+            var (_, a2, b2) = await RemoteWithTwoClonesAsync("pull-merge");
+            await DivergeAsync(a2, b2);
+            Assert.True((await RunNet(a2, GitSyncCommands.Pull(new GitPullOptions { Mode = GitPullMode.Merge }))).Success);
+            var head2 = GitOutputParser.ParseLog((await Git(a2, "log", "-z", "-n", "1", GitOutputParser.LogFormat)).StdOut).Single();
+            Assert.Equal(2, head2.Parents.Length);                              // 병합 커밋
+
+            var (_, a3, b3) = await RemoteWithTwoClonesAsync("pull-rebase");
+            await DivergeAsync(a3, b3);
+            File.WriteAllText(Path.Combine(a3, "f.txt"), "dirty\n");           // 커밋 안 한 변경
+            Assert.False((await RunNet(a3, GitSyncCommands.Pull(new GitPullOptions { Mode = GitPullMode.Rebase }))).Success);
+            Assert.True((await RunNet(a3, GitSyncCommands.Pull(new GitPullOptions { Mode = GitPullMode.Rebase, AutoStash = true }))).Success);
+            var head3 = GitOutputParser.ParseLog((await Git(a3, "log", "-z", "-n", "1", GitOutputParser.LogFormat)).StdOut).Single();
+            Assert.Single(head3.Parents);                                       // 일직선
+            Assert.Equal("dirty\n", File.ReadAllText(Path.Combine(a3, "f.txt")));   // 변경 복원
+        }
+
+        [SkippableFact]
+        public async Task RealGit_PushWithUpstreamAndTags_AndFetchPruneTags()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (_, a, b) = await RemoteWithTwoClonesAsync("push");
+
+            await Git(a, "switch", "-q", "-c", "feature");
+            File.WriteAllText(Path.Combine(a, "n.txt"), "n\n");
+            await CommitAllAsync(a, "feature commit");
+            await Git(a, "tag", "-a", "v1", "-m", "release");
+            Assert.Null((await StatusAsync(a)).Upstream);
+            var push = await RunNet(a, GitSyncCommands.Push(new GitPushOptions { Remote = "origin", Branch = "feature", SetUpstream = true, FollowTags = true }));
+            Assert.True(push.Success, push.StdErr);
+            Assert.Equal("origin/feature", (await StatusAsync(a)).Upstream);
+
+            // b: 태그와 feature 받기 → 원격에서 feature 삭제 → prune으로 추적 참조 정리
+            Assert.True((await RunNet(b, GitSyncCommands.Fetch(new GitFetchOptions { Prune = true, Tags = true }))).Success);
+            Assert.Contains("v1", (await Git(b, "tag")).StdOut);
+            Assert.Contains("origin/feature", (await Git(b, "branch", "-r")).StdOut);
+            Assert.True((await Git(a, "push", "-q", "origin", "--delete", "feature")).Success);
+            Assert.True((await RunNet(b, GitSyncCommands.Fetch(new GitFetchOptions { Prune = false }))).Success);
+            Assert.Contains("origin/feature", (await Git(b, "branch", "-r")).StdOut);   // prune 안 하면 남음
+            Assert.True((await RunNet(b, GitSyncCommands.Fetch(new GitFetchOptions { Prune = true, AllRemotes = true }))).Success);
+            Assert.DoesNotContain("origin/feature", (await Git(b, "branch", "-r")).StdOut);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CommitOptions_AmendKeepsMessage_SignOff_AllowEmpty()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (repo, _, second) = await TwoCommitRepoAsync("commitopts");
+
+            File.WriteAllText(Path.Combine(repo, "g.txt"), "g\n");
+            await Git(repo, "add", "g.txt");
+            Assert.True((await RunArgs(repo, GitSyncCommands.Commit(null, new GitCommitOptions { Amend = true }))).Success);
+            var log = GitOutputParser.ParseLog((await Git(repo, "log", "-z", GitOutputParser.LogFormat)).StdOut);
+            Assert.Equal(2, log.Count);                                         // 커밋 수 그대로
+            Assert.Equal("second", log[0].Subject);                             // 메시지 유지
+            Assert.NotEqual(second, log[0].Hash);                               // 새 해시
+
+            var messageFile = P("msg.txt");
+            File.WriteAllText(messageFile, "empty one");
+            Assert.False((await RunArgs(repo, GitSyncCommands.Commit(messageFile, new GitCommitOptions()))).Success);   // 스테이지 없음
+            Assert.True((await RunArgs(repo, GitSyncCommands.Commit(messageFile, new GitCommitOptions { AllowEmpty = true, SignOff = true }))).Success);
+            var body = (await Git(repo, "log", "-1", "--format=%B")).StdOut;
+            Assert.Contains("empty one", body);
+            Assert.Contains("Signed-off-by: t <t@example.com>", body);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_ForceDeleteBranch_AndForceRemoveDirtyWorktree()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (repo, _, _) = await TwoCommitRepoAsync("force");
+            await Git(repo, "switch", "-q", "-c", "unmerged");
+            File.WriteAllText(Path.Combine(repo, "u.txt"), "u\n");
+            await CommitAllAsync(repo, "unmerged work");
+            await Git(repo, "switch", "-q", "main");
+
+            Assert.False((await RunArgs(repo, GitSyncCommands.DeleteBranch("unmerged", force: false))).Success);
+            Assert.True((await RunArgs(repo, GitSyncCommands.DeleteBranch("unmerged", force: true))).Success);
+            Assert.DoesNotContain("unmerged", (await Git(repo, "branch")).StdOut);
+
+            var wt = P("force-wt");
+            Assert.True((await RunArgs(repo, GitRefCommands.WorktreeAdd(wt, "wtb", null))).Success);
+            File.WriteAllText(Path.Combine(wt, "dirty.txt"), "x");
+            Assert.False((await RunArgs(repo, GitRefCommands.WorktreeRemove(wt))).Success);
+            Assert.True((await RunArgs(repo, GitRefCommands.WorktreeRemove(wt, force: true))).Success);
+            Assert.False(Directory.Exists(wt));
+        }
     }
 }
