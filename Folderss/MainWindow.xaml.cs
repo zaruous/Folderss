@@ -59,6 +59,7 @@ namespace Folderss
         public MainWindow()
         {
             InitializeComponent();
+            PluginManager.OpenFileHandler = OpenViewerTab;
 
             // ViewerHost가 문서 탭 전환 방지를 위해 Handled 처리한 WebView2 발생 Home/End를
             // 라우팅 마지막 단계(Window)에서 되돌려, WebView2 래퍼가 브라우저 기본 동작
@@ -1865,6 +1866,44 @@ namespace Folderss
                     .FirstOrDefault(host => host != null && host.IsKeyboardFocusWithin);
 
             return viewerHost != null && viewerHost.HandleShortcut(e, _keyBindingService);
+        }
+
+        /// <summary>⋯ 메뉴 > 플러그인: 열 때마다 plugins 폴더의 zip 목록으로 다시 채운다 (플러그인 자체는 선택할 때 로드).</summary>
+        private void PluginsMenu_SubmenuOpened(object sender, RoutedEventArgs e)
+        {
+            if (!ReferenceEquals(e.OriginalSource, PluginsMenuItem))
+                return;
+
+            var errors = new List<string>();
+            var plugins = PluginManager.ListInstalled(errors);
+            PluginsMenuItem.Items.Clear();
+            foreach (var manifest in plugins)
+            {
+                var item = new System.Windows.Controls.MenuItem
+                {
+                    Header = manifest.DisplayName,
+                    ToolTip = string.IsNullOrWhiteSpace(manifest.Description)
+                        ? manifest.Id + " " + manifest.Version
+                        : manifest.Description + "\n" + manifest.Id + " " + manifest.Version
+                };
+                var target = manifest;
+                item.Click += (s, args) => PluginManager.ShowPluginWindow(target, this);
+                PluginsMenuItem.Items.Add(item);
+            }
+            if (plugins.Count == 0)
+                PluginsMenuItem.Items.Add(new System.Windows.Controls.MenuItem { Header = "(등록된 플러그인 없음)", IsEnabled = false });
+            if (errors.Count > 0)
+                PluginsMenuItem.Items.Add(new System.Windows.Controls.MenuItem
+                {
+                    Header = string.Format("읽지 못한 플러그인 {0}개", errors.Count),
+                    ToolTip = string.Join("\n", errors),
+                    IsEnabled = false
+                });
+
+            PluginsMenuItem.Items.Add(new System.Windows.Controls.Separator());
+            var manage = new System.Windows.Controls.MenuItem { Header = "플러그인 관리…" };
+            manage.Click += (s, args) => OpenSettings(this, "Plugins");
+            PluginsMenuItem.Items.Add(manage);
         }
 
         private void Settings_Click(object sender, RoutedEventArgs e)

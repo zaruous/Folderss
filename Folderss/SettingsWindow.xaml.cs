@@ -1,4 +1,5 @@
 using Folderss.Models;
+using Folderss.Plugins;
 using Folderss.Services;
 using System;
 using System.Collections.Generic;
@@ -25,6 +26,15 @@ namespace Folderss
             set { _viewerKey = value; PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(ViewerKey))); }
         }
         public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+    }
+
+    public class PluginListItem
+    {
+        public PluginManifest Manifest { get; set; }
+        public string Name { get { return Manifest.DisplayName; } }
+        public string Version { get { return Manifest.Version; } }
+        public string Id { get { return Manifest.Id; } }
+        public string Status { get; set; }
     }
 
     public class ViewerOption
@@ -167,6 +177,7 @@ namespace Folderss
 
             InitializeGitPanel();
             InitializeDiffPanel();
+            InitializePluginPages();
 
             TabNav.SelectedIndex = 0;
         }
@@ -343,6 +354,9 @@ namespace Folderss
             ConsolePanel.Visibility   = tag == "Console"   ? Visibility.Visible : Visibility.Collapsed;
             GitPanel.Visibility       = tag == "Git"       ? Visibility.Visible : Visibility.Collapsed;
             DiffPanel.Visibility      = tag == "Diff"      ? Visibility.Visible : Visibility.Collapsed;
+            PluginsPanel.Visibility   = tag == "Plugins"   ? Visibility.Visible : Visibility.Collapsed;
+            foreach (var page in _pluginPages)
+                page.Panel.Visibility = ReferenceEquals(item, page.NavItem) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void AddViewer_Click(object sender, RoutedEventArgs e)
@@ -499,6 +513,8 @@ namespace Folderss
             TrySave(failures, "테마", "theme.txt", ThemeManager.SaveCurrentTheme);
             TrySave(failures, "Git", "git-settings.xml", () => GitSettingsService.Save(_workingGit));
             TrySave(failures, "비교", "diff-settings.xml", () => DiffSettingsService.Save(_workingDiff));
+            foreach (var page in _pluginPages.Where(p => p.ViewCreated))
+                TrySave(failures, "플러그인: " + page.Title, page.PluginId, page.Page.Save);
             SavedGitSettings = _workingGit.Clone();
             SavedDiffSettings = _workingDiff.Clone();
 
@@ -777,6 +793,150 @@ namespace Folderss
                 case ViewerConfigService.BuiltInTextKey: return "Text";
                 default: return key;
             }
+        }
+
+        // ── 플러그인 ────────────────────────────────────────────────────────
+
+        private sealed class PluginPageEntry
+        {
+            public string PluginId;
+            public string Title;
+            public IPluginSettingsPage Page;
+            public ListBoxItem NavItem;
+            public FrameworkElement Panel;
+            public bool ViewCreated;
+        }
+
+        private readonly List<PluginPageEntry> _pluginPages = new List<PluginPageEntry>();
+
+        /// <summary>
+        /// 플러그인 목록을 채우고, 설정 탭이 있다고 선언한(plugin.json hasSettings) 플러그인을 로드해 탭을 붙인다.
+        /// 플러그인 코드(로드·Title·CreateView) 실패는 그 탭/행에만 표시하고 설정 창은 계속 연다.
+        /// </summary>
+        private void InitializePluginPages()
+        {
+            var items = RefreshPluginList();
+            foreach (var row in items.Where(r => r.Manifest.HasSettings))
+            {
+                string error;
+                var loaded = PluginManager.TryLoad(row.Manifest, out error);
+                if (loaded == null)
+                {
+                    row.Status = "로드 실패: " + error;
+                    continue;
+                }
+                row.Status = "로드됨";
+                foreach (var page in loaded.Host.SettingsPages)
+                    AddPluginPage(row.Manifest, page);
+            }
+            PluginList.Items.Refresh();
+        }
+
+        private void AddPluginPage(PluginManifest manifest, IPluginSettingsPage page)
+        {
+            var entry = new PluginPageEntry { PluginId = manifest.Id, Page = page };
+            try { entry.Title = page.Title; } catch { }
+            if (string.IsNullOrWhiteSpace(entry.Title))
+                entry.Title = manifest.DisplayName;
+
+            FrameworkElement view;
+            try
+            {
+                view = page.CreateView();
+                entry.ViewCreated = view != null;
+                if (view == null)
+                    view = new TextBlock { Text = "설정 화면이 없습니다 (CreateView()가 null)." };
+            }
+            catch (Exception ex)
+            {
+                view = new TextBlock { Text = "플러그인 설정 화면을 만들지 못했습니다.\n\n" + ex.GetType().Name + ": " + ex.Message, TextWrapping = TextWrapping.Wrap };
+            }
+
+            entry.Panel = new Border { Margin = new Thickness(24, 16, 24, 16), Child = view, Visibility = Visibility.Collapsed };
+            entry.NavItem = new ListBoxItem { Content = new TextBlock { Text = entry.Title }, ToolTip = manifest.Id };
+            ContentHost.Children.Add(entry.Panel);
+            TabNav.Items.Add(entry.NavItem);
+            _pluginPages.Add(entry);
+        }
+
+        private List<PluginListItem> RefreshPluginList()
+        {
+            var errors = new List<string>();
+            var items = PluginManager.ListInstalled(errors)
+                .Select(m => new PluginListItem { Manifest = m, Status = PluginManager.IsLoaded(m.Id) ? "로드됨" : string.Empty })
+                .ToList();
+            PluginList.ItemsSource = items;
+            PluginErrorText.Text = errors.Count == 0 ? string.Empty : string.Format("읽지 못한 zip {0}개", errors.Count);
+            PluginErrorText.ToolTip = errors.Count == 0 ? null : string.Join("\n", errors);
+            return items;
+        }
+
+        private void PluginBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new OpenFileDialog { Title = "플러그인 찾기", Filter = "플러그인 zip (*.zip)|*.zip" };
+            if (dialog.ShowDialog(this) != true)
+                return;
+
+            PluginManifest manifest;
+            try
+            {
+                manifest = PluginPackage.ReadManifest(dialog.FileName);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("플러그인 파일이 아닙니다.\n\n" + ex.Message, "플러그인 찾기", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            var exists = File.Exists(PluginPackage.GetPackagePath(PluginManager.PluginsDirectory, manifest.Id));
+            var message = string.Format(
+                "{0} {1} ({2})\n\n플러그인은 Folderss와 같은 권한으로 실행되어 파일을 읽고 쓰거나 프로그램을 실행할 수 있습니다. " +
+                "신뢰할 수 있는 출처의 플러그인만 추가하세요.{3}\n\n추가할까요?",
+                manifest.DisplayName, manifest.Version, manifest.Id,
+                exists ? "\n\n같은 ID의 플러그인이 이미 있어 교체합니다." : string.Empty);
+            if (MessageBox.Show(message, "플러그인 추가", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                PluginPackage.Install(dialog.FileName, PluginManager.PluginsDirectory);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("플러그인을 추가하지 못했습니다.\n\n" + ex.Message + "\n\n저장 위치: " + PluginManager.PluginsDirectory,
+                    "플러그인 추가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            RefreshPluginList();
+            if (PluginManager.IsLoaded(manifest.Id))
+                MessageBox.Show("이미 로드된 플러그인이라 교체한 버전은 다시 시작한 뒤에 적용됩니다.", "플러그인 추가",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        private void PluginRemove_Click(object sender, RoutedEventArgs e)
+        {
+            var row = PluginList.SelectedItem as PluginListItem;
+            if (row == null)
+                return;
+            if (MessageBox.Show(string.Format("{0}({1})을 제거할까요?\n플러그인 설정·데이터(plugin-data)는 남겨 둡니다.", row.Name, row.Id),
+                    "플러그인 제거", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+
+            try
+            {
+                File.Delete(row.Manifest.PackagePath);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("플러그인을 제거하지 못했습니다.\n\n" + ex.Message, "플러그인 제거", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            RefreshPluginList();
+            if (PluginManager.IsLoaded(row.Id))
+                MessageBox.Show("이미 로드된 플러그인은 다시 시작할 때까지 메모리에 남아 있습니다.", "플러그인 제거",
+                    MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         private void Cancel_Click(object sender, RoutedEventArgs e)

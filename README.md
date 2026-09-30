@@ -69,6 +69,9 @@ Folderss/
 │   ├── ConsoleSessionService   — 콘솔 프로필/외부 터미널 실행 관리
 │   ├── UpdateService           — GitHub 최신 릴리스 확인·다운로드
 │   ├── ShellContextMenuService — Windows 쉘 우클릭 컨텍스트 메뉴
+│   ├── PluginManager           — 플러그인 로드(전용 AssemblyLoadContext)·팝업·본체 기능 제공(IPluginManager), 플러그인 예외 격리
+│   ├── PluginPackage           — 플러그인 zip 검증(plugin.json)·등록·안전한 압축 해제(Zip Slip 차단)
+│   ├── PluginSettingsStore     — 플러그인별 키/값 설정 저장
 │   ├── SettingsFile            — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 후 교체)
 │   └── ThemeManager            — 테마 전환 및 저장
 ├── Converters/
@@ -86,6 +89,10 @@ Folderss/
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
+
+Folderss.PluginContract/     — 플러그인 계약 DLL (IFolderssPlugin, IPluginManager, IFolderPanel, IPluginSettingsPage)
+samples/
+└── HelloPlugin              — 폴더 패널 팝업 + 설정 탭 예제 플러그인 (빌드하면 HelloPlugin.zip 생성)
 
 tests/
 └── Folderss.SearchTests        — 검색 로직 xUnit 회귀 테스트 (`net8.0`, 앱 솔루션과 분리)
@@ -158,6 +165,7 @@ tests/
 - 뷰어에서 편집 후 저장하지 않은 변경은 탭 제목 끝의 ` *`로 표시되고, 탭을 닫거나 앱을 종료할 때 확인함
 - Markdown·Monaco 뷰어 안에서 `Ctrl+F`는 전역 파일 검색 대신 문서 내 검색을 엶
 - `보기 > 콘솔` 하단 터미널 패널에서 PowerShell 7, Windows PowerShell, 명령 프롬프트 실행
+- `⋯ 메뉴 > 플러그인`에서 등록한 플러그인을 팝업 창으로 실행 (아래 [플러그인](#플러그인) 참고)
 - `⋯ 메뉴 > Git 저장소…`로 선택한 폴더 아래의 여러 Git 저장소를 한 창에서 관리 (아래 [Git](#git) 참고)
 - `보기 > 디스크 사용량 보기`로 드라이브별 사용량을 가로바와 GB 단위(총량/사용량/여유 공간)로 표시, 즐겨찾기 위 미니 패널로 상시 확인 가능
 - Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
@@ -252,6 +260,25 @@ Git 창의 diff, 두 파일 비교 창, HTML 보고서가 함께 쓰는 옵션�
 - 직접 지정 인수의 `{left}`·`{right}`는 비교할 두 파일(또는 폴더)로 바뀝니다. Git 비교에서는 도구가 **창을 닫을 때까지 종료되지 않아야** 합니다 — git이 도구 종료 뒤 임시 파일을 지웁니다(VS Code는 `--wait`, WinMerge는 단일 인스턴스 옵션을 끄세요). 두 파일 비교는 원래 파일을 그대로 넘깁니다.
 - 사용자 `.gitconfig`는 바꾸지 않습니다. 직접 지정 도구는 실행할 때만 `-c difftool.folderss.cmd=…`로 등록합니다.
 - 범위 밖: 충돌 해결, merge/rebase 명령, 화면의 좌우 나란히(side-by-side) diff(양옆 배치는 HTML 보고서에서만) — 필요하면 `콘솔`이나 외부 도구에서 처리합니다.
+
+## 플러그인
+
+`설정 > 플러그인 > 플러그인 찾기…`로 플러그인 zip을 등록하면 `⋯ 메뉴 > 플러그인`에 나타납니다.
+메뉴에서 처음 선택할 때 zip을 풀고 로드해 팝업 창을 엽니다.
+
+- 플러그인 zip 루트에는 `plugin.json`과 진입점 DLL이 있어야 합니다.
+  ```json
+  { "id": "sample.hello", "name": "Hello 플러그인", "version": "1.0.0", "description": "...",
+    "assembly": "HelloPlugin.dll", "type": "HelloPlugin.HelloPlugin", "hasSettings": true }
+  ```
+- 진입점 형식은 `Folderss.PluginContract`의 `IFolderssPlugin`(`Initialize`, `CreateView`)을 구현합니다.
+  `Initialize`로 받는 `IPluginManager`가 폴더 패널 생성(`CreateFolderPanel`), 플러그인 설정(`GetSetting`/`SetSetting`),
+  데이터 폴더, 설정 창 탭 추가(`AddSettingsPage`)를 제공합니다. 예제는 `samples/HelloPlugin`을 참고하세요.
+- `hasSettings`가 `true`인 플러그인은 설정 창을 열 때 로드되어 탭이 붙습니다. 탭의 저장은 설정 창 `저장` 버튼에서 함께 실행됩니다.
+- 플러그인 로드·초기화·화면 생성 실패와 플러그인 코드에서 난 UI 스레드 예외는 메시지로 알리고 Folderss는 계속 실행됩니다.
+  단, 플러그인이 만든 별도 스레드의 예외, 스택 오버플로, 네이티브 크래시는 같은 프로세스라 막을 수 없습니다.
+- **플러그인은 Folderss와 같은 권한으로 실행됩니다.** 신뢰할 수 있는 출처의 플러그인만 추가하세요.
+- 로드한 플러그인은 종료할 때까지 메모리에 남습니다. 제거·교체는 다시 시작한 뒤에 반영됩니다.
 
 ## 디스크 사용량
 
@@ -357,6 +384,8 @@ Folderss\Themes\Controls.xaml
 | `panel-locks.xml` | 닫기를 잠근 패널 목록 |
 | `dock-layout.xml` | AvalonDock 패널 배치 |
 | `dock-layout.xml.version` | 레이아웃 호환성 버전 |
+| `plugins\<id>.zip` | 등록한 플러그인 (`plugins\extracted\`에 압축 해제본) |
+| `plugin-data\<id>\settings.json` | 플러그인별 설정 |
 
 ## 단축키
 

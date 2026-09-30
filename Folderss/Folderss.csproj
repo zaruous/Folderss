@@ -38,6 +38,10 @@
   </Target>
 
   <ItemGroup>
+    <ProjectReference Include="..\Folderss.PluginContract\Folderss.PluginContract.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
     <Resource Include="app.ico" />
   </ItemGroup>
 
