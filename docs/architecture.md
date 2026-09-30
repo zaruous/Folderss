@@ -8,7 +8,7 @@ Folderss/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
-│   ├── GitDiffView.xaml/.cs        — Git 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
+│   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
@@ -40,7 +40,7 @@ Folderss/
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
 │   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
-│   ├── GitDiffCommands.cs          — diff·upstream 비교 명령 인수 (UI·테스트 공용)
+│   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml) + 외부 비교 도구 프리셋
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
 │   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
@@ -71,6 +71,7 @@ Folderss/
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
+├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, GitDiffView + `git diff --no-index`), 코드로 구성
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── AboutWindow.cs                  — 정보 창
@@ -307,6 +308,13 @@ Folderss/
   직접 지정은 `-c difftool.folderss.cmd=<BuildToolCommand>` + `--tool=folderss`로 이번 실행에만 등록 — `{left}`/`{right}`는 항상
   `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,
   동시 실행 제한 밖(`throttle: false`), 창 수명 토큰 미사용(Git 창을 닫아도 도구는 유지). 2초 안에 끝나면 "바로 종료" 안내.
+- 두 파일 비교: 폴더 패널에서 파일 두 개(폴더 제외)를 고르고 우클릭하면 셸 메뉴 맨 위에 `선택한 두 파일 비교`가 붙는다
+  (`FolderBrowser.CompareFilesRequested`, 목록에 보이는 순서로 왼쪽/오른쪽). `MainWindow`가 `FileCompareWindow`를 연다 —
+  Git diff 경로를 그대로 재사용한다: `GitDiffCommands.Files`(`diff --no-index -- <왼쪽> <오른쪽>`, 저장소 불필요) → `GitDiffView`.
+  공백 무시·대체 인코딩·보기 모드 초기값은 Git 설정을 따른다. `--no-index` 출력의 경로는 git이 앞의 `/`를 떼는 등 원래 경로로
+  되돌릴 수 없어, UTF-16 BOM 재비교는 `GitEncodingDiff.ExpandAsync`(저장소 상대 경로) 대신 받은 두 경로를 직접 읽는
+  `ExpandFilesAsync`로 한다. `GitDiffView`의 보기 모드 상자는 `NoIndex && OldSide == null`(추적 안 됨 = 전체 추가)일 때만 숨긴다.
+  git이 없으면 비교 창에 오류 문구만 보인다. 외부 비교 도구 버튼은 두 파일 비교에서 지원하지 않는다(`ExternalSelector` 없음).
 - 브랜치 전환·pull 전 `MainWindow.CountModifiedDocumentsUnder(repo)`로 그 저장소 파일의 미저장 뷰어 탭을 세어 경고한다.
 - 회귀 테스트: `tests/Folderss.SearchTests/GitTests.cs`(탐색, 파서, 실제 git 왕복 — git 없으면 건너뜀).
 

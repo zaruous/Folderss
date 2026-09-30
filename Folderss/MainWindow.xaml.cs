@@ -670,9 +670,16 @@ namespace Folderss
             browser.Activated -= Pane_Activated;
             browser.PathChanged -= FolderBrowser_PathChanged;
             browser.FileOpenRequested -= Browser_FileOpenRequested;
+            browser.CompareFilesRequested -= Browser_CompareFilesRequested;
             browser.Activated += Pane_Activated;
             browser.PathChanged += FolderBrowser_PathChanged;
             browser.FileOpenRequested += Browser_FileOpenRequested;
+            browser.CompareFilesRequested += Browser_CompareFilesRequested;
+        }
+
+        private void Browser_CompareFilesRequested(object sender, string[] files)
+        {
+            new FileCompareWindow(files[0], files[1], CurrentGitSettings) { Owner = this }.Show();
         }
 
         private void Browser_FileOpenRequested(object sender, string filePath)

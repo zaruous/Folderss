@@ -109,8 +109,8 @@ namespace Folderss.Controls
             CurrentRequest = request;
             // 외부 도구로 열 수 없는 비교(추적 안 됨, 최초 커밋)는 버튼을 숨긴다.
             ExternalToolButton.Visibility = request?.ExternalSelector != null ? Visibility.Visible : Visibility.Collapsed;
-            // 추적 안 되는 파일은 원래 전체가 추가로 보이므로 보기 모드가 의미 없다.
-            ViewModeCombo.Visibility = request != null && !request.NoIndex ? Visibility.Visible : Visibility.Collapsed;
+            // 추적 안 되는 파일(빈 쪽 ↔ 파일)은 원래 전체가 추가로 보이므로 보기 모드가 의미 없다. 두 파일 비교(--no-index)는 보인다.
+            ViewModeCombo.Visibility = request != null && !(request.NoIndex && request.OldSide == null) ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void ViewModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)

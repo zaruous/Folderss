@@ -111,6 +111,22 @@ namespace Folderss.Services
             };
         }
 
+        /// <summary>
+        /// 폴더 패널에서 고른 임의의 두 파일(저장소 밖이어도 됨). 절대 경로를 그대로 넘긴다. 차이가 있으면 종료 코드 1(<see cref="IsSuccess"/>).
+        /// 양쪽 모두 파일이 있으므로 <see cref="GitDiffRequest.OldSide"/>를 비우지 않는다 — 보기 모드를 고를 수 있게.
+        /// UTF-16 BOM 재비교는 저장소 상대 경로를 쓰는 <see cref="GitEncodingDiff.ExpandAsync"/>가 아니라 <see cref="GitEncodingDiff.ExpandFilesAsync"/>로 한다.
+        /// </summary>
+        public static GitDiffRequest Files(string oldFile, string newFile, bool ignoreWhitespace = false)
+        {
+            return new GitDiffRequest
+            {
+                Arguments = Diff(ignoreWhitespace, new[] { "--no-index" }, PathSelector(oldFile, newFile)),
+                NoIndex = true,
+                OldSide = WorkTreeSide,
+                NewSide = WorkTreeSide
+            };
+        }
+
         /// <summary>두 리비전 비교. 예: <c>@{u}...HEAD</c>(push로 보낼 변경), <c>HEAD...@{u}</c>(pull로 받을 변경).</summary>
         public static GitDiffRequest Range(string range, bool ignoreWhitespace = false)
         {

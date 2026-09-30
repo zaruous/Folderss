@@ -52,6 +52,8 @@ namespace Folderss.Controls
         public event EventHandler Activated;
         public event EventHandler PathChanged;
         public event EventHandler<string> FileOpenRequested;
+        /// <summary>파일 두 개를 골라 "선택한 두 파일 비교"를 눌렀다. 목록 순서대로 [왼쪽(변경 전), 오른쪽(변경 후)].</summary>
+        public event EventHandler<string[]> CompareFilesRequested;
 
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
@@ -1214,6 +1216,18 @@ namespace Folderss.Controls
                     };
                 })
                 .ToList();
+
+            // 파일 두 개(폴더 제외)를 골랐을 때만. 선택 순서가 아니라 목록에 보이는 순서로 왼쪽/오른쪽을 정한다.
+            var selectedFiles = SelectedItems.Where(item => !item.IsDirectory).OrderBy(item => FileList.Items.IndexOf(item)).ToList();
+            if (selectedFiles.Count == 2 && SelectedItems.Count == 2)
+            {
+                var pair = new[] { selectedFiles[0].FullPath, selectedFiles[1].FullPath };
+                customItems.Insert(0, new ShellContextMenuService.CustomMenuItem
+                {
+                    Label = "선택한 두 파일 비교",
+                    Invoke = () => CompareFilesRequested?.Invoke(this, pair)
+                });
+            }
 
             var screenPoint = PointToScreen(e.GetPosition(this));
             try

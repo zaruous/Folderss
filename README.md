@@ -80,6 +80,7 @@ Folderss/
 ├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔·Git 설정
 ├── GitDialogs                  — Git reset·새 브랜치·체크아웃·워킹트리 선택 대화상자
 ├── GitWindow                   — 다중 저장소 Git 창 (상태·스테이지·커밋·브랜치·로그·fetch/pull/push)
+├── FileCompareWindow           — 폴더 패널에서 고른 두 파일 비교 창 (Git diff 뷰 재사용)
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
@@ -115,6 +116,7 @@ tests/
 - 메인 메뉴와 문서 탭 우클릭 메뉴에서 Windows 탐색기 열기: 폴더 선택 시 해당 폴더를 열고, 파일 선택 시 상위 폴더에서 그 파일이 선택된 상태로 엶
 - 파일 및 폴더의 Windows 컨텍스트 메뉴
 - 확장자·폴더별 사용자 지정 `다음으로 열기` 프로그램
+- 파일 두 개를 골라 우클릭 > `선택한 두 파일 비교`: 목록 위쪽 파일을 왼쪽(변경 전)으로 한 줄 단위 diff 창을 엶. Git 창과 같은 diff 뷰(보기 모드, `Ctrl+C`)이며 `git diff --no-index`를 쓰므로 git 설치가 필요하고, 저장소 밖 파일도 비교됨. 공백 무시·대체 인코딩은 `설정 > Git`을 따름
 - 반대편 패널로 복사 및 이동
 - Explorer 및 다른 패널과의 파일 드래그 앤 드롭
 - 이름 변경, 새 폴더, 새 파일, 휴지통 삭제, `Shift+Delete` 영구 삭제
