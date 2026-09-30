@@ -28,6 +28,7 @@
     <Compile Include="..\..\Folderss\Services\GitOutputParser.cs" Link="Linked\GitOutputParser.cs" />
     <Compile Include="..\..\Folderss\Services\GitCommandRunner.cs" Link="Linked\GitCommandRunner.cs" />
     <Compile Include="..\..\Folderss\Services\GitDiffCommands.cs" Link="Linked\GitDiffCommands.cs" />
+    <Compile Include="..\..\Folderss\Services\GitSettingsService.cs" Link="Linked\GitSettingsService.cs" />
   </ItemGroup>
 
   <ItemGroup>

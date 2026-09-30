@@ -53,11 +53,45 @@ namespace Folderss
         private string _editingConsoleProfileKey;
         private bool _initializingTheme;
         private readonly AppTheme _originalTheme;
+        private readonly GitSettings _workingGit;
         public IReadOnlyList<ViewerOption> ViewerOptions { get; }
+
+        /// <summary>저장을 누른 뒤의 Git 설정(파일 저장이 실패해도 이번 실행에는 적용할 값). 저장 전이면 null.</summary>
+        public GitSettings SavedGitSettings { get; private set; }
+
+        private const int GitTabIndex = 5;
+
+        private static readonly (GitBaseFolderMode Value, string Text)[] GitBaseFolderChoices =
+        {
+            (GitBaseFolderMode.SelectedFolderFirst, "선택한 폴더 우선 (없으면 현재 폴더)"),
+            (GitBaseFolderMode.CurrentFolder, "항상 패널의 현재 폴더")
+        };
+
+        private static readonly (GitPullMode Value, string Text)[] GitPullChoices =
+        {
+            (GitPullMode.FastForwardOnly, "fast-forward만 (--ff-only, 권장)"),
+            (GitPullMode.Merge, "병합 허용 (--no-rebase)"),
+            (GitPullMode.Rebase, "rebase (--rebase)"),
+            (GitPullMode.UseGitConfig, "git 설정 따름 (pull.rebase / pull.ff)")
+        };
+
+        private static readonly (GitFallbackEncoding Value, string Text)[] GitEncodingChoices =
+        {
+            (GitFallbackEncoding.SystemAnsi, "시스템 기본 코드 페이지 (한국어 Windows: CP949)"),
+            (GitFallbackEncoding.Cp949, "CP949 (EUC-KR)"),
+            (GitFallbackEncoding.None, "사용 안 함 (UTF-8로만 읽기)")
+        };
+
+        private static readonly (GitDiffToolMode Value, string Text)[] GitDiffToolChoices =
+        {
+            (GitDiffToolMode.None, "사용 안 함 (내장 diff만)"),
+            (GitDiffToolMode.GitConfig, "git 설정의 difftool 사용"),
+            (GitDiffToolMode.Custom, "직접 지정 (실행 파일 + 인수)")
+        };
 
         public SettingsWindow(KeyBindingService service) : this(service, new ViewerConfigService()) { }
 
-        public SettingsWindow(KeyBindingService service, ViewerConfigService viewerConfig)
+        public SettingsWindow(KeyBindingService service, ViewerConfigService viewerConfig, GitSettings gitSettings = null)
         {
             _service = service;
             _viewerConfig = viewerConfig;
@@ -88,6 +122,7 @@ namespace Folderss
             _consoleProfileOptions = new ObservableCollection<ConsoleProfileOption>();
 
             _originalTheme = ThemeManager.CurrentTheme;
+            _workingGit = (gitSettings ?? GitSettingsService.Load()).Clone();
 
             InitializeComponent();
             DataContext = this;
@@ -115,7 +150,146 @@ namespace Folderss
             GitHubThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.GitHub;
             _initializingTheme = false;
 
+            InitializeGitPanel();
+
             TabNav.SelectedIndex = 0;
+        }
+
+        /// <summary>지정한 탭(ListBoxItem Tag)을 연다. 예: Git 창의 설정 버튼 → "Git".</summary>
+        public void SelectTab(string tag)
+        {
+            var item = TabNav.Items.OfType<ListBoxItem>().FirstOrDefault(i => (i.Tag as string) == tag);
+            if (item != null)
+                TabNav.SelectedItem = item;
+        }
+
+        // ── Git ─────────────────────────────────────────────────────────────
+
+        private void InitializeGitPanel()
+        {
+            GitPathBox.Text = _workingGit.GitExecutablePath;
+            var saved = GitCommandRunner.ConfiguredGitPath;
+            GitCommandRunner.ConfiguredGitPath = string.Empty;
+            var detected = GitCommandRunner.FindGit();
+            GitCommandRunner.ConfiguredGitPath = saved;
+            GitDetectedText.Text = detected != null ? "자동 탐색 결과: " + detected : "자동 탐색으로 git을 찾지 못했습니다. Git for Windows(2.26 이상)를 설치하거나 경로를 지정하세요.";
+
+            FillCombo(GitBaseFolderCombo, GitBaseFolderChoices.Select(c => c.Text), Array.FindIndex(GitBaseFolderChoices, c => c.Value == _workingGit.BaseFolderMode));
+            FillCombo(GitPullModeCombo, GitPullChoices.Select(c => c.Text), Array.FindIndex(GitPullChoices, c => c.Value == _workingGit.PullMode));
+            GitScanDepthBox.Text = _workingGit.ScanDepth.ToString();
+            GitExcludedBox.Text = string.Join(Environment.NewLine, _workingGit.ExcludedFolders);
+            GitLogLimitBox.Text = _workingGit.LogLimit.ToString();
+            GitLogAllCheck.IsChecked = _workingGit.LogAllBranches;
+            GitIgnoreWhitespaceCheck.IsChecked = _workingGit.IgnoreWhitespace;
+            FillCombo(GitFallbackEncodingCombo, GitEncodingChoices.Select(c => c.Text), Array.FindIndex(GitEncodingChoices, c => c.Value == _workingGit.FallbackEncoding));
+            FillCombo(GitDiffToolPresetCombo, GitSettingsService.DiffToolPresets.Select(p => p.Name), 0);
+            GitDiffToolPathBox.Text = _workingGit.DiffToolPath;
+            GitDiffToolArgsBox.Text = _workingGit.DiffToolArguments;
+            FillCombo(GitDiffToolModeCombo, GitDiffToolChoices.Select(c => c.Text), Array.FindIndex(GitDiffToolChoices, c => c.Value == _workingGit.DiffToolMode));
+            UpdateGitDiffToolPanels();
+        }
+
+        private static void FillCombo(ComboBox combo, IEnumerable<string> items, int selectedIndex)
+        {
+            combo.ItemsSource = items.ToList();
+            combo.SelectedIndex = Math.Max(0, selectedIndex);
+        }
+
+        private void GitDiffToolModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdateGitDiffToolPanels();
+        }
+
+        private void UpdateGitDiffToolPanels()
+        {
+            if (GitCustomToolPanel == null || GitConfigToolHint == null)
+                return;
+            var mode = GitDiffToolChoices[Math.Max(0, GitDiffToolModeCombo.SelectedIndex)].Value;
+            GitCustomToolPanel.Visibility = mode == GitDiffToolMode.Custom ? Visibility.Visible : Visibility.Collapsed;
+            GitConfigToolHint.Visibility = mode == GitDiffToolMode.GitConfig ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void GitDiffToolPresetApply_Click(object sender, RoutedEventArgs e)
+        {
+            var index = GitDiffToolPresetCombo.SelectedIndex;
+            if (index < 0)
+                return;
+            var preset = GitSettingsService.DiffToolPresets[index];
+            var path = preset.ResolvePath();
+            GitDiffToolPathBox.Text = path;
+            GitDiffToolArgsBox.Text = preset.Arguments;
+            if (!File.Exists(path) || !string.IsNullOrEmpty(preset.Note))
+            {
+                MessageBox.Show(this,
+                    (File.Exists(path) ? string.Empty : preset.Name + "을(를) 기본 설치 위치에서 찾지 못했습니다. 실행 파일 경로를 직접 지정하세요.\n")
+                    + (preset.Note ?? string.Empty),
+                    "외부 비교 도구", MessageBoxButton.OK, MessageBoxImage.Information);
+            }
+        }
+
+        private void GitPathBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog { Title = "git 실행 파일 선택", Filter = "git.exe|git.exe|실행 파일 (*.exe)|*.exe", CheckFileExists = true };
+            if (dlg.ShowDialog(this) == true)
+                GitPathBox.Text = dlg.FileName;
+        }
+
+        private void GitDiffToolBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog { Title = "비교 도구 실행 파일 선택", Filter = "실행 파일 (*.exe)|*.exe|모든 파일 (*.*)|*.*", CheckFileExists = true };
+            if (dlg.ShowDialog(this) == true)
+                GitDiffToolPathBox.Text = dlg.FileName;
+        }
+
+        private bool GitSettingsError(string message, Control focus)
+        {
+            MessageBox.Show(this, message, "Git 설정 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+            TabNav.SelectedIndex = GitTabIndex;
+            focus.Focus();
+            (focus as TextBox)?.SelectAll();
+            return false;
+        }
+
+        /// <summary>Git 탭 입력을 검증해 <see cref="_workingGit"/>에 반영한다. 잘못된 값이 있으면 Git 탭을 열고 false.</summary>
+        private bool TryCollectGitSettings()
+        {
+            var gitPath = GitPathBox.Text.Trim().Trim('"');
+            if (gitPath.Length > 0 && !File.Exists(gitPath))
+                return GitSettingsError("지정한 git 실행 파일이 없습니다. 비우면 자동으로 찾습니다.", GitPathBox);
+
+            if (!int.TryParse(GitScanDepthBox.Text.Trim(), out var depth) || depth < GitSettingsService.MinScanDepth || depth > GitSettingsService.MaxScanDepth)
+                return GitSettingsError(string.Format("탐색 깊이는 {0}~{1} 사이 숫자여야 합니다.", GitSettingsService.MinScanDepth, GitSettingsService.MaxScanDepth), GitScanDepthBox);
+
+            if (!int.TryParse(GitLogLimitBox.Text.Trim(), out var logLimit) || logLimit < GitSettingsService.MinLogLimit || logLimit > GitSettingsService.MaxLogLimit)
+                return GitSettingsError(string.Format("로그 최대 개수는 {0}~{1} 사이 숫자여야 합니다.", GitSettingsService.MinLogLimit, GitSettingsService.MaxLogLimit), GitLogLimitBox);
+
+            var excluded = GitExcludedBox.Text
+                .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+                .Select(name => name.Trim())
+                .Where(name => name.Length > 0)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (excluded.Any(name => name.IndexOfAny(new[] { '\\', '/' }) >= 0))
+                return GitSettingsError("제외 폴더에는 경로가 아니라 폴더 이름만 적으세요 (예: node_modules).", GitExcludedBox);
+
+            var toolMode = GitDiffToolChoices[Math.Max(0, GitDiffToolModeCombo.SelectedIndex)].Value;
+            var toolPath = GitDiffToolPathBox.Text.Trim().Trim('"');
+            if (toolMode == GitDiffToolMode.Custom && !File.Exists(toolPath))
+                return GitSettingsError("외부 비교 도구 실행 파일이 없습니다. 경로를 지정하거나 사용 방식을 바꾸세요.", GitDiffToolPathBox);
+
+            _workingGit.GitExecutablePath = gitPath;
+            _workingGit.BaseFolderMode = GitBaseFolderChoices[Math.Max(0, GitBaseFolderCombo.SelectedIndex)].Value;
+            _workingGit.PullMode = GitPullChoices[Math.Max(0, GitPullModeCombo.SelectedIndex)].Value;
+            _workingGit.ScanDepth = depth;
+            _workingGit.ExcludedFolders = excluded;
+            _workingGit.LogLimit = logLimit;
+            _workingGit.LogAllBranches = GitLogAllCheck.IsChecked == true;
+            _workingGit.IgnoreWhitespace = GitIgnoreWhitespaceCheck.IsChecked == true;
+            _workingGit.FallbackEncoding = GitEncodingChoices[Math.Max(0, GitFallbackEncodingCombo.SelectedIndex)].Value;
+            _workingGit.DiffToolMode = toolMode;
+            _workingGit.DiffToolPath = toolPath;
+            _workingGit.DiffToolArguments = GitDiffToolArgsBox.Text.Trim();
+            return true;
         }
 
         private void TabNav_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -130,6 +304,7 @@ namespace Folderss
             ViewersPanel.Visibility   = tag == "Viewers"   ? Visibility.Visible : Visibility.Collapsed;
             OpenWithPanel.Visibility  = tag == "OpenWith"  ? Visibility.Visible : Visibility.Collapsed;
             ConsolePanel.Visibility   = tag == "Console"   ? Visibility.Visible : Visibility.Collapsed;
+            GitPanel.Visibility       = tag == "Git"       ? Visibility.Visible : Visibility.Collapsed;
         }
 
         private void AddViewer_Click(object sender, RoutedEventArgs e)
@@ -265,6 +440,9 @@ namespace Folderss
                 return;
             }
 
+            if (!TryCollectGitSettings())
+                return;
+
             _workingConsoleSettings.FontSize = fontSize;
             _workingConsoleSettings.PreferredProfileKey = preferredProfileKey;
             _workingConsoleSettings.CustomProfiles = _workingConsoleProfiles
@@ -281,6 +459,8 @@ namespace Folderss
             TrySave(failures, "열기 프로그램", "open-with.xml", () => OpenWithService.Save(_workingOpenWith));
             TrySave(failures, "콘솔", "console-settings.xml", () => ConsoleSettingsService.Save(_workingConsoleSettings));
             TrySave(failures, "테마", "theme.txt", ThemeManager.SaveCurrentTheme);
+            TrySave(failures, "Git", "git-settings.xml", () => GitSettingsService.Save(_workingGit));
+            SavedGitSettings = _workingGit.Clone();
 
             if (failures.Count > 0)
             {

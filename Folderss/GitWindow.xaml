@@ -41,7 +41,8 @@
                     <Button x:Name="PushButton" Content="⇡ push" Click="Push_Click"
                             ToolTip="선택한 저장소만 push (강제 푸시 없음)"/>
                     <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
-                    <Button x:Name="OptionsButton" Content="옵션…" Click="Options_Click"/>
+                    <Button x:Name="OptionsButton" Content="설정…" Click="Options_Click"
+                            ToolTip="설정 창의 Git 탭을 엽니다 (git 경로, pull 방식, 탐색, diff·외부 비교 도구)"/>
                     <Button x:Name="CancelButton" Content="취소" Click="Cancel_Click" IsEnabled="False"
                             ToolTip="진행 중인 탐색·git 명령을 중단합니다"/>
                 </StackPanel>

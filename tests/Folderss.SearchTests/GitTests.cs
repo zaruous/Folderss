@@ -335,6 +335,8 @@ namespace Folderss.SearchTests
         private static Task<GitResult> Run(string repo, System.Collections.Generic.List<string> args) =>
             GitCommandRunner.RunAsync(repo, args, GitCommandRunner.QueryTimeout, CancellationToken.None, readOnly: true);
 
+        private static Task<GitResult> Run(string repo, GitDiffRequest request) => Run(repo, request.Arguments);
+
         [SkippableFact]
         public async Task RealGit_WorkTreeStagedAndUntrackedDiffs()
         {
@@ -412,6 +414,180 @@ namespace Folderss.SearchTests
             Assert.Contains("+base", rootDiff);
             var head = outgoing.Single();
             Assert.Contains("+from local", (await Run(local, GitDiffCommands.Commit(head.Hash, head.Parents))).StdOut);
+        }
+
+        // ── 인코딩 대체 해석 ────────────────────────────────────────────────────
+
+        [Fact]
+        public void Decode_MixedUtf8AndCp949Lines_DecodesEachLine()
+        {
+            var cp949 = GitTextDecoder.Resolve(GitFallbackEncoding.Cp949);
+            var bytes = new System.Collections.Generic.List<byte>();
+            bytes.AddRange(System.Text.Encoding.UTF8.GetBytes("+UTF-8 한글\n"));
+            bytes.AddRange(cp949.GetBytes("-CP949 한글\n"));
+            bytes.AddRange(System.Text.Encoding.UTF8.GetBytes(" 끝"));
+
+            Assert.Equal("+UTF-8 한글\n-CP949 한글\n 끝", GitTextDecoder.Decode(bytes.ToArray(), cp949));
+
+            // 대체 인코딩이 없으면 깨진 문자로라도 읽는다(예외 없음).
+            Assert.StartsWith("+UTF-8 한글\n-CP949", GitTextDecoder.Decode(bytes.ToArray(), null));
+            Assert.Equal(string.Empty, GitTextDecoder.Decode(new byte[0], cp949));
+            Assert.Null(GitTextDecoder.Resolve(GitFallbackEncoding.None));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_DiffOfCp949File_ReadsWithFallback()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var cp949 = GitTextDecoder.Resolve(GitFallbackEncoding.Cp949);
+            var repo = await InitRepoAsync("cp949repo");
+            File.WriteAllBytes(Path.Combine(repo, "old.txt"), cp949.GetBytes("가나다\n"));
+            await CommitAllAsync(repo, "init");
+            File.WriteAllBytes(Path.Combine(repo, "old.txt"), cp949.GetBytes("라마바\n"));
+
+            var result = await GitCommandRunner.RunAsync(repo, GitDiffCommands.WorkTree("old.txt").Arguments,
+                GitCommandRunner.QueryTimeout, CancellationToken.None, readOnly: true, fallbackEncoding: cp949);
+
+            var lines = GitOutputParser.ParseDiff(result.StdOut);
+            Assert.Contains(lines, l => l.Text == "-가나다");
+            Assert.Contains(lines, l => l.Text == "+라마바");
+        }
+
+        // ── 공백 무시 ───────────────────────────────────────────────────────────
+
+        [SkippableFact]
+        public async Task RealGit_IgnoreWhitespace_HidesWhitespaceOnlyChanges()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("wsrepo");
+            File.WriteAllText(Path.Combine(repo, "w.txt"), "a b\n");
+            await CommitAllAsync(repo, "init");
+            File.WriteAllText(Path.Combine(repo, "w.txt"), "a    b\n");
+
+            Assert.NotEmpty((await Run(repo, GitDiffCommands.WorkTree("w.txt"))).StdOut);
+            Assert.DoesNotContain("@@", (await Run(repo, GitDiffCommands.WorkTree("w.txt", ignoreWhitespace: true))).StdOut);
+        }
+
+        // ── 외부 비교 도구 ──────────────────────────────────────────────────────
+
+        [Fact]
+        public void BuildToolCommand_QuotesExe_AndAlwaysQuotesPlaceholders()
+        {
+            Assert.Equal(@"'C:/Program Files/WinMerge/WinMergeU.exe' -e -u ""$LOCAL"" ""$REMOTE""",
+                GitDiffCommands.BuildToolCommand(@"""C:\Program Files\WinMerge\WinMergeU.exe""", @"-e -u ""{left}"" ""{right}"""));
+            // 따옴표를 빠뜨려도 따옴표 친 형태가 된다.
+            Assert.Equal(@"'x.exe' --diff ""$LOCAL"" ""$REMOTE""", GitDiffCommands.BuildToolCommand("x.exe", "--diff {left} {right}"));
+            // 자리표시자가 없으면 끝에 붙인다. 빈 인수는 기본값.
+            Assert.Equal(@"'x.exe' /s ""$LOCAL"" ""$REMOTE""", GitDiffCommands.BuildToolCommand("x.exe", "/s"));
+            Assert.Equal(@"'x.exe' ""$LOCAL"" ""$REMOTE""", GitDiffCommands.BuildToolCommand("x.exe", "  "));
+            // 경로의 작은따옴표는 셸 규칙대로 이스케이프.
+            Assert.StartsWith(@"'C:/it'\''s/t.exe' ", GitDiffCommands.BuildToolCommand(@"C:\it's\t.exe", null));
+        }
+
+        [Fact]
+        public void ExternalTool_BuildsDifftoolArgs_PerModeAndTarget()
+        {
+            var staged = GitDiffCommands.ExternalTool(GitDiffCommands.Staged("b.txt", "a.txt"), GitDiffToolMode.Custom, "t.exe", null);
+            Assert.Equal(new[] { "-c", "difftool.folderss.cmd='t.exe' \"$LOCAL\" \"$REMOTE\"", "difftool", "--tool=folderss", "--no-prompt",
+                "--cached", "--", "a.txt", "b.txt" }, staged);
+
+            var range = GitDiffCommands.ExternalTool(GitDiffCommands.Range("@{u}...HEAD"), GitDiffToolMode.GitConfig, null, null);
+            Assert.Equal(new[] { "difftool", "--no-prompt", "--dir-diff", "@{u}...HEAD", "--" }, range);
+
+            Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.Untracked("n.txt"), GitDiffToolMode.Custom, "t.exe", null));
+            Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.Commit("h", new string[0]), GitDiffToolMode.Custom, "t.exe", null));
+            Assert.Null(GitDiffCommands.ExternalTool(GitDiffCommands.WorkTree("a.txt"), GitDiffToolMode.None, "t.exe", null));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CustomDifftool_ReceivesBothSides_ForFileAndDirDiff()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null || OperatingSystem.IsWindows(), "셸 스크립트 도구로 검증 — 리눅스·맥 전용");
+            var repo = await InitRepoAsync("toolrepo");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "old\n");
+            await CommitAllAsync(repo, "init");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "new\n");
+
+            // 도구: 파일이면 두 내용을, 폴더면 두 목록을 기록한다. 경로에 공백을 넣어 따옴표 처리를 확인한다.
+            var outDir = P("tool out");
+            Directory.CreateDirectory(outDir);
+            var script = Path.Combine(outDir, "fake tool.sh");
+            File.WriteAllText(script,
+                "#!/bin/sh\n" +
+                "if [ -d \"$1\" ]; then ls -R \"$1\" > \"" + outDir + "/left.txt\"; ls -R \"$2\" > \"" + outDir + "/right.txt\";\n" +
+                "else cat \"$1\" > \"" + outDir + "/left.txt\"; cat \"$2\" > \"" + outDir + "/right.txt\"; fi\n");
+            System.Diagnostics.Process.Start("chmod", new[] { "+x", script }).WaitForExit();
+
+            var fileArgs = GitDiffCommands.ExternalTool(GitDiffCommands.WorkTree("a.txt"), GitDiffToolMode.Custom, script, "{left} {right}");
+            var fileRun = await GitCommandRunner.RunAsync(repo, fileArgs, GitCommandRunner.QueryTimeout, CancellationToken.None, throttle: false);
+            Assert.True(fileRun.Success, fileRun.StdErr);
+            Assert.Equal("old\n", File.ReadAllText(Path.Combine(outDir, "left.txt")));
+            Assert.Equal("new\n", File.ReadAllText(Path.Combine(outDir, "right.txt")));
+
+            await CommitAllAsync(repo, "second");
+            var head = GitOutputParser.ParseLog((await Git(repo, "log", "-z", "-n", "1", GitOutputParser.LogFormat)).StdOut).Single();
+            var dirArgs = GitDiffCommands.ExternalTool(GitDiffCommands.Commit(head.Hash, head.Parents), GitDiffToolMode.Custom, script, null);
+            var dirRun = await GitCommandRunner.RunAsync(repo, dirArgs, GitCommandRunner.QueryTimeout, CancellationToken.None, throttle: false);
+            Assert.True(dirRun.Success, dirRun.StdErr);
+            Assert.Contains("a.txt", File.ReadAllText(Path.Combine(outDir, "right.txt")));
+        }
+
+        // ── 설정 저장 ───────────────────────────────────────────────────────────
+
+        [Fact]
+        public void Settings_RoundTrip_KeepsAllFields()
+        {
+            var path = P("git-settings.xml");
+            var original = new GitSettings
+            {
+                GitExecutablePath = @"D:\PortableGit\cmd\git.exe",
+                BaseFolderMode = GitBaseFolderMode.CurrentFolder,
+                PullMode = GitPullMode.Rebase,
+                ScanDepth = 3,
+                ExcludedFolders = new System.Collections.Generic.List<string> { "dist", "out" },
+                LogLimit = 50,
+                LogAllBranches = false,
+                IgnoreWhitespace = true,
+                FallbackEncoding = GitFallbackEncoding.Cp949,
+                DiffToolMode = GitDiffToolMode.Custom,
+                DiffToolPath = @"C:\Program Files\WinMerge\WinMergeU.exe",
+                DiffToolArguments = "-e -u \"{left}\" \"{right}\""
+            };
+
+            GitSettingsService.Save(original, path);
+            var loaded = GitSettingsService.Load(path);
+
+            Assert.Equal(original.GitExecutablePath, loaded.GitExecutablePath);
+            Assert.Equal(original.BaseFolderMode, loaded.BaseFolderMode);
+            Assert.Equal(original.PullMode, loaded.PullMode);
+            Assert.Equal(3, loaded.ScanDepth);
+            Assert.Equal(new[] { "dist", "out" }, loaded.ExcludedFolders);
+            Assert.Equal(50, loaded.LogLimit);
+            Assert.False(loaded.LogAllBranches);
+            Assert.True(loaded.IgnoreWhitespace);
+            Assert.Equal(GitFallbackEncoding.Cp949, loaded.FallbackEncoding);
+            Assert.Equal(GitDiffToolMode.Custom, loaded.DiffToolMode);
+            Assert.Equal(original.DiffToolPath, loaded.DiffToolPath);
+            Assert.Equal(original.DiffToolArguments, loaded.DiffToolArguments);
+
+            // 파일이 없으면 기본값.
+            var defaults = GitSettingsService.Load(P("none.xml"));
+            Assert.Equal(GitDiffToolMode.None, defaults.DiffToolMode);
+            Assert.Equal(GitFallbackEncoding.SystemAnsi, defaults.FallbackEncoding);
+        }
+
+        [Fact]
+        public void ConfiguredGitPath_Missing_ReturnsNull_InsteadOfFallingBack()
+        {
+            try
+            {
+                GitCommandRunner.ConfiguredGitPath = P("no-such-git.exe");
+                Assert.Null(GitCommandRunner.FindGit());
+            }
+            finally
+            {
+                GitCommandRunner.ConfiguredGitPath = string.Empty;
+            }
         }
     }
 }

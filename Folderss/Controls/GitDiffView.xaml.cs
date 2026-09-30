@@ -1,3 +1,4 @@
+using System;
 using System.Linq;
 using System.Windows;
 using System.Windows.Controls;
@@ -18,6 +19,12 @@ namespace Folderss.Controls
 
         private int _requestId;
 
+        /// <summary>현재 보이는 비교. 외부 도구 버튼이 같은 비교를 열 때 쓴다.</summary>
+        public GitDiffRequest CurrentRequest { get; private set; }
+
+        /// <summary>"외부 도구로 비교"를 눌렀다. 실행은 저장소·설정을 아는 Git 창이 한다.</summary>
+        public event EventHandler ExternalToolRequested;
+
         public GitDiffView()
         {
             InitializeComponent();
@@ -27,14 +34,17 @@ namespace Folderss.Controls
         public void Clear(string message = "항목을 선택하면 차이를 보여 줍니다.")
         {
             _requestId++;
+            SetRequest(null);
             TitleText.Text = string.Empty;
             LineList.ItemsSource = null;
             ShowMessage(message);
         }
 
-        public int BeginLoad(string title)
+        public int BeginLoad(GitDiffRequest request)
         {
             _requestId++;
+            SetRequest(request);
+            var title = request?.Title ?? string.Empty;
             TitleText.Text = title;
             TitleText.ToolTip = title;
             LineList.ItemsSource = null;
@@ -61,6 +71,18 @@ namespace Folderss.Controls
             LineList.ItemsSource = null;
             ShowMessage(message);
             return true;
+        }
+
+        private void SetRequest(GitDiffRequest request)
+        {
+            CurrentRequest = request;
+            // 외부 도구로 열 수 없는 비교(추적 안 됨, 최초 커밋)는 버튼을 숨긴다.
+            ExternalToolButton.Visibility = request?.ExternalSelector != null ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ExternalToolButton_Click(object sender, RoutedEventArgs e)
+        {
+            ExternalToolRequested?.Invoke(this, EventArgs.Empty);
         }
 
         private void ShowMessage(string message)

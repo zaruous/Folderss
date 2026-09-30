@@ -68,9 +68,8 @@ Folderss/
 │   ├── Black / Light / Nord / Catppuccin / Solarized / Dracula / GitHub
 │   └── Controls.xaml           — 공통 컨트롤 스타일
 ├── MainWindow                  — 메인 창, AvalonDock 호스트, 전역 단축키, 문서 탭 컨텍스트 메뉴
-├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔 설정
+├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔·Git 설정
 ├── GitWindow                   — 다중 저장소 Git 창 (상태·스테이지·커밋·브랜치·로그·fetch/pull/push)
-├── GitOptionsWindow            — Git 옵션 대화상자
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
@@ -206,8 +205,24 @@ tests/
 - 여러 저장소에 한꺼번에 하는 동작은 `다시 찾기`(상태 조회)와 `전체 fetch`뿐입니다.
 - 브랜치 전환·pull 전에 그 저장소 파일을 저장하지 않은 문서 탭이 있으면 경고합니다.
 - 모든 git 명령과 오류 메시지는 창 아래 출력 영역에 남습니다. 인증은 사용자의 git 설정(Git Credential Manager, ssh-agent)을 그대로 쓰며, 응답이 없으면 5분 뒤 중단됩니다.
-- `옵션…` 대화상자: 기준 폴더 규칙, pull 방식(fast-forward만 / 병합 / rebase / git 설정 따름), 탐색 깊이·제외 폴더, 로그 개수·전체 브랜치 포함.
-- diff는 git 출력을 UTF-8로 읽습니다. UTF-8이 아닌 파일(CP949 등)은 한글이 깨져 보일 수 있고, 20,000줄을 넘으면 뒤는 생략합니다.
+- diff 창의 `외부 도구로 비교`는 같은 비교를 WinMerge·Beyond Compare·VS Code 등으로 엽니다(`git difftool`). 파일은 파일끼리, 커밋·원격 비교는 폴더 비교로 한 번에 엽니다. 추적 안 되는 파일과 최초 커밋은 지원하지 않습니다.
+- diff는 UTF-8로 읽고, UTF-8이 아닌 줄만 대체 인코딩(기본: 시스템 코드 페이지, 한국어 Windows는 CP949)으로 다시 읽습니다. 20,000줄을 넘으면 뒤는 생략합니다.
+
+### Git 설정 (`설정 > Git`, Git 창의 `설정…` 버튼)
+
+| 항목 | 기본값 | 설명 |
+|---|---|---|
+| git 실행 파일 | 자동 | 비우면 PATH → Git for Windows 기본 위치에서 찾음. 지정한 파일이 없으면 다른 git으로 대신 실행하지 않고 알림 |
+| 기준 폴더 | 선택한 폴더 우선 | 또는 항상 패널의 현재 폴더 |
+| pull 방식 | fast-forward만 | 병합 / rebase / git 설정 따름 |
+| 탐색 깊이·제외 폴더 | 6, `node_modules bin obj .vs packages` | 폴더 이름 기준, 대/소문자 무시 |
+| 로그 | 300개, 전체 브랜치 | 10~5000개 |
+| 공백 무시 | 끔 | 내장 diff에 `-w` |
+| 대체 인코딩 | 시스템 코드 페이지 | CP949 / 사용 안 함 |
+| 외부 비교 도구 | 사용 안 함 | git 설정의 difftool / 직접 지정(실행 파일 + 인수, 프리셋: WinMerge·Beyond Compare·VS Code·KDiff3·Meld) |
+
+- 직접 지정 인수의 `{left}`·`{right}`는 비교할 두 파일(또는 폴더)로 바뀝니다. 도구는 **창을 닫을 때까지 종료되지 않아야** 합니다 — git이 도구 종료 뒤 임시 파일을 지웁니다(VS Code는 `--wait`, WinMerge는 단일 인스턴스 옵션을 끄세요).
+- 사용자 `.gitconfig`는 바꾸지 않습니다. 직접 지정 도구는 실행할 때만 `-c difftool.folderss.cmd=…`로 등록합니다.
 - 범위 밖: 충돌 해결, merge/rebase/stash 명령, 좌우 나란히(side-by-side) diff, 브랜치 그래프 — 필요하면 `콘솔`에서 처리합니다.
 
 ## 디스크 사용량
@@ -308,7 +323,7 @@ Folderss\Themes\Controls.xaml
 | `viewer-config.json` | 확장자별 뷰어 매핑 (`version` 2 형식, 기본값과 다른 재정의만 저장) |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
 | `console-settings.xml` | 콘솔 설정(기본 프로필, 사용자 정의 프로필 등) |
-| `git-settings.xml` | Git 창 옵션(기준 폴더 규칙, pull 방식, 탐색 깊이·제외 폴더, 로그) |
+| `git-settings.xml` | Git 설정(git 경로, 기준 폴더 규칙, pull 방식, 탐색, 로그, diff·외부 비교 도구) |
 | `favorites.xml` | 즐겨찾기 그룹·항목 |
 | `session.xml` | 열린 폴더 패널과 활성 패널 |
 | `panel-locks.xml` | 닫기를 잠근 패널 목록 |

@@ -79,6 +79,7 @@ namespace Folderss
         private readonly string _basePath;
         private readonly Func<string, int> _countModifiedDocumentsUnder;
         private readonly Action<string> _openFile;
+        private readonly Action _openGitSettings;
         private readonly ObservableCollection<RepositoryRow> _rows = new ObservableCollection<RepositoryRow>();
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
         private CancellationTokenSource _operation;
@@ -89,13 +90,21 @@ namespace Folderss
         /// <param name="basePath">탐색 기준 폴더.</param>
         /// <param name="countModifiedDocumentsUnder">폴더 아래 경로로 열린 미저장 뷰어 개수 — 브랜치 전환·pull 전 경고용.</param>
         /// <param name="openFile">파일 더블클릭 시 기존 뷰어로 연다.</param>
-        public GitWindow(string basePath, Func<string, int> countModifiedDocumentsUnder, Action<string> openFile)
+        /// <param name="openGitSettings">설정 창의 Git 탭을 연다. 저장되면 메인 창이 <see cref="ApplySettings"/>로 알려 준다.</param>
+        public GitWindow(string basePath, GitSettings settings, Func<string, int> countModifiedDocumentsUnder,
+            Action<string> openFile, Action openGitSettings)
         {
             InitializeComponent();
             _basePath = basePath;
             _countModifiedDocumentsUnder = countModifiedDocumentsUnder ?? (_ => 0);
             _openFile = openFile;
-            _settings = GitSettingsService.Load();
+            _openGitSettings = openGitSettings;
+            _settings = (settings ?? new GitSettings()).Clone();
+            GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
+
+            ChangesDiff.ExternalToolRequested += DiffView_ExternalToolRequested;
+            RemoteDiff.ExternalToolRequested += DiffView_ExternalToolRequested;
+            LogDiff.ExternalToolRequested += DiffView_ExternalToolRequested;
 
             Title = "Git — " + basePath;
             BasePathText.Text = "기준: " + basePath;
@@ -460,20 +469,20 @@ namespace Folderss
         // ── diff ────────────────────────────────────────────────────────────
 
         /// <summary>선택 저장소에서 diff 명령을 돌려 <paramref name="view"/>에 보인다. 조회 전용이라 진행 중 잠금과 무관하게 돈다.</summary>
-        private async Task LoadDiffAsync(GitDiffView view, string title, IEnumerable<string> args, bool noIndex = false,
-            string emptyMessage = "차이가 없습니다.")
+        private async Task LoadDiffAsync(GitDiffView view, GitDiffRequest diff)
         {
             var row = SelectedRow;
             if (row == null)
                 return;
 
-            var request = view.BeginLoad(title);
+            var request = view.BeginLoad(diff);
             try
             {
-                var result = await GitCommandRunner.RunAsync(row.RootPath, args, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
-                if (GitDiffCommands.IsSuccess(result, noIndex))
+                var result = await GitCommandRunner.RunAsync(row.RootPath, diff.Arguments, GitCommandRunner.QueryTimeout, _lifetime.Token,
+                    readOnly: true, fallbackEncoding: ResolveFallbackEncoding());
+                if (GitDiffCommands.IsSuccess(result, diff.NoIndex))
                 {
-                    view.Complete(request, result.StdOut, emptyMessage);
+                    view.Complete(request, result.StdOut, diff.EmptyMessage);
                 }
                 else if (view.Fail(request, FirstLine(result.StdErr) ?? "차이를 읽지 못했습니다."))
                 {
@@ -488,6 +497,26 @@ namespace Folderss
                 // async void 이벤트에서 부르므로 여기서 막는다.
                 view.Fail(request, ex.Message);
             }
+        }
+
+        private System.Text.Encoding ResolveFallbackEncoding()
+        {
+            try
+            {
+                return GitTextDecoder.Resolve(_settings.FallbackEncoding);
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is NotSupportedException)
+            {
+                return null;   // 코드 페이지를 못 쓰는 환경이면 대체 해석 없이 UTF-8로만 읽는다.
+            }
+        }
+
+        private static GitDiffRequest WithTitle(GitDiffRequest request, string title, string emptyMessage = null)
+        {
+            request.Title = title;
+            if (emptyMessage != null)
+                request.EmptyMessage = emptyMessage;
+            return request;
         }
 
         private async void UnstagedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -507,13 +536,13 @@ namespace Folderss
                     ChangesDiff.Clear("추적 안 되는 폴더입니다. 폴더 안 파일은 스테이지한 뒤 볼 수 있습니다.");
                     return;
                 }
-                await LoadDiffAsync(ChangesDiff, "추적 안 됨 (새 파일): " + entry.Path, GitDiffCommands.Untracked(entry.Path), noIndex: true);
+                await LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.Untracked(entry.Path, _settings.IgnoreWhitespace),
+                    "추적 안 됨 (새 파일): " + entry.Path));
                 return;
             }
 
-            await LoadDiffAsync(ChangesDiff,
-                (entry.IsConflicted ? "충돌 (작업 트리): " : "작업 트리 ↔ 인덱스: ") + entry.Path,
-                GitDiffCommands.WorkTree(entry.Path));
+            await LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.WorkTree(entry.Path, _settings.IgnoreWhitespace),
+                (entry.IsConflicted ? "충돌 (작업 트리): " : "작업 트리 ↔ 인덱스: ") + entry.Path));
         }
 
         private async void StagedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -526,8 +555,8 @@ namespace Folderss
             }
 
             var entry = (GitStatusEntry)StagedList.SelectedItem;
-            await LoadDiffAsync(ChangesDiff, "인덱스 ↔ HEAD (커밋될 내용): " + entry.Path,
-                GitDiffCommands.Staged(entry.Path, entry.OriginalPath));
+            await LoadDiffAsync(ChangesDiff, WithTitle(GitDiffCommands.Staged(entry.Path, entry.OriginalPath, _settings.IgnoreWhitespace),
+                "인덱스 ↔ HEAD (커밋될 내용): " + entry.Path));
         }
 
         private async void LogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -554,7 +583,7 @@ namespace Folderss
             var basis = commit.Parents.Length == 0 ? "최초 커밋" : commit.Parents.Length > 1 ? "병합 커밋 — 첫 부모 기준" : null;
             var title = string.Format("{0}  {1}  ({2}, {3}{4})", commit.ShortHash, commit.Subject, commit.Author, commit.TimeText,
                 basis == null ? string.Empty : ", " + basis);
-            return LoadDiffAsync(view, title, GitDiffCommands.Commit(commit.Hash, commit.Parents));
+            return LoadDiffAsync(view, WithTitle(GitDiffCommands.Commit(commit.Hash, commit.Parents, _settings.IgnoreWhitespace), title));
         }
 
         // ── 원격 비교 ────────────────────────────────────────────────────────
@@ -624,20 +653,20 @@ namespace Folderss
 
         private async void OutgoingDiff_Click(object sender, RoutedEventArgs e)
         {
-            await LoadDiffAsync(RemoteDiff, "보낼 변경 전체: upstream과 갈라진 뒤 로컬에서 커밋한 변경 (@{u}...HEAD)",
-                GitDiffCommands.Range(GitDiffCommands.Upstream + "...HEAD"), emptyMessage: "보낼 변경이 없습니다.");
+            await LoadDiffAsync(RemoteDiff, WithTitle(GitDiffCommands.Range(GitDiffCommands.Upstream + "...HEAD", _settings.IgnoreWhitespace),
+                "보낼 변경 전체: upstream과 갈라진 뒤 로컬에서 커밋한 변경 (@{u}...HEAD)", "보낼 변경이 없습니다."));
         }
 
         private async void IncomingDiff_Click(object sender, RoutedEventArgs e)
         {
-            await LoadDiffAsync(RemoteDiff, "받을 변경 전체: 갈라진 뒤 upstream에 커밋된 변경 (HEAD...@{u})",
-                GitDiffCommands.Range("HEAD..." + GitDiffCommands.Upstream), emptyMessage: "받을 변경이 없습니다.");
+            await LoadDiffAsync(RemoteDiff, WithTitle(GitDiffCommands.Range("HEAD..." + GitDiffCommands.Upstream, _settings.IgnoreWhitespace),
+                "받을 변경 전체: 갈라진 뒤 upstream에 커밋된 변경 (HEAD...@{u})", "받을 변경이 없습니다."));
         }
 
         private async void WorkTreeVsUpstream_Click(object sender, RoutedEventArgs e)
         {
-            await LoadDiffAsync(RemoteDiff, "작업 트리 ↔ upstream: 커밋 안 한 수정 포함, 추적 안 되는 파일 제외 (@{u})",
-                GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream), emptyMessage: "로컬 작업 트리와 upstream이 같습니다.");
+            await LoadDiffAsync(RemoteDiff, WithTitle(GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream, _settings.IgnoreWhitespace),
+                "작업 트리 ↔ upstream: 커밋 안 한 수정 포함, 추적 안 되는 파일 제외 (@{u})", "로컬 작업 트리와 upstream이 같습니다."));
         }
 
         /// <summary>선택 저장소에 쓰기 명령을 실행하고, 끝나면 상태·브랜치·로그를 다시 읽는다.</summary>
@@ -954,37 +983,121 @@ namespace Folderss
             await RunOnSelectedAsync("push 중…", new[] { "push", "-u", remote, snapshot.Branch }, GitCommandRunner.NetworkTimeout);
         }
 
-        // ── 옵션 ────────────────────────────────────────────────────────────
+        // ── 외부 비교 도구 ─────────────────────────────────────────────────────
 
-        private async void Options_Click(object sender, RoutedEventArgs e)
+        private async void DiffView_ExternalToolRequested(object sender, EventArgs e)
         {
-            var dialog = new GitOptionsWindow(_settings) { Owner = this };
-            if (dialog.ShowDialog() != true)
+            var request = (sender as GitDiffView)?.CurrentRequest;
+            var row = SelectedRow;
+            if (request == null || row == null)
                 return;
 
-            var previous = _settings;
-            _settings = dialog.Result;
+            var mode = _settings.DiffToolMode;
+            if (mode == GitDiffToolMode.None)
+            {
+                if (MessageBox.Show(this, "외부 비교 도구가 지정되어 있지 않습니다.\n설정 > Git에서 도구를 지정할까요?", "외부 비교 도구",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question) == MessageBoxResult.Yes)
+                    _openGitSettings?.Invoke();
+                return;
+            }
+
             try
             {
-                GitSettingsService.Save(_settings);
+                if (mode == GitDiffToolMode.Custom && !File.Exists(_settings.DiffToolPath))
+                {
+                    MessageBox.Show(this, "지정한 비교 도구 실행 파일이 없습니다:\n" + _settings.DiffToolPath + "\n\n설정 > Git에서 경로를 확인하세요.",
+                        "외부 비교 도구", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                if (mode == GitDiffToolMode.GitConfig && !await HasConfiguredDiffToolAsync(row))
+                {
+                    MessageBox.Show(this, "git 설정에 difftool이 없습니다 (diff.tool / merge.tool).\n" +
+                        "git config --global diff.tool <도구>로 설정하거나, 설정 > Git에서 '직접 지정'을 고르세요.",
+                        "외부 비교 도구", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                var args = GitDiffCommands.ExternalTool(request, mode, _settings.DiffToolPath, _settings.DiffToolArguments);
+                AppendOutput("외부 비교 도구 실행: " + GitCommandRunner.FormatCommandLine(args) + "    [" + row.Info.DisplayPath + "]");
+
+                // 도구 창을 닫을 때까지 git difftool이 끝나지 않으므로: 시간 제한 없음, 동시 실행 제한 밖,
+                // Git 창을 닫아도 도구가 같이 꺼지지 않도록 창 수명 토큰을 쓰지 않는다.
+                var watch = System.Diagnostics.Stopwatch.StartNew();
+                var result = await GitCommandRunner.RunAsync(row.RootPath, args, Timeout.InfiniteTimeSpan, CancellationToken.None, throttle: false);
+                watch.Stop();
+
+                if (!result.Success || !string.IsNullOrWhiteSpace(result.StdErr))
+                    AppendResult(row.Info, result);
+                else if (watch.Elapsed < TimeSpan.FromSeconds(2))
+                    AppendOutput("비교 도구가 바로 종료됐습니다. 도구 창이 비어 있거나 파일을 못 찾으면, 창을 닫을 때까지 기다리도록 인수를 설정하세요 " +
+                                 "(git은 도구가 끝나면 임시 파일을 지웁니다. VS Code: --wait, WinMerge: 단일 인스턴스 옵션 끄기).");
             }
             catch (Exception ex)
             {
-                // 저장은 실패해도 이번 창에는 적용한다. 원인은 사용자에게 그대로 보인다.
-                MessageBox.Show(this, "설정 저장 실패 (git-settings.xml)\n" + ex.Message + "\n\n이번 창에만 적용됩니다.",
-                    "Git 옵션", MessageBoxButton.OK, MessageBoxImage.Warning);
+                AppendOutput("외부 비교 도구를 실행하지 못했습니다: " + ex.Message);
             }
+        }
 
-            var scanChanged = previous.ScanDepth != _settings.ScanDepth
-                || !previous.ExcludedFolders.SequenceEqual(_settings.ExcludedFolders, StringComparer.OrdinalIgnoreCase);
-            if (scanChanged)
+        private async Task<bool> HasConfiguredDiffToolAsync(RepositoryRow row)
+        {
+            foreach (var key in new[] { "diff.tool", "merge.tool" })
             {
-                await ScanAsync();
+                var result = await GitCommandRunner.RunAsync(row.RootPath, new[] { "config", "--get", key },
+                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                if (result.Success && !string.IsNullOrWhiteSpace(result.StdOut))
+                    return true;
+            }
+            return false;
+        }
+
+        // ── 설정 ────────────────────────────────────────────────────────────
+
+        private void Options_Click(object sender, RoutedEventArgs e)
+        {
+            _openGitSettings?.Invoke();
+        }
+
+        /// <summary>설정 창에서 저장한 값을 반영한다. 탐색·git 경로가 바뀌면 다시 찾고, 표시 옵션만 바뀌면 상세만 다시 읽는다.</summary>
+        public async void ApplySettings(GitSettings settings)
+        {
+            if (settings == null || _lifetime.IsCancellationRequested)
+                return;
+
+            var previous = _settings;
+            _settings = settings.Clone();
+            GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
+
+            if (_busyCount > 0)
+            {
+                AppendOutput("설정이 바뀌었습니다. 진행 중인 작업이 끝나면 '다시 찾기'로 반영하세요.");
                 return;
             }
 
-            if (previous.LogLimit != _settings.LogLimit || previous.LogAllBranches != _settings.LogAllBranches)
-                await ReloadSelectedDetailAsync();
+            try
+            {
+                if (!string.Equals(previous.GitExecutablePath, _settings.GitExecutablePath, StringComparison.OrdinalIgnoreCase))
+                {
+                    if (await CheckGitAsync())
+                        await ScanAsync();
+                    return;
+                }
+
+                var scanChanged = previous.ScanDepth != _settings.ScanDepth
+                    || !previous.ExcludedFolders.SequenceEqual(_settings.ExcludedFolders, StringComparer.OrdinalIgnoreCase);
+                if (scanChanged)
+                {
+                    await ScanAsync();
+                    return;
+                }
+
+                if (previous.LogLimit != _settings.LogLimit || previous.LogAllBranches != _settings.LogAllBranches
+                    || previous.IgnoreWhitespace != _settings.IgnoreWhitespace || previous.FallbackEncoding != _settings.FallbackEncoding)
+                    await ReloadSelectedDetailAsync();
+            }
+            catch (Exception ex)
+            {
+                AppendOutput("설정 반영 중 오류: " + ex.Message);
+            }
         }
     }
 }
