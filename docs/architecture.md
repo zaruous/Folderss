@@ -259,6 +259,9 @@ Folderss/
   `GitDiffRequest.OldSide/NewSide`(작업 트리 / 인덱스 `:` / 리비전, `A...B`는 merge-base)에서 양쪽 바이트를 읽고(`cat-file blob`, `rawOutput`)
   한쪽이라도 UTF-16/32 BOM이면 UTF-8 임시 파일 두 개를 `diff --no-index`로 비교해 그 줄을 헤더+hunk로 바꾼다. BOM 없는 진짜 바이너리·10MB 초과는 그대로.
   모든 diff에 `--src-prefix=a/ --dst-prefix=b/`를 붙여 사용자 `diff.noprefix` 설정이 경로 해석을 깨지 않게 한다.
+- diff 보기 모드: `GitDiffView.ViewMode`(창마다, 초기값 `GitSettings.DiffViewMode`)를 `LoadDiffAsync`가 `GitDiffCommands.WithViewMode`로
+  하위 명령 바로 뒤에 `-U10` / `-U1000000`(전체 파일)으로 넣는다. 변경점만은 옵션을 넣지 않아 사용자 `diff.context`를 따른다.
+  모드를 바꾸면 `ViewModeChanged` → 같은 `CurrentRequest`를 다시 불러온다. UTF-16 재비교(`GitEncodingDiff`)에도 같은 모드를 쓴다. 추적 안 됨(전체 추가)은 선택 상자를 숨긴다.
 - 변경 사항 트리 보기: `ShowChanges`가 평면 목록(ListBox)과 트리(`GitChangeTree.Build` → TreeView) 소스를 함께 채우고
   `트리로 보기` 체크박스가 둘의 표시만 바꾼다(창 단위, 저장 안 함). 스테이지/언스테이지 대상은 `SelectedChangeEntries` —
   평면은 다중 선택, 트리는 선택 노드 하나(폴더면 `GitChangeNode.Entries`로 그 아래 전체). diff 표시 로직은 두 보기가 공유한다.

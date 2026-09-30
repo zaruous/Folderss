@@ -102,9 +102,12 @@ namespace Folderss
             _settings = (settings ?? new GitSettings()).Clone();
             GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
 
-            ChangesDiff.ExternalToolRequested += DiffView_ExternalToolRequested;
-            RemoteDiff.ExternalToolRequested += DiffView_ExternalToolRequested;
-            LogDiff.ExternalToolRequested += DiffView_ExternalToolRequested;
+            foreach (var view in new[] { ChangesDiff, RemoteDiff, LogDiff })
+            {
+                view.ExternalToolRequested += DiffView_ExternalToolRequested;
+                view.ViewModeChanged += DiffView_ViewModeChanged;
+                view.ViewMode = _settings.DiffViewMode;
+            }
 
             Title = "Git — " + basePath;
             BasePathText.Text = "기준: " + basePath;
@@ -496,12 +499,14 @@ namespace Folderss
             try
             {
                 var fallback = ResolveFallbackEncoding();
-                var result = await GitCommandRunner.RunAsync(row.RootPath, diff.Arguments, GitCommandRunner.QueryTimeout, _lifetime.Token,
-                    readOnly: true, fallbackEncoding: fallback);
+                var mode = view.ViewMode;
+                var result = await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.WithViewMode(diff.Arguments, mode),
+                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true, fallbackEncoding: fallback);
                 if (GitDiffCommands.IsSuccess(result, diff.NoIndex))
                 {
                     // UTF-16/32(BOM) 파일은 git이 바이너리로 보이므로 BOM으로 읽어 텍스트로 다시 비교해 끼운다.
-                    var text = await GitEncodingDiff.ExpandAsync(row.RootPath, diff, result.StdOut, _settings.IgnoreWhitespace, fallback, _lifetime.Token);
+                    var text = await GitEncodingDiff.ExpandAsync(row.RootPath, diff, result.StdOut, _settings.IgnoreWhitespace, fallback,
+                        _lifetime.Token, mode);
                     view.Complete(request, text, diff.EmptyMessage);
                 }
                 else if (view.Fail(request, FirstLine(result.StdErr) ?? "차이를 읽지 못했습니다."))
@@ -517,6 +522,14 @@ namespace Folderss
                 // async void 이벤트에서 부르므로 여기서 막는다.
                 view.Fail(request, ex.Message);
             }
+        }
+
+        private async void DiffView_ViewModeChanged(object sender, EventArgs e)
+        {
+            // 보고 있던 비교를 새 보기 모드로 다시 불러온다(제목·외부 도구 대상은 그대로).
+            var view = (GitDiffView)sender;
+            if (view.CurrentRequest != null)
+                await LoadDiffAsync(view, view.CurrentRequest);
         }
 
         private System.Text.Encoding ResolveFallbackEncoding()
@@ -1180,8 +1193,15 @@ namespace Folderss
                     return;
                 }
 
+                if (previous.DiffViewMode != _settings.DiffViewMode)
+                {
+                    // 기본 보기가 바뀌면 세 diff 창 모두 새 기본값으로 맞춘다(창에서 따로 바꿔 둔 값은 덮어씀).
+                    ChangesDiff.ViewMode = RemoteDiff.ViewMode = LogDiff.ViewMode = _settings.DiffViewMode;
+                }
+
                 if (previous.LogLimit != _settings.LogLimit || previous.LogAllBranches != _settings.LogAllBranches
-                    || previous.IgnoreWhitespace != _settings.IgnoreWhitespace || previous.FallbackEncoding != _settings.FallbackEncoding)
+                    || previous.IgnoreWhitespace != _settings.IgnoreWhitespace || previous.FallbackEncoding != _settings.FallbackEncoding
+                    || previous.DiffViewMode != _settings.DiffViewMode)
                     await ReloadSelectedDetailAsync();
             }
             catch (Exception ex)

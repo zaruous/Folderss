@@ -737,6 +737,8 @@
                         <CheckBox x:Name="GitLogAllCheck" Content="로그에 모든 브랜치 포함 (--all)"/>
 
                         <TextBlock Style="{StaticResource GitSection}" Text="diff"/>
+                        <TextBlock Style="{StaticResource GitLabel}" Text="diff 기본 보기 (각 diff 창 제목 줄에서 바로 바꿀 수 있음)"/>
+                        <ComboBox x:Name="GitDiffViewModeCombo" HorizontalAlignment="Left" MinWidth="320"/>
                         <CheckBox x:Name="GitIgnoreWhitespaceCheck" Content="공백만 바뀐 줄 무시 (-w, 내장 diff에만 적용)"/>
                         <TextBlock Style="{StaticResource GitLabel}" Text="BOM 없는 파일에서 UTF-8이 아닌 줄의 대체 인코딩"/>
                         <ComboBox x:Name="GitFallbackEncodingCombo" HorizontalAlignment="Left" MinWidth="320"/>

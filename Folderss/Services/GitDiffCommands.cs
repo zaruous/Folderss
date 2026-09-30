@@ -184,6 +184,30 @@ namespace Folderss.Services
             return new List<string> { "log", "-z", "-n", limit.ToString(), GitOutputParser.LogFormat, from + ".." + to, "--" };
         }
 
+        /// <summary>"전체 파일" 보기의 문맥 줄 수. 이보다 긴 파일은 표시 한도(<c>GitDiffView.MaxLines</c>)에서 먼저 잘린다.</summary>
+        public const int FullFileContext = 1000000;
+
+        /// <summary>보기 모드의 문맥 옵션(<c>-U&lt;n&gt;</c>). 변경점만이면 null(git 기본/사용자 diff.context).</summary>
+        public static string ContextOption(GitDiffViewMode mode)
+        {
+            switch (mode)
+            {
+                case GitDiffViewMode.Context10: return "-U10";
+                case GitDiffViewMode.FullFile: return "-U" + FullFileContext;
+                default: return null;
+            }
+        }
+
+        /// <summary>diff/show 인수에 보기 모드의 문맥 옵션을 넣은 새 목록. 하위 명령 바로 뒤에 넣어 경로(--) 앞에 오게 한다.</summary>
+        public static List<string> WithViewMode(IReadOnlyList<string> arguments, GitDiffViewMode mode)
+        {
+            var args = new List<string>(arguments);
+            var option = ContextOption(mode);
+            if (option != null && args.Count > 0)
+                args.Insert(1, option);
+            return args;
+        }
+
         public static bool IsSuccess(GitResult result, bool noIndex)
         {
             return result != null && !result.TimedOut && (result.ExitCode == 0 || (noIndex && result.ExitCode == 1));

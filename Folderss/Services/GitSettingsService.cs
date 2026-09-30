@@ -36,6 +36,17 @@ namespace Folderss.Services
         Custom
     }
 
+    /// <summary>diff를 볼 때 변경점 주변을 얼마나 보일지.</summary>
+    public enum GitDiffViewMode
+    {
+        /// <summary>변경점만(git 기본 문맥 3줄 또는 사용자 diff.context).</summary>
+        ChangesOnly,
+        /// <summary>변경점 + 앞뒤 10줄.</summary>
+        Context10,
+        /// <summary>파일 전체(변경점은 색으로 표시).</summary>
+        FullFile
+    }
+
     /// <summary>
     /// 파일 인코딩은 BOM이 있으면 그 인코딩, 없으면 UTF-8이다. 이 값은 BOM 없는 파일에서 UTF-8로 읽히지 않는 줄만
     /// 다시 해석할 대체 인코딩이다(기본: 사용 안 함).
@@ -63,6 +74,9 @@ namespace Folderss.Services
         /// <summary>내장 diff에서 공백만 바뀐 줄을 무시한다(<c>-w</c>).</summary>
         public bool IgnoreWhitespace { get; set; }
         public GitFallbackEncoding FallbackEncoding { get; set; } = GitFallbackEncoding.None;
+
+        /// <summary>diff 창의 기본 보기. 각 diff 창에서 바로 바꿀 수 있고, 이 값은 창을 열 때의 초기값이다.</summary>
+        public GitDiffViewMode DiffViewMode { get; set; } = GitDiffViewMode.ChangesOnly;
 
         public GitDiffToolMode DiffToolMode { get; set; } = GitDiffToolMode.None;
         public string DiffToolPath { get; set; } = string.Empty;
@@ -175,6 +189,8 @@ namespace Folderss.Services
                     settings.IgnoreWhitespace = ignoreWhitespace;
                 if (Enum.TryParse(root.GetAttribute("fallbackEncoding"), out GitFallbackEncoding fallback))
                     settings.FallbackEncoding = fallback;
+                if (Enum.TryParse(root.GetAttribute("diffView"), out GitDiffViewMode diffView))
+                    settings.DiffViewMode = diffView;
 
                 if (root.SelectSingleNode("excludes") != null)
                 {
@@ -220,6 +236,7 @@ namespace Folderss.Services
             root.SetAttribute("logAll", settings.LogAllBranches.ToString());
             root.SetAttribute("ignoreWhitespace", settings.IgnoreWhitespace.ToString());
             root.SetAttribute("fallbackEncoding", settings.FallbackEncoding.ToString());
+            root.SetAttribute("diffView", settings.DiffViewMode.ToString());
 
             var excludes = doc.CreateElement("excludes");
             foreach (var name in settings.ExcludedFolders)

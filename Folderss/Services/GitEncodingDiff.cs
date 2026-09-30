@@ -22,7 +22,8 @@ namespace Folderss.Services
             @"^Binary files (?:a/(?<old>.+)|/dev/null) and (?:b/(?<new>.+)|/dev/null) differ$", RegexOptions.Compiled);
 
         public static async Task<string> ExpandAsync(string repositoryRoot, GitDiffRequest request, string diffText,
-            bool ignoreWhitespace, Encoding fallbackEncoding, CancellationToken token)
+            bool ignoreWhitespace, Encoding fallbackEncoding, CancellationToken token,
+            GitDiffViewMode viewMode = GitDiffViewMode.ChangesOnly)
         {
             if (string.IsNullOrEmpty(diffText) || request == null || diffText.IndexOf("Binary files ", StringComparison.Ordinal) < 0)
                 return diffText;
@@ -50,7 +51,7 @@ namespace Folderss.Services
                     var oldPath = match.Groups["old"].Success ? match.Groups["old"].Value : null;
                     var newPath = match.Groups["new"].Success ? match.Groups["new"].Value : null;
                     replacement = await TryTextDiffAsync(repositoryRoot, oldSide, oldPath, request.NewSide, newPath,
-                        ignoreWhitespace, fallbackEncoding, token);
+                        ignoreWhitespace, fallbackEncoding, viewMode, token);
                 }
 
                 output.Append(replacement ?? line);
@@ -61,7 +62,7 @@ namespace Folderss.Services
         }
 
         private static async Task<string> TryTextDiffAsync(string root, string oldSide, string oldPath, string newSide, string newPath,
-            bool ignoreWhitespace, Encoding fallbackEncoding, CancellationToken token)
+            bool ignoreWhitespace, Encoding fallbackEncoding, GitDiffViewMode viewMode, CancellationToken token)
         {
             var oldBytes = oldPath == null ? new byte[0] : await ReadSideAsync(root, oldSide, oldPath, token);
             var newBytes = newPath == null ? new byte[0] : await ReadSideAsync(root, newSide, newPath, token);
@@ -84,6 +85,9 @@ namespace Folderss.Services
                 var args = new List<string> { "diff", "--no-index", "--no-color", "--no-ext-diff" };
                 if (ignoreWhitespace)
                     args.Add("-w");
+                var context = GitDiffCommands.ContextOption(viewMode);
+                if (context != null)
+                    args.Add(context);
                 args.AddRange(new[] { "--", oldFile, newFile });
                 var result = await GitCommandRunner.RunAsync(null, args, GitCommandRunner.QueryTimeout, token, readOnly: true);
                 if (!GitDiffCommands.IsSuccess(result, noIndex: true))

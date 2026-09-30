@@ -549,6 +549,7 @@ namespace Folderss.SearchTests
                 LogAllBranches = false,
                 IgnoreWhitespace = true,
                 FallbackEncoding = GitFallbackEncoding.Cp949,
+                DiffViewMode = GitDiffViewMode.FullFile,
                 DiffToolMode = GitDiffToolMode.Custom,
                 DiffToolPath = @"C:\Program Files\WinMerge\WinMergeU.exe",
                 DiffToolArguments = "-e -u \"{left}\" \"{right}\""
@@ -566,6 +567,7 @@ namespace Folderss.SearchTests
             Assert.False(loaded.LogAllBranches);
             Assert.True(loaded.IgnoreWhitespace);
             Assert.Equal(GitFallbackEncoding.Cp949, loaded.FallbackEncoding);
+            Assert.Equal(GitDiffViewMode.FullFile, loaded.DiffViewMode);
             Assert.Equal(GitDiffToolMode.Custom, loaded.DiffToolMode);
             Assert.Equal(original.DiffToolPath, loaded.DiffToolPath);
             Assert.Equal(original.DiffToolArguments, loaded.DiffToolArguments);
@@ -805,6 +807,46 @@ namespace Folderss.SearchTests
             Assert.StartsWith("R.", leaf.DisplayText);
 
             Assert.Empty(GitChangeTree.Build(new GitStatusEntry[0]));
+        }
+
+        // ── diff 보기 모드 (변경점만 / 문맥 10줄 / 전체 파일) ──────────────────
+
+        [Fact]
+        public void WithViewMode_InsertsContextRightAfterSubcommand()
+        {
+            var args = GitDiffCommands.WorkTree("a.txt").Arguments;
+
+            Assert.Equal(args, GitDiffCommands.WithViewMode(args, GitDiffViewMode.ChangesOnly));
+            var ten = GitDiffCommands.WithViewMode(args, GitDiffViewMode.Context10);
+            Assert.Equal("diff", ten[0]);
+            Assert.Equal("-U10", ten[1]);
+            Assert.True(ten.IndexOf("-U10") < ten.IndexOf("--"));      // 경로 구분자보다 앞
+            Assert.Equal("-U" + GitDiffCommands.FullFileContext, GitDiffCommands.WithViewMode(args, GitDiffViewMode.FullFile)[1]);
+            Assert.Equal(args.Count, GitDiffCommands.WorkTree("a.txt").Arguments.Count);   // 원본은 바뀌지 않음
+        }
+
+        [SkippableFact]
+        public async Task RealGit_ViewModes_ShowChangesOnly_TenLines_OrWholeFile()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("viewmode");
+            var lines = Enumerable.Range(1, 40).Select(i => "line" + i).ToList();
+            File.WriteAllText(Path.Combine(repo, "f.txt"), string.Join("\n", lines) + "\n");
+            await CommitAllAsync(repo, "init");
+            lines[19] = "CHANGED";   // 20번째 줄
+            File.WriteAllText(Path.Combine(repo, "f.txt"), string.Join("\n", lines) + "\n");
+            // 사용자 diff.context 설정보다 보기 모드가 우선해야 한다.
+            await Git(repo, "config", "diff.context", "1");
+
+            async Task<int[]> ShownNewLines(GitDiffViewMode mode)
+            {
+                var result = await Run(repo, GitDiffCommands.WithViewMode(GitDiffCommands.WorkTree("f.txt").Arguments, mode));
+                return GitOutputParser.ParseDiff(result.StdOut).Where(l => l.NewLine.HasValue).Select(l => l.NewLine.Value).ToArray();
+            }
+
+            Assert.Equal(new[] { 19, 20, 21 }, await ShownNewLines(GitDiffViewMode.ChangesOnly));   // 사용자 설정(1줄) 그대로
+            Assert.Equal(Enumerable.Range(10, 21).ToArray(), await ShownNewLines(GitDiffViewMode.Context10));
+            Assert.Equal(Enumerable.Range(1, 40).ToArray(), await ShownNewLines(GitDiffViewMode.FullFile));
         }
     }
 }

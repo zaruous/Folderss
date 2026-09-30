@@ -10,6 +10,17 @@
                     Visibility="Collapsed"
                     Click="ExternalToolButton_Click"
                     ToolTip="설정 &gt; Git에서 지정한 비교 도구(WinMerge, Beyond Compare 등)로 같은 비교를 엽니다"/>
+            <ComboBox x:Name="ViewModeCombo"
+                      DockPanel.Dock="Right"
+                      Width="110"
+                      Margin="6,0,4,0"
+                      Visibility="Collapsed"
+                      SelectionChanged="ViewModeCombo_SelectionChanged"
+                      ToolTip="변경점만 / 변경점과 앞뒤 10줄 / 파일 전체(변경 줄은 색으로 표시)">
+                <ComboBoxItem Content="변경점만"/>
+                <ComboBoxItem Content="문맥 10줄"/>
+                <ComboBoxItem Content="전체 파일"/>
+            </ComboBox>
             <TextBlock x:Name="TitleText"
                        VerticalAlignment="Center"
                        FontWeight="SemiBold"

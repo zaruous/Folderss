@@ -82,6 +82,13 @@ namespace Folderss
             (GitFallbackEncoding.SystemAnsi, "시스템 기본 코드 페이지 (한국어 Windows: CP949)")
         };
 
+        private static readonly (GitDiffViewMode Value, string Text)[] GitDiffViewChoices =
+        {
+            (GitDiffViewMode.ChangesOnly, "변경점만 (git 기본 문맥, 보통 3줄)"),
+            (GitDiffViewMode.Context10, "변경점 + 앞뒤 10줄"),
+            (GitDiffViewMode.FullFile, "전체 파일 (변경 줄은 색으로 표시)")
+        };
+
         private static readonly (GitDiffToolMode Value, string Text)[] GitDiffToolChoices =
         {
             (GitDiffToolMode.None, "사용 안 함 (내장 diff만)"),
@@ -180,6 +187,7 @@ namespace Folderss
             GitExcludedBox.Text = string.Join(Environment.NewLine, _workingGit.ExcludedFolders);
             GitLogLimitBox.Text = _workingGit.LogLimit.ToString();
             GitLogAllCheck.IsChecked = _workingGit.LogAllBranches;
+            FillCombo(GitDiffViewModeCombo, GitDiffViewChoices.Select(c => c.Text), Array.FindIndex(GitDiffViewChoices, c => c.Value == _workingGit.DiffViewMode));
             GitIgnoreWhitespaceCheck.IsChecked = _workingGit.IgnoreWhitespace;
             FillCombo(GitFallbackEncodingCombo, GitEncodingChoices.Select(c => c.Text), Array.FindIndex(GitEncodingChoices, c => c.Value == _workingGit.FallbackEncoding));
             FillCombo(GitDiffToolPresetCombo, GitSettingsService.DiffToolPresets.Select(p => p.Name), 0);
@@ -284,6 +292,7 @@ namespace Folderss
             _workingGit.ExcludedFolders = excluded;
             _workingGit.LogLimit = logLimit;
             _workingGit.LogAllBranches = GitLogAllCheck.IsChecked == true;
+            _workingGit.DiffViewMode = GitDiffViewChoices[Math.Max(0, GitDiffViewModeCombo.SelectedIndex)].Value;
             _workingGit.IgnoreWhitespace = GitIgnoreWhitespaceCheck.IsChecked == true;
             _workingGit.FallbackEncoding = GitEncodingChoices[Math.Max(0, GitFallbackEncodingCombo.SelectedIndex)].Value;
             _workingGit.DiffToolMode = toolMode;

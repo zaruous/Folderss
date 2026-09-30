@@ -25,9 +25,29 @@ namespace Folderss.Controls
         /// <summary>"외부 도구로 비교"를 눌렀다. 실행은 저장소·설정을 아는 Git 창이 한다.</summary>
         public event EventHandler ExternalToolRequested;
 
+        /// <summary>사용자가 보기 모드를 바꿨다. Git 창이 <see cref="CurrentRequest"/>를 새 모드로 다시 불러온다.</summary>
+        public event EventHandler ViewModeChanged;
+
+        private bool _settingMode;
+
+        /// <summary>
+        /// 변경점만 / 문맥 10줄 / 전체 파일. 코드에서 바꿀 때는 <see cref="ViewModeChanged"/>를 내지 않는다(다시 불러오기는 호출 측 몫).
+        /// </summary>
+        public GitDiffViewMode ViewMode
+        {
+            get => (GitDiffViewMode)Math.Max(0, ViewModeCombo.SelectedIndex);
+            set
+            {
+                _settingMode = true;
+                ViewModeCombo.SelectedIndex = (int)value;
+                _settingMode = false;
+            }
+        }
+
         public GitDiffView()
         {
             InitializeComponent();
+            ViewMode = GitDiffViewMode.ChangesOnly;
             Clear();
         }
 
@@ -78,6 +98,14 @@ namespace Folderss.Controls
             CurrentRequest = request;
             // 외부 도구로 열 수 없는 비교(추적 안 됨, 최초 커밋)는 버튼을 숨긴다.
             ExternalToolButton.Visibility = request?.ExternalSelector != null ? Visibility.Visible : Visibility.Collapsed;
+            // 추적 안 되는 파일은 원래 전체가 추가로 보이므로 보기 모드가 의미 없다.
+            ViewModeCombo.Visibility = request != null && !request.NoIndex ? Visibility.Visible : Visibility.Collapsed;
+        }
+
+        private void ViewModeCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!_settingMode && CurrentRequest != null)
+                ViewModeChanged?.Invoke(this, EventArgs.Empty);
         }
 
         private void ExternalToolButton_Click(object sender, RoutedEventArgs e)
