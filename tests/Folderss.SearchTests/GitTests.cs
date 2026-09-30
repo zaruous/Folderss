@@ -1225,14 +1225,15 @@ namespace Folderss.SearchTests
 
         // ── ▾ 옵션: pull · push · fetch · 커밋 · 강제 삭제 ──────────────────────
 
-        /// <summary>bare 원격 + 두 클론(a, b). 둘 다 main이 origin/main을 추적한다.</summary>
+        /// <summary>bare 원격 + 두 클론(a, b). 둘 다 main이 origin/main을 추적한다.
+        /// Windows 러너의 전역 core.autocrlf=true가 체크아웃 줄 끝을 바꾸지 않게 InitRepoAsync처럼 끈다.</summary>
         private async Task<(string remote, string a, string b)> RemoteWithTwoClonesAsync(string name)
         {
             var remote = P(name + ".git");
             Assert.True((await Git(null, "init", "--bare", "-b", "main", remote)).Success);
             var a = P(name + "-a");
             var b = P(name + "-b");
-            Assert.True((await Git(null, "clone", "-q", remote, a)).Success);
+            Assert.True((await Git(null, "clone", "-q", "-c", "core.autocrlf=false", remote, a)).Success);
             foreach (var repo in new[] { a })
             {
                 await Git(repo, "config", "user.name", "t");
@@ -1243,7 +1244,7 @@ namespace Folderss.SearchTests
             File.WriteAllText(Path.Combine(a, "f.txt"), "base\n");
             await CommitAllAsync(a, "base");
             Assert.True((await Git(a, "push", "-q", "-u", "origin", "main")).Success);
-            Assert.True((await Git(null, "clone", "-q", remote, b)).Success);
+            Assert.True((await Git(null, "clone", "-q", "-c", "core.autocrlf=false", remote, b)).Success);
             await Git(b, "config", "user.name", "t");
             await Git(b, "config", "user.email", "t@example.com");
             await Git(b, "config", "commit.gpgsign", "false");
