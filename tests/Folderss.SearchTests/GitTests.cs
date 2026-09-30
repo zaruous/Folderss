@@ -848,5 +848,66 @@ namespace Folderss.SearchTests
             Assert.Equal(Enumerable.Range(10, 21).ToArray(), await ShownNewLines(GitDiffViewMode.Context10));
             Assert.Equal(Enumerable.Range(1, 40).ToArray(), await ShownNewLines(GitDiffViewMode.FullFile));
         }
+
+        // ── 커밋 안 된 새 폴더 안 파일 / 변경 없는 파일 ─────────────────────────
+
+        [SkippableFact]
+        public async Task RealGit_Status_ListsEveryFileInsideNewFolder()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("untrackedall");
+            File.WriteAllText(Path.Combine(repo, "keep.txt"), "k\n");
+            await CommitAllAsync(repo, "init");
+            Directory.CreateDirectory(Path.Combine(repo, "newdir", "sub"));
+            File.WriteAllText(Path.Combine(repo, "newdir", "a.txt"), "a\n");
+            File.WriteAllText(Path.Combine(repo, "newdir", "sub", "b.txt"), "b\n");
+            File.WriteAllText(Path.Combine(repo, ".gitignore"), "*.log\n");
+            File.WriteAllText(Path.Combine(repo, "newdir", "skip.log"), "x\n");
+
+            var status = GitOutputParser.ParseStatusV2((await Git(repo, GitOutputParser.StatusArguments)).StdOut);
+            var untracked = status.Entries.Where(e => e.IsUntracked).Select(e => e.Path).OrderBy(p => p, StringComparer.Ordinal).ToArray();
+
+            // 폴더 한 줄("newdir/")이 아니라 파일 하나하나. .gitignore에 걸린 파일은 나오지 않는다.
+            Assert.Equal(new[] { ".gitignore", "newdir/a.txt", "newdir/sub/b.txt" }, untracked);
+        }
+
+        [SkippableFact]
+        public async Task RealGit_UnchangedEntries_AreTrackedFilesMinusChanges()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("unchanged");
+            foreach (var name in new[] { "same.txt", "edit.txt", "old.txt", "dir/deep.txt" })
+            {
+                Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(repo, name)));
+                File.WriteAllText(Path.Combine(repo, name), name + "\n");
+            }
+            await CommitAllAsync(repo, "init");
+            File.WriteAllText(Path.Combine(repo, "edit.txt"), "changed\n");
+            await Git(repo, "mv", "old.txt", "renamed.txt");
+            File.WriteAllText(Path.Combine(repo, "new.txt"), "n\n");
+
+            var status = GitOutputParser.ParseStatusV2((await Git(repo, GitOutputParser.StatusArguments)).StdOut);
+            var tracked = GitOutputParser.ParseNulList((await Git(repo, GitOutputParser.TrackedFilesArguments)).StdOut);
+            var unchanged = GitOutputParser.UnchangedEntries(tracked, status);
+
+            Assert.Equal(new[] { "dir/deep.txt", "same.txt" }, unchanged.Select(e => e.Path).OrderBy(p => p, StringComparer.Ordinal));
+            Assert.All(unchanged, e => Assert.True(e.IsUnchanged && !e.IsStaged && !e.IsUnstaged));
+        }
+
+        [Fact]
+        public void UnchangedEntries_DeduplicatesConflictStages_AndContentLinesNumbersEveryLine()
+        {
+            var snapshot = new GitStatusSnapshot();
+            var unchanged = GitOutputParser.UnchangedEntries(new[] { "a.txt", "a.txt", "b.txt" }, snapshot);
+            Assert.Equal(new[] { "a.txt", "b.txt" }, unchanged.Select(e => e.Path));
+            Assert.Equal(new[] { "x", "y" }, GitOutputParser.ParseNulList("x\0y\0"));
+
+            var lines = GitOutputParser.ContentLines("첫째\r\n둘째\n셋째\n", 2);
+            Assert.Equal(3, lines.Count);
+            Assert.Equal((1, "첫째"), (lines[0].NewLine.Value, lines[0].Text));
+            Assert.Equal(GitDiffLineKind.Context, lines[1].Kind);
+            Assert.Equal(GitDiffLineKind.Meta, lines[2].Kind);        // 한도 초과 안내
+            Assert.Empty(GitOutputParser.ContentLines(""));
+        }
     }
 }

@@ -152,6 +152,9 @@
                             <RowDefinition Height="*" MinHeight="60"/>
                             <RowDefinition Height="8"/>
                             <RowDefinition Height="*" MinHeight="60"/>
+                            <!-- "변경 없는 파일 보기"를 켤 때만 높이를 준다(코드에서 0 ↔ 8/*). -->
+                            <RowDefinition x:Name="UnchangedSplitterRow" Height="0"/>
+                            <RowDefinition x:Name="UnchangedRow" Height="0"/>
                         </Grid.RowDefinitions>
 
                         <!-- 변경됨 ↔ 스테이지됨 높이 조절 -->
@@ -165,13 +168,50 @@
                                       Cursor="SizeNS"
                                       ToolTip="끌어서 변경됨·스테이지됨 목록 높이를 조절합니다"/>
 
-                        <CheckBox x:Name="ChangesTreeToggle"
-                                  Grid.Row="0"
-                                  Margin="2,0,0,6"
-                                  Content="트리로 보기"
-                                  Foreground="{DynamicResource PrimaryText}"
-                                  Click="ChangesTreeToggle_Click"
-                                  ToolTip="변경 파일을 폴더별로 묶어 봅니다. 폴더를 선택해 스테이지/언스테이지하면 그 아래 전체가 대상입니다."/>
+                        <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="2,0,0,6">
+                            <CheckBox x:Name="ChangesTreeToggle"
+                                      Content="트리로 보기"
+                                      Foreground="{DynamicResource PrimaryText}"
+                                      Click="ChangesTreeToggle_Click"
+                                      ToolTip="변경 파일을 폴더별로 묶어 봅니다. 폴더를 선택해 스테이지/언스테이지하면 그 아래 전체가 대상입니다."/>
+                            <CheckBox x:Name="UnchangedToggle"
+                                      Margin="14,0,0,0"
+                                      Content="변경 없는 파일 보기"
+                                      Foreground="{DynamicResource PrimaryText}"
+                                      Click="UnchangedToggle_Click"
+                                      ToolTip="추적 중이고 바뀌지 않은 파일(git ls-files 중 변경 목록에 없는 것)을 아래 목록에 보입니다. 선택하면 내용을 봅니다."/>
+                        </StackPanel>
+
+                        <GridSplitter x:Name="UnchangedSplitter"
+                                      Grid.Row="4"
+                                      Height="8"
+                                      Visibility="Collapsed"
+                                      HorizontalAlignment="Stretch"
+                                      VerticalAlignment="Stretch"
+                                      ResizeDirection="Rows"
+                                      ResizeBehavior="PreviousAndNext"
+                                      Background="Transparent"
+                                      Cursor="SizeNS"/>
+
+                        <DockPanel x:Name="UnchangedPanel" Grid.Row="5" Visibility="Collapsed">
+                            <TextBlock x:Name="UnchangedHeader" DockPanel.Dock="Top" Margin="0,0,0,4" FontWeight="SemiBold" Text="변경 없음"/>
+                            <Grid>
+                                <ListBox x:Name="UnchangedList"
+                                         FontFamily="Consolas"
+                                         DisplayMemberPath="DisplayText"
+                                         VirtualizingPanel.IsVirtualizing="True"
+                                         VirtualizingPanel.VirtualizationMode="Recycling"
+                                         SelectionChanged="UnchangedList_SelectionChanged"
+                                         MouseDoubleClick="ChangeList_MouseDoubleClick"
+                                         ToolTip="선택하면 파일 내용을 봅니다. 더블클릭하면 파일을 엽니다."/>
+                                <TreeView x:Name="UnchangedTree"
+                                          Visibility="Collapsed"
+                                          Style="{StaticResource GitChangeTreeStyle}"
+                                          VirtualizingPanel.IsVirtualizing="True"
+                                          SelectedItemChanged="UnchangedTree_SelectedItemChanged"
+                                          MouseDoubleClick="ChangeTree_MouseDoubleClick"/>
+                            </Grid>
+                        </DockPanel>
 
                         <DockPanel Grid.Row="1">
                             <DockPanel DockPanel.Dock="Top">

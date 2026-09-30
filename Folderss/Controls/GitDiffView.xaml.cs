@@ -72,6 +72,17 @@ namespace Folderss.Controls
             return _requestId;
         }
 
+        /// <summary>diff가 아닌 줄 목록(변경 없는 파일 내용 등)을 바로 보인다. 외부 도구·보기 모드는 숨긴다.</summary>
+        public void ShowLines(string title, System.Collections.Generic.List<GitDiffLine> lines, string emptyMessage)
+        {
+            _requestId++;
+            SetRequest(null);
+            TitleText.Text = title;
+            TitleText.ToolTip = title;
+            LineList.ItemsSource = lines;
+            ShowMessage(lines.Count == 0 ? emptyMessage : null);
+        }
+
         /// <summary>diff 텍스트를 반영한다. 더 새 요청이 있었으면 false를 돌려주고 무시한다.</summary>
         public bool Complete(int requestId, string diffText, string emptyMessage = "차이가 없습니다.")
         {

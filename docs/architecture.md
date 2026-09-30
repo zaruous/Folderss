@@ -262,6 +262,11 @@ Folderss/
 - diff 보기 모드: `GitDiffView.ViewMode`(창마다, 초기값 `GitSettings.DiffViewMode`)를 `LoadDiffAsync`가 `GitDiffCommands.WithViewMode`로
   하위 명령 바로 뒤에 `-U10` / `-U1000000`(전체 파일)으로 넣는다. 변경점만은 옵션을 넣지 않아 사용자 `diff.context`를 따른다.
   모드를 바꾸면 `ViewModeChanged` → 같은 `CurrentRequest`를 다시 불러온다. UTF-16 재비교(`GitEncodingDiff`)에도 같은 모드를 쓴다. 추적 안 됨(전체 추가)은 선택 상자를 숨긴다.
+- 상태 조회는 `GitOutputParser.StatusArguments`(`--untracked-files=all`)로 새 폴더 안 파일을 하나씩 받는다(폴더 한 줄로 접지 않음 —
+  add할 파일을 고를 수 있게). 대가로 무시되지 않은 거대한 새 폴더(빌드 산출물 등)가 있으면 항목이 많아지고 status가 느려진다.
+- 변경 없는 파일: `변경 없는 파일 보기`를 켜면 `ls-files -z --cached`에서 상태 목록(경로·이름 변경 전 경로)을 뺀 것을
+  `GitOutputParser.UnchangedEntries`로 만들어 세 번째 목록(행 높이 0 ↔ 8/*로 전환)에 보인다. 선택하면 작업 트리 파일을
+  BOM 규칙으로 읽어 `GitDiffView.ShowLines`로 줄 번호와 함께 보인다(10MB 초과·바이너리는 안내만). 상태를 다시 읽을 때마다 다시 계산.
 - 변경 사항 트리 보기: `ShowChanges`가 평면 목록(ListBox)과 트리(`GitChangeTree.Build` → TreeView) 소스를 함께 채우고
   `트리로 보기` 체크박스가 둘의 표시만 바꾼다(창 단위, 저장 안 함). 스테이지/언스테이지 대상은 `SelectedChangeEntries` —
   평면은 다중 선택, 트리는 선택 노드 하나(폴더면 `GitChangeNode.Entries`로 그 아래 전체). diff 표시 로직은 두 보기가 공유한다.

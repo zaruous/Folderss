@@ -33,6 +33,9 @@ namespace Folderss.Models
         public bool IsUntracked { get; set; }
         public bool IsConflicted { get; set; }
 
+        /// <summary>추적 중이고 바뀌지 않은 파일("변경 없음" 목록용). 스테이지·언스테이지 대상이 아니다.</summary>
+        public bool IsUnchanged { get; set; }
+
         public bool IsStaged => !IsUntracked && !IsConflicted && IndexState != '.';
         public bool IsUnstaged => IsUntracked || IsConflicted || WorkTreeState != '.';
 
@@ -41,6 +44,7 @@ namespace Folderss.Models
             get
             {
                 var name = string.IsNullOrEmpty(OriginalPath) ? Path : OriginalPath + " → " + Path;
+                if (IsUnchanged) return "   " + name;
                 if (IsUntracked) return "?  " + name;
                 if (IsConflicted) return "!  " + name;
                 return string.Format("{0}{1} {2}", IndexState, WorkTreeState, name);
@@ -85,7 +89,7 @@ namespace Folderss.Models
             {
                 if (IsFolder)
                     return string.Format("📁 {0}  ({1})", Name, Entries.Count());
-                var mark = Entry.IsUntracked ? "? " : Entry.IsConflicted ? "! " : string.Format("{0}{1}", Entry.IndexState, Entry.WorkTreeState);
+                var mark = Entry.IsUnchanged ? "  " : Entry.IsUntracked ? "? " : Entry.IsConflicted ? "! " : string.Format("{0}{1}", Entry.IndexState, Entry.WorkTreeState);
                 return mark + " " + Name + (string.IsNullOrEmpty(Entry.OriginalPath) ? string.Empty : "  ← " + Entry.OriginalPath);
             }
         }

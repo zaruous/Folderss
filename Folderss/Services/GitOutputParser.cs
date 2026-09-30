@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Globalization;
+using System.Linq;
 using System.Text.RegularExpressions;
 using Folderss.Models;
 
@@ -18,6 +19,71 @@ namespace Folderss.Services
 
         /// <summary><c>git for-each-ref</c>에 넘길 형식. <see cref="ParseBranches"/>와 짝이다.</summary>
         public const string BranchFormat = "--format=%(HEAD)%1f%(refname)%1f%(upstream:short)%1f%(contents:subject)";
+
+        /// <summary>
+        /// 상태 조회 인수. 추적 안 되는 폴더를 "dir/" 한 줄로 접지 않고 안의 파일을 하나씩 내도록 <c>--untracked-files=all</c>
+        /// (그래야 새 폴더 안에서 add할 파일을 골라 볼 수 있다). .gitignore에 걸린 파일은 나오지 않는다.
+        /// </summary>
+        public static readonly string[] StatusArguments = { "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=all" };
+
+        /// <summary><c>git ls-files -z</c>: 인덱스에 있는(추적 중인) 파일 목록.</summary>
+        public static readonly string[] TrackedFilesArguments = { "ls-files", "-z", "--cached", "--full-name" };
+
+        /// <summary>NUL 구분 경로 목록(<c>ls-files -z</c> 등)을 해석한다.</summary>
+        public static List<string> ParseNulList(string output)
+        {
+            var list = new List<string>();
+            foreach (var item in (output ?? string.Empty).Split('\0'))
+            {
+                if (item.Length > 0)
+                    list.Add(item);
+            }
+            return list;
+        }
+
+        /// <summary>추적 중인 파일 중 상태 목록(변경·스테이지·충돌·이름 변경 전후)에 없는 파일 = 변경 없음.</summary>
+        public static List<GitStatusEntry> UnchangedEntries(IEnumerable<string> trackedPaths, GitStatusSnapshot snapshot)
+        {
+            var changed = new HashSet<string>(StringComparer.Ordinal);
+            foreach (var entry in snapshot?.Entries ?? new List<GitStatusEntry>())
+            {
+                changed.Add(entry.Path);
+                if (!string.IsNullOrEmpty(entry.OriginalPath))
+                    changed.Add(entry.OriginalPath);
+            }
+
+            var result = new List<GitStatusEntry>();
+            foreach (var path in trackedPaths)
+            {
+                if (!changed.Contains(path))
+                    result.Add(new GitStatusEntry { Path = path, IsUnchanged = true });
+            }
+            // ls-files는 충돌 파일을 단계(stage)마다 되풀이하므로 중복을 없앤다.
+            return result.GroupBy(e => e.Path, StringComparer.Ordinal).Select(g => g.First()).ToList();
+        }
+
+        /// <summary>파일 내용을 줄 번호가 붙은 문맥 줄로(변경 없는 파일 미리보기). 한도를 넘으면 안내 줄을 붙인다.</summary>
+        public static List<GitDiffLine> ContentLines(string content, int maxLines = int.MaxValue)
+        {
+            var lines = new List<GitDiffLine>();
+            var text = (content ?? string.Empty).Replace("\r\n", "\n");
+            if (text.EndsWith("\n", StringComparison.Ordinal))
+                text = text.Substring(0, text.Length - 1);
+            if (text.Length == 0)
+                return lines;
+
+            var raw = text.Split('\n');
+            for (var i = 0; i < raw.Length; i++)
+            {
+                if (lines.Count >= maxLines)
+                {
+                    lines.Add(new GitDiffLine { Kind = GitDiffLineKind.Meta, Text = string.Format("… 너무 길어 이하 {0}줄은 표시하지 않습니다.", raw.Length - i) });
+                    break;
+                }
+                lines.Add(new GitDiffLine { Kind = GitDiffLineKind.Context, Text = raw[i], OldLine = i + 1, NewLine = i + 1 });
+            }
+            return lines;
+        }
 
         /// <summary><c>git status --porcelain=v2 --branch -z</c> 출력을 해석한다.</summary>
         public static GitStatusSnapshot ParseStatusV2(string output)

@@ -293,7 +293,7 @@ namespace Folderss
         private async Task RefreshStatusAsync(RepositoryRow row, CancellationToken token)
         {
             var result = await GitCommandRunner.RunAsync(row.RootPath,
-                new[] { "status", "--porcelain=v2", "--branch", "-z", "--untracked-files=normal" },
+                GitOutputParser.StatusArguments,
                 GitCommandRunner.QueryTimeout, token, readOnly: true);
 
             if (result.Success)
@@ -365,6 +365,9 @@ namespace Folderss
             StagedList.ItemsSource = null;
             UnstagedTree.ItemsSource = null;
             StagedTree.ItemsSource = null;
+            UnchangedList.ItemsSource = null;
+            UnchangedTree.ItemsSource = null;
+            UnchangedHeader.Text = "변경 없음";
             BranchList.ItemsSource = null;
             LogList.ItemsSource = null;
             OutgoingList.ItemsSource = null;
@@ -406,6 +409,9 @@ namespace Folderss
             StagedList.ItemsSource = staged;
             UnstagedTree.ItemsSource = GitChangeTree.Build(unstaged);
             StagedTree.ItemsSource = GitChangeTree.Build(staged);
+
+            if (UnchangedToggle.IsChecked == true)
+                LoadUnchanged(row);
             UnstagedHeader.Text = string.Format("변경됨 ({0})", unstaged.Count);
             StagedHeader.Text = string.Format("스테이지됨 ({0})", staged.Count);
         }
@@ -609,10 +615,133 @@ namespace Folderss
             var tree = IsChangesTreeMode;
             UnstagedList.Visibility = StagedList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
             UnstagedTree.Visibility = StagedTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            UnchangedList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            UnchangedTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
             // 두 보기의 선택은 따로라, 전환하면 오른쪽 diff가 어느 선택의 것인지 헷갈리지 않게 비운다.
             UnstagedList.UnselectAll();
             StagedList.UnselectAll();
+            UnchangedList.UnselectAll();
             ChangesDiff.Clear();
+        }
+
+        // ── 변경 없는 파일 ─────────────────────────────────────────────────
+
+        /// <summary>미리보기로 읽을 최대 파일 크기.</summary>
+        private const long MaxPreviewBytes = 10 * 1024 * 1024;
+
+        private void UnchangedToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var on = UnchangedToggle.IsChecked == true;
+            UnchangedSplitterRow.Height = on ? new GridLength(8) : new GridLength(0);
+            UnchangedRow.Height = on ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            UnchangedRow.MinHeight = on ? 60 : 0;
+            UnchangedSplitter.Visibility = UnchangedPanel.Visibility = on ? Visibility.Visible : Visibility.Collapsed;
+            if (on)
+            {
+                LoadUnchanged(SelectedRow);
+            }
+            else
+            {
+                UnchangedList.ItemsSource = null;
+                UnchangedTree.ItemsSource = null;
+            }
+        }
+
+        /// <summary>추적 파일(ls-files)에서 변경 목록을 뺀 것을 채운다. 조회 전용이라 진행 중 잠금과 무관하게 돈다.</summary>
+        private async void LoadUnchanged(RepositoryRow row)
+        {
+            UnchangedList.ItemsSource = null;
+            UnchangedTree.ItemsSource = null;
+            UnchangedHeader.Text = "변경 없음 (읽는 중…)";
+            if (row?.Snapshot == null)
+            {
+                UnchangedHeader.Text = "변경 없음";
+                return;
+            }
+
+            try
+            {
+                var result = await GitCommandRunner.RunAsync(row.RootPath, GitOutputParser.TrackedFilesArguments,
+                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                if (!ReferenceEquals(row, SelectedRow) || UnchangedToggle.IsChecked != true)
+                    return;
+                if (!result.Success)
+                {
+                    UnchangedHeader.Text = "변경 없음 (읽지 못함)";
+                    AppendResult(row.Info, result);
+                    return;
+                }
+
+                var unchanged = GitOutputParser.UnchangedEntries(GitOutputParser.ParseNulList(result.StdOut), row.Snapshot)
+                    .OrderBy(entry => entry.Path, StringComparer.OrdinalIgnoreCase)
+                    .ToList();
+                UnchangedList.ItemsSource = unchanged;
+                UnchangedTree.ItemsSource = GitChangeTree.Build(unchanged);
+                UnchangedHeader.Text = string.Format("변경 없음 ({0})", unchanged.Count);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // async void라 여기서 막는다.
+                UnchangedHeader.Text = "변경 없음 (읽지 못함)";
+                AppendOutput("변경 없는 파일 목록을 읽지 못했습니다: " + ex.Message);
+            }
+        }
+
+        private void UnchangedList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (UnchangedList.SelectedItem is GitStatusEntry entry)
+                ShowUnchangedContent(entry);
+        }
+
+        private void UnchangedTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = UnchangedTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+                ChangesDiff.Clear(string.Format("폴더 {0} — 변경 없는 파일 {1}개", node.Path, node.Entries.Count()));
+            else
+                ShowUnchangedContent(node.Entry);
+        }
+
+        /// <summary>변경 없는 파일은 차이가 없으므로 작업 트리 파일 내용을 줄 번호와 함께 보인다(BOM 규칙으로 디코딩).</summary>
+        private async void ShowUnchangedContent(GitStatusEntry entry)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+
+            var title = "변경 없음 (현재 내용): " + entry.Path;
+            var full = Path.Combine(row.RootPath, entry.Path.Replace('/', Path.DirectorySeparatorChar));
+            var fallback = ResolveFallbackEncoding();
+            ChangesDiff.ShowLines(title, new List<GitDiffLine>(), "불러오는 중…");
+            try
+            {
+                var (lines, message) = await Task.Run(() =>
+                {
+                    if (!File.Exists(full))
+                        return (new List<GitDiffLine>(), "작업 트리에 파일이 없습니다.");
+                    if (new FileInfo(full).Length > MaxPreviewBytes)
+                        return (new List<GitDiffLine>(), "파일이 너무 커서(10MB 초과) 미리 보지 않습니다. 더블클릭해 여세요.");
+                    var bytes = File.ReadAllBytes(full);
+                    // NUL이 있는데 UTF-16/32 BOM이 아니면 바이너리로 본다(git과 같은 기준: 앞 8000바이트).
+                    if (!GitTextDecoder.HasWideBom(bytes) && Array.IndexOf(bytes, (byte)0, 0, Math.Min(bytes.Length, 8000)) >= 0)
+                        return (new List<GitDiffLine>(), "바이너리 파일입니다.");
+                    return (GitOutputParser.ContentLines(GitTextDecoder.DecodeFile(bytes, fallback), GitDiffView.MaxLines), "빈 파일입니다.");
+                });
+
+                // 기다리는 사이 다른 항목을 골랐으면 버린다.
+                var current = (IsChangesTreeMode ? (UnchangedTree.SelectedItem as GitChangeNode)?.Entry : UnchangedList.SelectedItem as GitStatusEntry);
+                if (ReferenceEquals(current, entry))
+                    ChangesDiff.ShowLines(title, lines, message);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                ChangesDiff.ShowLines(title, new List<GitDiffLine>(), "파일을 읽지 못했습니다: " + ex.Message);
+            }
         }
 
         private async void UnstagedTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
