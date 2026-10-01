@@ -1214,6 +1214,59 @@ namespace Folderss
                 GitCommandRunner.QueryTimeout, GitRestoreCommands.PathspecInput(targets));
         }
 
+        /// <summary>변경됨 목록·트리에서 Delete: 고른 파일(트리 폴더면 그 아래 전체)을 확인 후 휴지통으로 보낸다.</summary>
+        private async void UnstagedChanges_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.Delete || Keyboard.Modifiers != ModifierKeys.None)
+                return;
+            e.Handled = true;
+
+            var row = SelectedRow;
+            if (row == null || _busyCount > 0)
+                return;
+            var entries = SelectedChangeEntries(UnstagedList, UnstagedTree);
+            var files = GitRestoreCommands.DeletableFiles(row.RootPath, entries);
+            if (files.Count == 0)
+                return;
+
+            var root = Path.GetFullPath(row.RootPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            var names = files.Take(10).Select(file => "  " + file.Substring(root.Length)).ToList();
+            if (files.Count > names.Count)
+                names.Add(string.Format("  … 외 {0}개", files.Count - names.Count));
+            var tracked = GitRestoreCommands.DeletableFiles(row.RootPath, entries.Where(entry => !entry.IsUntracked)).Count;
+            var message = string.Format("파일 {0}개를 휴지통으로 보낼까요?\n\n{1}", files.Count, string.Join("\n", names));
+            if (tracked > 0)
+                message += string.Format("\n\n⚠ 이 중 {0}개는 git이 추적하는 파일입니다. 지우면 \"삭제됨\" 변경이 되고, 커밋하지 않은 수정은 휴지통에서만 되살릴 수 있습니다.", tracked);
+            if (MessageBox.Show(this, message, "파일 삭제", MessageBoxButton.YesNo,
+                    tracked > 0 ? MessageBoxImage.Warning : MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+            if (!ConfirmNoUnsavedDocuments("삭제"))
+                return;
+
+            await RunBusyAsync("삭제 중…", async _ =>
+            {
+                var errors = new List<string>();
+                foreach (var file in files)
+                {
+                    try
+                    {
+                        FileOperationService.MoveToRecycleBin(file);
+                    }
+                    catch (OperationCanceledException)
+                    {
+                        break; // 셸 진행 창에서 취소
+                    }
+                    catch (Exception ex)
+                    {
+                        errors.Add(file.Substring(root.Length) + ": " + ex.Message);
+                    }
+                }
+                foreach (var error in errors)
+                    AppendOutput("삭제 실패 — " + error);
+                await RefreshStatusAsync(row, _lifetime.Token);
+            });
+        }
+
         private async void StageAll_Click(object sender, RoutedEventArgs e)
         {
             await RunOnSelectedAsync("전체 스테이지 중…", new[] { "add", "-A" }, GitCommandRunner.QueryTimeout);

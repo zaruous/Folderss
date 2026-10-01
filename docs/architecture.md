@@ -35,7 +35,7 @@ Folderss/
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
-│   ├── GitRestoreCommands.cs       — 파일 되돌리기(restore --worktree / --source=HEAD --staged --worktree) 인수와 모드별 제외 규칙
+│   ├── GitRestoreCommands.cs       — 파일 되돌리기(restore --worktree / --source=HEAD --staged --worktree) 인수와 모드별 제외 규칙, Delete 키 삭제 대상(`DeletableFiles`)
 │   ├── GitWindowStateService.cs    — Git 창 보기 상태(트리 보기·목록 너비·변경됨/스테이지됨 비율) git-window.xml 저장
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
 │   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
@@ -335,6 +335,9 @@ Folderss/
 - 되돌리기: `되돌리기…`(변경됨 목록)는 버린 변경을 복구할 수 없어 곧바로 `GitRestoreDialog`(확인 체크 필수)를 연다. git은 경로 하나라도
   모르면 명령 전체를 거부하고, 일부 경우 파일을 지우거나 비우므로 `GitRestoreCommands.ExclusionReason`이 모드별로 뺀다 — 새 파일, `add -N`(빈 파일이 됨),
   작업 트리 모드의 충돌(git 거부), HEAD 모드의 HEAD에 없는 경로(A/R/C, 충돌 UA/AA — 디스크에서 삭제됨). 실행 전 `ConfirmNoUnsavedDocuments`.
+- 파일 삭제: 변경됨 목록·트리의 `KeyDown`(`UnstagedChanges_KeyDown`, 수정키 없는 `Delete`만)이 선택 항목을 `GitRestoreCommands.DeletableFiles`로
+  거른다(디스크에 있는 파일만 — 이미 삭제된 항목·폴더/서브모듈·저장소 밖 경로 제외). 경로 목록(최대 10개)과 추적 파일 경고를 담은 예/아니오 확인 창(기본 아니오),
+  `ConfirmNoUnsavedDocuments` 뒤 `FileOperationService.MoveToRecycleBin`으로 휴지통에 보내고 상태를 다시 읽는다. 실패는 출력 창에 표시. 영구 삭제는 없다.
 - 끌어 놓기: 변경됨/스테이지됨 목록·트리의 Preview 마우스 이벤트로 끌기를 시작하고(`ChangeDragFormat`, 앱 안 전용 형식),
   반대쪽 영역(`UnstagedDropArea`/`StagedDropArea`)에 놓으면(받을 수 있는 끌기가 올라오면 `*DropHighlight` 테두리·안내 문구 표시,
   히트 테스트 제외. DragLeave는 영역 밖으로 나갈 때만, 끌기가 끝나면 `DoDragDrop` 뒤에서 항상 끔) 버튼과 같은 `StageAsync`/`UnstageAsync`를 부른다. 같은 목록·외부 파일·작업 중이면 거부.

@@ -338,7 +338,8 @@
                                          ItemTemplate="{StaticResource GitEntryTemplate}"
                                          SelectionChanged="UnstagedList_SelectionChanged"
                                          MouseDoubleClick="ChangeList_MouseDoubleClick"
-                                         ToolTip="선택하면 오른쪽에 작업 트리 ↔ 인덱스 차이를 보입니다. 더블클릭하면 파일을 엽니다. 스테이지됨으로 끌어 놓으면 스테이지합니다."/>
+                                         KeyDown="UnstagedChanges_KeyDown"
+                                         ToolTip="선택하면 오른쪽에 작업 트리 ↔ 인덱스 차이를 보입니다. 더블클릭하면 파일을 엽니다. 스테이지됨으로 끌어 놓으면 스테이지합니다. Delete 키로 고른 파일을 휴지통으로 보냅니다."/>
                                 <TreeView x:Name="UnstagedTree"
                                           Visibility="Collapsed"
                                           PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
@@ -346,7 +347,8 @@
                                           PreviewMouseMove="ChangeDrag_PreviewMouseMove"
                                           Style="{StaticResource GitChangeTreeStyle}"
                                           SelectedItemChanged="UnstagedTree_SelectedItemChanged"
-                                          MouseDoubleClick="ChangeTree_MouseDoubleClick"/>
+                                          MouseDoubleClick="ChangeTree_MouseDoubleClick"
+                                          KeyDown="UnstagedChanges_KeyDown"/>
                                 <!-- 끌어 놓기 대상 강조: 받을 수 있는 끌기가 위에 있을 때만 보인다(입력은 아래 목록으로 통과). -->
                                 <Border x:Name="UnstagedDropHighlight" Visibility="Collapsed" IsHitTestVisible="False"
                                         BorderThickness="2" BorderBrush="{DynamicResource AccentBrush}">
