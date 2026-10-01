@@ -9,7 +9,23 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
-## 미릴리스
+## v1.8.0 (2026-10-02)
+
+### 플러그인 (`docs/items/plugin-system.md`, `docs/items/plugin-github-install.md`)
+
+- 설정 > 플러그인(zip 등록·제거), ⋯ 메뉴 > 플러그인 팝업. 플러그인별 `AssemblyLoadContext`, 실행 시점 로드, 본체 설정 읽기 전용 제공, 설정 탭 추가, 비정상 종료 감지·로그. 개발 가이드·주문서 튜토리얼 문서.
+- `GitHub에서 설치…` — 공개 저장소 최신 정식 릴리스의 zip을 받아 설치(zip 여러 개면 선택, digest SHA-256 비교, 100MB 제한). 설치 출처 기록(`plugins\sources.json`)과 같은 ID 다른 출처 경고(확인 체크). 설치 전 플러그인 계약 참조 버전이 본체보다 높으면 거부.
+
+### Git 창 (`docs/items/git-integration.md`)
+
+- 선택 폴더 하위 다중 저장소 상태·스테이지·커밋·브랜치·로그·fetch/pull/push, diff·원격 비교, 브랜치 그래프, 인코딩 규칙(BOM 우선·기본 UTF-8), 설정 창 Git 탭·외부 비교 도구.
+- reset·브랜치 생성/체크아웃·워킹트리, stash, 파일 되돌리기(git restore), 기본 버튼 + ▾ 옵션 대화상자, 평면/트리 보기, 끌어 놓기 스테이지/언스테이지, diff 보기 모드.
+
+### 두 파일 비교 (`docs/items/folder-panel-file-compare.md`)
+
+- 폴더 패널에서 선택한 두 파일 비교(Git diff 뷰 재사용). 비교 설정 분리, 외부 도구·HTML 보고서 공용화.
+
+### 기타
 
 - `GitWindow` — 변경됨 목록·트리에서 `Delete`로 고른 파일(다중 선택, 트리 폴더면 그 아래 전체)을 확인 창(기본 아니오) 후 휴지통으로 보냄. 대상은 `GitRestoreCommands.DeletableFiles`(디스크에 있는 파일만, 폴더·서브모듈·저장소 밖 제외). 추적 중인 파일이 섞이면 경고 아이콘·문구. 영구 삭제(Shift+Delete)는 두지 않음.
 - `Controls/FolderBrowser.xaml.cs` — 폴더 트리 우클릭 시 트리가 접히던 버그 수정. 원인은 클릭 토글이 아니라 셸 컨텍스트 메뉴 후 `RefreshTreeAfterShellAction`이 부모의 자식 노드를 새로 만들면서(루트면 트리 전체 재생성) 펼침 상태가 사라진 것. 새로고침 전 펼친 경로를 모아(`CollectExpandedPaths`) 새로고침 후 다시 펼침(`RestoreExpandedPaths`). 이름이 바뀐 폴더는 경로가 달라져 접힌 상태로 남음.
