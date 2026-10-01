@@ -18,6 +18,7 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 - `Viewers/MarkdownViewer`·`TextViewer`·`MonacoViewer` — `CoreWebView2Environment.CreateAsync`/`EnsureCoreWebView2Async`를 기존 try/catch 안으로 옮김. 절전·장시간 유휴 후 처음 로드되는 뷰어에서 `RPC_E_DISCONNECTED`(COMException)가 `async void OnLoaded`로 올라가 앱 전체가 종료되던 문제를 해당 뷰어의 오류 표시로 대체.
 - 원인(브라우저 프로세스 연결 끊김) 자체는 해결하지 않음. 탭을 다시 열면 새로 초기화됨. 이미 초기화된 뷰어의 `ExecuteScriptAsync` 경로와 `ProcessFailed` 미처리는 남아 있음.
+- `Viewers/MonacoViewer` — 외부 변경 확인창이 떠 있는 동안 타이머가 다시 돌아 확인창이 겹쳐 뜨고, 확인 후 `CoreWebView2`가 null이라 `CallAppOpen`에서 `NullReferenceException`으로 종료되던 문제(#30 코멘트). `MarkdownViewer`와 같은 `_reloadPromptOpen` 가드 추가, 확인 후 탭이 닫혔으면 중단, `CoreWebView2`가 없으면 스크립트 대신 대기 내용으로 보관, 확인 뒤 최신 내용을 다시 읽음.
 
 ### PR 테스트 빌드 + preview 버전 표기
 

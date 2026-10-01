@@ -60,6 +60,7 @@ namespace Folderss.Viewers
         private FileSystemWatcher _fileWatcher;
         private readonly DispatcherTimer _fileReloadTimer;
         private bool _disposed;
+        private bool _reloadPromptOpen;
 
         public UIElement View => this;
         public ViewerCapabilities Capabilities => ViewerCapabilities.Edit;
@@ -194,6 +195,14 @@ namespace Folderss.Viewers
 
         private async System.Threading.Tasks.Task CallAppOpen(string content, string language)
         {
+            // 확인창이 떠 있는 동안 탭이 닫히거나 WebView2가 사라졌을 수 있다(이슈 #30) — 준비되면 다시 연다.
+            if (_disposed || WebView.CoreWebView2 == null)
+            {
+                _pendingContent = content;
+                _pendingLanguage = language;
+                return;
+            }
+
             _pendingContent = null;
             _pendingLanguage = null;
 
@@ -312,6 +321,9 @@ namespace Folderss.Viewers
 
         private async void PromptAndReloadAsync()
         {
+            // 모달 확인창의 메시지 펌프 안에서 타이머가 다시 돌아 확인창이 겹쳐 뜨지 않게 한다.
+            if (_reloadPromptOpen || _disposed)
+                return;
             if (string.IsNullOrWhiteSpace(_filePath) || !File.Exists(_filePath))
                 return;
 
@@ -324,15 +336,27 @@ namespace Folderss.Viewers
                 var message = _modified
                     ? "파일이 외부에서 변경되었습니다. 다시 읽으면 편집 중인 내용이 사라집니다.\n\n다시 읽으시겠습니까?"
                     : "파일이 외부에서 변경되었습니다. 다시 읽으시겠습니까?";
-                var answer = MessageBox.Show(
-                    message,
-                    Path.GetFileName(_filePath),
-                    MessageBoxButton.YesNo,
-                    MessageBoxImage.Question,
-                    MessageBoxResult.Yes);
+                MessageBoxResult answer;
+                _reloadPromptOpen = true;
+                try
+                {
+                    answer = MessageBox.Show(
+                        message,
+                        Path.GetFileName(_filePath),
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Question,
+                        MessageBoxResult.Yes);
+                }
+                finally
+                {
+                    _reloadPromptOpen = false;
+                }
 
-                if (answer != MessageBoxResult.Yes)
+                if (answer != MessageBoxResult.Yes || _disposed)
                     return;
+
+                // 확인창이 떠 있는 동안 파일이 또 바뀌었을 수 있어 최신 내용을 다시 읽는다.
+                content = ReadAllTextAllowingWriters(_filePath, _encoding);
 
                 _lastLoadedContent = content;
                 _modified = false;
