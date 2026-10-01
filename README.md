@@ -70,7 +70,9 @@ Folderss/
 │   ├── UpdateService           — GitHub 최신 릴리스 확인·다운로드
 │   ├── ShellContextMenuService — Windows 쉘 우클릭 컨텍스트 메뉴
 │   ├── PluginManager           — 플러그인 로드(전용 AssemblyLoadContext)·팝업·본체 기능 제공(IPluginManager), 플러그인 예외 격리
-│   ├── PluginPackage           — 플러그인 zip 검증(plugin.json)·등록·안전한 압축 해제(Zip Slip 차단)
+│   ├── PluginPackage           — 플러그인 zip 검증(plugin.json·계약 버전)·등록·안전한 압축 해제(Zip Slip 차단)
+│   ├── PluginGitHubSource      — GitHub 최신 릴리스에서 플러그인 zip 찾기·받기(크기 제한·SHA-256 확인)
+│   ├── PluginSourceStore       — 플러그인 설치 출처 기록(같은 ID 다른 출처 경고용)
 │   ├── PluginSettingsStore     — 플러그인별 키/값 설정 저장
 │   ├── PluginAppSettings       — 플러그인에 주는 본체 설정 읽기 전용 키 목록
 │   ├── PluginSessionRecord     — 플러그인 비정상 종료 감지 기록(plugin-sessions)·로그
@@ -269,6 +271,15 @@ Git 창의 diff, 두 파일 비교 창, HTML 보고서가 함께 쓰는 옵션�
 
 `설정 > 플러그인 > 플러그인 찾기…`로 플러그인 zip을 등록하면 `⋯ 메뉴 > 플러그인`에 나타납니다.
 메뉴에서 처음 선택할 때 zip을 풀고 로드해 팝업 창을 엽니다.
+
+`GitHub에서 설치…`에 공개 저장소 주소(예: `https://github.com/zaruous/Folderss-db-helper`)를 넣으면 최신 정식 릴리스의 zip을
+받아 같은 절차로 등록합니다. 릴리스에 zip이 여러 개면 목록에서 고르고, GitHub가 SHA-256을 알려 주면 받은 파일과 비교합니다.
+로그인하지 않으므로 비공개 저장소는 안 되고, GitHub API 호출 한도(IP당 시간당 60회)를 넘으면 zip을 받아 `플러그인 찾기…`로 설치하세요.
+
+- 설치 출처(로컬 zip / GitHub 저장소)를 기록합니다. 이미 설치한 ID를 **다른 출처**에서 설치하면 확인 체크를 거쳐야 교체합니다 —
+  같은 ID의 플러그인은 기존 플러그인의 설정·데이터를 그대로 읽을 수 있기 때문입니다.
+- 플러그인이 이 Folderss보다 새 플러그인 계약으로 빌드되었으면 설치하지 않고 Folderss 업데이트를 안내합니다
+  (설치해도 로드되지 않음 — 새 기능을 쓰지 않는 플러그인도 마찬가지).
 
 - 플러그인 zip 루트에는 `plugin.json`과 진입점 DLL이 있어야 합니다.
   ```json

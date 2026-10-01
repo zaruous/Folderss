@@ -40,6 +40,8 @@
     <Compile Include="..\..\Folderss\Services\GitEncodingDiff.cs" Link="Linked\GitEncodingDiff.cs" />
     <Compile Include="..\..\Folderss\Services\DiffHtmlReport.cs" Link="Linked\DiffHtmlReport.cs" />
     <Compile Include="..\..\Folderss\Services\PluginPackage.cs" Link="Linked\PluginPackage.cs" />
+    <Compile Include="..\..\Folderss\Services\PluginGitHubSource.cs" Link="Linked\PluginGitHubSource.cs" />
+    <Compile Include="..\..\Folderss\Services\PluginSourceStore.cs" Link="Linked\PluginSourceStore.cs" />
     <Compile Include="..\..\Folderss\Services\PluginSettingsStore.cs" Link="Linked\PluginSettingsStore.cs" />
     <Compile Include="..\..\Folderss\Services\PluginAppSettings.cs" Link="Linked\PluginAppSettings.cs" />
     <Compile Include="..\..\Folderss\Services\PluginSessionRecord.cs" Link="Linked\PluginSessionRecord.cs" />

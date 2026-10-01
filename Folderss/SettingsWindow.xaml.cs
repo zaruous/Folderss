@@ -892,40 +892,130 @@ namespace Folderss
             if (dialog.ShowDialog(this) != true)
                 return;
 
-            PluginManifest manifest;
+            InstallPluginPackage(dialog.FileName, PluginSourceStore.LocalFile);
+        }
+
+        // async void 이벤트 처리기라 예외가 밖으로 나가면 앱이 종료된다. 전체를 try/catch로 감싼다.
+        private async void PluginGitHub_Click(object sender, RoutedEventArgs e)
+        {
+            var temporary = Path.Combine(Path.GetTempPath(), "folderss-plugin-" + Guid.NewGuid().ToString("N") + ".zip");
             try
             {
-                manifest = PluginPackage.ReadManifest(dialog.FileName);
+                var input = new PluginGitHubInstallDialog { Owner = this };
+                if (input.ShowDialog() != true)
+                    return;
+
+                var assets = input.Release.ZipAssets;
+                var asset = assets[0];
+                if (assets.Count > 1)
+                {
+                    var choice = new PluginAssetChoiceDialog(input.Release) { Owner = this };
+                    if (choice.ShowDialog() != true || choice.Selected == null)
+                        return;
+                    asset = choice.Selected;
+                }
+
+                PluginGitHubButton.IsEnabled = false;
+                PluginErrorText.Text = asset.Name + " 내려받는 중…";
+                try
+                {
+                    await PluginGitHubSource.DownloadAsync(PluginGitHubSource.SharedClient, asset, temporary, System.Threading.CancellationToken.None);
+                }
+                finally
+                {
+                    PluginGitHubButton.IsEnabled = true;
+                    RefreshPluginList();
+                }
+
+                // 받는 동안 설정 창을 닫았으면 설치하지 않는다(닫힌 창을 소유자로 대화상자를 띄울 수 없음).
+                if (!IsLoaded)
+                    return;
+                InstallPluginPackage(temporary, PluginGitHubSource.SourceKey(input.RepoOwner, input.Repo));
             }
             catch (Exception ex)
             {
-                MessageBox.Show("플러그인 파일이 아닙니다.\n\n" + ex.Message, "플러그인 찾기", MessageBoxButton.OK, MessageBoxImage.Warning);
+                if (IsLoaded)
+                    MessageBox.Show(this, "GitHub에서 플러그인을 설치하지 못했습니다.\n\n" + ex.Message, "GitHub에서 플러그인 설치",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                // 임시 파일 삭제 실패는 설치 결과와 무관하고 TEMP 정리 대상이라 알리지 않는다.
+                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        /// <summary>
+        /// zip 설치 공통 단계: plugin.json·계약 버전 확인 → 출처 비교·경고 → 등록 → 출처 기록.
+        /// <paramref name="source"/>는 <see cref="PluginSourceStore"/>의 출처 값.
+        /// </summary>
+        private void InstallPluginPackage(string zipPath, string source)
+        {
+            PluginManifest manifest;
+            try
+            {
+                manifest = PluginPackage.ReadManifest(zipPath);
+                PluginPackage.EnsureContractCompatible(
+                    PluginPackage.ReadAssemblyReference(zipPath, manifest, PluginPackage.ContractAssemblyName),
+                    typeof(IFolderssPlugin).Assembly.GetName().Version);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "플러그인을 설치할 수 없습니다.\n\n" + ex.Message, "플러그인 추가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            string previousSource;
+            try
+            {
+                previousSource = PluginSourceStore.Get(PluginManager.PluginsDirectory, manifest.Id);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "플러그인 추가", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             var exists = File.Exists(PluginPackage.GetPackagePath(PluginManager.PluginsDirectory, manifest.Id));
-            var message = string.Format(
-                "{0} {1} ({2})\n\n플러그인은 Folderss와 같은 권한으로 실행되어 파일을 읽고 쓰거나 프로그램을 실행할 수 있습니다. " +
-                "신뢰할 수 있는 출처의 플러그인만 추가하세요.{3}\n\n추가할까요?",
-                manifest.DisplayName, manifest.Version, manifest.Id,
-                exists ? "\n\n같은 ID의 플러그인이 이미 있어 교체합니다." : string.Empty);
-            if (MessageBox.Show(message, "플러그인 추가", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
-                return;
+            if (exists && previousSource != null && !PluginSourceStore.IsSameSource(previousSource, source))
+            {
+                if (new PluginSourceChangeDialog(manifest, previousSource, source) { Owner = this }.ShowDialog() != true)
+                    return;
+            }
+            else
+            {
+                var message = string.Format(
+                    "{0} {1} ({2})\n출처: {3}\n\n플러그인은 Folderss와 같은 권한으로 실행되어 파일을 읽고 쓰거나 프로그램을 실행할 수 있습니다. " +
+                    "신뢰할 수 있는 출처의 플러그인만 추가하세요.{4}\n\n추가할까요?",
+                    manifest.DisplayName, manifest.Version, manifest.Id, PluginSourceStore.Describe(source),
+                    exists ? "\n\n같은 ID의 플러그인이 이미 있어 교체합니다." : string.Empty);
+                if (MessageBox.Show(this, message, "플러그인 추가", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                    return;
+            }
 
             try
             {
-                PluginPackage.Install(dialog.FileName, PluginManager.PluginsDirectory);
+                PluginPackage.Install(zipPath, PluginManager.PluginsDirectory);
             }
             catch (Exception ex)
             {
-                MessageBox.Show("플러그인을 추가하지 못했습니다.\n\n" + ex.Message + "\n\n저장 위치: " + PluginManager.PluginsDirectory,
+                MessageBox.Show(this, "플러그인을 추가하지 못했습니다.\n\n" + ex.Message + "\n\n저장 위치: " + PluginManager.PluginsDirectory,
                     "플러그인 추가", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
 
             RefreshPluginList();
+            try
+            {
+                PluginSourceStore.Set(PluginManager.PluginsDirectory, manifest.Id, source);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, "플러그인은 추가했지만 설치 출처를 기록하지 못했습니다. 다음에 다른 출처에서 같은 ID를 설치할 때 경고가 나오지 않을 수 있습니다.\n\n" + ex.Message,
+                    "플러그인 추가", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             if (PluginManager.IsLoaded(manifest.Id))
-                MessageBox.Show("이미 로드된 플러그인이라 교체한 버전은 다시 시작한 뒤에 적용됩니다.", "플러그인 추가",
+                MessageBox.Show(this, "이미 로드된 플러그인이라 교체한 버전은 다시 시작한 뒤에 적용됩니다.", "플러그인 추가",
                     MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
@@ -949,6 +1039,14 @@ namespace Folderss
             }
 
             RefreshPluginList();
+            try
+            {
+                PluginSourceStore.Set(PluginManager.PluginsDirectory, row.Id, null);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("플러그인은 제거했지만 설치 출처 기록을 지우지 못했습니다.\n\n" + ex.Message, "플러그인 제거", MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
             if (PluginManager.IsLoaded(row.Id))
                 MessageBox.Show("이미 로드된 플러그인은 다시 시작할 때까지 메모리에 남아 있습니다.", "플러그인 제거",
                     MessageBoxButton.OK, MessageBoxImage.Information);
