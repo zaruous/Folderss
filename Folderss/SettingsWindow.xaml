@@ -132,6 +132,7 @@
 
                     <DockPanel Grid.Row="3" Margin="0,10,0,0" LastChildFill="True">
                         <Button DockPanel.Dock="Left" Content="플러그인 찾기…" Click="PluginBrowse_Click" Padding="10,4"/>
+                        <Button x:Name="PluginGitHubButton" DockPanel.Dock="Left" Content="GitHub에서 설치…" Click="PluginGitHub_Click" Padding="10,4" Margin="6,0,0,0"/>
                         <Button DockPanel.Dock="Left" Content="제거" Click="PluginRemove_Click" Padding="10,4" Margin="6,0,0,0"/>
                         <TextBlock x:Name="PluginErrorText" Margin="10,0,0,0" VerticalAlignment="Center" FontSize="11"
                                    TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SecondaryText}"/>

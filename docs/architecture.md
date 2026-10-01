@@ -58,7 +58,9 @@ Folderss/
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
 │   ├── PluginManager.cs            — 플러그인 로드(플러그인별 AssemblyLoadContext, 계약 DLL은 본체 것 공유)·팝업 창·IPluginManager 구현(PluginHost)·팝업용 폴더 패널·플러그인 예외 판별
-│   ├── PluginPackage.cs            — plugin.json 검증, plugins\<id>.zip 등록·목록, 해시별 폴더로 안전한 압축 해제 (순수 로직)
+│   ├── PluginPackage.cs            — plugin.json 검증, 진입점 DLL의 계약 참조 버전 확인, plugins\<id>.zip 등록·목록, 해시별 폴더로 안전한 압축 해제 (순수 로직)
+│   ├── PluginGitHubSource.cs       — 공개 GitHub 저장소 최신 정식 릴리스 조회·zip 받기(100MB 제한, digest SHA-256 비교), 오류는 문장 예외 (순수 로직)
+│   ├── PluginSourceStore.cs        — plugins\sources.json: 플러그인 id별 설치 출처(local / github.com/<소유자>/<저장소>) (순수 로직)
 │   ├── PluginSettingsStore.cs      — 플러그인별 키/값 settings.json (SettingsFile 사용, 실패는 예외)
 │   ├── PluginAppSettings.cs        — 플러그인에 주는 본체 설정 읽기 전용 키 목록 (명시 매핑, 순수 로직)
 │   ├── PluginSessionRecord.cs      — PluginSessionLog: plugin-sessions\<pid>.json 기록·주인 없는 기록 수거·plugin-log.txt (순수 로직)
@@ -205,8 +207,19 @@ Folderss/
   붙이지 않는다. 붙이면 ⋯ 메뉴 명령이 팝업 속 패널을 대상으로 삼고 팝업을 닫은 뒤에도 그 패널을 가리킨다. 파일 열기만
   `PluginManager.OpenFileHandler`(메인 창 `OpenViewerTab`)로 보낸다. 두 파일 비교 메뉴는 팝업 패널에서 동작하지 않는다.
 - 플러그인 설정 탭은 `SettingsWindow.ContentHost`에 코드로 패널을, `TabNav`에 항목을 추가한다(`_pluginPages`).
+- 설치(`SettingsWindow.InstallPluginPackage`, zip·GitHub 공통): `ReadManifest` → 진입점 DLL의 `Folderss.PluginContract` 참조 버전을
+  메타데이터로 읽어(`ReadAssemblyReference`, 로드하지 않음) 본체 계약보다 높으면 거부(`EnsureContractCompatible`) → 출처 비교 → 등록 → 출처 기록.
+  .NET 기본 영역은 요청보다 낮은 버전의 어셈블리로 대체하지 않으므로, 새 계약으로 빌드한 플러그인은 새 멤버를 쓰지 않아도 옛 본체에서 로드되지 않는다.
+  낮은 계약으로 빌드한 플러그인은 높은 본체에서 로드된다(멤버를 지우지 않는 한).
+- 출처: `PluginSourceStore`(`plugins\sources.json`). 이미 있는 id를 기록된 출처와 다른 출처에서 설치하면 `PluginSourceChangeDialog`(경고 + 확인 체크)를
+  거친다. 같은 id는 `plugin-data\<id>`(DPAPI로 암호화한 값도 같은 Windows 사용자라 풀림)를 그대로 읽기 때문이다. 기록이 없으면(이 기능 이전 설치) 일반 교체 확인만.
+  기록 파일을 읽지 못하면 덮어쓰지 않고 설치를 멈춘다.
+- GitHub 설치(`PluginGitHubInstallDialog` → `PluginGitHubSource`): `https://github.com/<소유자>/<저장소>`만 받고 `releases/latest` API로 첨부 zip을 찾는다
+  (API 목록에는 자동 "Source code (zip)"이 없다). 비로그인이라 공개 저장소만, 호출 한도 IP당 시간당 60회(초과 시 문구로 안내).
+  첨부 주소는 https `github.com`만 허용, 리다이렉트는 HttpClient 기본(https→http 거부). Windows 프록시 + 현재 사용자 자격 증명 사용.
 - 테스트: `tests/Folderss.SearchTests/PluginPackageTests.cs` (manifest 검증, Zip Slip, 해제 재사용, 등록·목록, 설정 저장),
-  `PluginSessionTests.cs` (종료 기록 수거·삭제·설명, 로그, 본체 설정 키 목록).
+  `PluginSessionTests.cs` (종료 기록 수거·삭제·설명, 로그, 본체 설정 키 목록),
+  `PluginGitHubSourceTests.cs` (주소 해석, 릴리스 응답·404·호출 한도·연결 실패, 다운로드 제한·해시, 출처 기록, 계약 버전 확인).
   로더(`PluginManager`)는 WPF라 단위 테스트가 없다 — `samples/HelloPlugin`으로 Windows에서 확인한다.
 
 ### DiskUsagePanel / DiskUsageService / DiskUsageMiniPanel

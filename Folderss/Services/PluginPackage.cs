@@ -3,6 +3,8 @@ using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
 using System.Linq;
+using System.Reflection.Metadata;
+using System.Reflection.PortableExecutable;
 using System.Security.Cryptography;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -36,6 +38,8 @@ namespace Folderss.Services
     public static class PluginPackage
     {
         public const string ManifestFileName = "plugin.json";
+        public const string ContractAssemblyName = "Folderss.PluginContract";
+        private const long MaxAssemblyBytes = 200L * 1024 * 1024;
         private const string CompleteMarker = ".complete";
 
         private static readonly Regex IdPattern = new Regex(@"^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$");
@@ -78,6 +82,59 @@ namespace Folderss.Services
                 manifest.PackagePath = zipPath;
                 return manifest;
             }
+        }
+
+        /// <summary>
+        /// zip 안 진입점 DLL(<see cref="PluginManifest.Assembly"/>)이 참조하는 어셈블리 버전. 참조가 없으면 null.
+        /// DLL을 로드하지 않고 메타데이터만 읽는다. .NET 어셈블리가 아니면 <see cref="InvalidDataException"/>.
+        /// </summary>
+        public static Version ReadAssemblyReference(string zipPath, PluginManifest manifest, string assemblyName)
+        {
+            using (var archive = ZipFile.OpenRead(zipPath))
+            {
+                var entry = archive.Entries.FirstOrDefault(e => string.Equals(NormalizeEntryName(e.FullName), NormalizeEntryName(manifest.Assembly),
+                    StringComparison.OrdinalIgnoreCase));
+                if (entry == null)
+                    throw new InvalidDataException("zip에 assembly로 지정한 파일(" + manifest.Assembly + ")이 없습니다.");
+                if (entry.Length > MaxAssemblyBytes)
+                    throw new InvalidDataException(manifest.Assembly + "이(가) 너무 큽니다.");
+
+                var buffer = new MemoryStream();
+                using (var stream = entry.Open())
+                    stream.CopyTo(buffer);
+                buffer.Position = 0;
+                try
+                {
+                    using (var pe = new PEReader(buffer))
+                    {
+                        if (!pe.HasMetadata)
+                            throw new InvalidDataException(manifest.Assembly + "은(는) .NET 어셈블리가 아닙니다.");
+                        var reader = pe.GetMetadataReader();
+                        foreach (var handle in reader.AssemblyReferences)
+                        {
+                            var reference = reader.GetAssemblyReference(handle);
+                            if (string.Equals(reader.GetString(reference.Name), assemblyName, StringComparison.OrdinalIgnoreCase))
+                                return reference.Version;
+                        }
+                        return null;
+                    }
+                }
+                catch (BadImageFormatException ex)
+                {
+                    throw new InvalidDataException(manifest.Assembly + "은(는) .NET 어셈블리가 아닙니다: " + ex.Message, ex);
+                }
+            }
+        }
+
+        /// <summary>
+        /// 플러그인이 참조하는 계약이 본체보다 높으면 <see cref="InvalidDataException"/>. .NET은 더 낮은 버전으로 대체해 로드하지 않으므로
+        /// 설치해도 실행할 때 FileNotFoundException으로 실패한다(새 기능을 쓰지 않는 플러그인도 마찬가지). 낮거나 같으면 로드된다.
+        /// </summary>
+        public static void EnsureContractCompatible(Version required, Version host)
+        {
+            if (required != null && host != null && required > host)
+                throw new InvalidDataException("이 플러그인은 플러그인 계약 " + required + " 이상이 필요하지만 이 Folderss는 " + host +
+                    "입니다. Folderss를 업데이트한 뒤 설치하세요.");
         }
 
         public static void Validate(PluginManifest manifest)
