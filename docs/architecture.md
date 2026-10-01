@@ -57,6 +57,11 @@ Folderss/
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
+│   ├── PluginManager.cs            — 플러그인 로드(플러그인별 AssemblyLoadContext, 계약 DLL은 본체 것 공유)·팝업 창·IPluginManager 구현(PluginHost)·팝업용 폴더 패널·플러그인 예외 판별
+│   ├── PluginPackage.cs            — plugin.json 검증, plugins\<id>.zip 등록·목록, 해시별 폴더로 안전한 압축 해제 (순수 로직)
+│   ├── PluginSettingsStore.cs      — 플러그인별 키/값 settings.json (SettingsFile 사용, 실패는 예외)
+│   ├── PluginAppSettings.cs        — 플러그인에 주는 본체 설정 읽기 전용 키 목록 (명시 매핑, 순수 로직)
+│   ├── PluginSessionRecord.cs      — PluginSessionLog: plugin-sessions\<pid>.json 기록·주인 없는 기록 수거·plugin-log.txt (순수 로직)
 │   ├── SettingsFile.cs             — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 → File.Move 교체, 실패는 예외)
 │   └── ThemeManager.cs             — 테마 전환 및 저장
 ├── Converters/
@@ -80,7 +85,7 @@ Folderss/
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── AboutWindow.cs                  — 정보 창
 ├── PromptWindow.cs                 — 이름 변경·새 폴더 입력 다이얼로그
-├── App.xaml/.cs                    — 앱 진입점, 테마 초기 로드
+├── App.xaml/.cs                    — 앱 진입점, 테마 초기 로드, 플러그인 발 UI 예외 처리
 └── docs/
     ├── architecture.md             — 코드 구조와 확장 포인트 참조
     ├── PROJECT.md                  — 로컬 개발 아이템 운용 규칙
@@ -166,6 +171,43 @@ Folderss/
   `.txt → Text` 같은 매핑이 저장은 되지만 다음 실행 때 사라졌다(버그).
 - 뷰어 매핑은 `ReplaceMappings`로 전체를 한 번에 교체하고 파일을 한 번만 쓴다
   (과거에는 행마다 `RemoveMapping`/`SetMapping`이 각각 파일을 다시 써 저장 한 번에 수십 번 덮어썼다).
+
+### PluginManager / PluginPackage (플러그인)
+- 계약: 솔루션의 `Folderss.PluginContract` 프로젝트(`IFolderssPlugin`, `IPluginManager`, `IFolderPanel`, `IPluginSettingsPage`).
+  본체 내부 형식을 계약에 넣지 않는다 — 넣으면 본체를 고칠 때마다 플러그인이 깨진다.
+- 등록 목록은 별도 파일 없이 `%LOCALAPPDATA%\Folderss\plugins\<id>.zip` 파일들 자체다. 파일 이름과 manifest id가 다르면 목록에서 뺀다.
+  설정 창 `플러그인` 탭의 추가·제거는 `저장` 버튼과 무관하게 바로 적용된다.
+- 로드 시점: 사용자가 `⋯ 메뉴 > 플러그인`에서 실행할 때(`ShowPluginWindow`)만. 메뉴 이름·설정 창 안내 탭은 `plugin.json`만 읽는다.
+  메뉴는 `SubmenuOpened`마다 zip 목록으로 다시 채운다(DLL은 읽지 않음). 설정 창은 `PluginManager.GetLoaded`로 이미 로드된
+  플러그인의 탭만 붙이고, 아직 실행하지 않은 `hasSettings: true` 플러그인에는 안내 탭을 붙인다(로드하지 않음).
+- 본체 설정: `IPluginManager.GetAppSettings()` → `PluginAppSettings.Build`. 키를 명시적으로 나열한다 — 리플렉션으로 속성을 자동 노출하면
+  속성 이름 변경이 플러그인을 조용히 깨고, 나중에 추가한 민감한 값도 새어 나간다. 호출마다 저장 파일을 새로 읽는다.
+  다른 플러그인 설정은 API로 주지 않지만, 플러그인은 같은 권한의 코드라 파일 시스템으로 직접 읽는 것까지 막지는 못한다.
+- 압축 해제는 `plugins\extracted\<id>-<zip SHA256 앞 12자>`에 한다. 이전 실행·다른 창이 로드한 DLL은 잠겨 덮어쓸 수 없어서
+  내용별 폴더를 쓴다(`.complete` 표시가 있으면 재사용). 교체·제거 후 옛 해제본은 남는다.
+  zip 항목 경로가 대상 폴더 밖을 가리키면 거부한다(Zip Slip, `PluginPackage.ExtractSafely`).
+- `PluginLoadContext`는 계약 어셈블리 이름이면 null을 돌려 기본 영역(본체)의 것을 쓰게 한다. 플러그인 폴더의 사본을 올리면
+  같은 이름이라도 다른 형식이 되어 `IFolderssPlugin` 형변환이 실패한다. 수집 가능(collectible) 영역이 아니다 — WPF 형식을 쓰면
+  사실상 언로드되지 않으므로 제거·교체는 재시작 후 반영.
+- 실패 격리: 로드·`Initialize`·`CreateView`·설정 탭 `Title`/`CreateView`/`Save`는 호출부에서 잡는다(`Save`는 `TrySave`로
+  `설정 저장 실패`에 모인다). 그 밖의 UI 스레드 예외는 `App.DispatcherUnhandledException`에서 `PluginManager.TryHandleUnhandled`가
+  예외 스택에 `PluginLoadContext` 어셈블리 프레임이 있을 때만 처리한다(본체 예외는 기존 동작 유지). 같은 플러그인은 한 번만 알린다.
+  플러그인이 만든 스레드의 예외·StackOverflow·네이티브 크래시는 같은 프로세스라 막을 수 없다.
+- 종료 감지(막기는 불가 — 같은 프로세스): 플러그인을 처음 로드하면 `plugin-sessions\<pid>.json`(pid, 시작 시각, 로드한 플러그인)을 쓴다.
+  - 정상 종료: `MainWindow.Window_Closing`이 확인을 모두 지난 뒤 `MarkUserRequestedExit` → `App.OnExit`에서 기록 삭제. OS 로그오프(`SessionEnding`)도 정상.
+  - `App.OnExit`인데 위 표시가 없음 → 코드의 `Application.Shutdown`. 호출이 나중에 처리돼 스택에 호출자가 없으므로 로드된 플러그인만 용의자로 남긴다.
+  - `ProcessExit`인데 `OnExit`를 안 거침 → `Environment.Exit` 등. 이 시점 스택에서 플러그인 프레임을 찾아 기록(최선).
+  - `AppDomain.UnhandledException`(별도 스레드 예외 등) → 예외 스택으로 플러그인 판별해 기록. 종료 자체는 못 막는다.
+  - Kill·FailFast·스택 오버플로·네이티브 크래시 → 아무것도 실행되지 않아 기록이 원인 없이 남는다.
+  - 다음 시작(`ReportPreviousAbnormalExits`, ApplicationIdle): 주인 없는 기록(같은 pid·시작 시각 프로세스가 없음)을 읽어 로그에 남기고 알린 뒤 지운다.
+  - 메인 창 `Close()`는 트레이로 숨기기라서 플러그인이 호출해도 종료되지 않는다(기존 동작).
+- 팝업 폴더 패널(`PluginFolderPanel`)은 `FolderBrowser`를 새로 만들되 메인 창의 활성 패널 추적(`Activated`/`PathChanged`)에는
+  붙이지 않는다. 붙이면 ⋯ 메뉴 명령이 팝업 속 패널을 대상으로 삼고 팝업을 닫은 뒤에도 그 패널을 가리킨다. 파일 열기만
+  `PluginManager.OpenFileHandler`(메인 창 `OpenViewerTab`)로 보낸다. 두 파일 비교 메뉴는 팝업 패널에서 동작하지 않는다.
+- 플러그인 설정 탭은 `SettingsWindow.ContentHost`에 코드로 패널을, `TabNav`에 항목을 추가한다(`_pluginPages`).
+- 테스트: `tests/Folderss.SearchTests/PluginPackageTests.cs` (manifest 검증, Zip Slip, 해제 재사용, 등록·목록, 설정 저장),
+  `PluginSessionTests.cs` (종료 기록 수거·삭제·설명, 로그, 본체 설정 키 목록).
+  로더(`PluginManager`)는 WPF라 단위 테스트가 없다 — `samples/HelloPlugin`으로 Windows에서 확인한다.
 
 ### DiskUsagePanel / DiskUsageService / DiskUsageMiniPanel
 - `보기 > 디스크 사용량 보기` 클릭 시 `MainWindow.ShowDiskUsage_Click`이 `ShowDiskUsagePanel()`로 문서 탭을 연다.

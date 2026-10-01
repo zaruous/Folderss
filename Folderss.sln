@@ -4,6 +4,8 @@ VisualStudioVersion = 17.0.31903.59
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{60DC8134-EBA5-43B8-BCC9-BB4BC16C2548}") = "Folderss", "Folderss\Folderss.csproj", "{0E7EA81C-76E0-4A73-BC01-827D43BE7586}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Folderss.PluginContract", "Folderss.PluginContract\Folderss.PluginContract.csproj", "{07060945-B166-4D47-8E5F-02AB89E5AAC4}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -14,5 +16,9 @@ Global
 		{0E7EA81C-76E0-4A73-BC01-827D43BE7586}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{0E7EA81C-76E0-4A73-BC01-827D43BE7586}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{0E7EA81C-76E0-4A73-BC01-827D43BE7586}.Release|Any CPU.Build.0 = Release|Any CPU
+		{07060945-B166-4D47-8E5F-02AB89E5AAC4}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{07060945-B166-4D47-8E5F-02AB89E5AAC4}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{07060945-B166-4D47-8E5F-02AB89E5AAC4}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{07060945-B166-4D47-8E5F-02AB89E5AAC4}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 EndGlobal

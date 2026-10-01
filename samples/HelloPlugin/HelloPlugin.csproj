@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!--
+    Folderss 플러그인 예제. 빌드하면 bin\<구성>\HelloPlugin.zip(plugin.json + HelloPlugin.dll)이 만들어진다.
+    설정 > 플러그인 > 플러그인 찾기…로 그 zip을 등록한다. (Folderss.sln에는 넣지 않는다)
+    빌드: dotnet build samples/HelloPlugin
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <Nullable>disable</Nullable>
+    <UseWPF>true</UseWPF>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- 계약 DLL은 본체의 것을 쓰므로 플러그인에 복사하지 않는다. -->
+    <ProjectReference Include="..\..\Folderss.PluginContract\Folderss.PluginContract.csproj" Private="false" />
+  </ItemGroup>
+
+  <Target Name="PackPlugin" AfterTargets="Build">
+    <PropertyGroup>
+      <PluginStage>$(IntermediateOutputPath)plugin-stage\</PluginStage>
+    </PropertyGroup>
+    <RemoveDir Directories="$(PluginStage)" />
+    <Copy SourceFiles="plugin.json;$(TargetPath)" DestinationFolder="$(PluginStage)" />
+    <ZipDirectory SourceDirectory="$(PluginStage)" DestinationFile="$(OutDir)HelloPlugin.zip" Overwrite="true" />
+  </Target>
+
+</Project>

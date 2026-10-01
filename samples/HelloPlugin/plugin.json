@@ -1,0 +1,9 @@
+{
+  "id": "sample.hello",
+  "name": "Hello 플러그인",
+  "version": "1.0.0",
+  "description": "폴더 패널 팝업과 설정 탭 예제",
+  "assembly": "HelloPlugin.dll",
+  "type": "HelloPlugin.HelloPlugin",
+  "hasSettings": true
+}

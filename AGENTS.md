@@ -93,6 +93,14 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `docs/architecture.md` — 서비스·컨트롤 목록 업데이트
 - [ ] `README.md` — 아키텍처 요약 업데이트
 
+### 플러그인 계약 변경 시
+- [ ] `Folderss.PluginContract/PluginContracts.cs` — 기존 멤버 삭제·시그니처 변경은 이미 배포된 플러그인을 깨뜨린다. 추가 위주로 하고, 깨지는 변경이면 계약 `<Version>` 주 버전을 올린다
+- [ ] `Services/PluginManager.cs` — `PluginHost`(IPluginManager 구현) 갱신
+- [ ] `samples/HelloPlugin` — 예제가 계속 빌드되는지 확인 (`dotnet build samples/HelloPlugin`)
+- [ ] 플러그인에 보여 줄 본체 설정 키를 추가·변경하면 `Services/PluginAppSettings.cs`, 계약 `GetAppSettings` 주석, `PluginSessionTests.AppSettings_ExposesDocumentedKeysOnly`를 함께 고친다 (키 이름 변경은 깨지는 변경)
+- [ ] `README.md` 플러그인 섹션, `docs/architecture.md` PluginManager 절
+- [ ] 플러그인 개발자 문서 `docs/plugin-development.md`(API 표·plugin.json 표·오류 처리 표), 튜토리얼 `docs/plugin-tutorial-order-form.md`의 코드가 계속 빌드되는지
+
 ### 태그/릴리스 생성 시
 - [ ] `Properties/AssemblyInfo.cs` — `AssemblyVersion`, `AssemblyFileVersion`을 태그 버전에 맞게 갱신
 - [ ] 정보 창(`AboutWindow`)이 실제 어셈블리 버전을 표시하는지 확인
