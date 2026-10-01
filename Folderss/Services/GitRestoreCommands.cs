@@ -1,4 +1,6 @@
+using System;
 using System.Collections.Generic;
+using System.IO;
 using System.Linq;
 using Folderss.Models;
 
@@ -60,6 +62,20 @@ namespace Folderss.Services
         public static List<GitStatusEntry> Restorable(IEnumerable<GitStatusEntry> entries, GitRestoreMode mode, bool hasHead)
         {
             return entries.Where(entry => ExclusionReason(entry, mode, hasHead) == null).ToList();
+        }
+
+        /// <summary>
+        /// 변경됨 목록에서 Delete 키로 지울 파일의 전체 경로. 디스크에 실제 파일로 있는 것만(이미 삭제된 항목·폴더·서브모듈 제외),
+        /// 저장소 폴더 밖을 가리키는 경로는 버린다.
+        /// </summary>
+        public static List<string> DeletableFiles(string rootPath, IEnumerable<GitStatusEntry> entries)
+        {
+            var root = Path.GetFullPath(rootPath).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+            return entries
+                .Select(entry => Path.GetFullPath(Path.Combine(root, entry.Path.Replace('/', Path.DirectorySeparatorChar))))
+                .Where(path => path.StartsWith(root, StringComparison.OrdinalIgnoreCase) && File.Exists(path))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
         }
 
         /// <summary>NUL 구분 경로 목록(명령줄 길이 제한·특수 문자 회피).</summary>

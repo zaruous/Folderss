@@ -1232,6 +1232,37 @@ namespace Folderss.SearchTests
             Assert.Equal("s3\n", File.ReadAllText(Path.Combine(repo, "added.txt")));
         }
 
+        [Fact]
+        public void DeletableFiles_KeepsExistingFilesInsideRepoOnly()
+        {
+            var repo = Path.Combine(Path.GetTempPath(), "folderss-git-delete-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(Path.Combine(repo, "logs"));
+            Directory.CreateDirectory(Path.Combine(repo, "sub"));
+            var outside = repo + "-outside.txt";
+            File.WriteAllText(outside, "x");
+            try
+            {
+                File.WriteAllText(Path.Combine(repo, "logs", "app.log"), "x");
+                File.WriteAllText(Path.Combine(repo, "a.txt"), "x");
+                GitStatusEntry E(string path) => new GitStatusEntry { Path = path };
+
+                var files = GitRestoreCommands.DeletableFiles(repo, new[]
+                {
+                    E("logs/app.log"), E("a.txt"), E("a.txt"),   // 중복은 한 번
+                    E("gone.txt"),                              // 이미 삭제된 항목
+                    E("sub"),                                   // 폴더(서브모듈 등)
+                    E("../" + Path.GetFileName(outside)),       // 저장소 밖(실제로 있는 파일)
+                });
+
+                Assert.Equal(new[] { Path.Combine(repo, "logs", "app.log"), Path.Combine(repo, "a.txt") }, files);
+            }
+            finally
+            {
+                Directory.Delete(repo, true);
+                File.Delete(outside);
+            }
+        }
+
         [SkippableFact]
         public async Task RealGit_Restore_HeadModeResolvesConflictToHead_WorkTreeModeExcludesIt()
         {
