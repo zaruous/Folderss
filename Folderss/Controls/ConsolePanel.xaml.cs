@@ -251,7 +251,7 @@ namespace Folderss.Controls
                     args.Handled = true;
                     var selectedText = TryGetTerminalSelectedText(terminal);
                     if (!string.IsNullOrEmpty(selectedText))
-                        Clipboard.SetText(selectedText);
+                        ClipboardService.TrySetDataObject(selectedText);
                     else
                         terminal.ConPTYTerm?.WriteToTerm("\x03");
                     return;

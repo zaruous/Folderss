@@ -77,6 +77,7 @@ Folderss/
 │   ├── PluginAppSettings       — 플러그인에 주는 본체 설정 읽기 전용 키 목록
 │   ├── PluginSessionRecord     — 플러그인 비정상 종료 감지 기록(plugin-sessions)·로그
 │   ├── SettingsFile            — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 후 교체)
+│   ├── ClipboardService        — 클립보드 쓰기 (다른 프로그램이 점유 중이면 알리고 실패 반환)
 │   └── ThemeManager            — 테마 전환 및 저장
 ├── Converters/
 │   └── FractionToStarConverter — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)

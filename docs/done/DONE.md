@@ -9,6 +9,15 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## 다음 릴리스 (미배포)
+
+### 클립보드 점유 시 앱 크래시 방지 (#30 코멘트 2026-10-02)
+
+- `Services/ClipboardService.cs` (신규) — `TrySetDataObject`: `Clipboard.SetDataObject(data, true)`의 `ExternalException`(`CLIPBRD_E_CANT_OPEN`)을 잡아 경고 창을 띄우고 false 반환. WPF는 내부에서 OleSetClipboard/OleFlushClipboard를 이미 10회×100ms 재시도하므로 추가 재시도는 두지 않음(1초 넘게 다른 프로그램이 점유한 경우).
+- `Controls/FolderBrowser.xaml.cs` — 복사(파일·폴더 트리)·잘라내기를 이 헬퍼로 바꿈. 실패하면 잘라내기 상태를 설정하지 않음(예전 클립보드 내용이 이동되는 것 방지). `FavoritesPanel` 경로 복사, `ConsolePanel` Ctrl+C 텍스트 복사도 동일 적용.
+- 조용히 넘기지 않고 알리는 이유: 복사가 안 된 줄 모르고 붙여넣으면 예전 클립보드의 파일이 복사·이동됨.
+- 남은 것: 붙여넣기 쪽 `Clipboard.GetFileDropList`/`GetText`(MainWindow·FolderBrowser 경로창)는 미보호. Flush만 실패한 경우 데이터는 실제로 클립보드에 올라가 있을 수 있어 경고와 실제 상태가 다를 수 있음.
+
 ## v1.8.0 (2026-10-02)
 
 ### 플러그인 (`docs/items/plugin-system.md`, `docs/items/plugin-github-install.md`)
