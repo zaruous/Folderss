@@ -1476,7 +1476,7 @@ namespace Folderss.Controls
 
         private void Paste_CanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
-            e.CanExecute = Clipboard.ContainsFileDropList();
+            e.CanExecute = ClipboardService.ContainsFileDropList();
             e.Handled = true;
         }
 
@@ -1517,9 +1517,14 @@ namespace Folderss.Controls
         {
             if (e.Key == Key.V && Keyboard.Modifiers == ModifierKeys.Control)
             {
-                if (Clipboard.ContainsFileDropList())
+                if (!ClipboardService.TryGetFileDropList(out var files))
                 {
-                    var files = Clipboard.GetFileDropList();
+                    e.Handled = true;
+                    return;
+                }
+
+                if (files != null)
+                {
                     if (files.Count > 0)
                     {
                         var path = files[0];
@@ -1530,9 +1535,17 @@ namespace Folderss.Controls
                         e.Handled = true;
                     }
                 }
-                else if (Clipboard.ContainsText())
+                else
                 {
-                    var text = Clipboard.GetText().Trim();
+                    if (!ClipboardService.TryGetText(out var text))
+                    {
+                        e.Handled = true;
+                        return;
+                    }
+                    if (text == null)
+                        return;
+
+                    text = text.Trim();
                     PathBox.SelectedText = text;
                     PathBox.CaretIndex = PathBox.SelectionStart + text.Length;
                     PathBox.SelectionLength = 0;
