@@ -2078,11 +2078,9 @@ namespace Folderss
 
         public bool TryPasteFromClipboardInto(FolderBrowser targetPane)
         {
-            if (!Clipboard.ContainsFileDropList())
-                return false;
-
-            var files = Clipboard.GetFileDropList();
-            if (files.Count == 0)
+            if (!ClipboardService.TryGetFileDropList(out var files))
+                return true;
+            if (files == null || files.Count == 0)
                 return false;
 
             var targetPath = targetPane?.CurrentPath;
