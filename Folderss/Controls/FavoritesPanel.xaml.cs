@@ -41,11 +41,11 @@ namespace Folderss.Controls
                 var dataObject = new DataObject();
                 dataObject.SetFileDropList(pathsCollection);
                 dataObject.SetText(path, TextDataFormat.UnicodeText);
-                Clipboard.SetDataObject(dataObject, true);
+                ClipboardService.TrySetDataObject(dataObject);
             }
             else
             {
-                Clipboard.SetText(path);
+                ClipboardService.TrySetDataObject(path);
             }
 
             return true;

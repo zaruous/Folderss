@@ -1397,7 +1397,8 @@ namespace Folderss.Controls
             var dataObject = new DataObject();
             dataObject.SetFileDropList(pathsCollection);
             dataObject.SetText(BuildNameListText(paths), TextDataFormat.UnicodeText);
-            Clipboard.SetDataObject(dataObject, true);
+            if (!ClipboardService.TrySetDataObject(dataObject))
+                return;
 
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
@@ -1424,7 +1425,8 @@ namespace Folderss.Controls
             var dataObject = new DataObject();
             dataObject.SetFileDropList(pathsCollection);
             dataObject.SetText(name, TextDataFormat.UnicodeText);
-            Clipboard.SetDataObject(dataObject, true);
+            if (!ClipboardService.TrySetDataObject(dataObject))
+                return;
 
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
@@ -1458,7 +1460,8 @@ namespace Folderss.Controls
             var dataObject = new DataObject();
             dataObject.SetFileDropList(pathsCollection);
             dataObject.SetText(BuildNameListText(selected.Select(item => item.FullPath)), TextDataFormat.UnicodeText);
-            Clipboard.SetDataObject(dataObject, true);
+            if (!ClipboardService.TrySetDataObject(dataObject))
+                return;
 
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
