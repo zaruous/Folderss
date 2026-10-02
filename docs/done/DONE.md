@@ -19,6 +19,11 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 - 붙여넣기 쪽도 보호: `TryGetFileDropList`/`TryGetText`(읽기 실패 시 경고), `ContainsFileDropList`(붙여넣기 명령 사용 가능 판단용, 자주 불려 경고 없이 false). `MainWindow.TryPasteFromClipboardInto`, `FolderBrowser` 붙여넣기 CanExecute·경로창 Ctrl+V에 적용.
 - 등록(OleSetClipboard)은 됐고 Flush만 실패한 경우(#30 로그가 이 경우)는 `Clipboard.IsCurrent`로 확인해 성공으로 처리. 이 앱이 실행 중인 동안은 붙여넣기가 되고, 앱을 닫으면 내용이 사라질 수 있음.
 
+### Git 창 커밋 ▾ 크래시 방지, Git 화면 클립보드 실패 알림
+
+- `GitWindow.CommitOptions_Click` — 직전 커밋 제목 조회(`git log -1`)가 `async void` 안에서 보호 없이 실행돼, git 경로 오류(`FileNotFoundException`)나 창 닫힘 취소 시 앱이 종료될 수 있던 문제. 다른 핸들러와 같은 방식(취소는 중단, 그 밖은 경고 후 중단)으로 감쌈.
+- `GitWindow` 해시 복사, `GitDiffView` Ctrl+C — 클립보드 실패를 조용히 무시하던 것을 `ClipboardService.TrySetDataObject`로 바꿔 알림.
+
 ## v1.8.0 (2026-10-02)
 
 ### 플러그인 (`docs/items/plugin-system.md`, `docs/items/plugin-github-install.md`)
