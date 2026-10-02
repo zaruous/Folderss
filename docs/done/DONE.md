@@ -17,6 +17,7 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 - `Controls/FolderBrowser.xaml.cs` — 복사(파일·폴더 트리)·잘라내기를 이 헬퍼로 바꿈. 실패하면 잘라내기 상태를 설정하지 않음(예전 클립보드 내용이 이동되는 것 방지). `FavoritesPanel` 경로 복사, `ConsolePanel` Ctrl+C 텍스트 복사도 동일 적용.
 - 조용히 넘기지 않고 알리는 이유: 복사가 안 된 줄 모르고 붙여넣으면 예전 클립보드의 파일이 복사·이동됨.
 - 붙여넣기 쪽도 보호: `TryGetFileDropList`/`TryGetText`(읽기 실패 시 경고), `ContainsFileDropList`(붙여넣기 명령 사용 가능 판단용, 자주 불려 경고 없이 false). `MainWindow.TryPasteFromClipboardInto`, `FolderBrowser` 붙여넣기 CanExecute·경로창 Ctrl+V에 적용.
+- `MainWindow.TryPasteFromClipboardInto` — 잘라내기 뒤 다른 프로그램(탐색기 등)에서 복사한 파일을 붙여넣으면 `_isCut` 플래그만 보고 **이동**하던 버그. 클립보드 파일 목록이 잘라낸 목록과 같을 때만 이동하고, 다르면 복사하며 남은 잘라내기 표시를 지움.
 - 등록(OleSetClipboard)은 됐고 Flush만 실패한 경우(#30 로그가 이 경우)는 `Clipboard.IsCurrent`로 확인해 성공으로 처리. 이 앱이 실행 중인 동안은 붙여넣기가 되고, 앱을 닫으면 내용이 사라질 수 있음.
 
 ### Git 창 커밋 ▾ 크래시 방지, Git 화면 클립보드 실패 알림
