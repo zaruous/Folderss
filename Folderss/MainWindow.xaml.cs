@@ -170,8 +170,16 @@ namespace Folderss
             if (resource != null)
                 _trayIcon.Icon = new System.Drawing.Icon(resource.Stream);
 
-            var menu = new Forms.ContextMenuStrip();
+            var menu = new Forms.ContextMenuStrip { ShowItemToolTips = true };
             menu.Items.Add("열기", null, (s, e) => Dispatcher.Invoke(ShowFromTray));
+            menu.Items.Add(new Forms.ToolStripSeparator());
+            // 플러그인은 본체 창을 열지 않고도 트레이에서 바로 실행한다. 하위 항목은 열 때마다 plugins 폴더 기준으로 다시 채운다
+            // (빈 하위 메뉴는 ▸가 안 보이고 DropDownOpening도 안 오므로 자리표시 항목을 하나 둔다).
+            var plugins = new Forms.ToolStripMenuItem("플러그인");
+            plugins.DropDownItems.Add(new Forms.ToolStripMenuItem("(목록 읽는 중…)") { Enabled = false });
+            plugins.DropDownOpening += (s, e) => PopulateTrayPluginMenu(plugins);
+            menu.Items.Add(plugins);
+            menu.Items.Add("플러그인 관리…", null, (s, e) => Dispatcher.Invoke(OpenPluginSettingsFromTray));
             menu.Items.Add(new Forms.ToolStripSeparator());
             menu.Items.Add("종료", null, (s, e) => Dispatcher.Invoke(ExitApp));
             _trayIcon.ContextMenuStrip = menu;
@@ -185,6 +193,52 @@ namespace Folderss
             if (WindowState == WindowState.Minimized)
                 WindowState = WindowState.Normal;
             Activate();
+        }
+
+        /// <summary>트레이 > 플러그인: ⋯ 메뉴와 같은 규칙으로 등록된 플러그인 목록·읽기 오류·"플러그인 관리…"를 채운다.</summary>
+        private void PopulateTrayPluginMenu(Forms.ToolStripMenuItem root)
+        {
+            root.DropDownItems.Clear();
+            var errors = new List<string>();
+            var plugins = PluginManager.ListInstalled(errors);
+            foreach (var manifest in plugins)
+            {
+                var target = manifest;
+                var item = new Forms.ToolStripMenuItem(manifest.DisplayName)
+                {
+                    ToolTipText = string.IsNullOrWhiteSpace(manifest.Description)
+                        ? manifest.Id + " " + manifest.Version
+                        : manifest.Description + "\n" + manifest.Id + " " + manifest.Version
+                };
+                item.Click += (s, e) => Dispatcher.Invoke(() => ShowPluginFromTray(target));
+                root.DropDownItems.Add(item);
+            }
+            if (plugins.Count == 0)
+                root.DropDownItems.Add(new Forms.ToolStripMenuItem("(등록된 플러그인 없음)") { Enabled = false });
+            if (errors.Count > 0)
+                root.DropDownItems.Add(new Forms.ToolStripMenuItem(string.Format("읽지 못한 플러그인 {0}개", errors.Count))
+                {
+                    Enabled = false,
+                    ToolTipText = string.Join("\n", errors)
+                });
+
+            root.DropDownItems.Add(new Forms.ToolStripSeparator());
+            var manage = new Forms.ToolStripMenuItem("플러그인 관리…");
+            manage.Click += (s, e) => Dispatcher.Invoke(OpenPluginSettingsFromTray);
+            root.DropDownItems.Add(manage);
+        }
+
+        /// <summary>트레이에서 플러그인 창 열기. 본체 창이 숨어 있으면 소유자 없이 연다 — 숨은 창을 Owner로 두면 플러그인 창도 같이 숨는다.</summary>
+        private void ShowPluginFromTray(PluginManifest manifest)
+        {
+            PluginManager.ShowPluginWindow(manifest, IsVisible ? this : null);
+        }
+
+        /// <summary>트레이에서 플러그인 관리: 설정 창은 본체 창을 소유자로 쓰므로 먼저 본체 창을 보인다.</summary>
+        private void OpenPluginSettingsFromTray()
+        {
+            ShowFromTray();
+            OpenSettings(this, "Plugins");
         }
 
         private void ExitApp()
