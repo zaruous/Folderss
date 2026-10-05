@@ -1331,8 +1331,21 @@ namespace Folderss
             string lastSubject = null;
             if (row.Snapshot.HeadOid != null)
             {
-                var last = await GitCommandRunner.RunAsync(row.RootPath, new[] { "log", "-1", "--format=%s" }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
-                lastSubject = last.Success ? last.StdOut.Trim() : null;
+                // async void라 예외가 나가면 앱이 종료된다(git 경로 오류, 창 닫힘 취소).
+                try
+                {
+                    var last = await GitCommandRunner.RunAsync(row.RootPath, new[] { "log", "-1", "--format=%s" }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                    lastSubject = last.Success ? last.StdOut.Trim() : null;
+                }
+                catch (OperationCanceledException)
+                {
+                    return;
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show(this, "git을 실행할 수 없습니다.\n" + ex.Message, "Git", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
             }
             var headPushed = row.Snapshot.Upstream != null && row.Snapshot.Ahead == 0;
             var dialog = new GitCommitOptionsDialog(lastSubject, headPushed, string.IsNullOrWhiteSpace(CommitMessageBox.Text)) { Owner = this };
@@ -1557,14 +1570,7 @@ namespace Folderss
         {
             if (SelectedCommit == null)
                 return;
-            try
-            {
-                Clipboard.SetText(SelectedCommit.Hash);
-            }
-            catch (System.Runtime.InteropServices.COMException)
-            {
-                // 다른 프로그램이 클립보드를 잡고 있으면 조용히 실패한다.
-            }
+            ClipboardService.TrySetDataObject(SelectedCommit.Hash);
         }
 
         // ── 워킹트리 ──────────────────────────────────────────────────────────

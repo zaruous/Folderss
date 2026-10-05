@@ -161,14 +161,7 @@ namespace Folderss.Controls
             // 선택 순서가 아니라 화면 순서로 복사한다.
             var selected = LineList.SelectedItems.Cast<GitDiffLine>().ToHashSet();
             var text = string.Join("\r\n", LineList.Items.Cast<GitDiffLine>().Where(selected.Contains).Select(line => line.Text));
-            try
-            {
-                Clipboard.SetText(text);
-            }
-            catch (System.Runtime.InteropServices.COMException)
-            {
-                // 다른 프로그램이 클립보드를 잡고 있으면 조용히 실패한다(사용자가 다시 누르면 됨).
-            }
+            ClipboardService.TrySetDataObject(text);
             e.Handled = true;
         }
     }

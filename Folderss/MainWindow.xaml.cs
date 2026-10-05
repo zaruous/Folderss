@@ -2132,18 +2132,19 @@ namespace Folderss
 
         public bool TryPasteFromClipboardInto(FolderBrowser targetPane)
         {
-            if (!Clipboard.ContainsFileDropList())
-                return false;
-
-            var files = Clipboard.GetFileDropList();
-            if (files.Count == 0)
+            if (!ClipboardService.TryGetFileDropList(out var files))
+                return true;
+            if (files == null || files.Count == 0)
                 return false;
 
             var targetPath = targetPane?.CurrentPath;
             if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
                 return false;
 
-            bool isCut = _isCut;
+            // 잘라낸 뒤 다른 프로그램에서 복사했으면 클립보드 목록이 바뀌어 있다. 그때는 이동이 아니라 복사.
+            bool isCut = _isCut && _cutPaths.SetEquals(files.Cast<string>());
+            if (!isCut)
+                ClearCutState();
             if (IsDestinationPinLocked(targetPath) ||
                 (isCut && files.Cast<string>().Any(IsPathPinLocked)))
             {

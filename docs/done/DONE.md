@@ -21,7 +21,14 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 - `Services/ClipboardService.cs` (신규) — `TrySetDataObject`: `Clipboard.SetDataObject(data, true)`의 `ExternalException`(`CLIPBRD_E_CANT_OPEN`)을 잡아 경고 창을 띄우고 false 반환. WPF는 내부에서 OleSetClipboard/OleFlushClipboard를 이미 10회×100ms 재시도하므로 추가 재시도는 두지 않음(1초 넘게 다른 프로그램이 점유한 경우).
 - `Controls/FolderBrowser.xaml.cs` — 복사(파일·폴더 트리)·잘라내기를 이 헬퍼로 바꿈. 실패하면 잘라내기 상태를 설정하지 않음(예전 클립보드 내용이 이동되는 것 방지). `FavoritesPanel` 경로 복사, `ConsolePanel` Ctrl+C 텍스트 복사도 동일 적용.
 - 조용히 넘기지 않고 알리는 이유: 복사가 안 된 줄 모르고 붙여넣으면 예전 클립보드의 파일이 복사·이동됨.
-- 남은 것: 붙여넣기 쪽 `Clipboard.GetFileDropList`/`GetText`(MainWindow·FolderBrowser 경로창)는 미보호. Flush만 실패한 경우 데이터는 실제로 클립보드에 올라가 있을 수 있어 경고와 실제 상태가 다를 수 있음.
+- 붙여넣기 쪽도 보호: `TryGetFileDropList`/`TryGetText`(읽기 실패 시 경고), `ContainsFileDropList`(붙여넣기 명령 사용 가능 판단용, 자주 불려 경고 없이 false). `MainWindow.TryPasteFromClipboardInto`, `FolderBrowser` 붙여넣기 CanExecute·경로창 Ctrl+V에 적용.
+- `MainWindow.TryPasteFromClipboardInto` — 잘라내기 뒤 다른 프로그램(탐색기 등)에서 복사한 파일을 붙여넣으면 `_isCut` 플래그만 보고 **이동**하던 버그. 클립보드 파일 목록이 잘라낸 목록과 같을 때만 이동하고, 다르면 복사하며 남은 잘라내기 표시를 지움.
+- 등록(OleSetClipboard)은 됐고 Flush만 실패한 경우(#30 로그가 이 경우)는 `Clipboard.IsCurrent`로 확인해 성공으로 처리. 이 앱이 실행 중인 동안은 붙여넣기가 되고, 앱을 닫으면 내용이 사라질 수 있음.
+
+### Git 창 커밋 ▾ 크래시 방지, Git 화면 클립보드 실패 알림
+
+- `GitWindow.CommitOptions_Click` — 직전 커밋 제목 조회(`git log -1`)가 `async void` 안에서 보호 없이 실행돼, git 경로 오류(`FileNotFoundException`)나 창 닫힘 취소 시 앱이 종료될 수 있던 문제. 다른 핸들러와 같은 방식(취소는 중단, 그 밖은 경고 후 중단)으로 감쌈.
+- `GitWindow` 해시 복사, `GitDiffView` Ctrl+C — 클립보드 실패를 조용히 무시하던 것을 `ClipboardService.TrySetDataObject`로 바꿔 알림.
 
 ## v1.8.0 (2026-10-02)
 
