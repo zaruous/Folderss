@@ -35,6 +35,7 @@ Folderss/
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
+│   ├── GitConfigCommands.cs        — 저장소 설정(git config --global/--local) list -z 파서·set/unset 인수·편집 diff, 인증·작성자 키 목록 (순수 로직)
 │   ├── GitRestoreCommands.cs       — 파일 되돌리기(restore --worktree / --source=HEAD --staged --worktree) 인수와 모드별 제외 규칙, Delete 키 삭제 대상(`DeletableFiles`)
 │   ├── GitWindowStateService.cs    — Git 창 보기 상태(트리 보기·목록 너비·변경됨/스테이지됨 비율) git-window.xml 저장
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
@@ -79,7 +80,7 @@ Folderss/
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
-├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리), 코드로 구성
+├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, 이름·위치 헤더, 좌우 바꾸기, GitDiffView + `git diff --no-index`), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
@@ -324,6 +325,10 @@ Folderss/
   (파일 저장 실패여도 이번 실행 값)를 `MainWindow._gitSettings`·`_diffSettings`에 두고 열린 모든 `GitWindow.ApplySettings(git, diff)`와
   `FileCompareWindow.ApplySettings(diff)`에 알린다 — git 경로가 바뀌면 재확인+재탐색, 탐색 옵션이면 재탐색,
   표시 옵션이면 상세만 다시 읽음. `GitCommandRunner.ConfiguredGitPath`는 정적이라 마지막으로 반영한 설정이 모든 창에 적용된다.
+- 저장소 설정: 왼쪽 목록 우클릭 > `설정…`(`RepoConfig_Click`). `GitConfigCommands.List`로 글로벌·로컬을 각각 `config --list -z`로 읽어
+  `GitConfigDialog`에 두 열로 보인다(인증·작성자 키 `GitConfigCommands.AuthFields` 편집 + 전체 목록 읽기 전용). 글로벌 파일이 없으면(128,
+  "unable to read config file") 빈 설정으로 본다. 저장은 `Diff`가 낸 바뀐 키만 `config --<scope> -- key value` / `--unset`으로 하나씩 실행하고
+  실패하면 거기서 멈춘다(출력 영역에 남음). 값이 여러 개인 키는 git이 단일 set·unset을 거부(종료 코드 5)하므로 읽기 전용. system 범위는 다루지 않는다.
 - 인코딩 규칙: BOM(매직넘버)이 있으면 그 인코딩, 없으면 UTF-8(`GitTextDecoder.DetectBom`/`DecodeFile`). 대체 인코딩(기본 없음)은
   BOM 없는 내용에서 엄격 UTF-8로 안 읽히는 줄에만 쓴다(`Decode`, `CodePagesEncodingProvider` 등록 필요). 상태·로그·브랜치 출력은 UTF-8 그대로.
   UTF-16/32 파일은 git이 NUL 때문에 바이너리로 보므로 `GitEncodingDiff.ExpandAsync`가 "Binary files a/X and b/Y differ" 줄을 찾아
