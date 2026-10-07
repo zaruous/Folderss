@@ -369,6 +369,79 @@ namespace Folderss
             await ReloadSelectedDetailAsync();
         }
 
+        private void RepoList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
+        {
+            // ListBox는 오른쪽 버튼으로 선택하지 않으므로 메뉴가 열리기 전에 누른 저장소를 선택한다.
+            if (ItemsControl.ContainerFromElement(RepoList, e.OriginalSource as DependencyObject) is ListBoxItem item && !item.IsSelected)
+                item.IsSelected = true;
+        }
+
+        private void RepoList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            // 빈 곳을 눌렀거나 작업 중이면 메뉴를 열지 않는다.
+            if (SelectedRow == null || _busyCount > 0)
+                e.Handled = true;
+        }
+
+        // ── 저장소 설정(git config) ──────────────────────────────────────────
+
+        /// <summary>
+        /// 선택 저장소의 글로벌·로컬 설정을 읽어 <see cref="GitConfigDialog"/>로 보여 주고, 바뀐 값만 <c>git config</c>로 저장한다.
+        /// 글로벌 파일이 아직 없으면(종료 코드 128 "unable to read config file") 빈 설정으로 본다.
+        /// </summary>
+        private async void RepoConfig_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            if (row == null || _busyCount > 0)
+                return;
+
+            List<GitConfigEntry> global = null, local = null;
+            await RunBusyAsync("설정 읽는 중…", async token =>
+            {
+                global = await ReadConfigAsync(row, GitConfigScope.Global, token);
+                local = await ReadConfigAsync(row, GitConfigScope.Local, token);
+            });
+            if (global == null || local == null)
+                return; // 읽기 실패·취소 — 원인은 출력 영역에 남음
+
+            var dialog = new GitConfigDialog(row.Info.DisplayPath, row.RootPath, global, local) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+
+            var changes = dialog.Changes;
+            if (changes.Count == 0)
+            {
+                AppendOutput("바뀐 설정이 없습니다.    [" + row.Info.DisplayPath + "]");
+                return;
+            }
+
+            await RunBusyAsync("설정 저장 중…", async token =>
+            {
+                foreach (var change in changes)
+                {
+                    var result = await GitCommandRunner.RunAsync(row.RootPath, GitConfigCommands.Apply(change), GitCommandRunner.QueryTimeout, token);
+                    AppendResult(row.Info, result);
+                    if (!result.Success)
+                    {
+                        AppendOutput("설정 저장을 중단했습니다. 뒤의 항목은 적용되지 않았습니다.");
+                        return;
+                    }
+                }
+                AppendOutput(string.Format("설정 {0}개를 저장했습니다.", changes.Count));
+            });
+        }
+
+        private async Task<List<GitConfigEntry>> ReadConfigAsync(RepositoryRow row, GitConfigScope scope, CancellationToken token)
+        {
+            var result = await GitCommandRunner.RunAsync(row.RootPath, GitConfigCommands.List(scope), GitCommandRunner.QueryTimeout, token, readOnly: true);
+            if (result.Success)
+                return GitConfigCommands.ParseList(result.StdOut);
+            if (scope == GitConfigScope.Global && result.ExitCode == 128 && result.StdErr.Contains("unable to read config file"))
+                return new List<GitConfigEntry>();
+            AppendResult(row.Info, result);
+            throw new InvalidOperationException((scope == GitConfigScope.Global ? "글로벌" : "로컬") + " 설정을 읽지 못했습니다.");
+        }
+
         private void SectionNav_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             var tag = (SectionNav.SelectedItem as ListBoxItem)?.Tag as string;

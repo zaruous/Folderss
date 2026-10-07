@@ -192,7 +192,16 @@
                 <ListBox x:Name="RepoList"
                          BorderThickness="0,1,0,0"
                          SelectionChanged="RepoList_SelectionChanged"
+                         PreviewMouseRightButtonDown="RepoList_PreviewMouseRightButtonDown"
+                         ContextMenuOpening="RepoList_ContextMenuOpening"
                          ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <!-- 저장소 우클릭: 그 저장소의 git config(글로벌·로컬) 보기·저장 -->
+                    <ListBox.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="설정…" Click="RepoConfig_Click"
+                                      ToolTip="이 저장소의 인증·작성자 설정(git config)을 글로벌/로컬로 나눠 보고 저장합니다"/>
+                        </ContextMenu>
+                    </ListBox.ContextMenu>
                     <ListBox.ItemTemplate>
                         <DataTemplate>
                             <StackPanel ToolTip="{Binding RootPath}">

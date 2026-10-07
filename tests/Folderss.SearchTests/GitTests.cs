@@ -1607,5 +1607,72 @@ namespace Folderss.SearchTests
             Assert.True((await RunArgs(repo, GitStashCommands.Clear)).Success);
             Assert.Empty(await StashesAsync(repo));
         }
+        // ── 저장소 설정(git config) ──────────────────────────────────────────
+
+        [Fact]
+        public void ConfigParseList_SplitsNulRecords_KeepsOrder_AndMultilineValues()
+        {
+            var entries = GitConfigCommands.ParseList("user.name\n홍 길동\0credential.helper\n\0credential.helper\nmanager\0x.y\na\nb\0flag.only\0");
+
+            Assert.Equal(new[] { "user.name", "credential.helper", "credential.helper", "x.y", "flag.only" }, entries.Select(e => e.Key));
+            Assert.Equal("홍 길동", entries[0].Value);
+            Assert.Equal("a\nb", entries[3].Value);          // 값 안의 줄바꿈은 유지
+            Assert.Equal(string.Empty, entries[4].Value);    // 값 없는 키
+            Assert.Equal(new[] { "", "manager" }, GitConfigCommands.ValuesOf(entries, "Credential.Helper"));
+            Assert.Empty(GitConfigCommands.ParseList(string.Empty));
+        }
+
+        [Fact]
+        public void ConfigDiff_SkipsMultiValued_UnsetsOnlyExisting_AndIgnoresUnchanged()
+        {
+            var original = GitConfigCommands.ParseList("user.name\nold\0user.email\nme@x\0credential.helper\n\0credential.helper\nmanager\0");
+            var edited = new System.Collections.Generic.Dictionary<string, string>
+            {
+                ["user.name"] = "new",             // 바뀜 → set
+                ["user.email"] = "",               // 비움 → unset
+                ["credential.helper"] = "store",   // 값이 여럿 → 건드리지 않음
+                ["credential.username"] = "",      // 원래 없었고 비움 → 아무것도 안 함(--unset은 없는 키에 실패)
+                ["core.sshCommand"] = "ssh -i k"   // 새로 추가 → set
+            };
+
+            var changes = GitConfigCommands.Diff(GitConfigScope.Local, original, edited).OrderBy(c => c.Key).ToList();
+
+            Assert.Equal(new[] { "core.sshCommand", "user.email", "user.name" }, changes.Select(c => c.Key));
+            Assert.All(changes, c => Assert.Equal(GitConfigScope.Local, c.Scope));
+            Assert.Null(changes[1].Value);
+            Assert.Equal(new[] { "config", "--local", "--unset", "--", "user.email" }, GitConfigCommands.Apply(changes[1]));
+            Assert.Equal(new[] { "config", "--local", "--", "user.name", "new" }, GitConfigCommands.Apply(changes[2]));
+            Assert.Equal(new[] { "config", "--global", "--list", "-z" }, GitConfigCommands.List(GitConfigScope.Global));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_ConfigLocal_SetListUnset_RoundTrip_AndMultiValuedIsRejected()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = P("cfg");
+            Directory.CreateDirectory(repo);
+            Assert.True((await Git(repo, "init", "-q")).Success);
+
+            Assert.True((await RunArgs(repo, GitConfigCommands.Set(GitConfigScope.Local, "user.name", "홍 길동"))).Success);
+            Assert.True((await RunArgs(repo, GitConfigCommands.Set(GitConfigScope.Local, "core.sshCommand", "ssh -i C:/k/id"))).Success);
+
+            var list = await RunArgs(repo, GitConfigCommands.List(GitConfigScope.Local));
+            Assert.True(list.Success);
+            var entries = GitConfigCommands.ParseList(list.StdOut);
+            Assert.Equal(new[] { "홍 길동" }, GitConfigCommands.ValuesOf(entries, "user.name"));
+            Assert.Equal(new[] { "ssh -i C:/k/id" }, GitConfigCommands.ValuesOf(entries, "core.sshCommand"));
+            Assert.Empty(GitConfigCommands.ValuesOf(entries, "user.email"));
+
+            Assert.True((await RunArgs(repo, GitConfigCommands.Unset(GitConfigScope.Local, "user.name"))).Success);
+            Assert.Empty(GitConfigCommands.ValuesOf(GitConfigCommands.ParseList((await RunArgs(repo, GitConfigCommands.List(GitConfigScope.Local))).StdOut), "user.name"));
+            Assert.False((await RunArgs(repo, GitConfigCommands.Unset(GitConfigScope.Local, "user.name"))).Success); // 없는 키 unset은 실패
+
+            // 값이 여럿인 키는 단일 set·unset이 거부된다 — 대화상자가 편집을 막는 근거
+            await Git(repo, "config", "--local", "--add", "credential.helper", "");
+            await Git(repo, "config", "--local", "--add", "credential.helper", "manager");
+            Assert.False((await RunArgs(repo, GitConfigCommands.Set(GitConfigScope.Local, "credential.helper", "store"))).Success);
+            Assert.False((await RunArgs(repo, GitConfigCommands.Unset(GitConfigScope.Local, "credential.helper"))).Success);
+            Assert.Equal(2, GitConfigCommands.ValuesOf(GitConfigCommands.ParseList((await RunArgs(repo, GitConfigCommands.List(GitConfigScope.Local))).StdOut), "credential.helper").Count);
+        }
     }
 }

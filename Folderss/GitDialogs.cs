@@ -649,4 +649,121 @@ namespace Folderss
             return _validateName(BranchName);
         }
     }
+
+    /// <summary>
+    /// 저장소 설정: 글로벌(모든 저장소)과 로컬(이 저장소) 두 범위의 인증·작성자 키를 나란히 보여 주고 고친다.
+    /// 로컬 값이 글로벌 값을 덮어쓴다. 값이 여러 개인 키는 git이 단일 set·unset을 거부하므로 읽기 전용으로 보인다.
+    /// 대화상자는 값을 모으기만 하고, 실제 <c>git config</c> 실행은 Git 창이 한다(출력 영역에 명령이 남도록).
+    /// </summary>
+    public sealed class GitConfigDialog : GitDialogBase
+    {
+        private readonly IReadOnlyList<GitConfigEntry> _global;
+        private readonly IReadOnlyList<GitConfigEntry> _local;
+        private readonly Dictionary<string, TextBox> _globalBoxes = new Dictionary<string, TextBox>();
+        private readonly Dictionary<string, TextBox> _localBoxes = new Dictionary<string, TextBox>();
+
+        /// <summary>확인을 눌렀을 때 바뀐 값. 글로벌 먼저, 로컬 다음.</summary>
+        public List<GitConfigChange> Changes
+        {
+            get
+            {
+                var changes = GitConfigCommands.Diff(GitConfigScope.Global, _global, Edited(_globalBoxes));
+                changes.AddRange(GitConfigCommands.Diff(GitConfigScope.Local, _local, Edited(_localBoxes)));
+                return changes;
+            }
+        }
+
+        public GitConfigDialog(string repoDisplayPath, string repoRootPath, IReadOnlyList<GitConfigEntry> global, IReadOnlyList<GitConfigEntry> local)
+            : base("저장소 설정 — " + repoDisplayPath, 920)
+        {
+            _global = global;
+            _local = local;
+
+            AddText("로컬 값이 있으면 이 저장소에서는 글로벌 값 대신 쓰입니다. 비우면 그 범위에서 지웁니다. 비밀번호·토큰은 여기 저장하지 않습니다(자격 증명 도우미가 관리).", secondary: true);
+
+            var columns = new Grid { Margin = new Thickness(0, 8, 0, 0) };
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(16) });
+            columns.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+            Body.Children.Add(columns);
+
+            var globalColumn = BuildScope("글로벌", "모든 저장소에 적용 (~/.gitconfig)", global, _globalBoxes, null);
+            Grid.SetColumn(globalColumn, 0);
+            columns.Children.Add(globalColumn);
+
+            var localColumn = BuildScope("로컬", "이 저장소에만 적용 (" + Path.Combine(repoRootPath, ".git", "config") + ")", local, _localBoxes, global);
+            Grid.SetColumn(localColumn, 2);
+            columns.Children.Add(localColumn);
+
+            AddButtons("저장");
+        }
+
+        private StackPanel BuildScope(string title, string description, IReadOnlyList<GitConfigEntry> entries,
+            Dictionary<string, TextBox> boxes, IReadOnlyList<GitConfigEntry> fallback)
+        {
+            var panel = new StackPanel();
+            panel.Children.Add(new TextBlock { Text = title, FontWeight = FontWeights.SemiBold, FontSize = 14 });
+            var desc = new TextBlock { Text = description, TextWrapping = TextWrapping.Wrap, FontSize = 12, Margin = new Thickness(0, 2, 0, 4) };
+            desc.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+            panel.Children.Add(desc);
+
+            foreach (var field in GitConfigCommands.AuthFields)
+            {
+                var values = GitConfigCommands.ValuesOf(entries, field.Key);
+                var label = new TextBlock { Margin = new Thickness(0, 8, 0, 2), TextWrapping = TextWrapping.Wrap };
+                label.Inlines.Add(new System.Windows.Documents.Run(field.Label) { FontWeight = FontWeights.SemiBold });
+                label.Inlines.Add(new System.Windows.Documents.Run("  " + field.Key) { FontSize = 11 });
+                panel.Children.Add(label);
+
+                var box = new TextBox { Text = string.Join(" ; ", values), ToolTip = field.Hint };
+                if (values.Count > 1)
+                {
+                    // git config key value / --unset은 값이 여럿이면 실패(종료 코드 5)한다.
+                    box.IsReadOnly = true;
+                    box.ToolTip = "값이 " + values.Count + "개라 여기서 고칠 수 없습니다. 명령줄에서 git config --unset-all " + field.Key + " 로 정리하세요.";
+                }
+                panel.Children.Add(box);
+                boxes[field.Key] = box;
+
+                var hint = field.Hint;
+                if (fallback != null && values.Count == 0)
+                {
+                    var inherited = GitConfigCommands.ValuesOf(fallback, field.Key);
+                    if (inherited.Count > 0)
+                        hint = "비우면 글로벌 값 사용: " + string.Join(" ; ", inherited);
+                }
+                var hintBlock = new TextBlock { Text = hint, TextWrapping = TextWrapping.Wrap, FontSize = 11, Margin = new Thickness(0, 2, 0, 0) };
+                hintBlock.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+                panel.Children.Add(hintBlock);
+            }
+
+            // 참고용 전체 목록(읽기 전용). 위 항목 외의 키는 여기서 고치지 않는다.
+            var all = new TextBox
+            {
+                Text = entries.Count == 0 ? "(설정 없음)" : string.Join(Environment.NewLine, entries.Select(e => e.Key + "=" + e.Value)),
+                IsReadOnly = true,
+                AcceptsReturn = true,
+                TextWrapping = TextWrapping.NoWrap,
+                MaxHeight = 160,
+                FontSize = 11,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto
+            };
+            var expander = new Expander { Header = "전체 설정 보기 (" + entries.Count + "개, 읽기 전용)", Content = all, Margin = new Thickness(0, 12, 0, 0) };
+            expander.SetResourceReference(ForegroundProperty, "PrimaryText");
+            panel.Children.Add(expander);
+            return panel;
+        }
+
+        private static Dictionary<string, string> Edited(Dictionary<string, TextBox> boxes)
+        {
+            var edited = new Dictionary<string, string>();
+            foreach (var pair in boxes)
+            {
+                if (!pair.Value.IsReadOnly)
+                    edited[pair.Key] = pair.Value.Text.Trim();
+            }
+            return edited;
+        }
+    }
 }
