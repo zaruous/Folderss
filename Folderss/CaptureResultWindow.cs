@@ -17,7 +17,8 @@ namespace Folderss
     /// <summary>
     /// 캡쳐 결과 팝업(비모달). 열리면 이미지를 클립보드에 복사한다.
     /// <c>저장</c>은 활성 폴더 패널에 <c>캡쳐_yyyyMMdd_HHmmss.png</c>로 바로 저장하고, 옆 <c>▾</c>는 다른 이름·형식(PNG/JPEG/BMP)으로 저장한다.
-    /// 둘째 줄은 편집 도구(<see cref="CaptureEditor"/>): 사각형·타원·화살표·텍스트·자르기, 색·굵기·글자 크기, 크기 조절, 되돌리기(Ctrl+Z).
+    /// 둘째 줄은 편집 도구(<see cref="CaptureEditor"/>): 선택(이동·핸들 크기 변경·Delete)·사각형·타원·화살표·텍스트·자르기,
+    /// 색·굵기·글자 크기, 크기 조절, 되돌리기(Ctrl+Z).
     /// 저장·복사는 편집 결과를 한 장으로 합친 이미지다. 편집 후 저장·복사 없이 닫으면 확인한다.
     /// </summary>
     public sealed class CaptureResultWindow : Window
@@ -79,11 +80,12 @@ namespace Folderss
             toolbar.Children.Add(_status);
 
             var tools = new WrapPanel { Margin = new Thickness(8, 0, 8, 8) };
+            AddTool(tools, "↖ 선택", CaptureTool.Select, "도형을 눌러 선택 · 끌어서 이동 · 핸들로 크기 변경(화살표는 양 끝, 텍스트는 이동만) · Delete로 삭제");
             AddTool(tools, "▭ 사각형", CaptureTool.Rectangle, "드래그해서 사각형");
             AddTool(tools, "◯ 타원", CaptureTool.Ellipse, "드래그해서 타원");
             AddTool(tools, "↗ 화살표", CaptureTool.Arrow, "시작점에서 끝점으로 드래그");
             AddTool(tools, "T 텍스트", CaptureTool.Text, "클릭한 곳에 글자 입력 · Enter 확정, Shift+Enter 줄바꿈, Esc 취소");
-            AddTool(tools, "✂ 자르기", CaptureTool.Crop, "남길 영역을 드래그 (놓으면 바로 잘림, 되돌리기 가능)");
+            AddTool(tools, "✂ 자르기", CaptureTool.Crop, "남길 영역을 드래그 (놓으면 바로 잘림, 도형은 위치를 맞춰 남음, 되돌리기 가능)");
             AddSeparator(tools);
             foreach (var color in Palette)
                 AddColor(tools, color);
@@ -91,7 +93,7 @@ namespace Folderss
             tools.Children.Add(AddChoice("굵기", new[] { 2, 3, 5, 8 }, 3, value => _editor.StrokeThickness = value));
             tools.Children.Add(AddChoice("글자", new[] { 14, 18, 24, 32, 48 }, 18, value => _editor.TextSize = value));
             AddSeparator(tools);
-            var resize = new Button { Content = "크기 조절…", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0), ToolTip = "이미지 크기를 바꿉니다 (도형·텍스트도 함께)" };
+            var resize = new Button { Content = "크기 조절…", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0), ToolTip = "이미지 크기를 바꿉니다 (도형·텍스트도 같은 배율로, 그 뒤에도 선택해 고칠 수 있음)" };
             resize.Click += (s, e) => ResizeImage();
             tools.Children.Add(resize);
             _undo = new Button { Content = "↶ 되돌리기", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0), IsEnabled = false, ToolTip = "되돌리기 (Ctrl+Z)" };
@@ -126,10 +128,16 @@ namespace Folderss
             };
             PreviewKeyDown += (s, e) =>
             {
-                // 텍스트 입력 중의 Ctrl+Z는 입력 상자 자체의 되돌리기에 맡긴다.
-                if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control && !(Keyboard.FocusedElement is TextBox))
+                // 텍스트 입력 중의 Ctrl+Z·Delete는 입력 상자 자체 동작에 맡긴다.
+                if (Keyboard.FocusedElement is TextBox)
+                    return;
+                if (e.Key == Key.Z && Keyboard.Modifiers == ModifierKeys.Control)
                 {
                     _editor.Undo();
+                    e.Handled = true;
+                }
+                else if (e.Key == Key.Delete && Keyboard.Modifiers == ModifierKeys.None && _editor.DeleteSelected())
+                {
                     e.Handled = true;
                 }
             };
