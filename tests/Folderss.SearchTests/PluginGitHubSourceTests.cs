@@ -93,6 +93,49 @@ namespace Folderss.SearchTests
             Assert.Throws<ArgumentException>(() => PluginGitHubSource.ParseRepository(url));
         }
 
+        [Theory]
+        [InlineData("github.com/zaruous/Folderss-db-helper", "zaruous", "Folderss-db-helper")]
+        [InlineData("GitHub.com/zaruous/Folderss-db-helper", "zaruous", "Folderss-db-helper")]
+        public void TryParseSourceKey_RoundTripsSourceKey(string source, string owner, string repo)
+        {
+            Assert.Equal(source.ToLowerInvariant(), PluginGitHubSource.SourceKey(owner, repo).ToLowerInvariant());
+            string o, r;
+            Assert.True(PluginGitHubSource.TryParseSourceKey(source, out o, out r));
+            Assert.Equal(owner, o);
+            Assert.Equal(repo, r);
+        }
+
+        [Theory]
+        [InlineData(null)]
+        [InlineData("")]
+        [InlineData("local")]
+        [InlineData("github.com/zaruous")]
+        [InlineData("gitlab.com/zaruous/Folderss-db-helper")]
+        [InlineData("https://github.com/zaruous/Folderss-db-helper")]
+        public void TryParseSourceKey_RejectsLocalMissingAndOtherSources(string source)
+        {
+            string o, r;
+            Assert.False(PluginGitHubSource.TryParseSourceKey(source, out o, out r));
+            Assert.Null(o);
+            Assert.Null(r);
+        }
+
+        [Theory]
+        [InlineData("v1.2.0", "1.2.0", true)]
+        [InlineData("V1.2.0", "1.2.0", true)]
+        [InlineData("1.2", "1.2.0", true)]
+        [InlineData(" v1.2.0 ", "1.2.0", true)]
+        [InlineData("1.2.0", "1.2.1", false)]
+        [InlineData("v1.2.0", "1.2.0-beta", false)]
+        [InlineData("2026-10-08", "1.2.0", false)]
+        [InlineData("", "1.2.0", false)]
+        [InlineData(null, "1.2.0", false)]
+        [InlineData("vanilla", "vanilla", true)]
+        public void IsSameVersion_IgnoresVPrefixAndTrailingZero(string tag, string version, bool same)
+        {
+            Assert.Equal(same, PluginGitHubSource.IsSameVersion(tag, version));
+        }
+
         [Fact]
         public void ParseRelease_ReadsTagAssetsAndDigest_ZipAssetsFiltersZip()
         {
