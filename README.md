@@ -78,6 +78,7 @@ Folderss/
 │   ├── PluginSessionRecord     — 플러그인 비정상 종료 감지 기록(plugin-sessions)·로그
 │   ├── SettingsFile            — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 후 교체)
 │   ├── ClipboardService        — 클립보드 읽기·쓰기 (다른 프로그램이 점유 중이면 알리고 실패 반환)
+│   ├── ScreenCaptureService    — 화면 캡쳐 순수 계산 (선택 영역 → 픽셀 사각형, 저장 파일 이름, 확장자 → 형식)
 │   └── ThemeManager            — 테마 전환 및 저장
 ├── Converters/
 │   └── FractionToStarConverter — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
@@ -92,6 +93,8 @@ Folderss/
 ├── DiffReportDialog            — diff HTML 보고서 형식 선택 (양옆/한 줄 × 변경점만/전체)
 ├── DiffToolLauncher            — 외부 비교 도구 실행 (Git 창·파일 비교 공용)
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
+├── CaptureOverlayWindow        — 화면 캡쳐 영역 선택 오버레이 (정지 화면 + 반투명 막)
+├── CaptureResultWindow         — 화면 캡쳐 결과 팝업 (클립보드 복사, 활성 폴더에 저장, 다른 이름으로 저장)
 ├── AboutWindow                 — 버전 정보 창
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
 
@@ -173,6 +176,7 @@ tests/
 - `⋯ 메뉴 > 플러그인`에서 등록한 플러그인을 팝업 창으로 실행 (아래 [플러그인](#플러그인) 참고)
 - 트레이 아이콘 오른쪽 클릭 메뉴의 `플러그인 ▸`·`플러그인 관리…`로 본체 창을 열지 않고도 플러그인을 실행·관리
 - `⋯ 메뉴 > Git 저장소…`로 선택한 폴더 아래의 여러 Git 저장소를 한 창에서 관리 (아래 [Git](#git) 참고)
+- `⋯ 메뉴 > 화면 캡쳐…`: Folderss 창을 잠시 숨기고 화면을 찍은 뒤, 반투명 화면 위에서 드래그한 영역을 결과 창에 보여 줌 (Esc·오른쪽 클릭 취소). 결과는 클립보드에 자동 복사되고, `저장`은 활성 폴더 패널에 `캡쳐_yyyyMMdd_HHmmss.png`로 바로 저장, 옆 `▾`는 다른 이름·형식(PNG/JPEG/BMP)으로 저장
 - `보기 > 디스크 사용량 보기`로 드라이브별 사용량을 가로바와 GB 단위(총량/사용량/여유 공간)로 표시, 즐겨찾기 위 미니 패널로 상시 확인 가능
 - Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub 테마 실시간 전환 및 사용자 설정 저장
 - 설정 창에서 단축키와 확장자별 뷰어 매핑 변경

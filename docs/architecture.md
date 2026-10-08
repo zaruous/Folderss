@@ -67,6 +67,7 @@ Folderss/
 │   ├── PluginSessionRecord.cs      — PluginSessionLog: plugin-sessions\<pid>.json 기록·주인 없는 기록 수거·plugin-log.txt (순수 로직)
 │   ├── SettingsFile.cs             — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 → File.Move 교체, 실패는 예외)
 │   ├── ClipboardService.cs         — 클립보드 읽기·쓰기. 다른 프로그램이 점유 중(CLIPBRD_E_CANT_OPEN)이면 경고 후 false (앱 종료 방지)
+│   ├── ScreenCaptureService.cs     — 화면 캡쳐 순수 계산: 오버레이 좌표 → 이미지 픽셀 사각형(비율 변환), 빠른 저장 파일 이름, 확장자 → 저장 형식 (순수 로직)
 │   └── ThemeManager.cs             — 테마 전환 및 저장
 ├── Converters/
 │   └── FractionToStarConverter.cs  — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
@@ -87,6 +88,8 @@ Folderss/
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
+├── CaptureOverlayWindow.cs         — 화면 캡쳐: 가상 화면 전체를 GDI로 찍고(`CaptureVirtualScreen`) 모든 모니터를 덮는 창에 깔아 드래그로 영역 선택, 코드로 구성
+├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 다른 이름으로 저장 (`SettingsFile.Write`로 임시 파일 후 교체)
 ├── AboutWindow.cs                  — 정보 창
 ├── PromptWindow.cs                 — 이름 변경·새 폴더 입력 다이얼로그
 ├── App.xaml/.cs                    — 앱 진입점, 테마 초기 로드, 플러그인 발 UI 예외 처리
