@@ -2464,6 +2464,70 @@ namespace Folderss
             catch { }
         }
 
+        /// <summary>
+        /// ⋯ > 화면 캡쳐: 본체 창을 숨기고 전체 화면을 찍은 뒤 오버레이에서 영역을 고르게 하고, 고르면 결과 창을 연다.
+        /// 숨기는 동안 다른 프로그램 화면을 찍을 수 있지만, Folderss 자신은 찍히지 않는다.
+        /// </summary>
+        private async void ScreenCapture_Click(object sender, RoutedEventArgs e)
+        {
+            System.Windows.Media.Imaging.BitmapSource region = null;
+            Hide();
+            try
+            {
+                // ⋯ 메뉴 닫힘과 창 숨김(DWM 페이드)이 끝난 뒤 찍어야 Folderss가 캡쳐에 남지 않는다.
+                await Task.Delay(300);
+                System.Windows.Media.Imaging.BitmapSource screen;
+                try
+                {
+                    screen = CaptureOverlayWindow.CaptureVirtualScreen();
+                }
+                catch (Exception exception) when (exception is Win32Exception || exception is System.Runtime.InteropServices.ExternalException || exception is ArgumentException || exception is OutOfMemoryException)
+                {
+                    // 잠긴 화면·보안 데스크톱(UAC)에서는 화면 DC를 얻지 못한다.
+                    Show();
+                    MessageBox.Show(this, "화면을 찍지 못했습니다.\n" + exception.Message, "화면 캡쳐", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+
+                var overlay = new CaptureOverlayWindow(screen);
+                overlay.ShowDialog();
+                region = overlay.Result;
+            }
+            finally
+            {
+                Show();
+                Activate();
+            }
+
+            if (region != null)
+                new CaptureResultWindow(region, GetCaptureSaveFolder, OnCaptureSaved) { Owner = this }.Show();
+        }
+
+        /// <summary>캡쳐 빠른 저장 폴더 = 활성 폴더 패널. 폴더가 없거나 고정(📌)이면 알리고 null.</summary>
+        private string GetCaptureSaveFolder()
+        {
+            var folder = ActivePane.CurrentPath;
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+            {
+                MessageBox.Show(this, "활성 폴더 패널의 폴더를 찾을 수 없습니다.\n▾ 버튼(다른 이름으로 저장)을 쓰세요.", "캡쳐 저장", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return null;
+            }
+            if (IsDestinationPinLocked(folder))
+            {
+                ShowPinLockedMessage();
+                return null;
+            }
+            return folder;
+        }
+
+        private void OnCaptureSaved(string path)
+        {
+            if (!string.Equals(NormalizeDirectoryPath(Path.GetDirectoryName(path)), NormalizeDirectoryPath(ActivePane.CurrentPath), StringComparison.OrdinalIgnoreCase))
+                return;
+            ActivePane.RefreshItems();
+            ActivePane.SelectAndScrollTo(path);
+        }
+
         private void About_Click(object sender, RoutedEventArgs e)
         {
             new AboutWindow { Owner = this }.ShowDialog();
