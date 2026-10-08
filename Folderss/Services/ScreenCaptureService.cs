@@ -6,7 +6,7 @@ namespace Folderss.Services
 {
     /// <summary>
     /// 화면 캡쳐의 순수 계산(WPF·GDI 없음, 테스트 프로젝트에서 소스 링크로 검증).
-    /// 화면을 찍고 오버레이·결과 창을 띄우는 쪽은 <c>CaptureOverlayWindow</c>, <c>CaptureResultWindow</c>.
+    /// 화면을 찍고 오버레이·결과 창을 띄우는 쪽은 <c>CaptureOverlayWindow</c>, <c>CaptureResultWindow</c>, 편집면은 <c>CaptureEditor</c>.
     /// </summary>
     public static class ScreenCaptureService
     {
@@ -63,6 +63,44 @@ namespace Folderss.Services
                 case ".bmp": return "bmp";
                 default: return null;
             }
+        }
+
+        /// <summary>크기 조절에서 받는 한 변의 최대 픽셀(너무 큰 값으로 메모리를 다 쓰지 않게).</summary>
+        public const int MaxImageSide = 16384;
+
+        public static bool IsValidSide(int value)
+        {
+            return value >= 1 && value <= MaxImageSide;
+        }
+
+        /// <summary>비율 유지: 한 변을 <paramref name="value"/>로 바꿀 때 다른 변의 크기(반올림, 최소 1).</summary>
+        public static int ProportionalSide(int value, int valueOriginal, int otherOriginal)
+        {
+            if (valueOriginal <= 0)
+                return Math.Max(1, otherOriginal);
+            return Math.Max(1, (int)Math.Round((double)value * otherOriginal / valueOriginal, MidpointRounding.AwayFromZero));
+        }
+
+        /// <summary>
+        /// 화살표 머리: 끝점(x2, y2)이 꼭짓점인 삼각형의 두 날개 점과 밑변 가운데(몸통이 끝나는 곳).
+        /// 머리 길이는 선 굵기의 4배(최소 10, 화살표 길이를 넘지 않음), 꼭지각은 60°.
+        /// </summary>
+        public static (double LeftX, double LeftY, double RightX, double RightY, double BaseX, double BaseY) ArrowHead(
+            double x1, double y1, double x2, double y2, double thickness)
+        {
+            var dx = x2 - x1;
+            var dy = y2 - y1;
+            var length = Math.Sqrt(dx * dx + dy * dy);
+            if (length <= 0)
+                return (x2, y2, x2, y2, x2, y2);
+
+            var head = Math.Min(length, Math.Max(10, thickness * 4));
+            var ux = dx / length;
+            var uy = dy / length;
+            var baseX = x2 - ux * head;
+            var baseY = y2 - uy * head;
+            var half = head * Math.Tan(Math.PI / 6);
+            return (baseX + uy * half, baseY - ux * half, baseX - uy * half, baseY + ux * half, baseX, baseY);
         }
 
         private static int Clamp(double value, int max)

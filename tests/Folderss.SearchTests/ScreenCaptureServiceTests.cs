@@ -7,7 +7,8 @@ using Xunit;
 namespace Folderss.SearchTests
 {
     /// <summary>
-    /// 화면 캡쳐의 순수 계산: 오버레이 좌표 → 캡쳐 픽셀 사각형, 빠른 저장 파일 이름, 확장자 → 저장 형식.
+    /// 화면 캡쳐의 순수 계산: 오버레이 좌표 → 캡쳐 픽셀 사각형, 빠른 저장 파일 이름, 확장자 → 저장 형식,
+    /// 편집의 화살표 머리 좌표, 크기 조절 비율 유지.
     /// 오버레이·GDI 캡쳐 자체는 Windows 화면이 있어야 하므로 여기서 다루지 않는다.
     /// </summary>
     public sealed class ScreenCaptureServiceTests
@@ -80,6 +81,56 @@ namespace Folderss.SearchTests
             };
             var path = ScreenCaptureService.NextCapturePath("folder", new DateTime(2026, 10, 8, 9, 5, 7), taken.Contains);
             Assert.Equal(Path.Combine("folder", "캡쳐_20261008_090507_3.png"), path);
+        }
+
+        [Fact]
+        public void ArrowHead_PointsBackAlongShaft()
+        {
+            // 오른쪽으로 100px, 굵기 3 → 머리 길이 12(굵기×4), 반폭 12·tan30°.
+            var head = ScreenCaptureService.ArrowHead(0, 0, 100, 0, 3);
+            var half = 12 * Math.Tan(Math.PI / 6);
+            Assert.Equal(88, head.BaseX, 6);
+            Assert.Equal(0, head.BaseY, 6);
+            Assert.Equal(88, head.LeftX, 6);
+            Assert.Equal(-half, head.LeftY, 6);
+            Assert.Equal(88, head.RightX, 6);
+            Assert.Equal(half, head.RightY, 6);
+        }
+
+        [Fact]
+        public void ArrowHead_ThinLineHasMinimumHead_AndShortArrowIsAllHead()
+        {
+            Assert.Equal(90, ScreenCaptureService.ArrowHead(0, 0, 100, 0, 1).BaseX, 6);
+            var shortArrow = ScreenCaptureService.ArrowHead(0, 0, 0, 6, 8);
+            Assert.Equal(0, shortArrow.BaseX, 6);
+            Assert.Equal(0, shortArrow.BaseY, 6);
+        }
+
+        [Fact]
+        public void ArrowHead_ZeroLengthCollapsesToTip()
+        {
+            Assert.Equal((5d, 5d, 5d, 5d, 5d, 5d), ScreenCaptureService.ArrowHead(5, 5, 5, 5, 3));
+        }
+
+        [Theory]
+        [InlineData(960, 1920, 1080, 540)]
+        [InlineData(1, 1920, 1080, 1)]
+        [InlineData(3, 1000, 333, 1)]
+        [InlineData(500, 1000, 333, 167)]
+        [InlineData(100, 0, 50, 50)]
+        public void ProportionalSide_KeepsRatio(int value, int valueOriginal, int otherOriginal, int expected)
+        {
+            Assert.Equal(expected, ScreenCaptureService.ProportionalSide(value, valueOriginal, otherOriginal));
+        }
+
+        [Theory]
+        [InlineData(0, false)]
+        [InlineData(1, true)]
+        [InlineData(16384, true)]
+        [InlineData(16385, false)]
+        public void IsValidSide_Bounds(int value, bool expected)
+        {
+            Assert.Equal(expected, ScreenCaptureService.IsValidSide(value));
         }
 
         [Theory]
