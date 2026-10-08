@@ -817,6 +817,10 @@ namespace Folderss.Controls
             _dragStartPoint = e.GetPosition(FileList);
             var container = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
             _dragPending = container != null;
+            // Ctrl 클릭은 ListView(SelectionMode=Extended)의 토글 선택에 맡긴다.
+            // 여기서 단일 선택으로 바꾸면 그 뒤의 토글이 방금 선택한 항목을 다시 풀어 Ctrl 다중 선택이 되지 않는다.
+            if ((Keyboard.Modifiers & ModifierKeys.Control) != 0)
+                return;
             if (container != null && !container.IsSelected)
             {
                 FileList.SelectedItems.Clear();
