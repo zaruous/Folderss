@@ -126,6 +126,18 @@ namespace Folderss
                 Copy();
                 _dirty = false;
             };
+            // 85% 제한은 처음 열 때 큰 캡쳐가 화면을 넘지 않게 하려는 것이다. WPF는 최대화도 MaxWidth/MaxHeight에 묶으므로
+            // 첫 표시(크기·위치 결정) 뒤에는 지금 크기로 고정하고 제한을 풀어 최대화·자유 크기 조절이 화면 전체까지 되게 한다.
+            ContentRendered += (s, e) =>
+            {
+                var width = ActualWidth;
+                var height = ActualHeight;
+                SizeToContent = SizeToContent.Manual;
+                MaxWidth = double.PositiveInfinity;
+                MaxHeight = double.PositiveInfinity;
+                Width = width;
+                Height = height;
+            };
             PreviewKeyDown += (s, e) =>
             {
                 // 텍스트 입력 중의 Ctrl+Z·Delete는 입력 상자 자체 동작에 맡긴다.
