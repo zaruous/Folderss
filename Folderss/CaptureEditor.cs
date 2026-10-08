@@ -14,11 +14,13 @@ namespace Folderss
     public enum CaptureTool { None, Select, Rectangle, Ellipse, Arrow, Text, Crop }
 
     /// <summary>
-    /// 캡쳐 결과 편집면. 상태는 (이미지, 도형 목록)이고 도형은 바뀌지 않는 값(<see cref="CaptureAnnotation"/>)이다.
-    /// 화면 요소는 목록에서 매번 다시 만들고, 저장·복사 때만 한 장으로 합친다(<see cref="Render"/>).
-    /// 자르기·크기 조절은 이미지만 바꾸고 도형은 위치·크기를 맞춰 옮기므로, 그 뒤에도 도형을 선택해 고칠 수 있다.
-    /// 되돌리기는 바꾸기 전 (이미지, 도형 배열)을 쌓는다 — 값이 불변이라 나중 편집이 기록을 바꾸지 않는다.
-    /// 좌표는 이미지 픽셀 = 편집면 DIP이고, 화면에는 캡쳐 DPI만큼 줄여(LayoutTransform) 실제 픽셀 1:1로 보인다.
+    /// 캡쳐 결과 편집면. 흰 페이지 위에 캡쳐 이미지와 도형이 놓인다. 상태는 (페이지 크기, 도형 목록)이고
+    /// 도형은 바뀌지 않는 값(<see cref="CaptureAnnotation"/>)이다. 캡쳐 이미지도 목록의 첫 항목(<see cref="CaptureAnnotationKind.Image"/>,
+    /// 자리만 값, 비트맵은 <see cref="_bitmap"/> 하나로 고정)이라 다른 도형처럼 선택·이동·핸들 크기 변경이 되고, 항상 맨 아래에 그려진다.
+    /// 화면 요소는 목록에서 매번 다시 만들고, 저장·복사 때만 페이지 한 장으로 합친다(<see cref="Render"/>).
+    /// 자르기·크기 조절은 페이지 크기만 바꾸고 이미지·도형은 위치·크기를 맞춰 옮기므로(비트맵은 다시 샘플링하지 않음), 그 뒤에도 선택해 고칠 수 있다.
+    /// 되돌리기는 바꾸기 전 (페이지 크기, 도형 배열)을 쌓는다 — 값이 불변이라 나중 편집이 기록을 바꾸지 않는다.
+    /// 좌표는 페이지 픽셀 = 편집면 DIP이고, 화면에는 캡쳐 DPI만큼 줄여(LayoutTransform) 실제 픽셀 1:1로 보인다.
     /// </summary>
     public sealed class CaptureEditor : Grid
     {
@@ -28,16 +30,18 @@ namespace Folderss
         private const double HandleScreenSize = 8;
         private const double HitScreenTolerance = 6;
 
-        // 합쳐서 내보내는 층: [0] 이미지 + 도형 요소들.
-        private readonly Canvas _surface = new Canvas { ClipToBounds = true };
+        // 합쳐서 내보내는 층(페이지): 흰 바탕 + [0] 캡쳐 이미지 + 도형 요소들.
+        private readonly Canvas _surface = new Canvas { ClipToBounds = true, Background = Brushes.White };
         // 그리는 중 미리보기·자르기 틀·선택 표시·텍스트 입력 상자. 내보내지 않는다.
         private readonly Canvas _overlay = new Canvas { Background = Brushes.Transparent, ClipToBounds = true };
-        private readonly Image _image = new Image { Stretch = Stretch.Fill };
-        private readonly Stack<(BitmapSource Bitmap, CaptureAnnotation[] Annotations)> _undo = new Stack<(BitmapSource, CaptureAnnotation[])>();
+        private readonly Stack<(int Width, int Height, CaptureAnnotation[] Annotations)> _undo = new Stack<(int, int, CaptureAnnotation[])>();
         private readonly List<UIElement> _selectionVisuals = new List<UIElement>();
         private readonly double _displayScale;
-        private BitmapSource _bitmap;
-        private CaptureAnnotation[] _annotations = Array.Empty<CaptureAnnotation>();
+        private readonly BitmapSource _bitmap;
+        private int _pageWidth;
+        private int _pageHeight;
+        // [0]은 항상 캡쳐 이미지(Kind == Image). 새 도형은 뒤에 붙고, 이미지는 지우지 않는다.
+        private CaptureAnnotation[] _annotations;
         private CaptureTool _tool;
         private int _selected = -1;
         private DragMode _drag;
@@ -54,23 +58,25 @@ namespace Folderss
         /// <summary>이미지·도형이 바뀌었다(크기, 되돌리기 가능 여부 갱신용).</summary>
         public event EventHandler Changed;
 
-        public int PixelWidth => _bitmap.PixelWidth;
-        public int PixelHeight => _bitmap.PixelHeight;
+        /// <summary>페이지(저장·복사 결과) 크기(픽셀).</summary>
+        public int PixelWidth => _pageWidth;
+        public int PixelHeight => _pageHeight;
         public bool CanUndo => _undo.Count > 0;
 
         public CaptureEditor(BitmapSource bitmap)
         {
             HorizontalAlignment = HorizontalAlignment.Left;
             VerticalAlignment = VerticalAlignment.Top;
-            // 1:1 표시와 합치기에서 다시 샘플링하지 않도록.
-            RenderOptions.SetBitmapScalingMode(_image, BitmapScalingMode.NearestNeighbor);
             _displayScale = bitmap.DpiX > 0 ? 96.0 / bitmap.DpiX : 1.0;
             LayoutTransform = new ScaleTransform(_displayScale, _displayScale);
 
-            _surface.Children.Add(_image);
             Children.Add(_surface);
             Children.Add(_overlay);
-            SetBitmap(bitmap);
+            _bitmap = bitmap;
+            // 처음에는 페이지 = 캡쳐 크기, 이미지는 페이지를 꽉 채운다(편집하지 않으면 저장·복사 결과가 캡쳐 그대로).
+            _annotations = new[] { new CaptureAnnotation(CaptureAnnotationKind.Image, 0, 0, bitmap.PixelWidth, bitmap.PixelHeight, 0, 0) };
+            SetPageSize(bitmap.PixelWidth, bitmap.PixelHeight);
+            ShowAnnotations(_annotations);
 
             _overlay.MouseLeftButtonDown += Overlay_MouseLeftButtonDown;
             _overlay.MouseMove += Overlay_MouseMove;
@@ -94,11 +100,11 @@ namespace Folderss
             }
         }
 
-        /// <summary>이미지와 도형을 한 장으로 합친다(입력 중인 텍스트는 먼저 확정). 도형이 없으면 이미지 그대로.</summary>
+        /// <summary>페이지(흰 바탕 + 이미지 + 도형)를 한 장으로 합친다(입력 중인 텍스트는 먼저 확정). 아무것도 바꾸지 않았으면 캡쳐 그대로.</summary>
         public BitmapSource Render()
         {
             CommitText();
-            if (_annotations.Length == 0)
+            if (IsUnchanged())
                 return _bitmap;
 
             _surface.UpdateLayout();
@@ -115,38 +121,30 @@ namespace Folderss
             if (_undo.Count == 0)
                 return;
             var state = _undo.Pop();
-            SetBitmap(state.Bitmap);
+            SetPageSize(state.Width, state.Height);
             _annotations = state.Annotations;
             Select(-1);
             ShowAnnotations(_annotations);
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
-        /// <summary>선택한 도형을 지운다. 지웠으면 true.</summary>
+        /// <summary>선택한 도형을 지운다. 지웠으면 true. 캡쳐 이미지는 지우지 않는다.</summary>
         public bool DeleteSelected()
         {
-            if (_selected < 0 || _drag != DragMode.None)
+            if (_selected < 0 || _drag != DragMode.None || _annotations[_selected].Kind == CaptureAnnotationKind.Image)
                 return false;
             var index = _selected;
-            Apply(_bitmap, _annotations.Where((_, i) => i != index).ToArray());
+            Apply(_pageWidth, _pageHeight, _annotations.Where((_, i) => i != index).ToArray());
             return true;
         }
 
-        /// <summary>이미지를 <paramref name="width"/>×<paramref name="height"/>로 다시 그리고(고품질 보간) 도형도 같은 배율로 늘린다.</summary>
+        /// <summary>페이지를 <paramref name="width"/>×<paramref name="height"/>로 바꾸고 이미지·도형도 같은 배율로 늘린다.</summary>
         public void Resize(int width, int height)
         {
             CommitText();
-            var visual = new DrawingVisual();
-            RenderOptions.SetBitmapScalingMode(visual, BitmapScalingMode.HighQuality);
-            using (var context = visual.RenderOpen())
-                context.DrawImage(_bitmap, new Rect(0, 0, width, height));
-            var resized = new RenderTargetBitmap(width, height, 96, 96, PixelFormats.Pbgra32);
-            resized.Render(visual);
-            resized.Freeze();
-
             var scaleX = (double)width / PixelWidth;
             var scaleY = (double)height / PixelHeight;
-            Apply(resized, _annotations.Select(a => a.Transform(0, 0, scaleX, scaleY)).ToArray());
+            Apply(width, height, _annotations.Select(a => a.Transform(0, 0, scaleX, scaleY)).ToArray());
         }
 
         private void Crop(Point a, Point b)
@@ -154,37 +152,42 @@ namespace Folderss
             var rect = ScreenCaptureService.ToPixelRect(a.X, a.Y, b.X, b.Y, PixelWidth, PixelHeight, PixelWidth, PixelHeight);
             if (!ScreenCaptureService.IsSelectable(rect.Width, rect.Height))
                 return;
-            var cropped = new CroppedBitmap(_bitmap, new Int32Rect(rect.X, rect.Y, rect.Width, rect.Height));
-            cropped.Freeze();
-            // 영역 밖으로 나간 도형도 지우지 않고 옮겨 둔다(잘린 부분은 보이지 않고, 되돌리기 없이도 다시 끌어올 수 있다).
-            Apply(cropped, _annotations.Select(x => x.Transform(-rect.X, -rect.Y, 1, 1)).ToArray());
+            // 페이지만 줄이고 이미지·도형은 자른 원점만큼 옮긴다. 밖으로 나간 부분은 보이지 않을 뿐 지우지 않는다(되돌리기 없이도 다시 끌어올 수 있다).
+            Apply(rect.Width, rect.Height, _annotations.Select(x => x.Transform(-rect.X, -rect.Y, 1, 1)).ToArray());
         }
 
         /// <summary>되돌리기에 지금 상태를 쌓고 새 상태로 바꾼다.</summary>
-        private void Apply(BitmapSource bitmap, CaptureAnnotation[] annotations)
+        private void Apply(int width, int height, CaptureAnnotation[] annotations)
         {
-            _undo.Push((_bitmap, _annotations));
-            if (!ReferenceEquals(bitmap, _bitmap))
-                SetBitmap(bitmap);
+            _undo.Push((_pageWidth, _pageHeight, _annotations));
+            SetPageSize(width, height);
             _annotations = annotations;
             Select(-1);
             ShowAnnotations(_annotations);
             Changed?.Invoke(this, EventArgs.Empty);
         }
 
-        private void SetBitmap(BitmapSource bitmap)
+        private void SetPageSize(int width, int height)
         {
-            _bitmap = bitmap;
-            _image.Source = bitmap;
-            _image.Width = _surface.Width = _overlay.Width = bitmap.PixelWidth;
-            _image.Height = _surface.Height = _overlay.Height = bitmap.PixelHeight;
+            _pageWidth = width;
+            _pageHeight = height;
+            _surface.Width = _overlay.Width = width;
+            _surface.Height = _overlay.Height = height;
         }
 
-        /// <summary>도형 요소를 목록에서 다시 만든다(끄는 중에는 바뀐 사본 목록을 보여 준다).</summary>
+        /// <summary>페이지가 캡쳐 크기 그대로이고 이미지가 제자리에 꽉 차 있으며 도형이 없는가(= 캡쳐 원본을 그대로 내보내도 됨).</summary>
+        private bool IsUnchanged()
+        {
+            if (_annotations.Length != 1 || _pageWidth != _bitmap.PixelWidth || _pageHeight != _bitmap.PixelHeight)
+                return false;
+            var image = _annotations[0];
+            return image.Left == 0 && image.Top == 0 && image.Width == _bitmap.PixelWidth && image.Height == _bitmap.PixelHeight;
+        }
+
+        /// <summary>이미지·도형 요소를 목록에서 다시 만든다(끄는 중에는 바뀐 사본 목록을 보여 준다).</summary>
         private void ShowAnnotations(IReadOnlyList<CaptureAnnotation> annotations)
         {
-            while (_surface.Children.Count > 1)
-                _surface.Children.RemoveAt(1);
+            _surface.Children.Clear();
             foreach (var annotation in annotations)
                 _surface.Children.Add(CreateElement(annotation));
         }
@@ -324,7 +327,7 @@ namespace Folderss
                     break;
                 case DragMode.Draw:
                     if (!IsTooSmall(draft))
-                        Apply(_bitmap, _annotations.Concat(new[] { draft.Normalized() }).ToArray());
+                        Apply(_pageWidth, _pageHeight, _annotations.Concat(new[] { draft.Normalized() }).ToArray());
                     break;
                 case DragMode.Move:
                 case DragMode.Handle:
@@ -337,7 +340,7 @@ namespace Folderss
                         break;
                     }
                     var replaced = WithSelectedReplaced(draft.Normalized());
-                    Apply(_bitmap, replaced);
+                    Apply(_pageWidth, _pageHeight, replaced);
                     Select(index);
                     break;
             }
@@ -462,12 +465,19 @@ namespace Folderss
             return brush;
         }
 
-        private static UIElement CreateElement(CaptureAnnotation annotation)
+        private UIElement CreateElement(CaptureAnnotation annotation)
         {
             var brush = ToBrush(annotation.Argb);
             FrameworkElement element;
             switch (annotation.Kind)
             {
+                case CaptureAnnotationKind.Image:
+                    var image = new Image { Source = _bitmap, Stretch = Stretch.Fill, Width = annotation.Width, Height = annotation.Height };
+                    // 캡쳐 크기 그대로면 1:1 표시·합치기에서 다시 샘플링하지 않고, 늘리거나 줄였으면 고품질 보간.
+                    var original = annotation.Width == _bitmap.PixelWidth && annotation.Height == _bitmap.PixelHeight;
+                    RenderOptions.SetBitmapScalingMode(image, original ? BitmapScalingMode.NearestNeighbor : BitmapScalingMode.HighQuality);
+                    element = image;
+                    break;
                 case CaptureAnnotationKind.Arrow:
                     return new Path
                     {
@@ -580,7 +590,7 @@ namespace Folderss
             }
             _overlay.Children.Remove(box);
             if (text != null)
-                Apply(_bitmap, _annotations.Concat(new[] { text }).ToArray());
+                Apply(_pageWidth, _pageHeight, _annotations.Concat(new[] { text }).ToArray());
         }
 
         private void CancelText()

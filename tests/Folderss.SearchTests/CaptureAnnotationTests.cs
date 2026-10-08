@@ -133,6 +133,55 @@ namespace Folderss.SearchTests
             AssertPoints(flipped.Normalized(), 110, 20, 200, 80);
         }
 
+        private static CaptureAnnotation Image(double x1, double y1, double x2, double y2)
+        {
+            return new CaptureAnnotation(CaptureAnnotationKind.Image, x1, y1, x2, y2, 0, 0);
+        }
+
+        [Fact]
+        public void Image_SelectsLikeBoxAndHasEightHandles()
+        {
+            var image = Image(0, 0, 400, 300);
+            Assert.True(image.HitTest(200, 150, 0));
+            Assert.True(image.HitTest(-5, 150, 6));   // 굵기 없음: 여유만큼만 바깥 허용
+            Assert.False(image.HitTest(-7, 150, 6));
+            Assert.Equal(8, image.Handles().Count);
+            Assert.Equal(CaptureHandle.BottomRight, image.HitHandle(399, 301, 4));
+            // 도형 아래에 있어도(먼저 그려짐) 겹치지 않은 곳에서는 이미지가 잡힌다.
+            Assert.Equal(0, CaptureAnnotation.TopmostHit(new[] { image, Rect(10, 10, 50, 50) }, 200, 150, 0));
+            Assert.Equal(1, CaptureAnnotation.TopmostHit(new[] { image, Rect(10, 10, 50, 50) }, 30, 30, 0));
+        }
+
+        [Fact]
+        public void DragHandle_ImageCorner_KeepsRatioAnchoredAtOppositeCorner()
+        {
+            var image = Image(100, 100, 500, 400); // 4:3
+            // 오른쪽 아래를 가로(200/400)로 세로(100/300)보다 더 많이 끌면 가로에 맞추고 세로는 비율대로.
+            AssertPoints(image.DragHandle(CaptureHandle.BottomRight, 300, 200), 100, 100, 300, 250);
+            // 세로(600/300)로 더 많이 끌면 세로에 맞춘다.
+            AssertPoints(image.DragHandle(CaptureHandle.BottomRight, 490, 700), 100, 100, 900, 700);
+            // 왼쪽 위는 오른쪽 아래를 고정한다.
+            AssertPoints(image.DragHandle(CaptureHandle.TopLeft, 300, 350), 500, 400, 300, 250);
+            // 반대편을 넘기면 뒤집힌 채로 두고 정리하면 고정점 너머에 놓인다(거울 반전은 없음).
+            AssertPoints(image.DragHandle(CaptureHandle.BottomRight, -100, 0).Normalized(), -100, -50, 100, 100);
+        }
+
+        [Fact]
+        public void DragHandle_ImageSide_StretchesFreely()
+        {
+            var image = Image(100, 100, 500, 400);
+            AssertPoints(image.DragHandle(CaptureHandle.Right, 700, 999), 100, 100, 700, 400);
+            AssertPoints(image.DragHandle(CaptureHandle.Top, 999, 50), 100, 50, 500, 400);
+        }
+
+        [Fact]
+        public void Transform_Image_ScalesPlacementOnly()
+        {
+            var half = Image(0, 0, 400, 300).Transform(-100, -100, 0.5, 0.5);
+            AssertPoints(half, -50, -50, 150, 100);
+            Assert.Equal(0, half.Thickness, 6);
+        }
+
         [Fact]
         public void DragHandle_ArrowEndsAndTextIgnores()
         {

@@ -67,7 +67,7 @@ Folderss/
 │   ├── PluginSessionRecord.cs      — PluginSessionLog: plugin-sessions\<pid>.json 기록·주인 없는 기록 수거·plugin-log.txt (순수 로직)
 │   ├── SettingsFile.cs             — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 → File.Move 교체, 실패는 예외)
 │   ├── ClipboardService.cs         — 클립보드 읽기·쓰기. 다른 프로그램이 점유 중(CLIPBRD_E_CANT_OPEN)이면 경고 후 false (앱 종료 방지)
-│   ├── CaptureAnnotation.cs        — 캡쳐 편집 도형 하나(불변 값): 이동·자르기/크기 조절 변환(굵기·글자는 기하 평균 배율), 정리, 선택 판정(상자형은 테두리 상자 안, 화살표는 선 거리), 핸들 목록·판정·끌기, 맨 위 도형 찾기 (순수 로직)
+│   ├── CaptureAnnotation.cs        — 캡쳐 편집 도형·캡쳐 이미지 자리 하나(불변 값): 이동·자르기/크기 조절 변환(굵기·글자는 기하 평균 배율), 정리, 선택 판정(상자형은 테두리 상자 안, 화살표는 선 거리), 핸들 목록·판정·끌기(이미지 모서리는 비율 유지), 맨 위 도형 찾기 (순수 로직)
 │   ├── ScreenCaptureService.cs     — 화면 캡쳐 순수 계산: 오버레이 좌표 → 이미지 픽셀 사각형(비율 변환), 빠른 저장 파일 이름, 확장자 → 저장 형식, 화살표 머리 좌표, 크기 조절 비율 유지 (순수 로직)
 │   └── ThemeManager.cs             — 테마 전환 및 저장
 ├── Converters/
@@ -91,7 +91,7 @@ Folderss/
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── CaptureOverlayWindow.cs         — 화면 캡쳐: 가상 화면 전체를 GDI로 찍고(`CaptureVirtualScreen`) 모든 모니터를 덮는 창에 깔아 드래그로 영역 선택, 코드로 구성
 ├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 다른 이름으로 저장 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
-├── CaptureEditor.cs                — 캡쳐 편집면: 상태 = (이미지, 불변 `CaptureAnnotation` 배열). 화면 요소는 배열에서 매번 다시 만들고 저장·복사 때만 `Render`(RenderTargetBitmap)로 합침. 내보내는 층과 미리보기·선택 표시·텍스트 입력 층 분리. 선택(이동·핸들·Delete), 자르기·크기 조절은 이미지만 바꾸고 도형은 좌표 변환. 상태 스냅숏 되돌리기. 좌표는 이미지 픽셀, 표시는 LayoutTransform으로 1:1
+├── CaptureEditor.cs                — 캡쳐 편집면: 흰 페이지 위에 캡쳐 이미지(배열 [0], `Kind == Image`, 비트맵은 하나로 고정)와 도형. 상태 = (페이지 크기, 불변 `CaptureAnnotation` 배열). 화면 요소는 배열에서 매번 다시 만들고 저장·복사 때만 `Render`(RenderTargetBitmap)로 합침(바꾼 것이 없으면 캡쳐 원본 그대로). 내보내는 층과 미리보기·선택 표시·텍스트 입력 층 분리. 선택(이미지·도형 이동·핸들, 도형 Delete), 자르기·크기 조절은 페이지 크기만 바꾸고 이미지·도형은 좌표 변환. 상태 스냅숏 되돌리기. 좌표는 페이지 픽셀, 표시는 LayoutTransform으로 1:1
 ├── AboutWindow.cs                  — 정보 창
 ├── PromptWindow.cs                 — 이름 변경·새 폴더 입력 다이얼로그
 ├── App.xaml/.cs                    — 앱 진입점, 테마 초기 로드, 플러그인 발 UI 예외 처리
