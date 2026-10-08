@@ -6,6 +6,7 @@ using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.IO;
 using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -905,30 +906,7 @@ namespace Folderss
                 if (input.ShowDialog() != true)
                     return;
 
-                var assets = input.Release.ZipAssets;
-                var asset = assets[0];
-                if (assets.Count > 1)
-                {
-                    var choice = new PluginAssetChoiceDialog(input.Release) { Owner = this };
-                    if (choice.ShowDialog() != true || choice.Selected == null)
-                        return;
-                    asset = choice.Selected;
-                }
-
-                PluginGitHubButton.IsEnabled = false;
-                PluginErrorText.Text = asset.Name + " 내려받는 중…";
-                try
-                {
-                    await PluginGitHubSource.DownloadAsync(PluginGitHubSource.SharedClient, asset, temporary, System.Threading.CancellationToken.None);
-                }
-                finally
-                {
-                    PluginGitHubButton.IsEnabled = true;
-                    RefreshPluginList();
-                }
-
-                // 받는 동안 설정 창을 닫았으면 설치하지 않는다(닫힌 창을 소유자로 대화상자를 띄울 수 없음).
-                if (!IsLoaded)
+                if (!await DownloadReleaseZipAsync(input.Release, temporary))
                     return;
                 InstallPluginPackage(temporary, PluginGitHubSource.SourceKey(input.RepoOwner, input.Repo));
             }
@@ -943,6 +921,123 @@ namespace Folderss
                 // 임시 파일 삭제 실패는 설치 결과와 무관하고 TEMP 정리 대상이라 알리지 않는다.
                 try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
             }
+        }
+
+        /// <summary>
+        /// 선택한 플러그인을 설치 출처로 기록된 GitHub 저장소의 최신 정식 릴리스로 교체한다. 로컬 zip 출처·기록 없음은 안내만 한다.
+        /// 태그가 현재 버전과 같으면 받지 않고, 받은 zip의 plugin.json 버전이 현재와 같아도 교체하지 않는다(태그와 manifest가 다를 수 있음).
+        /// </summary>
+        private async void PluginUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            var row = PluginList.SelectedItem as PluginListItem;
+            if (row == null)
+                return;
+
+            var temporary = Path.Combine(Path.GetTempPath(), "folderss-plugin-" + Guid.NewGuid().ToString("N") + ".zip");
+            try
+            {
+                var source = PluginSourceStore.Get(PluginManager.PluginsDirectory, row.Id);
+                string owner, repo;
+                if (!PluginGitHubSource.TryParseSourceKey(source, out owner, out repo))
+                {
+                    MessageBox.Show(this, string.Format("{0}({1})은(는) GitHub에서 설치한 플러그인이 아니라 업데이트할 수 없습니다.\n출처: {2}\n\n" +
+                        "새 zip을 플러그인 찾기…로 선택하거나 GitHub에서 설치…로 저장소를 입력해 교체하세요.",
+                        row.Name, row.Id, PluginSourceStore.Describe(source)), "플러그인 업데이트", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+
+                GitHubRelease release;
+                PluginUpdateButton.IsEnabled = false;
+                PluginErrorText.Text = owner + "/" + repo + " 최신 릴리스 확인 중…";
+                try
+                {
+                    release = await PluginGitHubSource.GetLatestReleaseAsync(PluginGitHubSource.SharedClient, owner, repo, System.Threading.CancellationToken.None);
+                }
+                finally
+                {
+                    PluginUpdateButton.IsEnabled = true;
+                    RefreshPluginList();
+                }
+                if (!IsLoaded)
+                    return;
+
+                if (release.ZipAssets.Count == 0)
+                {
+                    MessageBox.Show(this, "최신 릴리스(" + release.TagName + ")에 zip 첨부 파일이 없어 업데이트할 수 없습니다.", "플러그인 업데이트",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                if (PluginGitHubSource.IsSameVersion(release.TagName, row.Version))
+                {
+                    MessageBox.Show(this, string.Format("{0}은(는) 이미 최신 버전입니다.\n현재 {1}, 최신 릴리스 {2}", row.Name, row.Version, release.TagName),
+                        "플러그인 업데이트", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                if (MessageBox.Show(this, string.Format("{0}({1})\n현재 {2} → 최신 릴리스 {3}\n출처: {4}\n\n릴리스 zip을 받아 교체할까요?",
+                        row.Name, row.Id, row.Version, release.TagName, PluginSourceStore.Describe(source)),
+                        "플러그인 업데이트", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                    return;
+
+                if (!await DownloadReleaseZipAsync(release, temporary))
+                    return;
+
+                var downloaded = PluginPackage.ReadManifest(temporary);
+                if (!string.Equals(downloaded.Id, row.Id, StringComparison.OrdinalIgnoreCase))
+                {
+                    MessageBox.Show(this, string.Format("받은 zip의 플러그인 ID({0})가 현재 플러그인({1})과 달라 업데이트하지 않습니다.", downloaded.Id, row.Id),
+                        "플러그인 업데이트", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                if (PluginGitHubSource.IsSameVersion(downloaded.Version, row.Version))
+                {
+                    MessageBox.Show(this, string.Format("받은 zip의 버전({0})이 현재와 같아 교체하지 않습니다. 릴리스 태그 {1}의 plugin.json 버전이 올라가지 않았습니다.",
+                        downloaded.Version, release.TagName), "플러그인 업데이트", MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+                InstallPluginPackage(temporary, source);
+            }
+            catch (Exception ex)
+            {
+                if (IsLoaded)
+                    MessageBox.Show(this, "플러그인을 업데이트하지 못했습니다.\n\n" + ex.Message, "플러그인 업데이트",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            finally
+            {
+                try { File.Delete(temporary); } catch (IOException) { } catch (UnauthorizedAccessException) { }
+            }
+        }
+
+        /// <summary>
+        /// 릴리스의 zip(여러 개면 고르게 함)을 <paramref name="temporary"/>로 받는다. 취소했거나 받는 동안 설정 창이 닫혔으면 false
+        /// (닫힌 창을 소유자로 대화상자를 띄울 수 없음). 다운로드 실패는 예외.
+        /// </summary>
+        private async Task<bool> DownloadReleaseZipAsync(GitHubRelease release, string temporary)
+        {
+            var assets = release.ZipAssets;
+            var asset = assets[0];
+            if (assets.Count > 1)
+            {
+                var choice = new PluginAssetChoiceDialog(release) { Owner = this };
+                if (choice.ShowDialog() != true || choice.Selected == null)
+                    return false;
+                asset = choice.Selected;
+            }
+
+            PluginGitHubButton.IsEnabled = false;
+            PluginUpdateButton.IsEnabled = false;
+            PluginErrorText.Text = asset.Name + " 내려받는 중…";
+            try
+            {
+                await PluginGitHubSource.DownloadAsync(PluginGitHubSource.SharedClient, asset, temporary, System.Threading.CancellationToken.None);
+            }
+            finally
+            {
+                PluginGitHubButton.IsEnabled = true;
+                PluginUpdateButton.IsEnabled = true;
+                RefreshPluginList();
+            }
+            return IsLoaded;
         }
 
         /// <summary>

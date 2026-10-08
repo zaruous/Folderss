@@ -87,6 +87,57 @@ namespace Folderss.Services
             return "github.com/" + owner + "/" + repo;
         }
 
+        /// <summary>
+        /// <see cref="SourceKey"/>로 기록한 출처(<c>github.com/&lt;소유자&gt;/&lt;저장소&gt;</c>)에서 저장소를 되찾는다.
+        /// 로컬 zip 출처·기록 없음·다른 형식이면 false (업데이트 버튼이 GitHub 설치분만 다루기 위함).
+        /// </summary>
+        public static bool TryParseSourceKey(string source, out string owner, out string repo)
+        {
+            owner = null;
+            repo = null;
+            if (string.IsNullOrWhiteSpace(source) || !source.StartsWith("github.com/", StringComparison.OrdinalIgnoreCase))
+                return false;
+            try
+            {
+                var parsed = ParseRepository("https://" + source.Trim());
+                owner = parsed.Owner;
+                repo = parsed.Repo;
+                return true;
+            }
+            catch (ArgumentException)
+            {
+                return false;
+            }
+        }
+
+        /// <summary>
+        /// 릴리스 태그(<c>v1.2.0</c>)와 plugin.json 버전(<c>1.2.0</c>)이 같은 버전인지. 앞의 <c>v</c>는 무시하고,
+        /// 둘 다 <see cref="Version"/>으로 읽히면 <c>1.2</c>와 <c>1.2.0</c>도 같게 본다. 내려받기 전에 건너뛸지 정하는 용도라
+        /// 확실히 같을 때만 true — 형식이 다르면(태그가 날짜 등) false로 두고 받은 zip의 manifest로 다시 비교한다.
+        /// </summary>
+        public static bool IsSameVersion(string tagOrVersion, string other)
+        {
+            var a = Normalize(tagOrVersion);
+            var b = Normalize(other);
+            if (a.Length == 0 || b.Length == 0)
+                return false;
+            if (string.Equals(a, b, StringComparison.OrdinalIgnoreCase))
+                return true;
+            Version va, vb;
+            return Version.TryParse(a, out va) && Version.TryParse(b, out vb) && Pad(va).Equals(Pad(vb));
+        }
+
+        private static string Normalize(string value)
+        {
+            var text = (value ?? string.Empty).Trim();
+            return text.Length > 1 && (text[0] == 'v' || text[0] == 'V') && char.IsDigit(text[1]) ? text.Substring(1) : text;
+        }
+
+        private static Version Pad(Version v)
+        {
+            return new Version(v.Major, v.Minor, Math.Max(v.Build, 0), Math.Max(v.Revision, 0));
+        }
+
         public static GitHubRelease ParseRelease(string json)
         {
             using (var document = JsonDocument.Parse(json))

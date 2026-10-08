@@ -11,6 +11,16 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ## v1.8.1 (2026-10-05)
 
+### 설정 > 플러그인 탭에 `업데이트` 버튼 (2026-10-08)
+
+- `SettingsWindow.xaml` — `GitHub에서 설치…`와 `제거` 사이에 `업데이트` 버튼. `제거`처럼 선택 행이 없으면 아무것도 하지 않는다.
+- `SettingsWindow.PluginUpdate_Click` — `PluginSourceStore`에 기록된 출처가 GitHub(`PluginGitHubSource.TryParseSourceKey`)일 때만 `releases/latest`를 조회. 로컬 zip·기록 없음은 `플러그인 찾기…`/`GitHub에서 설치…`로 교체하라고 안내만 한다.
+- 버전 비교 `PluginGitHubSource.IsSameVersion`: 태그 `v1.2.0`과 manifest `1.2.0`, `1.2`와 `1.2.0`을 같게 본다. 태그가 같으면 받지 않고, 태그 형식이 달라(날짜 등) 비교가 안 되면 받은 zip의 `plugin.json` 버전으로 다시 비교해 같으면 교체하지 않는다. 받은 zip의 id가 선택한 플러그인과 다르면 중단.
+- 받기 전에 `현재 → 새 버전` 확인 창(기본 아니오, 최대 100MB를 받으므로). 교체는 기존 `InstallPluginPackage`를 그대로 타서 출처 동일 → 일반 교체 확인, 로드된 플러그인은 재시작 안내.
+- zip 선택·내려받기는 `DownloadReleaseZipAsync`로 빼서 GitHub 설치와 공유. 내려받는 동안 `GitHub에서 설치…`·`업데이트` 둘 다 비활성.
+- 테스트: `PluginGitHubSourceTests` — `TryParseSourceKey`(출처 키 왕복, local/기록 없음/다른 호스트/https 주소 거부), `IsSameVersion`.
+- 한계: 최신 릴리스가 현재보다 낮아도(수동으로 Pre-release를 설치한 경우) 버전만 보여 주고 막지는 않는다. GitHub API 한도(시간당 60회)는 업데이트 확인마다 1회 쓴다.
+
 ### 트레이 아이콘 메뉴에 플러그인 / 플러그인 관리 노출 (2026-10-05)
 
 - `MainWindow.xaml.cs` `InitTrayIcon` — 트레이 오른쪽 클릭 메뉴: `열기 / 플러그인 ▸ / 플러그인 관리… / 종료`. `플러그인 ▸`은 열 때마다(`DropDownOpening`) `PluginManager.ListInstalled`로 다시 채워 ⋯ 메뉴와 같은 목록·읽기 오류·"플러그인 관리…"를 보인다(빈 하위 메뉴는 ▸가 안 보여 자리표시 항목을 둠).

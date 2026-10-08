@@ -219,6 +219,10 @@ Folderss/
 - GitHub 설치(`PluginGitHubInstallDialog` → `PluginGitHubSource`): `https://github.com/<소유자>/<저장소>`만 받고 `releases/latest` API로 첨부 zip을 찾는다
   (API 목록에는 자동 "Source code (zip)"이 없다). 비로그인이라 공개 저장소만, 호출 한도 IP당 시간당 60회(초과 시 문구로 안내).
   첨부 주소는 https `github.com`만 허용, 리다이렉트는 HttpClient 기본(https→http 거부). Windows 프록시 + 현재 사용자 자격 증명 사용.
+- 업데이트(`SettingsWindow.PluginUpdate_Click`): 선택한 플러그인의 출처 기록이 `github.com/<소유자>/<저장소>`일 때만(`PluginGitHubSource.TryParseSourceKey`)
+  같은 저장소의 `releases/latest`를 조회한다. 태그가 현재 `plugin.json` 버전과 같으면(`IsSameVersion` — 앞 `v`·끝 `.0` 무시) 받지 않고,
+  다르면 현재 → 새 버전을 보여 주고 확인 후 zip을 받아(`DownloadReleaseZipAsync`, GitHub 설치와 공유) manifest의 id가 다르거나 버전이 같으면
+  교체하지 않는다. 교체 자체는 `InstallPluginPackage`(출처 동일 → 일반 교체 확인)로 간다. 로컬 zip 출처·기록 없음은 안내만 한다.
 - 테스트: `tests/Folderss.SearchTests/PluginPackageTests.cs` (manifest 검증, Zip Slip, 해제 재사용, 등록·목록, 설정 저장),
   `PluginSessionTests.cs` (종료 기록 수거·삭제·설명, 로그, 본체 설정 키 목록),
   `PluginGitHubSourceTests.cs` (주소 해석, 릴리스 응답·404·호출 한도·연결 실패, 다운로드 제한·해시, 출처 기록, 계약 버전 확인).
