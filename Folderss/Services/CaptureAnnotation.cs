@@ -3,13 +3,14 @@ using System.Collections.Generic;
 
 namespace Folderss.Services
 {
-    public enum CaptureAnnotationKind { Rectangle, Ellipse, Arrow, Text }
+    public enum CaptureAnnotationKind { Rectangle, Ellipse, Arrow, Text, Image }
 
     public enum CaptureHandle { None, TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left, Start, End }
 
     /// <summary>
-    /// 캡쳐 편집의 도형·텍스트 하나(바뀌지 않는 값). 좌표는 이미지 픽셀.
-    /// 사각형·타원·텍스트는 (X1, Y1)–(X2, Y2)가 테두리 상자, 화살표는 시작점–끝점.
+    /// 캡쳐 편집의 도형·텍스트·캡쳐 이미지 하나(바뀌지 않는 값). 좌표는 페이지 픽셀.
+    /// 사각형·타원·텍스트·이미지는 (X1, Y1)–(X2, Y2)가 테두리 상자, 화살표는 시작점–끝점.
+    /// 이미지는 캡쳐본이 페이지에 놓인 자리만 값으로 두고 그림(비트맵)은 편집면이 따로 든다(굵기·글자 없음).
     /// 텍스트의 상자는 확정할 때 잰 글자 크기다(이동·자르기·크기 조절 때 함께 옮기고 늘린다).
     /// 이동·핸들 끌기·자르기·크기 조절은 새 값을 돌려주므로 되돌리기 기록이 나중 편집에 오염되지 않는다.
     /// WPF 없음 — 테스트 프로젝트에서 소스 링크로 검증한다.
@@ -87,7 +88,7 @@ namespace Folderss.Services
             return x >= Left - margin && x <= Left + Width + margin && y >= Top - margin && y <= Top + Height + margin;
         }
 
-        /// <summary>크기 조절 핸들: 사각형·타원은 모서리·변 가운데 8개, 화살표는 양 끝 2개, 텍스트는 없음(이동만).</summary>
+        /// <summary>크기 조절 핸들: 사각형·타원·이미지는 모서리·변 가운데 8개, 화살표는 양 끝 2개, 텍스트는 없음(이동만).</summary>
         public IReadOnlyList<(CaptureHandle Handle, double X, double Y)> Handles()
         {
             switch (Kind)
@@ -123,6 +124,7 @@ namespace Folderss.Services
         /// <summary>
         /// 핸들을 (x, y)로 끈 결과. 상자형은 정리된(<see cref="Normalized"/>) 값에서 시작해 잡은 변만 옮긴다 —
         /// 반대편을 넘어가면 뒤집힌 채로 두고, 끝낼 때 <see cref="Normalized"/>로 정리한다.
+        /// 이미지의 모서리 핸들은 비율을 유지한다(반대편 모서리를 고정하고 가로·세로 중 더 많이 끈 쪽에 맞춤). 변 핸들은 그 방향으로만 늘린다.
         /// </summary>
         public CaptureAnnotation DragHandle(CaptureHandle handle, double x, double y)
         {
@@ -141,6 +143,17 @@ namespace Folderss.Services
             var top = Top;
             var right = Left + Width;
             var bottom = Top + Height;
+            if (Kind == CaptureAnnotationKind.Image && IsCorner(handle) && Width > 0 && Height > 0)
+            {
+                var anchorX = handle == CaptureHandle.TopLeft || handle == CaptureHandle.BottomLeft ? right : left;
+                var anchorY = handle == CaptureHandle.TopLeft || handle == CaptureHandle.TopRight ? bottom : top;
+                var dx = x - anchorX;
+                var dy = y - anchorY;
+                var scale = Math.Max(Math.Abs(dx) / Width, Math.Abs(dy) / Height);
+                var width = Width * scale * (dx < 0 ? -1 : 1);
+                var height = Height * scale * (dy < 0 ? -1 : 1);
+                return WithPoints(anchorX, anchorY, anchorX + width, anchorY + height);
+            }
             switch (handle)
             {
                 case CaptureHandle.TopLeft: left = x; top = y; break;
@@ -154,6 +167,12 @@ namespace Folderss.Services
                 default: return this;
             }
             return WithPoints(left, top, right, bottom);
+        }
+
+        private static bool IsCorner(CaptureHandle handle)
+        {
+            return handle == CaptureHandle.TopLeft || handle == CaptureHandle.TopRight ||
+                handle == CaptureHandle.BottomRight || handle == CaptureHandle.BottomLeft;
         }
 
         /// <summary>점을 집는 맨 위(나중에 그린) 도형의 번호, 없으면 -1.</summary>
