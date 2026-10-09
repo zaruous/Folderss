@@ -348,7 +348,7 @@ namespace Folderss
         private void InitializeCapturePanel()
         {
             CaptureSaveFolderBox.Text = _workingCapture.SaveFolder;
-            CaptureSaveFolderHint.Text = "비워 두면 사용자 폴더(" + CaptureSettingsService.DefaultSaveFolder + ")를 씁니다. 저장 버튼은 파일 이름 캡쳐_날짜_시각.png로 바로 저장하고, ▾ > 다른 이름으로 저장은 이 설정과 관계없이 위치를 고릅니다.";
+            CaptureSaveFolderHint.Text = "비워 두면 사진 폴더(" + CaptureSettingsService.DefaultSaveFolder + ")를 씁니다. 저장 버튼은 파일 이름 캡쳐_날짜_시각.png로 바로 저장하고, ▾ > 다른 이름으로 저장은 이 설정과 관계없이 위치를 고릅니다.";
         }
 
         private void CaptureSaveFolderBrowse_Click(object sender, RoutedEventArgs e)

@@ -2503,7 +2503,7 @@ namespace Folderss
                 new CaptureResultWindow(region, GetCaptureSaveFolder, OnCaptureSaved, () => CaptureSettingsService.Load().SaveFolder) { Owner = this }.Show();
         }
 
-        /// <summary>캡쳐 빠른 저장 폴더 = 설정 > 캡쳐의 기본 저장 폴더(기본: 사용자 폴더). 저장할 때마다 다시 읽어 설정 변경이 열린 결과 창에도 반영된다. 폴더가 없거나 고정(📌)이면 알리고 null.</summary>
+        /// <summary>캡쳐 빠른 저장 폴더 = 설정 > 캡쳐의 기본 저장 폴더(기본: 사진 폴더). 저장할 때마다 다시 읽어 설정 변경이 열린 결과 창에도 반영된다. 폴더가 없거나 고정(📌)이면 알리고 null.</summary>
         private string GetCaptureSaveFolder()
         {
             var folder = CaptureSettingsService.Load().SaveFolder;

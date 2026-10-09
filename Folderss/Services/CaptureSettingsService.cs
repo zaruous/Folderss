@@ -7,7 +7,7 @@ namespace Folderss.Services
     /// <summary>화면 캡쳐 설정(설정 창의 "캡쳐" 탭).</summary>
     public sealed class CaptureSettings
     {
-        /// <summary>결과 창 <c>저장</c>이 바로 저장하는 폴더. 기본은 사용자 폴더(<c>C:\Users\이름</c>).</summary>
+        /// <summary>결과 창 <c>저장</c>이 바로 저장하는 폴더. 기본은 사진 폴더(<c>C:\Users\이름\Pictures</c>, 옮겼으면 옮긴 곳).</summary>
         public string SaveFolder { get; set; } = CaptureSettingsService.DefaultSaveFolder;
 
         public CaptureSettings Clone() => (CaptureSettings)MemberwiseClone();
@@ -16,7 +16,16 @@ namespace Folderss.Services
     /// <summary>캡쳐 설정을 <c>%LOCALAPPDATA%\Folderss\capture-settings.xml</c>에 저장한다.</summary>
     public static class CaptureSettingsService
     {
-        public static string DefaultSaveFolder => Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        /// <summary>기본 저장 폴더: 사진 폴더(Windows 라이브러리 위치, OneDrive 등으로 옮겼으면 그곳). 얻지 못하면 사용자 폴더.</summary>
+        public static string DefaultSaveFolder => ResolveDefault(
+            Environment.GetFolderPath(Environment.SpecialFolder.MyPictures),
+            Environment.GetFolderPath(Environment.SpecialFolder.UserProfile));
+
+        /// <summary>사진 폴더 경로가 비어 있으면(폴더가 없거나 정책으로 막힘) 사용자 폴더.</summary>
+        public static string ResolveDefault(string picturesFolder, string userProfileFolder)
+        {
+            return string.IsNullOrEmpty(picturesFolder) ? userProfileFolder : picturesFolder;
+        }
 
         public static readonly string DefaultConfigPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -61,7 +70,7 @@ namespace Folderss.Services
         }
 
         /// <summary>
-        /// 설정 창의 저장 폴더 입력 검증. 앞뒤 공백·큰따옴표는 떼고, 비어 있으면 기본(사용자 폴더)으로 본다.
+        /// 설정 창의 저장 폴더 입력 검증. 앞뒤 공백·큰따옴표는 떼고, 비어 있으면 기본(사진 폴더)으로 본다.
         /// 절대 경로이면서 있는 폴더만 받는다(저장할 때 가서야 실패하지 않게). 오류 문구 또는 null.
         /// </summary>
         public static string Validate(string input, Func<string, bool> directoryExists, out string folder)

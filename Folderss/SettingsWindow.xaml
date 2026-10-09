@@ -872,7 +872,7 @@
                                    Text="기본 저장 폴더 (결과 창의 저장 버튼이 바로 저장하고, ▾ > 기본 저장 폴더 열기가 여는 곳)"/>
                         <DockPanel>
                             <Button DockPanel.Dock="Right" Content="기본값" Click="CaptureSaveFolderDefault_Click" Padding="10,4" Margin="6,0,0,0"
-                                    ToolTip="사용자 폴더로 되돌립니다"/>
+                                    ToolTip="사진 폴더로 되돌립니다"/>
                             <Button DockPanel.Dock="Right" Content="찾아보기…" Click="CaptureSaveFolderBrowse_Click" Padding="10,4" Margin="6,0,0,0"/>
                             <TextBox x:Name="CaptureSaveFolderBox" Padding="6,4" VerticalContentAlignment="Center"/>
                         </DockPanel>

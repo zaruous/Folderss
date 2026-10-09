@@ -5,7 +5,7 @@ using Xunit;
 
 namespace Folderss.SearchTests
 {
-    /// <summary>캡쳐 설정: 기본 저장 폴더는 사용자 폴더, 저장·읽기 왕복, 설정 창 입력 검증.</summary>
+    /// <summary>캡쳐 설정: 기본 저장 폴더는 사진 폴더(없으면 사용자 폴더), 저장·읽기 왕복, 설정 창 입력 검증.</summary>
     public sealed class CaptureSettingsServiceTests : IDisposable
     {
         private readonly string _dir = Path.Combine(Path.GetTempPath(), "folderss-capture-settings-" + Guid.NewGuid().ToString("N"));
@@ -21,11 +21,22 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
-        public void Load_MissingFile_DefaultsToUserProfile()
+        public void Load_MissingFile_DefaultsToPicturesFolder()
         {
             var settings = CaptureSettingsService.Load(Path.Combine(_dir, "none.xml"));
-            Assert.Equal(Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), settings.SaveFolder);
+            var pictures = Environment.GetFolderPath(Environment.SpecialFolder.MyPictures);
+            var expected = pictures.Length > 0 ? pictures : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            Assert.Equal(expected, settings.SaveFolder);
             Assert.Equal(CaptureSettingsService.DefaultSaveFolder, settings.SaveFolder);
+        }
+
+        [Theory]
+        [InlineData(@"C:\Users\kim\Pictures", @"C:\Users\kim", @"C:\Users\kim\Pictures")]  // 사진 폴더
+        [InlineData(@"D:\OneDrive\사진", @"C:\Users\kim", @"D:\OneDrive\사진")]          // 옮긴 사진 폴더도 그대로
+        [InlineData("", @"C:\Users\kim", @"C:\Users\kim")]                                // 사진 폴더를 못 얻으면 사용자 폴더
+        public void ResolveDefault_PrefersPicturesThenUserProfile(string pictures, string profile, string expected)
+        {
+            Assert.Equal(expected, CaptureSettingsService.ResolveDefault(pictures, profile));
         }
 
         [Fact]
