@@ -36,7 +36,11 @@ namespace Folderss
         private readonly Func<string> _getQuickSaveFolder;
         private readonly Func<string> _getDefaultFolder;
         private readonly Action<string> _onSaved;
-        private readonly TextBlock _status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis };
+        // 도구 줄 컨트롤의 공통 높이. 줄마다 높이가 달라 들쭉날쭉하던 것을 맞춘다.
+        private const double ControlHeight = 28;
+
+        private readonly TextBlock _status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, TextTrimming = TextTrimming.CharacterEllipsis, FontSize = 12 };
+        private readonly TextBlock _size = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), FontSize = 12 };
         private readonly List<(ToggleButton Button, CaptureTool Tool)> _toolButtons = new List<(ToggleButton, CaptureTool)>();
         private readonly List<(Button Button, Color Color)> _colorButtons = new List<(Button, Color)>();
         private readonly Button _undo;
@@ -55,7 +59,8 @@ namespace Folderss
 
             SizeToContent = SizeToContent.WidthAndHeight;
             MinWidth = 640;
-            MinHeight = 200;
+            // 흰 페이지를 작업 공간으로 쓰므로 작은 캡쳐도 위아래로 여유가 있게.
+            MinHeight = 400;
             MaxWidth = SystemParameters.WorkArea.Width * 0.85;
             MaxHeight = SystemParameters.WorkArea.Height * 0.85;
             WindowStartupLocation = WindowStartupLocation.CenterOwner;
@@ -65,7 +70,9 @@ namespace Folderss
             SetResourceReference(FontFamilyProperty, "AppFontFamily");
             FontSize = 13;
 
-            var save = new Button { Content = "저장", Padding = new Thickness(10, 3, 10, 3), ToolTip = "활성 폴더 패널에 PNG로 바로 저장" };
+            var save = new Button { Content = "저장", ToolTip = "활성 폴더 패널에 PNG로 바로 저장" };
+            Compact(save, 12);
+            save.Margin = new Thickness(0);
             save.Click += (s, e) => QuickSave();
             var saveAsItem = new MenuItem { Header = "다른 이름으로 저장… (PNG / JPEG / BMP)" };
             saveAsItem.Click += (s, e) => SaveAs();
@@ -74,63 +81,86 @@ namespace Folderss
             var saveMenu = new ContextMenu();
             saveMenu.Items.Add(saveAsItem);
             saveMenu.Items.Add(openFolderItem);
-            var saveAs = new Button { Content = "▾", Padding = new Thickness(5, 3, 5, 3), MinWidth = 0, Margin = new Thickness(-1, 0, 6, 0), ToolTip = "다른 이름으로 저장 · 기본 저장 폴더 열기", ContextMenu = saveMenu };
+            var saveAs = new Button { Content = "▾", MinWidth = 0, ToolTip = "다른 이름으로 저장 · 기본 저장 폴더 열기", ContextMenu = saveMenu };
+            Compact(saveAs, 6);
+            // 저장 버튼과 테두리를 1픽셀 겹쳐 한 덩어리(분할 버튼)로 보이게 한다.
+            saveAs.Margin = new Thickness(-1, 0, 6, 0);
             saveAs.Click += (s, e) =>
             {
                 saveMenu.PlacementTarget = saveAs;
                 saveMenu.Placement = PlacementMode.Bottom;
                 saveMenu.IsOpen = true;
             };
-            var copy = new Button { Content = "복사", Padding = new Thickness(10, 3, 10, 3), ToolTip = "편집 결과를 클립보드에 복사" };
+            var copy = new Button { Content = "복사", ToolTip = "편집 결과를 클립보드에 복사" };
+            Compact(copy, 12);
             copy.Click += (s, e) => Copy();
-            var close = new Button { Content = "닫기", Padding = new Thickness(10, 3, 10, 3), IsCancel = true };
+            _undo = new Button { Content = "↶ 되돌리기", IsEnabled = false, ToolTip = "되돌리기 (Ctrl+Z)" };
+            Compact(_undo, 10);
+            _undo.Click += (s, e) => _editor.Undo();
+            var close = new Button { Content = "닫기", IsCancel = true };
+            Compact(close, 12);
+            close.Margin = new Thickness(0);
             close.Click += (s, e) => Close();
-            _status.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
 
-            var toolbar = new DockPanel { Margin = new Thickness(8, 8, 8, 4), LastChildFill = true };
+            // 1줄: 파일·문서 명령(왼쪽)과 닫기(오른쪽). 되돌리기는 도구 줄이 접혀도 항상 보이게 여기 둔다.
+            var commands = new DockPanel { LastChildFill = false };
             DockPanel.SetDock(close, Dock.Right);
-            toolbar.Children.Add(close);
+            commands.Children.Add(close);
             var left = new StackPanel { Orientation = Orientation.Horizontal };
             left.Children.Add(save);
             left.Children.Add(saveAs);
             left.Children.Add(copy);
-            DockPanel.SetDock(left, Dock.Left);
-            toolbar.Children.Add(left);
-            toolbar.Children.Add(_status);
+            AddSeparator(left);
+            left.Children.Add(_undo);
+            commands.Children.Add(left);
 
-            var tools = new WrapPanel { Margin = new Thickness(8, 0, 8, 8) };
-            AddTool(tools, "↖ 선택", CaptureTool.Select, "캡쳐 이미지·도형을 눌러 선택 · 끌어서 이동 · 핸들로 크기 변경(이미지 모서리는 비율 유지, 화살표는 양 끝, 텍스트는 이동만) · Delete로 도형 삭제");
-            AddTool(tools, "▭ 사각형", CaptureTool.Rectangle, "드래그해서 사각형");
-            AddTool(tools, "◯ 타원", CaptureTool.Ellipse, "드래그해서 타원");
-            AddTool(tools, "↗ 화살표", CaptureTool.Arrow, "시작점에서 끝점으로 드래그");
-            AddTool(tools, "T 텍스트", CaptureTool.Text, "클릭한 곳에 글자 입력 · Enter 확정, Shift+Enter 줄바꿈, Esc 취소");
-            AddTool(tools, "✂ 자르기", CaptureTool.Crop, "남길 페이지 영역을 드래그 (놓으면 바로 잘림, 이미지·도형은 위치를 맞춰 남음, 되돌리기 가능)");
-            AddSeparator(tools);
+            // 2줄: 도구 · 모양 · 페이지 묶음. 창이 좁으면 묶음 단위로 접힌다(묶음 중간에서 끊기지 않게).
+            var toolGroup = NewGroup();
+            AddTool(toolGroup, "↖ 선택", CaptureTool.Select, "캡쳐 이미지·도형을 눌러 선택 · 끌어서 이동 · 핸들로 크기 변경(이미지 모서리는 비율 유지, 화살표는 양 끝, 텍스트는 이동만) · Delete로 도형 삭제");
+            AddTool(toolGroup, "▭ 사각형", CaptureTool.Rectangle, "드래그해서 사각형");
+            AddTool(toolGroup, "◯ 타원", CaptureTool.Ellipse, "드래그해서 타원");
+            AddTool(toolGroup, "↗ 화살표", CaptureTool.Arrow, "시작점에서 끝점으로 드래그");
+            AddTool(toolGroup, "T 텍스트", CaptureTool.Text, "클릭한 곳에 글자 입력 · Enter 확정, Shift+Enter 줄바꿈, Esc 취소");
+            AddTool(toolGroup, "✂ 자르기", CaptureTool.Crop, "남길 페이지 영역을 드래그 (놓으면 바로 잘림, 이미지·도형은 위치를 맞춰 남음, 되돌리기 가능)");
+            var styleGroup = NewGroup();
             foreach (var color in Palette)
-                AddColor(tools, color);
-            AddSeparator(tools);
-            tools.Children.Add(AddChoice("굵기", new[] { 2, 3, 5, 8 }, 3, value => _editor.StrokeThickness = value));
-            tools.Children.Add(AddChoice("글자", new[] { 14, 18, 24, 32, 48 }, 18, value => _editor.TextSize = value));
-            AddSeparator(tools);
-            var resize = new Button { Content = "크기 조절…", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0), ToolTip = "페이지 크기를 바꿉니다 (이미지·도형·텍스트도 같은 배율로, 그 뒤에도 선택해 고칠 수 있음)" };
+                AddColor(styleGroup, color);
+            styleGroup.Children.Add(AddChoice("굵기", new[] { 2, 3, 5, 8 }, 3, value => _editor.StrokeThickness = value));
+            styleGroup.Children.Add(AddChoice("글자", new[] { 14, 18, 24, 32, 48 }, 18, value => _editor.TextSize = value));
+            var pageGroup = NewGroup();
+            var resize = new Button { Content = "크기 조절…", ToolTip = "페이지 크기를 바꿉니다 (이미지·도형·텍스트도 같은 배율로, 그 뒤에도 선택해 고칠 수 있음)" };
+            Compact(resize, 10);
             resize.Click += (s, e) => ResizeImage();
-            tools.Children.Add(resize);
-            var pageSize = new Button { Content = "배경 크기…", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0), ToolTip = "흰 배경 크기만 바꿉니다 (이미지·도형은 그대로, 왼쪽 위 기준)" };
+            pageGroup.Children.Add(resize);
+            var pageSize = new Button { Content = "배경 크기…", ToolTip = "흰 배경 크기만 바꿉니다 (이미지·도형은 그대로, 왼쪽 위 기준)" };
+            Compact(pageSize, 10);
             pageSize.Click += (s, e) => ResizePage();
-            tools.Children.Add(pageSize);
-            _undo = new Button { Content = "↶ 되돌리기", Padding = new Thickness(8, 2, 8, 2), Margin = new Thickness(2, 0, 2, 0), IsEnabled = false, ToolTip = "되돌리기 (Ctrl+Z)" };
-            _undo.Click += (s, e) => _editor.Undo();
-            tools.Children.Add(_undo);
+            pageGroup.Children.Add(pageSize);
             UpdateColorButtons();
+            var tools = new WrapPanel();
+            tools.Children.Add(toolGroup);
+            tools.Children.Add(styleGroup);
+            tools.Children.Add(pageGroup);
 
             var header = new StackPanel();
-            header.Children.Add(toolbar);
-            header.Children.Add(tools);
+            header.Children.Add(Bar(commands, new Thickness(0, 0, 0, 1)));
+            header.Children.Add(Bar(tools, new Thickness(0, 0, 0, 1)));
+            _status.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+            _size.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+            var statusLine = new DockPanel();
+            DockPanel.SetDock(_size, Dock.Right);
+            statusLine.Children.Add(_size);
+            statusLine.Children.Add(_status);
+            var footer = Bar(statusLine, new Thickness(0, 1, 0, 0));
+            footer.Padding = new Thickness(8, 3, 8, 3);
+
             var root = new DockPanel();
             DockPanel.SetDock(header, Dock.Top);
             root.Children.Add(header);
+            DockPanel.SetDock(footer, Dock.Bottom);
+            root.Children.Add(footer);
             // 흰 페이지가 밝은 테마의 창 배경과 섞이지 않게 테두리를 두른다(내보내는 그림에는 들어가지 않음).
-            var page = new Border { Margin = new Thickness(8, 0, 8, 8), BorderThickness = new Thickness(1), Child = _editor, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
+            var page = new Border { Margin = new Thickness(12), BorderThickness = new Thickness(1), Child = _editor, HorizontalAlignment = HorizontalAlignment.Left, VerticalAlignment = VerticalAlignment.Top };
             page.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
             _scroll = new ScrollViewer
             {
@@ -198,12 +228,13 @@ namespace Folderss
         private void UpdateTitle()
         {
             Title = string.Format("캡쳐 결과 — {0} × {1}", _editor.PixelWidth, _editor.PixelHeight);
+            _size.Text = string.Format("{0} × {1} px", _editor.PixelWidth, _editor.PixelHeight);
             _undo.IsEnabled = _editor.CanUndo;
         }
 
         private void AddTool(Panel panel, string text, CaptureTool tool, string tip)
         {
-            var button = new ToggleButton { Content = new TextBlock { Text = text, Margin = new Thickness(8, 3, 8, 3) }, ToolTip = tip, Margin = new Thickness(1, 0, 1, 0) };
+            var button = new ToggleButton { Content = new TextBlock { Text = text, Margin = new Thickness(8, 0, 8, 0) }, ToolTip = tip, Height = ControlHeight, Margin = new Thickness(0, 0, 2, 0) };
             button.SetResourceReference(StyleProperty, "CompactToggleButtonStyle");
             // 같은 도구를 다시 누르면 꺼진다(도구 없음 = 보기만).
             button.Click += (s, e) => SelectTool(button.IsChecked == true ? tool : CaptureTool.None);
@@ -227,6 +258,9 @@ namespace Folderss
                 ToolTip = "도형·텍스트 색"
             };
             button.SetResourceReference(StyleProperty, "CompactToolButtonStyle");
+            button.Width = ControlHeight;
+            button.Height = ControlHeight;
+            button.Margin = new Thickness(0, 0, 1, 0);
             button.Click += (s, e) =>
             {
                 _editor.StrokeColor = color;
@@ -249,9 +283,9 @@ namespace Folderss
 
         private static FrameworkElement AddChoice(string label, int[] values, int selected, Action<int> apply)
         {
-            var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(4, 0, 4, 0) };
+            var panel = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 0, 0) };
             panel.Children.Add(new TextBlock { Text = label, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 4, 0) });
-            var combo = new ComboBox { ItemsSource = values, SelectedItem = selected, MinWidth = 56, Padding = new Thickness(6, 2, 6, 2) };
+            var combo = new ComboBox { ItemsSource = values, SelectedItem = selected, MinWidth = 56, Height = ControlHeight, Padding = new Thickness(6, 0, 6, 0), VerticalContentAlignment = VerticalAlignment.Center };
             combo.SelectionChanged += (s, e) =>
             {
                 if (combo.SelectedItem is int value)
@@ -263,9 +297,33 @@ namespace Folderss
 
         private static void AddSeparator(Panel panel)
         {
-            var line = new Border { Width = 1, Margin = new Thickness(6, 4, 6, 4) };
+            var line = new Border { Width = 1, Height = ControlHeight - 8, Margin = new Thickness(6, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
             line.SetResourceReference(Border.BackgroundProperty, "BorderBrush");
             panel.Children.Add(line);
+        }
+
+        /// <summary>도구 줄 버튼: 공통 높이, 위아래 여백 없음(기본 버튼 스타일의 여백 3·안쪽 12,7을 덮어씀).</summary>
+        private static void Compact(Button button, double horizontalPadding)
+        {
+            button.Height = ControlHeight;
+            button.Padding = new Thickness(horizontalPadding, 0, horizontalPadding, 0);
+            button.Margin = new Thickness(0, 0, 4, 0);
+            button.VerticalAlignment = VerticalAlignment.Center;
+        }
+
+        /// <summary>도구 줄의 한 묶음. 접힐 때 줄 사이가 붙지 않게 위아래 여백, 묶음 사이는 오른쪽 여백으로 띄운다.</summary>
+        private static StackPanel NewGroup()
+        {
+            return new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 2, 16, 2) };
+        }
+
+        /// <summary>명령·도구·상태 줄 바탕: 페이지 영역과 구분되는 면 색 + 한쪽 구분선.</summary>
+        private static Border Bar(UIElement child, Thickness borderThickness)
+        {
+            var bar = new Border { Child = child, BorderThickness = borderThickness, Padding = new Thickness(8, 4, 8, 4) };
+            bar.SetResourceReference(Border.BackgroundProperty, "SurfaceBackground");
+            bar.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            return bar;
         }
 
         private void ResizeImage()
