@@ -2500,7 +2500,7 @@ namespace Folderss
             }
 
             if (region != null)
-                new CaptureResultWindow(region, GetCaptureSaveFolder, OnCaptureSaved) { Owner = this }.Show();
+                new CaptureResultWindow(region, GetCaptureSaveFolder, OnCaptureSaved, () => ActivePane.CurrentPath) { Owner = this }.Show();
         }
 
         /// <summary>캡쳐 빠른 저장 폴더 = 활성 폴더 패널. 폴더가 없거나 고정(📌)이면 알리고 null.</summary>
@@ -2509,7 +2509,7 @@ namespace Folderss
             var folder = ActivePane.CurrentPath;
             if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
             {
-                MessageBox.Show(this, "활성 폴더 패널의 폴더를 찾을 수 없습니다.\n▾ 버튼(다른 이름으로 저장)을 쓰세요.", "캡쳐 저장", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "활성 폴더 패널의 폴더를 찾을 수 없습니다.\n▾ > 다른 이름으로 저장을 쓰세요.", "캡쳐 저장", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return null;
             }
             if (IsDestinationPinLocked(folder))

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Threading.Tasks;
 using System.Windows;
@@ -16,7 +17,8 @@ namespace Folderss
 {
     /// <summary>
     /// 캡쳐 결과 팝업(비모달). 열리면 이미지를 클립보드에 복사한다.
-    /// <c>저장</c>은 활성 폴더 패널에 <c>캡쳐_yyyyMMdd_HHmmss.png</c>로 바로 저장하고, 옆 <c>▾</c>는 다른 이름·형식(PNG/JPEG/BMP)으로 저장한다.
+    /// <c>저장</c>은 활성 폴더 패널에 <c>캡쳐_yyyyMMdd_HHmmss.png</c>로 바로 저장하고, 옆 <c>▾</c> 메뉴는 다른 이름·형식(PNG/JPEG/BMP)으로 저장과
+    /// 기본 저장 폴더(활성 폴더 패널) 탐색기로 열기다. 저장이 끝나면 저장한 파일을 탐색기에서 열지 묻는다.
     /// 둘째 줄은 편집 도구(<see cref="CaptureEditor"/>): 선택(캡쳐 이미지·도형의 이동·핸들 크기 변경, 도형 Delete)·사각형·타원·화살표·텍스트·자르기,
     /// 색·굵기·글자 크기, 크기 조절, 되돌리기(Ctrl+Z).
     /// 편집면은 흰 페이지이고 캡쳐 이미지는 그 위의 오브젝트다. 흰 페이지는 처음 열 때 창의 보이는 영역을 채우고(캡쳐보다 작지 않게), `배경 크기…`로 바꾼다.
@@ -32,6 +34,7 @@ namespace Folderss
 
         private readonly CaptureEditor _editor;
         private readonly Func<string> _getQuickSaveFolder;
+        private readonly Func<string> _getDefaultFolder;
         private readonly Action<string> _onSaved;
         private readonly TextBlock _status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(8, 0, 8, 0), TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly List<(ToggleButton Button, CaptureTool Tool)> _toolButtons = new List<(ToggleButton, CaptureTool)>();
@@ -42,10 +45,12 @@ namespace Folderss
 
         /// <param name="getQuickSaveFolder">빠른 저장 폴더. 저장할 수 없으면 사용자에게 알리고 null.</param>
         /// <param name="onSaved">저장한 파일 경로를 받아 폴더 패널을 갱신한다.</param>
-        public CaptureResultWindow(BitmapSource image, Func<string> getQuickSaveFolder, Action<string> onSaved)
+        /// <param name="getDefaultFolder">기본 저장 폴더(활성 폴더 패널) 경로. 열기 전용이라 고정(📌) 검사를 하지 않는다.</param>
+        public CaptureResultWindow(BitmapSource image, Func<string> getQuickSaveFolder, Action<string> onSaved, Func<string> getDefaultFolder)
         {
             _editor = new CaptureEditor(image) { StrokeColor = Palette[0] };
             _getQuickSaveFolder = getQuickSaveFolder;
+            _getDefaultFolder = getDefaultFolder;
             _onSaved = onSaved;
 
             SizeToContent = SizeToContent.WidthAndHeight;
@@ -62,8 +67,20 @@ namespace Folderss
 
             var save = new Button { Content = "저장", Padding = new Thickness(10, 3, 10, 3), ToolTip = "활성 폴더 패널에 PNG로 바로 저장" };
             save.Click += (s, e) => QuickSave();
-            var saveAs = new Button { Content = "▾", Padding = new Thickness(5, 3, 5, 3), MinWidth = 0, Margin = new Thickness(-1, 0, 6, 0), ToolTip = "다른 이름으로 저장… (PNG / JPEG / BMP)" };
-            saveAs.Click += (s, e) => SaveAs();
+            var saveAsItem = new MenuItem { Header = "다른 이름으로 저장… (PNG / JPEG / BMP)" };
+            saveAsItem.Click += (s, e) => SaveAs();
+            var openFolderItem = new MenuItem { Header = "기본 저장 폴더 열기" };
+            openFolderItem.Click += (s, e) => OpenDefaultFolder();
+            var saveMenu = new ContextMenu();
+            saveMenu.Items.Add(saveAsItem);
+            saveMenu.Items.Add(openFolderItem);
+            var saveAs = new Button { Content = "▾", Padding = new Thickness(5, 3, 5, 3), MinWidth = 0, Margin = new Thickness(-1, 0, 6, 0), ToolTip = "다른 이름으로 저장 · 기본 저장 폴더 열기", ContextMenu = saveMenu };
+            saveAs.Click += (s, e) =>
+            {
+                saveMenu.PlacementTarget = saveAs;
+                saveMenu.Placement = PlacementMode.Bottom;
+                saveMenu.IsOpen = true;
+            };
             var copy = new Button { Content = "복사", Padding = new Thickness(10, 3, 10, 3), ToolTip = "편집 결과를 클립보드에 복사" };
             copy.Click += (s, e) => Copy();
             var close = new Button { Content = "닫기", Padding = new Thickness(10, 3, 10, 3), IsCancel = true };
@@ -347,6 +364,34 @@ namespace Folderss
             _status.Text = "저장했습니다: " + path;
             _status.ToolTip = path;
             _onSaved?.Invoke(path);
+
+            // 기본값은 아니오 — 자주 저장할 때 Enter로 바로 넘길 수 있게.
+            var answer = MessageBox.Show(this, "저장했습니다.\n" + path + "\n\n저장한 위치를 탐색기에서 열까요?", "캡쳐 저장", MessageBoxButton.YesNo, MessageBoxImage.Information, MessageBoxResult.No);
+            if (answer == MessageBoxResult.Yes)
+                StartExplorer("/select,\"" + path + "\"");
+        }
+
+        private void OpenDefaultFolder()
+        {
+            var folder = _getDefaultFolder();
+            if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
+            {
+                MessageBox.Show(this, "활성 폴더 패널의 폴더를 찾을 수 없습니다.", "기본 저장 폴더 열기", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+            StartExplorer("\"" + folder + "\"");
+        }
+
+        private void StartExplorer(string arguments)
+        {
+            try
+            {
+                Process.Start(new ProcessStartInfo("explorer.exe", arguments) { UseShellExecute = true });
+            }
+            catch (Exception exception)
+            {
+                MessageBox.Show(this, exception.Message, "탐색기를 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
+            }
         }
     }
 
