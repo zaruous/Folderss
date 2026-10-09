@@ -1,7 +1,35 @@
+using System;
 using System.Collections.Generic;
 
 namespace Folderss.Services
 {
+    /// <summary>브랜치 업데이트(base ← compare) 방식.</summary>
+    public enum GitBranchUpdateMode
+    {
+        /// <summary>base가 compare의 조상일 때만 앞으로 옮긴다. 갈라졌으면 실패하고 아무것도 바꾸지 않는다(기본).</summary>
+        FastForwardOnly,
+        /// <summary>항상 병합 커밋(<c>merge --no-ff</c>).</summary>
+        Merge,
+        /// <summary>compare의 변경을 스테이지만 한다(<c>merge --squash</c>). 커밋은 사용자가 한다.</summary>
+        Squash,
+        /// <summary>base의 커밋을 compare 위로 다시 쌓는다.</summary>
+        Rebase,
+        /// <summary>base를 compare와 같게 만든다. base에만 있던 커밋(현재 브랜치면 커밋 안 한 변경까지)이 사라진다.</summary>
+        Overwrite
+    }
+
+    /// <summary>PR처럼 base(바뀌는 쪽, 로컬 브랜치) ← compare(그대로, 로컬 또는 원격 추적 브랜치).</summary>
+    public sealed class GitBranchUpdateOptions
+    {
+        public string Base { get; set; }
+        public string Compare { get; set; }
+        public bool CompareIsRemote { get; set; }
+        public GitBranchUpdateMode Mode { get; set; } = GitBranchUpdateMode.FastForwardOnly;
+
+        /// <summary>base가 현재 체크아웃된 브랜치인지. 병합·squash·rebase는 이때만 할 수 있다.</summary>
+        public bool BaseIsCurrent { get; set; }
+    }
+
     /// <summary>pull 옵션. 기본값은 설정(<see cref="GitSettings.PullMode"/>)에서 온다.</summary>
     public sealed class GitPullOptions
     {
@@ -48,7 +76,7 @@ namespace Folderss.Services
     }
 
     /// <summary>
-    /// pull·push·fetch·커밋·브랜치 삭제 인수. 버튼은 기본 옵션으로 바로 실행하고, 옆의 ▾ 대화상자에서 고른 옵션도 같은 함수로 인수를 만든다.
+    /// pull·push·fetch·커밋·브랜치 삭제·브랜치 업데이트 인수. 버튼은 기본 옵션으로 바로 실행하고, 옆의 ▾ 대화상자에서 고른 옵션도 같은 함수로 인수를 만든다.
     /// 강제 푸시는 만들지 않는다(원격의 다른 사람 커밋을 덮어쓸 수 있음).
     /// </summary>
     public static class GitSyncCommands
@@ -123,6 +151,41 @@ namespace Folderss.Services
         public static List<string> DeleteBranch(string name, bool force)
         {
             return new List<string> { "branch", force ? "-D" : "-d", "--", name };
+        }
+
+        /// <summary>병합·squash·rebase는 git이 base를 체크아웃해야 하므로 현재 브랜치에만 허용한다(자동 전환 안 함).</summary>
+        public static bool NeedsCurrentBase(GitBranchUpdateMode mode) =>
+            mode == GitBranchUpdateMode.Merge || mode == GitBranchUpdateMode.Squash || mode == GitBranchUpdateMode.Rebase;
+
+        /// <summary>
+        /// 브랜치 업데이트(base ← compare). compare는 전체 참조 이름으로 넘겨 같은 이름의 태그·파일과 헷갈리지 않게 한다.
+        /// 체크아웃 안 된 base의 fast-forward는 <c>fetch . src:dst</c>(+ 없는 refspec은 fast-forward만 허용)로 작업 트리를 건드리지 않는다.
+        /// </summary>
+        public static List<string> UpdateBranch(GitBranchUpdateOptions options)
+        {
+            if (options.Base == options.Compare && !options.CompareIsRemote)
+                throw new InvalidOperationException("같은 브랜치끼리는 업데이트할 수 없습니다.");
+            if (!options.BaseIsCurrent && NeedsCurrentBase(options.Mode))
+                throw new InvalidOperationException("병합·squash·rebase는 현재 브랜치에만 할 수 있습니다. 먼저 '" + options.Base + "'(으)로 전환하세요.");
+
+            var compare = (options.CompareIsRemote ? "refs/remotes/" : "refs/heads/") + options.Compare;
+            switch (options.Mode)
+            {
+                case GitBranchUpdateMode.Merge:
+                    return new List<string> { "merge", "--no-ff", "--no-edit", compare };
+                case GitBranchUpdateMode.Squash:
+                    return new List<string> { "merge", "--squash", compare };
+                case GitBranchUpdateMode.Rebase:
+                    return new List<string> { "rebase", compare };
+                case GitBranchUpdateMode.Overwrite:
+                    return options.BaseIsCurrent
+                        ? GitRefCommands.Reset(GitResetMode.Hard, compare)
+                        : new List<string> { "branch", "-f", "--", options.Base, compare };
+                default:
+                    return options.BaseIsCurrent
+                        ? new List<string> { "merge", "--ff-only", compare }
+                        : new List<string> { "fetch", ".", compare + ":refs/heads/" + options.Base };
+            }
         }
 
         public static readonly string[] Remotes = { "remote" };

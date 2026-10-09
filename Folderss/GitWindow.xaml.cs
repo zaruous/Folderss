@@ -2023,6 +2023,70 @@ namespace Folderss
                 GitSyncCommands.DeleteBranch(branch.Name, dialog.Force), GitCommandRunner.QueryTimeout);
         }
 
+        // ── 브랜치 업데이트 (base ← compare) ─────────────────────────────────
+
+        /// <summary>기본: 현재 브랜치 ← 목록에서 고른 브랜치, fast-forward만.</summary>
+        private async void UpdateBranch_Click(object sender, RoutedEventArgs e)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null)
+                return;
+            var compare = BranchList.SelectedItem as GitBranchInfo;
+            if (snapshot.IsDetached || string.IsNullOrEmpty(snapshot.Branch))
+            {
+                MessageBox.Show(this, "detached HEAD 상태입니다. 브랜치로 전환하거나 ▾에서 바꿀 브랜치를 고르세요.", "브랜치 업데이트", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (compare == null || compare.IsCurrent)
+            {
+                MessageBox.Show(this, string.Format("목록에서 '{0}'을(를) 맞출 기준 브랜치를 고르세요.", snapshot.Branch), "브랜치 업데이트", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            await UpdateBranchAsync(new GitBranchUpdateOptions
+            {
+                Base = snapshot.Branch,
+                Compare = compare.Name,
+                CompareIsRemote = compare.IsRemote,
+                BaseIsCurrent = true
+            });
+        }
+
+        private async void UpdateBranchOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var snapshot = SelectedRow?.Snapshot;
+            if (snapshot == null)
+                return;
+            var current = snapshot.IsDetached ? null : snapshot.Branch;
+            var selected = BranchList.SelectedItem as GitBranchInfo;
+            var compare = selected != null && !selected.IsCurrent ? selected.Name : snapshot.Upstream;
+            var dialog = new GitBranchUpdateDialog(_branches, current, current, compare, snapshot.Entries.Count(entry => !entry.IsUntracked)) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await UpdateBranchAsync(dialog.Options);
+        }
+
+        private async Task UpdateBranchAsync(GitBranchUpdateOptions options)
+        {
+            // 체크아웃 안 된 브랜치만 바뀌면 작업 트리는 그대로라 열린 문서를 확인할 필요가 없다.
+            if (options.BaseIsCurrent && !ConfirmNoUnsavedDocuments("브랜치 업데이트"))
+                return;
+
+            await RunOnSelectedAsync("브랜치 업데이트 중…", GitSyncCommands.UpdateBranch(options), GitCommandRunner.QueryTimeout, onDone: result =>
+            {
+                if (result.Success)
+                {
+                    if (options.Mode == GitBranchUpdateMode.Squash)
+                        AppendOutput("squash한 변경이 스테이지되었습니다. 메시지를 쓰고 커밋하세요.");
+                    else if (options.Mode == GitBranchUpdateMode.Overwrite)
+                        AppendOutput("버린 커밋은 git reflog로 찾을 수 있습니다.");
+                    return;
+                }
+                if (options.Mode == GitBranchUpdateMode.FastForwardOnly)
+                    AppendOutput(string.Format("fast-forward할 수 없습니다('{0}'과(와) '{1}'이(가) 갈라졌거나, 다른 워킹트리에 체크아웃됨). 업데이트 옆 ▾에서 다른 방식을 고르세요.", options.Base, options.Compare));
+                else if (options.Mode != GitBranchUpdateMode.Overwrite)
+                    AppendOutput("병합·rebase가 중간에 멈췄다면 충돌을 콘솔/IDE에서 해결하세요 (git status로 확인, 취소는 git merge --abort / git rebase --abort).");
+            });
+        }
+
         // ── pull / push ─────────────────────────────────────────────────────
 
         private async void Pull_Click(object sender, RoutedEventArgs e)

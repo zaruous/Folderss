@@ -1512,6 +1512,113 @@ namespace Folderss.SearchTests
             Assert.False(Directory.Exists(wt));
         }
 
+        // ── 브랜치 업데이트 (base ← compare) ─────────────────────────────────────
+
+        private static async Task<string> RevAsync(string repo, string rev) => (await Git(repo, "rev-parse", rev)).StdOut.Trim();
+
+        private static GitBranchUpdateOptions Update(string baseBranch, string compare, GitBranchUpdateMode mode, bool baseIsCurrent, bool compareIsRemote = false) =>
+            new GitBranchUpdateOptions { Base = baseBranch, Compare = compare, CompareIsRemote = compareIsRemote, Mode = mode, BaseIsCurrent = baseIsCurrent };
+
+        /// <summary>main(first) ← feature(second): feature가 main보다 한 커밋 앞선 저장소. 현재 브랜치는 main.</summary>
+        private async Task<string> AheadRepoAsync(string name)
+        {
+            var (repo, first, _) = await TwoCommitRepoAsync(name);
+            await Git(repo, "branch", "feature");
+            await Git(repo, "reset", "-q", "--hard", first);
+            return repo;
+        }
+
+        /// <summary>main과 feature가 갈라진 저장소. 현재 브랜치는 main.</summary>
+        private async Task<string> DivergedRepoAsync(string name)
+        {
+            var repo = await AheadRepoAsync(name);
+            File.WriteAllText(Path.Combine(repo, "m.txt"), "main\n");
+            await CommitAllAsync(repo, "main only");
+            return repo;
+        }
+
+        [Fact]
+        public void BranchUpdate_ModesNeedingCheckout_RejectNonCurrentBase()
+        {
+            foreach (var mode in new[] { GitBranchUpdateMode.Merge, GitBranchUpdateMode.Squash, GitBranchUpdateMode.Rebase })
+                Assert.Throws<InvalidOperationException>(() => GitSyncCommands.UpdateBranch(Update("main", "feature", mode, baseIsCurrent: false)));
+            Assert.Throws<InvalidOperationException>(() => GitSyncCommands.UpdateBranch(Update("main", "main", GitBranchUpdateMode.FastForwardOnly, true)));
+            Assert.Equal(new[] { "fetch", ".", "refs/remotes/origin/main:refs/heads/main" },
+                GitSyncCommands.UpdateBranch(Update("main", "origin/main", GitBranchUpdateMode.FastForwardOnly, false, compareIsRemote: true)));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_BranchUpdate_FastForward_CurrentAndNonCurrent_AndRemoteCompare()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+
+            var current = await AheadRepoAsync("upd-ff-cur");
+            Assert.True((await RunArgs(current, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.FastForwardOnly, true)))).Success);
+            Assert.Equal(await RevAsync(current, "feature"), await RevAsync(current, "main"));
+            Assert.Equal("two\n", File.ReadAllText(Path.Combine(current, "f.txt")));   // 작업 트리도 따라옴
+
+            // 체크아웃 안 된 main을 앞으로: 현재 브랜치(other)·작업 트리는 그대로
+            var other = await AheadRepoAsync("upd-ff-other");
+            await Git(other, "switch", "-q", "-c", "other");
+            File.WriteAllText(Path.Combine(other, "f.txt"), "dirty\n");
+            Assert.True((await RunArgs(other, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.FastForwardOnly, false)))).Success);
+            Assert.Equal(await RevAsync(other, "feature"), await RevAsync(other, "main"));
+            Assert.Equal("dirty\n", File.ReadAllText(Path.Combine(other, "f.txt")));
+
+            // 원격 추적 브랜치를 기준으로
+            var remote = await AheadRepoAsync("upd-ff-remote");
+            await Git(remote, "update-ref", "refs/remotes/origin/main", "feature");
+            await Git(remote, "switch", "-q", "-c", "other");
+            Assert.True((await RunArgs(remote, GitSyncCommands.UpdateBranch(Update("main", "origin/main", GitBranchUpdateMode.FastForwardOnly, false, compareIsRemote: true)))).Success);
+            Assert.Equal(await RevAsync(remote, "feature"), await RevAsync(remote, "main"));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_BranchUpdate_FastForwardOnDiverged_FailsAndChangesNothing()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await DivergedRepoAsync("upd-diverged");
+            var main = await RevAsync(repo, "main");
+
+            Assert.False((await RunArgs(repo, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.FastForwardOnly, true)))).Success);
+            Assert.Equal(main, await RevAsync(repo, "main"));
+
+            await Git(repo, "switch", "-q", "feature");
+            Assert.False((await RunArgs(repo, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.FastForwardOnly, false)))).Success);
+            Assert.Equal(main, await RevAsync(repo, "main"));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_BranchUpdate_MergeSquashRebaseOverwrite()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+
+            var merge = await DivergedRepoAsync("upd-merge");
+            Assert.True((await RunArgs(merge, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.Merge, true)))).Success);
+            Assert.Equal(2, GitOutputParser.ParseLog((await Git(merge, "log", "-z", "-n", "1", GitOutputParser.LogFormat)).StdOut).Single().Parents.Length);
+
+            var squash = await DivergedRepoAsync("upd-squash");
+            var squashHead = await RevAsync(squash, "HEAD");
+            Assert.True((await RunArgs(squash, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.Squash, true)))).Success);
+            Assert.Equal(squashHead, await RevAsync(squash, "HEAD"));                  // 커밋은 안 만들고
+            Assert.True((await StatusAsync(squash)).Entries.Single().IsStaged);        // 변경만 스테이지
+
+            var rebase = await DivergedRepoAsync("upd-rebase");
+            Assert.True((await RunArgs(rebase, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.Rebase, true)))).Success);
+            Assert.Equal(await RevAsync(rebase, "feature"), await RevAsync(rebase, "HEAD~1"));   // feature 위로 한 줄
+
+            var overwrite = await DivergedRepoAsync("upd-overwrite");
+            File.WriteAllText(Path.Combine(overwrite, "f.txt"), "uncommitted\n");
+            Assert.True((await RunArgs(overwrite, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.Overwrite, true)))).Success);
+            Assert.Equal(await RevAsync(overwrite, "feature"), await RevAsync(overwrite, "main"));
+            Assert.Empty((await StatusAsync(overwrite)).Entries);                      // 커밋 안 한 변경도 사라짐
+
+            var overwriteOther = await DivergedRepoAsync("upd-overwrite-other");
+            await Git(overwriteOther, "switch", "-q", "-c", "other");
+            Assert.True((await RunArgs(overwriteOther, GitSyncCommands.UpdateBranch(Update("main", "feature", GitBranchUpdateMode.Overwrite, false)))).Success);
+            Assert.Equal(await RevAsync(overwriteOther, "feature"), await RevAsync(overwriteOther, "main"));
+        }
+
         // ── stash ──────────────────────────────────────────────────────────────
 
         private static async Task<System.Collections.Generic.List<GitStashInfo>> StashesAsync(string repo) =>
