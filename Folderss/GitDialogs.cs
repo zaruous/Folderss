@@ -384,6 +384,131 @@ namespace Folderss
         }
     }
 
+    /// <summary>
+    /// 브랜치 업데이트 옵션(▾). PR처럼 base(바뀌는 쪽, 로컬) ← compare(그대로, 로컬·원격). 기본은 fast-forward만.
+    /// 병합·squash·rebase는 base가 현재 브랜치일 때만, 덮어쓰기는 경고와 확인 체크를 거쳐야 실행된다.
+    /// </summary>
+    public sealed class GitBranchUpdateDialog : GitDialogBase
+    {
+        private readonly ComboBox _base;
+        private readonly ComboBox _compare;
+        private readonly Button _swap;
+        private readonly RadioButton[] _modes;
+        private readonly TextBlock _direction;
+        private readonly TextBlock _overwriteWarning;
+        private readonly CheckBox _overwriteConfirm;
+        private readonly Button _ok;
+        private readonly string _current;
+        private readonly int _uncommitted;
+
+        private static readonly (GitBranchUpdateMode Mode, string Text, string Hint)[] Modes =
+        {
+            (GitBranchUpdateMode.FastForwardOnly, "fast-forward만 (권장)", "base가 compare보다 뒤에만 있을 때 앞으로 옮깁니다. 갈라졌으면 아무것도 바꾸지 않고 실패합니다. 현재 브랜치가 아니어도 됩니다."),
+            (GitBranchUpdateMode.Merge, "병합 커밋 (merge --no-ff)", "항상 병합 커밋을 만듭니다. 충돌 나면 병합 중 상태로 남습니다. 현재 브랜치만."),
+            (GitBranchUpdateMode.Squash, "squash (merge --squash)", "compare의 변경을 스테이지만 합니다. 커밋은 직접 하며, git은 이 둘을 병합된 것으로 보지 않습니다. 현재 브랜치만."),
+            (GitBranchUpdateMode.Rebase, "rebase", "base의 커밋을 compare 위로 다시 쌓습니다(해시가 바뀜). 이미 push한 커밋이면 원격과 갈라집니다. 현재 브랜치만."),
+            (GitBranchUpdateMode.Overwrite, "덮어쓰기 (compare와 똑같이)", "base에만 있는 커밋을 버립니다.")
+        };
+
+        public GitBranchUpdateOptions Options
+        {
+            get
+            {
+                var compare = (GitBranchInfo)_compare.SelectedItem;
+                var baseName = ((GitBranchInfo)_base.SelectedItem)?.Name;
+                return new GitBranchUpdateOptions
+                {
+                    Base = baseName,
+                    Compare = compare?.Name,
+                    CompareIsRemote = compare?.IsRemote == true,
+                    Mode = Modes[Array.FindIndex(_modes, r => r.IsChecked == true)].Mode,
+                    BaseIsCurrent = baseName != null && baseName == _current
+                };
+            }
+        }
+
+        /// <param name="current">현재 브랜치(detached면 null).</param>
+        /// <param name="uncommittedCount">추적 중인 파일의 커밋 안 한 변경 수(현재 브랜치를 덮어쓸 때 경고에 씀).</param>
+        public GitBranchUpdateDialog(IList<GitBranchInfo> branches, string current, string defaultBase, string defaultCompare, int uncommittedCount)
+            : base("브랜치 업데이트", 560)
+        {
+            _current = current;
+            _uncommitted = uncommittedCount;
+            var locals = branches.Where(b => !b.IsRemote).ToList();
+
+            var row = new Grid();
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            row.ColumnDefinitions.Add(new ColumnDefinition());
+            row.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+            _base = new ComboBox { ItemsSource = locals, DisplayMemberPath = "Name", SelectedItem = locals.FirstOrDefault(b => b.Name == defaultBase), ToolTip = "base: 바뀌는 브랜치(로컬)" };
+            var arrow = new TextBlock { Text = "←", FontSize = 16, Margin = new Thickness(8, 0, 8, 0), VerticalAlignment = VerticalAlignment.Center };
+            _compare = new ComboBox { ItemsSource = branches, DisplayMemberPath = "Name", ToolTip = "compare: 기준 브랜치(그대로)" };
+            _compare.SelectedItem = branches.FirstOrDefault(b => b.Name == defaultCompare);
+            _swap = new Button { Content = "⇄", Margin = new Thickness(8, 0, 0, 0), MinWidth = 32, ToolTip = "base와 compare 바꾸기 (compare가 로컬 브랜치일 때)" };
+            Grid.SetColumn(arrow, 1);
+            Grid.SetColumn(_compare, 2);
+            Grid.SetColumn(_swap, 3);
+            foreach (UIElement child in new UIElement[] { _base, arrow, _compare, _swap })
+                row.Children.Add(child);
+            AddLabel("base (바뀜)  ←  compare (그대로)");
+            Body.Children.Add(row);
+            _direction = AddText(string.Empty, secondary: true, top: 6);
+
+            AddLabel("방식");
+            _modes = Modes.Select(m => AddRadio("update", m.Text, m.Hint, m.Mode == GitBranchUpdateMode.FastForwardOnly)).ToArray();
+            _overwriteWarning = AddText(string.Empty, warning: true, top: 10);
+            _overwriteConfirm = AddCheck("위 내용을 이해했고 덮어씁니다", false);
+
+            AddText("원격 브랜치는 마지막 fetch 때의 상태입니다. 최신으로 맞추려면 먼저 fetch하세요. 이 기능은 원격을 바꾸지 않습니다.", secondary: true, top: 12);
+            _ok = AddButtons("업데이트");
+
+            _base.SelectionChanged += (s, e) => Refresh();
+            _compare.SelectionChanged += (s, e) => Refresh();
+            _swap.Click += (s, e) =>
+            {
+                var oldBase = (GitBranchInfo)_base.SelectedItem;
+                _base.SelectedItem = locals.FirstOrDefault(b => b == _compare.SelectedItem);
+                _compare.SelectedItem = oldBase;
+            };
+            foreach (var radio in _modes)
+                radio.Checked += (s, e) => Refresh();
+            _overwriteConfirm.Checked += (s, e) => Refresh();
+            _overwriteConfirm.Unchecked += (s, e) => Refresh();
+            Refresh();
+        }
+
+        private void Refresh()
+        {
+            var options = Options;
+            _swap.IsEnabled = _compare.SelectedItem is GitBranchInfo compare && !compare.IsRemote;
+            _direction.Text = options.Base == null || options.Compare == null
+                ? "base와 compare를 고르세요."
+                : string.Format("'{0}'이(가) 바뀝니다. '{1}'은(는) 그대로입니다.{2}", options.Base, options.Compare,
+                    options.BaseIsCurrent ? " (현재 브랜치 — 작업 트리도 바뀜)" : string.Empty);
+
+            var overwrite = options.Mode == GitBranchUpdateMode.Overwrite;
+            _overwriteWarning.Text = options.BaseIsCurrent && _uncommitted > 0
+                ? string.Format("⚠ '{0}'에만 있는 커밋과 커밋 안 한 변경 {1}개가 사라집니다(reset --hard). 변경은 되돌릴 수 없습니다.", options.Base, _uncommitted)
+                : string.Format("⚠ '{0}'에만 있는 커밋이 브랜치에서 사라집니다. git reflog로만 찾을 수 있습니다.", options.Base ?? "base");
+            _overwriteWarning.Visibility = _overwriteConfirm.Visibility = overwrite ? Visibility.Visible : Visibility.Collapsed;
+            if (_ok != null)
+                _ok.IsEnabled = !overwrite || _overwriteConfirm.IsChecked == true;
+        }
+
+        protected override Task<string> ValidateAsync()
+        {
+            var options = Options;
+            if (options.Base == null || options.Compare == null)
+                return Task.FromResult("base와 compare를 고르세요.");
+            if (options.Base == options.Compare && !options.CompareIsRemote)
+                return Task.FromResult("같은 브랜치끼리는 업데이트할 수 없습니다.");
+            if (!options.BaseIsCurrent && GitSyncCommands.NeedsCurrentBase(options.Mode))
+                return Task.FromResult(string.Format("병합·squash·rebase는 현재 브랜치에만 할 수 있습니다.\n먼저 '{0}'(으)로 전환하거나 fast-forward·덮어쓰기를 고르세요.", options.Base));
+            return Task.FromResult<string>(null);
+        }
+    }
+
     /// <summary>push 옵션(▾): 원격, upstream 설정, 태그. 강제 푸시는 없다.</summary>
     public sealed class GitPushDialog : GitDialogBase
     {
