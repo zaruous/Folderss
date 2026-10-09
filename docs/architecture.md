@@ -33,7 +33,7 @@ Folderss/
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
-│   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제·브랜치 업데이트(base ← compare) 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
+│   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제(로컬·원격)·브랜치 업데이트(base ← compare) 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
 │   ├── GitConfigCommands.cs        — 저장소 설정(git config --global/--local) list -z 파서·set/unset 인수·편집 diff, 인증·작성자 키 목록 (순수 로직)
 │   ├── GitRestoreCommands.cs       — 파일 되돌리기(restore --worktree / --source=HEAD --staged --worktree) 인수와 모드별 제외 규칙, Delete 키 삭제 대상(`DeletableFiles`)
@@ -83,7 +83,7 @@ Folderss/
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
-├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·저장소 설정), 코드로 구성
+├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, 이름·위치 헤더, 좌우 바꾸기, GitDiffView + `git diff --no-index`), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용

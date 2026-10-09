@@ -636,6 +636,30 @@ namespace Folderss
     }
 
     /// <summary>
+    /// 원격 브랜치 삭제 확인(▾). 안전한 대안이 없는 동작이라 경고를 늘 보이고, 확인 체크를 해야 삭제 버튼이 켜진다.
+    /// </summary>
+    public sealed class GitRemoteBranchDeleteDialog : GitDialogBase
+    {
+        /// <param name="trackingLocals">이 원격 브랜치를 upstream으로 쓰는 로컬 브랜치(삭제 뒤 upstream이 사라짐).</param>
+        public GitRemoteBranchDeleteDialog(string remote, string branch, IList<string> trackingLocals) : base("원격 브랜치 삭제", 500)
+        {
+            AddText(string.Format("원격 '{0}'에서 브랜치 '{1}'을(를) 삭제합니다.", remote, branch));
+            AddText(string.Format("git push --delete {0} {1}", remote, branch), secondary: true, top: 4);
+            AddText("⚠ 원격 저장소의 브랜치가 지워져 다른 사람도 더 이상 받을 수 없습니다. 아직 받지 않은 커밋은 원격에서 사라지며, 이 앱에서는 되돌릴 수 없습니다.",
+                warning: true, top: 10);
+            if (trackingLocals.Count > 0)
+                AddText(string.Format("이 브랜치를 upstream으로 쓰는 로컬 브랜치({0})는 남지만 upstream이 사라집니다.", string.Join(", ", trackingLocals)),
+                    secondary: true, top: 8);
+            AddText("원격 저장소가 기본 브랜치나 보호된 브랜치 삭제를 거부하면 실패하고 아무것도 바뀌지 않습니다.", secondary: true, top: 8);
+            var confirm = AddCheck("원격에서 삭제되며 되돌릴 수 없다는 것을 이해했습니다", false);
+            var ok = AddButtons("원격에서 삭제");
+            ok.IsEnabled = false;
+            confirm.Checked += (s, e) => ok.IsEnabled = true;
+            confirm.Unchecked += (s, e) => ok.IsEnabled = false;
+        }
+    }
+
+    /// <summary>
     /// 파일 되돌리기(git restore). 버린 변경은 복구할 수 없으므로 버튼이 곧바로 이 창을 열고, 확인 체크를 거쳐야 실행된다.
     /// 모드마다 git이 거부하거나 파일을 지우는 항목은 빼고, 몇 개를 왜 뺐는지 보인다.
     /// </summary>

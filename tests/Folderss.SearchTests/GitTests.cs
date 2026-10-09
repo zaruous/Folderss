@@ -1138,11 +1138,11 @@ namespace Folderss.SearchTests
         public void WindowState_RoundTrips_AndBadValuesFallBackToDefaults()
         {
             var path = P("git-window.xml");
-            Assert.False(GitWindowStateService.Load(path).ChangesTreeMode);   // 파일 없음 → 기본값
+            Assert.True(GitWindowStateService.Load(path).ChangesTreeMode);    // 파일 없음 → 기본값(트리 보기)
 
-            GitWindowStateService.Save(new GitWindowState { ChangesTreeMode = true, ChangesListWidth = 412.5, UnstagedWeight = 0.75, StagedWeight = 1.25 }, path);
+            GitWindowStateService.Save(new GitWindowState { ChangesTreeMode = false, ChangesListWidth = 412.5, UnstagedWeight = 0.75, StagedWeight = 1.25 }, path);
             var loaded = GitWindowStateService.Load(path);
-            Assert.True(loaded.ChangesTreeMode);
+            Assert.False(loaded.ChangesTreeMode);                              // 사용자가 끈 값은 유지
             Assert.Equal(412.5, loaded.ChangesListWidth);
             Assert.Equal(0.75, loaded.UnstagedWeight);
             Assert.Equal(1.25, loaded.StagedWeight);
@@ -1150,7 +1150,7 @@ namespace Folderss.SearchTests
             // 음수·NaN·한쪽만 있는 비율은 버리고, 범위를 벗어난 너비는 잘라 낸다.
             File.WriteAllText(path, "<gitWindow changesTree=\"x\" listWidth=\"99999\" unstagedWeight=\"NaN\" stagedWeight=\"2\"/>");
             loaded = GitWindowStateService.Load(path);
-            Assert.False(loaded.ChangesTreeMode);
+            Assert.True(loaded.ChangesTreeMode);                               // 잘못된 값 → 기본값
             Assert.Equal(GitWindowState.MaxListWidth, loaded.ChangesListWidth);
             Assert.Equal(1, loaded.UnstagedWeight);
             Assert.Equal(1, loaded.StagedWeight);
@@ -1510,6 +1510,34 @@ namespace Folderss.SearchTests
             Assert.False((await RunArgs(repo, GitRefCommands.WorktreeRemove(wt))).Success);
             Assert.True((await RunArgs(repo, GitRefCommands.WorktreeRemove(wt, force: true))).Success);
             Assert.False(Directory.Exists(wt));
+        }
+
+        [Fact]
+        public void SplitRemoteBranch_PicksLongestMatchingRemote()
+        {
+            var remotes = new[] { "origin", "origin/mirror", "up" };
+            Assert.Equal(("origin", "feature/x"), GitSyncCommands.SplitRemoteBranch("origin/feature/x", remotes));
+            Assert.Equal(("origin/mirror", "main"), GitSyncCommands.SplitRemoteBranch("origin/mirror/main", remotes));
+            Assert.Null(GitSyncCommands.SplitRemoteBranch("other/main", remotes));
+            Assert.Null(GitSyncCommands.SplitRemoteBranch("origin/", remotes));
+            Assert.Equal(new[] { "push", "--delete", "--", "origin", "feature/x" }, GitSyncCommands.DeleteRemoteBranch("origin", "feature/x"));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_DeleteRemoteBranch_RemovesItFromRemoteOnly()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (remote, a, _) = await RemoteWithTwoClonesAsync("del-remote");
+            await Git(a, "switch", "-q", "-c", "feature/x");
+            Assert.True((await Git(a, "push", "-q", "-u", "origin", "feature/x")).Success);
+
+            var result = await RunNet(a, GitSyncCommands.DeleteRemoteBranch("origin", "feature/x"));
+            Assert.True(result.Success, result.StdErr);
+            Assert.DoesNotContain("feature/x", (await Git(remote, "branch")).StdOut);      // 원격에서 사라짐
+            Assert.DoesNotContain("origin/feature/x", (await Git(a, "branch", "-r")).StdOut); // 추적 참조도 정리
+            Assert.Contains("feature/x", (await Git(a, "branch")).StdOut);                 // 로컬 브랜치는 그대로
+
+            Assert.False((await RunNet(a, GitSyncCommands.DeleteRemoteBranch("origin", "feature/x"))).Success);   // 이미 없음
         }
 
         // ── 브랜치 업데이트 (base ← compare) ─────────────────────────────────────

@@ -449,7 +449,7 @@
                         <Button x:Name="DeleteBranchButton" Content="삭제" Click="DeleteBranch_Click"
                                 ToolTip="병합된 로컬 브랜치만 삭제합니다 (git branch -d)"/>
                         <Button Style="{StaticResource OptionArrowButton}" Click="DeleteBranchOptions_Click"
-                                ToolTip="삭제 옵션… (병합 안 된 브랜치 강제 삭제)"/>
+                                ToolTip="삭제 옵션… (병합 안 된 브랜치 강제 삭제, 원격 브랜치 삭제)"/>
                         <Button Content="업데이트" Margin="12,3,3,3" Click="UpdateBranch_Click"
                                 ToolTip="현재 브랜치를 선택한 브랜치까지 fast-forward합니다 (현재 ← 선택). 갈라졌으면 아무것도 바꾸지 않습니다"/>
                         <Button Style="{StaticResource OptionArrowButton}" Click="UpdateBranchOptions_Click"

@@ -14,8 +14,8 @@ namespace Folderss.Services
         public const double MinWeight = 0.05;
         public const double MaxWeight = 20;
 
-        /// <summary>변경 목록을 트리로 볼지.</summary>
-        public bool ChangesTreeMode { get; set; }
+        /// <summary>변경 목록을 트리로 볼지. 기본은 트리 보기.</summary>
+        public bool ChangesTreeMode { get; set; } = true;
 
         /// <summary>변경 목록 열(왼쪽) 너비(px).</summary>
         public double ChangesListWidth { get; set; } = DefaultListWidth;

@@ -153,6 +153,31 @@ namespace Folderss.Services
             return new List<string> { "branch", force ? "-D" : "-d", "--", name };
         }
 
+        /// <summary>
+        /// 원격 브랜치 삭제(<c>push --delete</c>). 원격의 브랜치를 지우며 다른 사람이 쓰던 브랜치일 수 있어 되돌리기 어렵다.
+        /// 성공하면 git이 로컬의 추적 참조(<c>refs/remotes/…</c>)도 지운다. 로컬 브랜치는 그대로.
+        /// </summary>
+        public static List<string> DeleteRemoteBranch(string remote, string branch)
+        {
+            return new List<string> { "push", "--delete", "--", remote, branch };
+        }
+
+        /// <summary>
+        /// 원격 추적 브랜치 이름(<c>origin/feature/x</c>)을 원격과 브랜치로 나눈다. 원격 이름에도 '/'가 올 수 있어
+        /// 실제 원격 목록에서 가장 길게 맞는 것을 고른다. 맞는 원격이 없으면 null.
+        /// </summary>
+        public static (string Remote, string Branch)? SplitRemoteBranch(string name, IEnumerable<string> remotes)
+        {
+            string best = null;
+            foreach (var remote in remotes)
+            {
+                if (name.Length > remote.Length + 1 && name.StartsWith(remote + "/", StringComparison.Ordinal)
+                    && (best == null || remote.Length > best.Length))
+                    best = remote;
+            }
+            return best == null ? ((string, string)?)null : (best, name.Substring(best.Length + 1));
+        }
+
         /// <summary>병합·squash·rebase는 git이 base를 체크아웃해야 하므로 현재 브랜치에만 허용한다(자동 전환 안 함).</summary>
         public static bool NeedsCurrentBase(GitBranchUpdateMode mode) =>
             mode == GitBranchUpdateMode.Merge || mode == GitBranchUpdateMode.Squash || mode == GitBranchUpdateMode.Rebase;
