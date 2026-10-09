@@ -2500,16 +2500,16 @@ namespace Folderss
             }
 
             if (region != null)
-                new CaptureResultWindow(region, GetCaptureSaveFolder, OnCaptureSaved) { Owner = this }.Show();
+                new CaptureResultWindow(region, GetCaptureSaveFolder, OnCaptureSaved, () => CaptureSettingsService.Load().SaveFolder) { Owner = this }.Show();
         }
 
-        /// <summary>캡쳐 빠른 저장 폴더 = 활성 폴더 패널. 폴더가 없거나 고정(📌)이면 알리고 null.</summary>
+        /// <summary>캡쳐 빠른 저장 폴더 = 설정 > 캡쳐의 기본 저장 폴더(기본: 사진 폴더). 저장할 때마다 다시 읽어 설정 변경이 열린 결과 창에도 반영된다. 폴더가 없거나 고정(📌)이면 알리고 null.</summary>
         private string GetCaptureSaveFolder()
         {
-            var folder = ActivePane.CurrentPath;
+            var folder = CaptureSettingsService.Load().SaveFolder;
             if (string.IsNullOrWhiteSpace(folder) || !Directory.Exists(folder))
             {
-                MessageBox.Show(this, "활성 폴더 패널의 폴더를 찾을 수 없습니다.\n▾ 버튼(다른 이름으로 저장)을 쓰세요.", "캡쳐 저장", MessageBoxButton.OK, MessageBoxImage.Warning);
+                MessageBox.Show(this, "캡쳐 저장 폴더를 찾을 수 없습니다.\n" + folder + "\n\n설정 > 캡쳐에서 폴더를 바꾸거나 ▾ > 다른 이름으로 저장을 쓰세요.", "캡쳐 저장", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return null;
             }
             if (IsDestinationPinLocked(folder))

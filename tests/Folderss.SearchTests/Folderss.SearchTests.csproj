@@ -24,6 +24,7 @@
     <Compile Include="..\..\Folderss\Services\SettingsFile.cs" Link="Linked\SettingsFile.cs" />
     <Compile Include="..\..\Folderss\Services\ScreenCaptureService.cs" Link="Linked\ScreenCaptureService.cs" />
     <Compile Include="..\..\Folderss\Services\CaptureAnnotation.cs" Link="Linked\CaptureAnnotation.cs" />
+    <Compile Include="..\..\Folderss\Services\CaptureSettingsService.cs" Link="Linked\CaptureSettingsService.cs" />
     <Compile Include="..\..\Folderss\Services\IgnoreRuleSet.cs" Link="Linked\IgnoreRuleSet.cs" />
     <Compile Include="..\..\Folderss\Models\GitModels.cs" Link="Linked\GitModels.cs" />
     <Compile Include="..\..\Folderss\Services\GitRepositoryScanner.cs" Link="Linked\GitRepositoryScanner.cs" />

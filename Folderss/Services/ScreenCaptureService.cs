@@ -74,14 +74,12 @@ namespace Folderss.Services
         }
 
         /// <summary>
-        /// 결과 창을 처음 열 때 흰 배경(페이지)의 한 변: 보이는 영역(<paramref name="availableDip"/>, 화면 DIP)을 표시 배율로 나눈 픽셀(내림)로 채우되,
-        /// 캡쳐보다 작게 하지 않는다(이미지가 잘리지 않게). 한 변 최대를 넘지 않는다.
+        /// 결과 창을 처음 열 때 흰 배경(페이지)의 한 변: 디스플레이 해상도(<paramref name="displaySide"/>, 픽셀)와 같게 하되,
+        /// 캡쳐보다 작게 하지 않는다(여러 모니터에 걸친 캡쳐가 잘리지 않게). 한 변 최대를 넘지 않는다.
         /// </summary>
-        public static int InitialPageSide(double availableDip, double displayScale, int captureSide)
+        public static int InitialPageSide(int displaySide, int captureSide)
         {
-            // 1e-6: 620 ÷ 0.8 같은 나눗셈이 774.9999…로 나와 1픽셀 덜 채우는 것을 막는다.
-            var fit = displayScale > 0 && availableDip > 0 ? (int)Math.Min(MaxImageSide, Math.Floor(availableDip / displayScale + 1e-6)) : 0;
-            return Math.Min(MaxImageSide, Math.Max(captureSide, fit));
+            return Math.Min(MaxImageSide, Math.Max(captureSide, displaySide));
         }
 
         /// <summary>비율 유지: 한 변을 <paramref name="value"/>로 바꿀 때 다른 변의 크기(반올림, 최소 1).</summary>

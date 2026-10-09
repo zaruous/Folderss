@@ -43,6 +43,7 @@ Folderss/
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
 │   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
+│   ├── CaptureSettingsService.cs   — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더(없으면 사용자 폴더), 설정 창 입력 검증 `Validate`)
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
@@ -90,8 +91,8 @@ Folderss/
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── CaptureOverlayWindow.cs         — 화면 캡쳐: 가상 화면 전체를 GDI로 찍고(`CaptureVirtualScreen`) 모든 모니터를 덮는 창에 깔아 드래그로 영역 선택, 코드로 구성
-├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 다른 이름으로 저장 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
-├── CaptureEditor.cs                — 캡쳐 편집면: 흰 페이지 위에 캡쳐 이미지(배열 [0], `Kind == Image`, 비트맵은 하나로 고정)와 도형. 상태 = (페이지 크기, 불변 `CaptureAnnotation` 배열). 화면 요소는 배열에서 매번 다시 만들고 저장·복사 때만 `Render`(RenderTargetBitmap)로 합침(바꾼 것이 없으면 캡쳐 원본 그대로). 내보내는 층과 미리보기·선택 표시·텍스트 입력 층 분리. 선택(이미지·도형 이동·핸들, 도형 Delete), 자르기·크기 조절은 페이지 크기만 바꾸고 이미지·도형은 좌표 변환. `ExpandPageToView`(처음 열 때 보이는 영역만큼 흰 배경), `ResizePage`(배경만 변경). 상태 스냅숏 되돌리기. 좌표는 페이지 픽셀, 표시는 LayoutTransform으로 1:1
+├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 메뉴(다른 이름으로 저장, 기본 저장 폴더 탐색기로 열기), 저장 후 탐색기 열기 확인 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
+├── CaptureEditor.cs                — 캡쳐 편집면: 흰 페이지 위에 캡쳐 이미지(배열 [0], `Kind == Image`, 비트맵은 하나로 고정)와 도형. 상태 = (페이지 크기, 불변 `CaptureAnnotation` 배열). 화면 요소는 배열에서 매번 다시 만들고 저장·복사 때만 `Render`(RenderTargetBitmap)로 합침(바꾼 것이 없으면 캡쳐 원본 그대로). 내보내는 층과 미리보기·선택 표시·텍스트 입력 층 분리. 선택(이미지·도형 이동·핸들, 도형 Delete), 자르기·크기 조절은 페이지 크기만 바꾸고 이미지·도형은 좌표 변환. `ExpandPageToDisplay`(처음 열 때 모니터 해상도만큼 흰 배경), `ResizePage`(배경만 변경). 상태 스냅숏 되돌리기. 좌표는 페이지 픽셀, 표시는 LayoutTransform으로 1:1
 ├── AboutWindow.cs                  — 정보 창
 ├── PromptWindow.cs                 — 이름 변경·새 폴더 입력 다이얼로그
 ├── App.xaml/.cs                    — 앱 진입점, 테마 초기 로드, 플러그인 발 UI 예외 처리

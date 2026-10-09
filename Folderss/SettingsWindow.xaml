@@ -87,6 +87,9 @@
                     <ListBoxItem Tag="Diff">
                         <TextBlock Text="비교"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="Capture">
+                        <TextBlock Text="캡쳐"/>
+                    </ListBoxItem>
                     <ListBoxItem Tag="Plugins">
                         <TextBlock Text="플러그인"/>
                     </ListBoxItem>
@@ -856,6 +859,24 @@
                         </StackPanel>
                         <TextBlock x:Name="DiffGitConfigToolHint" Style="{StaticResource GitHint}"
                                    Text="git 설정의 difftool(diff.tool, 없으면 merge.tool)을 씁니다. 예: git config --global diff.tool winmerge"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Capture panel: 화면 캡쳐 결과 창 설정 (capture-settings.xml) -->
+                <ScrollViewer x:Name="CapturePanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,16">
+                        <TextBlock Text="캡쳐" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"
+                                   Text="⋯ 메뉴 > 화면 캡쳐… 결과 창의 설정입니다."/>
+                        <TextBlock FontSize="11" Margin="0,16,0,4" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"
+                                   Text="기본 저장 폴더 (결과 창의 저장 버튼이 바로 저장하고, ▾ > 기본 저장 폴더 열기가 여는 곳)"/>
+                        <DockPanel>
+                            <Button DockPanel.Dock="Right" Content="기본값" Click="CaptureSaveFolderDefault_Click" Padding="10,4" Margin="6,0,0,0"
+                                    ToolTip="사진 폴더로 되돌립니다"/>
+                            <Button DockPanel.Dock="Right" Content="찾아보기…" Click="CaptureSaveFolderBrowse_Click" Padding="10,4" Margin="6,0,0,0"/>
+                            <TextBox x:Name="CaptureSaveFolderBox" Padding="6,4" VerticalContentAlignment="Center"/>
+                        </DockPanel>
+                        <TextBlock x:Name="CaptureSaveFolderHint" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"/>
                     </StackPanel>
                 </ScrollViewer>
 
