@@ -139,13 +139,13 @@ namespace Folderss
         }
 
         /// <summary>
-        /// 처음 열 때 흰 배경을 보이는 영역(<paramref name="viewWidth"/>×<paramref name="viewHeight"/>, 화면 DIP)만큼 넓힌다.
+        /// 처음 열 때 흰 배경을 디스플레이 해상도(<paramref name="displayWidth"/>×<paramref name="displayHeight"/>, 픽셀)만큼 넓힌다.
         /// 캡쳐보다 작게 하지 않고, 이미지는 왼쪽 위 그대로. 열린 상태로 보므로 되돌리기·변경 알림을 남기지 않는다.
         /// </summary>
-        public void ExpandPageToView(double viewWidth, double viewHeight)
+        public void ExpandPageToDisplay(int displayWidth, int displayHeight)
         {
-            SetPageSize(ScreenCaptureService.InitialPageSide(viewWidth, _displayScale, _pageWidth),
-                ScreenCaptureService.InitialPageSide(viewHeight, _displayScale, _pageHeight));
+            SetPageSize(ScreenCaptureService.InitialPageSide(displayWidth, _pageWidth),
+                ScreenCaptureService.InitialPageSide(displayHeight, _pageHeight));
         }
 
         /// <summary>흰 배경(페이지)만 <paramref name="width"/>×<paramref name="height"/>로 바꾼다. 이미지·도형은 그 자리·크기 그대로(왼쪽 위 기준).</summary>

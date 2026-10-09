@@ -147,15 +147,14 @@ namespace Folderss.SearchTests
         }
 
         [Theory]
-        [InlineData(620, 1.0, 300, 620)]       // 작은 캡쳐: 보이는 영역만큼 흰 배경
-        [InlineData(620, 0.8, 300, 775)]       // 125% 배율: 화면 DIP ÷ 표시 배율 = 페이지 픽셀
-        [InlineData(400, 1.0, 1000, 1000)]     // 캡쳐가 더 크면 캡쳐 크기(이미지가 잘리지 않게)
-        [InlineData(1000.6, 1.0, 10, 1000)]    // 넘치지 않게 내림
-        [InlineData(100000, 1.0, 10, 16384)]   // 한 변 최대
-        [InlineData(-5, 1.0, 10, 10)]          // 영역이 없으면 캡쳐 크기
-        public void InitialPageSide_FillsViewButNeverSmallerThanCapture(double available, double displayScale, int captureSide, int expected)
+        [InlineData(1920, 300, 1920)]      // 작은 캡쳐: 디스플레이 해상도만큼 흰 배경
+        [InlineData(2560, 2560, 2560)]     // 화면 전체 캡쳐: 그대로
+        [InlineData(1920, 3840, 3840)]     // 여러 모니터에 걸친 캡쳐가 더 크면 캡쳐 크기(이미지가 잘리지 않게)
+        [InlineData(20000, 10, 16384)]     // 한 변 최대
+        [InlineData(0, 10, 10)]            // 디스플레이 크기를 못 얻으면 캡쳐 크기
+        public void InitialPageSide_MatchesDisplayButNeverSmallerThanCapture(int displaySide, int captureSide, int expected)
         {
-            Assert.Equal(expected, ScreenCaptureService.InitialPageSide(available, displayScale, captureSide));
+            Assert.Equal(expected, ScreenCaptureService.InitialPageSide(displaySide, captureSide));
         }
     }
 }

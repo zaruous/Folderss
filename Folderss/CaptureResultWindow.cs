@@ -8,6 +8,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Interop;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using Folderss.Services;
@@ -21,8 +22,8 @@ namespace Folderss
     /// 기본 저장 폴더(활성 폴더 패널) 탐색기로 열기다. 저장이 끝나면 저장한 파일을 탐색기에서 열지 묻는다.
     /// 둘째 줄은 편집 도구(<see cref="CaptureEditor"/>): 선택(캡쳐 이미지·도형의 이동·핸들 크기 변경, 도형 Delete)·사각형·타원·화살표·텍스트·자르기,
     /// 색·굵기·글자 크기, 크기 조절, 되돌리기(Ctrl+Z).
-    /// 편집면은 흰 페이지이고 캡쳐 이미지는 그 위의 오브젝트다. 흰 페이지는 처음 열 때 창의 보이는 영역을 채우고(캡쳐보다 작지 않게), `배경 크기…`로 바꾼다.
-    /// 저장·복사는 페이지를 한 장으로 합친 이미지다(열자마자 하는 자동 복사는 페이지를 넓히기 전이라 캡쳐 그대로). 편집 후 저장·복사 없이 닫으면 확인한다.
+    /// 편집면은 흰 페이지이고 캡쳐 이미지는 그 위의 오브젝트다. 흰 페이지는 처음 열 때 결과 창이 뜨는 모니터의 해상도만큼(캡쳐보다 작지 않게), `배경 크기…`로 바꾼다.
+    /// 저장·복사는 페이지를 한 장으로 합친 이미지다(열자마자 하는 자동 복사만 캡쳐 원본). 편집 후 저장·복사 없이 닫으면 확인한다.
     /// </summary>
     public sealed class CaptureResultWindow : Window
     {
@@ -93,7 +94,7 @@ namespace Folderss
             };
             var copy = new Button { Content = "복사", ToolTip = "편집 결과를 클립보드에 복사" };
             Compact(copy, 12);
-            copy.Click += (s, e) => Copy();
+            copy.Click += (s, e) => Copy(_editor.Render());
             _undo = new Button { Content = "↶ 되돌리기", IsEnabled = false, ToolTip = "되돌리기 (Ctrl+Z)" };
             Compact(_undo, 10);
             _undo.Click += (s, e) => _editor.Undo();
@@ -177,9 +178,18 @@ namespace Folderss
                 UpdateTitle();
             };
             UpdateTitle();
+            // 창 크기를 내용에 맞춰 정하기 전(SourceInitialized)에 흰 배경을 넓혀, 창이 넓힌 페이지에 맞춰(최대 작업 영역 85%) 열리게 한다.
+            // 결과 창은 소유자 가운데에 뜨므로 소유자(본체 창)가 있는 모니터의 해상도를 쓴다. 좌표는 캡쳐와 같은 시스템 DPI 픽셀.
+            SourceInitialized += (s, e) =>
+            {
+                var bounds = System.Windows.Forms.Screen.FromHandle(new WindowInteropHelper(Owner ?? this).Handle).Bounds;
+                _editor.ExpandPageToDisplay(bounds.Width, bounds.Height);
+                UpdateTitle();
+            };
             Loaded += (s, e) =>
             {
-                Copy();
+                // 자동 복사는 흰 배경 없이 캡쳐 원본만(열자마자 클립보드에 해상도 크기 흰 그림이 들어가지 않게).
+                Copy(image);
                 _dirty = false;
             };
             // 85% 제한은 처음 열 때 큰 캡쳐가 화면을 넘지 않게 하려는 것이다. WPF는 최대화도 MaxWidth/MaxHeight에 묶으므로
@@ -193,10 +203,6 @@ namespace Folderss
                 MaxHeight = double.PositiveInfinity;
                 Width = width;
                 Height = height;
-                // 창 크기가 정해진 뒤 흰 배경을 보이는 영역(페이지 여백·테두리 제외)만큼 넓힌다.
-                _editor.ExpandPageToView(_scroll.ViewportWidth - page.Margin.Left - page.Margin.Right - page.BorderThickness.Left - page.BorderThickness.Right,
-                    _scroll.ViewportHeight - page.Margin.Top - page.Margin.Bottom - page.BorderThickness.Top - page.BorderThickness.Bottom);
-                UpdateTitle();
             };
             PreviewKeyDown += (s, e) =>
             {
@@ -341,10 +347,10 @@ namespace Folderss
                 _editor.ResizePage(dialog.NewWidth, dialog.NewHeight);
         }
 
-        private void Copy()
+        private void Copy(BitmapSource image)
         {
             var data = new DataObject();
-            data.SetImage(_editor.Render());
+            data.SetImage(image);
             // 실패(다른 프로그램이 클립보드 점유)는 ClipboardService가 알린다.
             if (ClipboardService.TrySetDataObject(data))
             {
