@@ -1512,6 +1512,34 @@ namespace Folderss.SearchTests
             Assert.False(Directory.Exists(wt));
         }
 
+        [Fact]
+        public void SplitRemoteBranch_PicksLongestMatchingRemote()
+        {
+            var remotes = new[] { "origin", "origin/mirror", "up" };
+            Assert.Equal(("origin", "feature/x"), GitSyncCommands.SplitRemoteBranch("origin/feature/x", remotes));
+            Assert.Equal(("origin/mirror", "main"), GitSyncCommands.SplitRemoteBranch("origin/mirror/main", remotes));
+            Assert.Null(GitSyncCommands.SplitRemoteBranch("other/main", remotes));
+            Assert.Null(GitSyncCommands.SplitRemoteBranch("origin/", remotes));
+            Assert.Equal(new[] { "push", "--delete", "--", "origin", "feature/x" }, GitSyncCommands.DeleteRemoteBranch("origin", "feature/x"));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_DeleteRemoteBranch_RemovesItFromRemoteOnly()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var (remote, a, _) = await RemoteWithTwoClonesAsync("del-remote");
+            await Git(a, "switch", "-q", "-c", "feature/x");
+            Assert.True((await Git(a, "push", "-q", "-u", "origin", "feature/x")).Success);
+
+            var result = await RunNet(a, GitSyncCommands.DeleteRemoteBranch("origin", "feature/x"));
+            Assert.True(result.Success, result.StdErr);
+            Assert.DoesNotContain("feature/x", (await Git(remote, "branch")).StdOut);      // 원격에서 사라짐
+            Assert.DoesNotContain("origin/feature/x", (await Git(a, "branch", "-r")).StdOut); // 추적 참조도 정리
+            Assert.Contains("feature/x", (await Git(a, "branch")).StdOut);                 // 로컬 브랜치는 그대로
+
+            Assert.False((await RunNet(a, GitSyncCommands.DeleteRemoteBranch("origin", "feature/x"))).Success);   // 이미 없음
+        }
+
         // ── 브랜치 업데이트 (base ← compare) ─────────────────────────────────────
 
         private static async Task<string> RevAsync(string repo, string rev) => (await Git(repo, "rev-parse", rev)).StdOut.Trim();

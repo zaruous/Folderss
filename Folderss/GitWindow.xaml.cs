@@ -1983,7 +1983,7 @@ namespace Folderss
                 return null;
             if (branch.IsRemote)
             {
-                MessageBox.Show(this, "원격 브랜치는 여기서 삭제하지 않습니다.", "브랜치 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
+                MessageBox.Show(this, "원격 브랜치는 삭제 옆 ▾에서 확인한 뒤 삭제할 수 있습니다.", "브랜치 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
                 return null;
             }
             if (branch.IsCurrent)
@@ -2009,6 +2009,11 @@ namespace Folderss
 
         private async void DeleteBranchOptions_Click(object sender, RoutedEventArgs e)
         {
+            if (BranchList.SelectedItem is GitBranchInfo remoteBranch && remoteBranch.IsRemote)
+            {
+                await DeleteRemoteBranchAsync(remoteBranch);
+                return;
+            }
             var branch = DeletableBranch();
             if (branch == null)
                 return;
@@ -2021,6 +2026,30 @@ namespace Folderss
                 return;
             await RunOnSelectedAsync(dialog.Force ? "브랜치 강제 삭제 중…" : "브랜치 삭제 중…",
                 GitSyncCommands.DeleteBranch(branch.Name, dialog.Force), GitCommandRunner.QueryTimeout);
+        }
+
+        /// <summary>원격 브랜치 삭제(push --delete). 경고와 확인 체크를 거친 뒤에만 실행한다.</summary>
+        private async Task DeleteRemoteBranchAsync(GitBranchInfo branch)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+            var remotes = await GetRemotesAsync(row);
+            if (remotes == null)
+                return;
+            var split = GitSyncCommands.SplitRemoteBranch(branch.Name, remotes);
+            if (split == null)
+            {
+                MessageBox.Show(this, string.Format("'{0}'에 맞는 원격을 찾지 못했습니다(원격이 지워졌을 수 있음). fetch --prune으로 정리하세요.", branch.Name),
+                    "원격 브랜치 삭제", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var (remote, name) = split.Value;
+            var tracking = _branches.Where(b => !b.IsRemote && b.Upstream == branch.Name).Select(b => b.Name).ToList();
+            var dialog = new GitRemoteBranchDeleteDialog(remote, name, tracking) { Owner = this };
+            if (dialog.ShowDialog() != true)
+                return;
+            await RunOnSelectedAsync("원격 브랜치 삭제 중…", GitSyncCommands.DeleteRemoteBranch(remote, name), GitCommandRunner.NetworkTimeout);
         }
 
         // ── 브랜치 업데이트 (base ← compare) ─────────────────────────────────
