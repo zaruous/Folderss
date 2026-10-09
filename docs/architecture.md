@@ -43,6 +43,7 @@ Folderss/
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
 │   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
+│   ├── CaptureSettingsService.cs   — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사용자 폴더, 설정 창 입력 검증 `Validate`)
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)

@@ -74,6 +74,7 @@ namespace Folderss
         public DiffSettings SavedDiffSettings { get; private set; }
 
         private readonly DiffSettings _workingDiff;
+        private readonly CaptureSettings _workingCapture = CaptureSettingsService.Load();
 
         private const int GitTabIndex = 5;
         private const int DiffTabIndex = 6;
@@ -178,6 +179,7 @@ namespace Folderss
 
             InitializeGitPanel();
             InitializeDiffPanel();
+            InitializeCapturePanel();
             InitializePluginPages();
 
             TabNav.SelectedIndex = 0;
@@ -341,6 +343,47 @@ namespace Folderss
             return true;
         }
 
+        // ── 캡쳐 ────────────────────────────────────────────────────────────
+
+        private void InitializeCapturePanel()
+        {
+            CaptureSaveFolderBox.Text = _workingCapture.SaveFolder;
+            CaptureSaveFolderHint.Text = "비워 두면 사용자 폴더(" + CaptureSettingsService.DefaultSaveFolder + ")를 씁니다. 저장 버튼은 파일 이름 캡쳐_날짜_시각.png로 바로 저장하고, ▾ > 다른 이름으로 저장은 이 설정과 관계없이 위치를 고릅니다.";
+        }
+
+        private void CaptureSaveFolderBrowse_Click(object sender, RoutedEventArgs e)
+        {
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog { Description = "캡쳐 기본 저장 폴더", UseDescriptionForTitle = true })
+            {
+                var current = CaptureSaveFolderBox.Text.Trim().Trim('"');
+                if (Directory.Exists(current))
+                    dialog.SelectedPath = current;
+                if (dialog.ShowDialog() == System.Windows.Forms.DialogResult.OK)
+                    CaptureSaveFolderBox.Text = dialog.SelectedPath;
+            }
+        }
+
+        private void CaptureSaveFolderDefault_Click(object sender, RoutedEventArgs e)
+        {
+            CaptureSaveFolderBox.Text = CaptureSettingsService.DefaultSaveFolder;
+        }
+
+        /// <summary>캡쳐 탭 입력을 검증해 <see cref="_workingCapture"/>에 반영한다. 잘못된 값이면 캡쳐 탭을 열고 false.</summary>
+        private bool TryCollectCaptureSettings()
+        {
+            var error = CaptureSettingsService.Validate(CaptureSaveFolderBox.Text, Directory.Exists, out var folder);
+            if (error != null)
+            {
+                MessageBox.Show(this, error, "캡쳐 설정 오류", MessageBoxButton.OK, MessageBoxImage.Warning);
+                SelectTab("Capture");
+                CaptureSaveFolderBox.Focus();
+                CaptureSaveFolderBox.SelectAll();
+                return false;
+            }
+            _workingCapture.SaveFolder = folder;
+            return true;
+        }
+
         private void TabNav_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (ShortcutsPanel == null) return;
@@ -355,6 +398,7 @@ namespace Folderss
             ConsolePanel.Visibility   = tag == "Console"   ? Visibility.Visible : Visibility.Collapsed;
             GitPanel.Visibility       = tag == "Git"       ? Visibility.Visible : Visibility.Collapsed;
             DiffPanel.Visibility      = tag == "Diff"      ? Visibility.Visible : Visibility.Collapsed;
+            CapturePanel.Visibility   = tag == "Capture"   ? Visibility.Visible : Visibility.Collapsed;
             PluginsPanel.Visibility   = tag == "Plugins"   ? Visibility.Visible : Visibility.Collapsed;
             foreach (var page in _pluginPages)
                 page.Panel.Visibility = ReferenceEquals(item, page.NavItem) ? Visibility.Visible : Visibility.Collapsed;
@@ -493,7 +537,7 @@ namespace Folderss
                 return;
             }
 
-            if (!TryCollectGitSettings() || !TryCollectDiffSettings())
+            if (!TryCollectGitSettings() || !TryCollectDiffSettings() || !TryCollectCaptureSettings())
                 return;
 
             _workingConsoleSettings.FontSize = fontSize;
@@ -514,6 +558,7 @@ namespace Folderss
             TrySave(failures, "테마", "theme.txt", ThemeManager.SaveCurrentTheme);
             TrySave(failures, "Git", "git-settings.xml", () => GitSettingsService.Save(_workingGit));
             TrySave(failures, "비교", "diff-settings.xml", () => DiffSettingsService.Save(_workingDiff));
+            TrySave(failures, "캡쳐", "capture-settings.xml", () => CaptureSettingsService.Save(_workingCapture));
             foreach (var page in _pluginPages.Where(p => p.Page != null && p.ViewCreated))
                 TrySave(failures, "플러그인: " + page.Title, page.PluginId, page.Page.Save);
             SavedGitSettings = _workingGit.Clone();
