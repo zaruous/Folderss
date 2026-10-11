@@ -32,7 +32,8 @@ jobs:
       - name: Set version from tag
         shell: pwsh
         run: |
-          $tag = "$env:RELEASE_TAG".TrimStart('v')
+          # v1.8.3-pre 같은 사전 릴리스 접미사(-...)는 어셈블리 버전에 넣을 수 없으므로 떼어낸다.
+          $tag = ("$env:RELEASE_TAG".TrimStart('v') -split '-', 2)[0]
           $parts = $tag.Split('.')
           while ($parts.Count -lt 4) { $parts += '0' }
           $ver = $parts -join '.'
@@ -71,3 +72,5 @@ jobs:
           target_commitish: ${{ github.event_name == 'workflow_dispatch' && github.sha || '' }}
           files: Folderss-${{ env.RELEASE_TAG }}.zip
           generate_release_notes: true
+          # 태그에 '-'가 있으면(v1.8.3-pre 등) 사전 릴리스로 올린다. 앱의 업데이트 확인(releases/latest)은 사전 릴리스를 건너뛴다.
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
