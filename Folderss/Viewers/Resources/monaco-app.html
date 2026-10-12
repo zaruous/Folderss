@@ -21,6 +21,7 @@
 <body>
 <div id="editor"></div>
 <script src="monaco/vs/loader.js"></script>
+<script src="monaco-jsonl.js"></script>
 <script>
 var editor = null;
 var model = null;
@@ -31,6 +32,8 @@ var suppressChange = false;
 
 require.config({ paths: { vs: 'monaco/vs' } });
 require(['vs/editor/editor.main'], function() {
+  jsonlTools.registerJsonl(monaco); // .jsonl: 줄마다 JSON — 모델을 만들기 전에 등록
+
   monaco.editor.defineTheme('folderss-dark', {
     base: 'vs-dark',
     inherit: true,
@@ -68,6 +71,8 @@ require(['vs/editor/editor.main'], function() {
     lineHeight: 20,
     renderWhitespace: 'selection'
   });
+
+  jsonlTools.addJsonlActions(editor);
 
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
     window.chrome.webview.postMessage({

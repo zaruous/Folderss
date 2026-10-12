@@ -197,7 +197,7 @@ tests/
 | 뷰어 | 기본 확장자 | 주요 기능 |
 |---|---|---|
 | Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기, Edit/Split 모드 라인번호 표시, `Ctrl+F` 문서 내 검색, TOC, front matter 표시, Mermaid, KaTeX, 상대 경로 이미지 표시, 로컬 파일 링크 클릭 시 새 뷰어 탭으로 열기, HTML/PDF 내보내기, 우클릭 메뉴의 인쇄·다른 이름으로 저장·공유, 외부 변경 자동 반영(스크롤 위치 유지) |
-| Monaco | `.json`, `.xml` | Monaco Editor 기반 편집, 구문 강조, `Ctrl+F` 내장 검색(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1`), 대용량 파일 모드, 외부 변경 감지 |
+| Monaco | `.json`, `.jsonl`, `.xml` | Monaco Editor 기반 편집, 구문 강조, `Ctrl+F` 내장 검색(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1`), 대용량 파일 모드, 외부 변경 감지. `.jsonl`(JSON Lines)은 전용 언어로 열려 줄마다 JSON으로 강조하고, `Format Document`는 레코드를 한 줄로 압축, 커맨드 팔레트의 `JSONL: 레코드 펼쳐 보기`는 들여쓰기해 펼침(값·키 순서·큰 정수는 원문 그대로, 파싱 안 되는 줄은 손대지 않음) |
 | Text | 사용자 매핑 | 읽기 전용 텍스트 보기와 구문 강조 |
 
 - 매핑되지 않은 확장자는 Windows 기본 프로그램으로 열립니다. `.cs`, `.py`, `.txt` 등은 설정에서 Monaco 또는 Text 뷰어에 추가로 매핑할 수 있습니다.
