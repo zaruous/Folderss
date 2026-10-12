@@ -319,7 +319,9 @@ Folderss/
 - 실행: 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
   표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
 - 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.
-- 동시성: 창 안의 쓰기 작업은 `RunBusyAsync`로 한 번에 하나(버튼 잠금 + 취소 버튼). 여러 저장소 동작은 status·fetch만.
+- 동시성: 창 안의 쓰기 작업은 `RunBusyAsync`로 한 번에 하나(버튼 잠금 + 취소 버튼). 여러 저장소 동작은 status와 툴바 `전체` 그룹의
+  fetch·pull·push(`RunOnAllAsync` — 저장소마다 `Task.WhenAll`로 동시에, 성공·실패·건너뜀 요약). 일괄 pull/push는 `GitSyncCommands.BatchSkipReason`으로
+  detached HEAD·upstream 없는 저장소를 건너뛰고 `-u`를 붙이지 않는다(원격 선택은 단일 push에서만).
   창을 닫으면 `_lifetime` 토큰이 진행 중 프로세스를 모두 끝낸다.
 - diff: 인수는 모두 `GitDiffCommands`(공통 `--no-color --no-ext-diff -M` — 사용자 외부 diff 도구 설정 무시).
   작업 트리 `diff -- <p>`, 스테이지 `diff --cached -- [<원래 경로>] <p>`, 추적 안 됨 `diff --no-index -- /dev/null <p>`(종료 코드 1 = 차이 있음),

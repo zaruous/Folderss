@@ -32,6 +32,7 @@ namespace Folderss.Services
             { ".md",       BuiltInMarkdownKey },
             { ".markdown", BuiltInMarkdownKey },
             { ".json",     BuiltInMonacoKey   },
+            { ".jsonl",    BuiltInMonacoKey   },
             { ".xml",      BuiltInMonacoKey   },
         };
 

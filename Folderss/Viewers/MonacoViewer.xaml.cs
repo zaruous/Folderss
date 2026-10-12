@@ -27,6 +27,7 @@ namespace Folderss.Viewers
                 { ".js",    "javascript" },
                 { ".ts",    "typescript" },
                 { ".json",  "json"       },
+                { ".jsonl", "jsonl"      }, // monaco-jsonl.js가 등록하는 줄 단위 JSON 언어
                 { ".xml",   "xml"        },
                 { ".xaml",  "xml"        },
                 { ".html",  "html"       },

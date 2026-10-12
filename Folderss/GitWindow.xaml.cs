@@ -18,7 +18,9 @@ namespace Folderss
 {
     /// <summary>
     /// 기준 폴더 아래의 여러 Git 저장소를 보여 주고, 선택한 저장소 하나에 대해 스테이지·커밋·브랜치·로그·pull/push를 한다.
-    /// 여러 저장소에 한꺼번에 하는 동작은 작업 트리를 바꾸지 않는 상태 조회와 fetch뿐이다(일괄 pull/push는 부분 실패 복구가 어려움).
+    /// 여러 저장소에 한꺼번에 하는 동작은 상태 조회와 툴바 `전체` 그룹의 fetch·pull·push(<see cref="RunOnAllAsync"/> — 저장소마다 독립 실행, 성공·실패·건너뜀 요약).
+    /// 일괄 pull/push는 부분 실패 복구가 어려우므로 pull은 설정의 방식(기본 fast-forward만)으로, push는 upstream으로만 보내고
+    /// detached HEAD·upstream 없는 저장소는 건너뛴다(<see cref="GitSyncCommands.BatchSkipReason"/>).
     /// 모든 명령과 stderr는 아래 출력 영역에 남긴다.
     /// </summary>
     public partial class GitWindow : Window
@@ -220,13 +222,16 @@ namespace Folderss
             var snapshot = row?.Snapshot;
             var hasRepo = row != null && snapshot != null;
 
+            var hasRows = idle && _rows.Count > 0;
             RescanButton.IsEnabled = idle;
-            FetchAllButton.IsEnabled = idle && _rows.Count > 0;
+            FetchAllButton.IsEnabled = FetchAllOptionsButton.IsEnabled = hasRows;
+            PullAllButton.IsEnabled = PullAllOptionsButton.IsEnabled = hasRows;
+            PushAllButton.IsEnabled = hasRows;
             OptionsButton.IsEnabled = idle;
             CancelButton.IsEnabled = !idle;
+            FetchButton.IsEnabled = FetchOptionsButton.IsEnabled = idle && hasRepo;
             PullButton.IsEnabled = PullOptionsButton.IsEnabled = idle && hasRepo;
             PushButton.IsEnabled = PushOptionsButton.IsEnabled = idle && hasRepo;
-            FetchAllOptionsButton.IsEnabled = idle && _rows.Count > 0;
             DetailRoot.IsEnabled = idle && hasRepo;
         }
 
@@ -341,24 +346,93 @@ namespace Folderss
                 await FetchAllAsync(dialog.Options);
         }
 
-        private async Task FetchAllAsync(GitFetchOptions options)
+        private Task FetchAllAsync(GitFetchOptions options)
+        {
+            return RunOnAllAsync("fetch", GitSyncCommands.Fetch(options), skipReason: null);
+        }
+
+        private async void PullAll_Click(object sender, RoutedEventArgs e)
+        {
+            await PullAllAsync(new GitPullOptions { Mode = _settings.PullMode });
+        }
+
+        private async void PullAllOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var dialog = new GitPullDialog(
+                string.Format("목록의 저장소 {0}개 모두에서 pull합니다. detached HEAD·upstream 없는 저장소는 건너뜁니다.\n" +
+                              "병합·rebase가 충돌로 멈추면 저장소마다 따로 해결해야 합니다.", _rows.Count),
+                new GitPullOptions { Mode = _settings.PullMode }) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await PullAllAsync(dialog.Options);
+        }
+
+        private async Task PullAllAsync(GitPullOptions options)
+        {
+            if (!ConfirmNoUnsavedDocumentsUnderAll("전체 pull"))
+                return;
+            await RunOnAllAsync("pull", GitSyncCommands.Pull(options), row => GitSyncCommands.BatchSkipReason(row.Snapshot));
+        }
+
+        /// <summary>전체 push: 저장소마다 현재 브랜치를 upstream으로. upstream이 없으면 건너뛴다(-u는 단일 push에서만).</summary>
+        private async void PushAll_Click(object sender, RoutedEventArgs e)
+        {
+            await RunOnAllAsync("push", new[] { "push" }, row => GitSyncCommands.BatchSkipReason(row.Snapshot));
+        }
+
+        /// <summary>
+        /// 목록의 모든 저장소에 같은 명령을 동시에 실행하고(저장소마다 독립), 끝나면 성공·실패·건너뜀 수를 요약한다.
+        /// 취소돼도 저장소마다 상태는 다시 읽는다(pull은 일부만 적용됐을 수 있음).
+        /// </summary>
+        /// <param name="skipReason">건너뛸 저장소면 이유, 아니면 null. null이면 모두 실행.</param>
+        private async Task RunOnAllAsync(string verb, IEnumerable<string> args, Func<RepositoryRow, string> skipReason)
         {
             var rows = _rows.ToList();
-            var args = GitSyncCommands.Fetch(options);
-            await RunBusyAsync(string.Format("fetch 중… ({0}개)", rows.Count), async token =>
+            var argList = args.ToList();
+            await RunBusyAsync(string.Format("{0} 중… ({1}개)", verb, rows.Count), async token =>
             {
-                var failed = 0;
+                int failed = 0, skipped = 0;
                 await Task.WhenAll(rows.Select(async row =>
                 {
-                    var result = await GitCommandRunner.RunAsync(row.RootPath, args, GitCommandRunner.NetworkTimeout, token);
+                    var reason = skipReason?.Invoke(row);
+                    if (reason != null)
+                    {
+                        skipped++;
+                        AppendOutput(string.Format("{0} 건너뜀: {1}    [{2}]", verb, reason, row.Info.DisplayPath));
+                        return;
+                    }
+                    GitResult result;
+                    try
+                    {
+                        result = await GitCommandRunner.RunAsync(row.RootPath, argList, GitCommandRunner.NetworkTimeout, token);
+                    }
+                    finally
+                    {
+                        await RefreshStatusAsync(row, _lifetime.Token);
+                    }
                     AppendResult(row.Info, result);
                     if (!result.Success)
                         failed++;
-                    await RefreshStatusAsync(row, token);
                 }));
-                AppendOutput(string.Format("전체 fetch 완료: 성공 {0}, 실패 {1}", rows.Count - failed, failed));
+                AppendOutput(string.Format("전체 {0} 완료: 성공 {1}, 실패 {2}, 건너뜀 {3}", verb, rows.Count - failed - skipped, failed, skipped));
             });
             await ReloadSelectedDetailAsync();
+        }
+
+        // ── 선택 저장소 fetch ──────────────────────────────────────────────────
+
+        private async void Fetch_Click(object sender, RoutedEventArgs e)
+        {
+            await RunOnSelectedAsync("fetch 중…", GitSyncCommands.Fetch(new GitFetchOptions()), GitCommandRunner.NetworkTimeout);
+        }
+
+        private async void FetchOptions_Click(object sender, RoutedEventArgs e)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+            var dialog = new GitFetchDialog(string.Format("'{0}'에서 fetch합니다.", row.Info.DisplayPath)) { Owner = this };
+            if (dialog.ShowDialog() == true)
+                await RunOnSelectedAsync("fetch 중…", GitSyncCommands.Fetch(dialog.Options), GitCommandRunner.NetworkTimeout);
         }
 
         // ── 선택 저장소 상세 ──────────────────────────────────────────────────
@@ -1502,12 +1576,24 @@ namespace Folderss
         private bool ConfirmNoUnsavedDocuments(string action)
         {
             var row = SelectedRow;
-            var count = row == null ? 0 : _countModifiedDocumentsUnder(row.RootPath);
+            return ConfirmNoUnsavedDocumentsUnder(row == null ? null : row.RootPath, "이 저장소의", action);
+        }
+
+        /// <summary>목록의 모든 저장소를 덮는 폴더(상위 저장소가 있으면 그 루트, 아니면 기준 폴더) 아래에서 센다 — 중첩 저장소를 두 번 세지 않는다.</summary>
+        private bool ConfirmNoUnsavedDocumentsUnderAll(string action)
+        {
+            var ancestor = _rows.FirstOrDefault(r => r.Info.IsAncestor);
+            return ConfirmNoUnsavedDocumentsUnder(ancestor != null ? ancestor.RootPath : _basePath, "목록 저장소들의", action);
+        }
+
+        private bool ConfirmNoUnsavedDocumentsUnder(string folder, string whose, string action)
+        {
+            var count = folder == null ? 0 : _countModifiedDocumentsUnder(folder);
             if (count == 0)
                 return true;
 
             return MessageBox.Show(this,
-                string.Format("이 저장소의 파일을 저장하지 않은 문서 탭이 {0}개 있습니다.\n{1}하면 디스크의 파일이 바뀌어 편집 내용과 어긋날 수 있습니다. 계속할까요?", count, action),
+                string.Format("{0} 파일을 저장하지 않은 문서 탭이 {1}개 있습니다.\n{2}하면 디스크의 파일이 바뀌어 편집 내용과 어긋날 수 있습니다. 계속할까요?", whose, count, action),
                 "Git", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) == MessageBoxResult.Yes;
         }
 

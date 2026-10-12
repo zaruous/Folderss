@@ -1,3 +1,4 @@
+using Folderss.Models;
 using System;
 using System.Collections.Generic;
 
@@ -111,6 +112,21 @@ namespace Folderss.Services
                     args.Add(options.Branch);
             }
             return args;
+        }
+
+        /// <summary>
+        /// 전체 pull/push에서 이 저장소를 건너뛰어야 하면 그 이유(출력용), 아니면 null.
+        /// 상태를 못 읽었거나 detached HEAD이거나 upstream이 없으면 건너뛴다 — 일괄에서는 원격을 골라 <c>-u</c>로 연결하지 않는다(저장소마다 다른 결정이라 단일 push에서만 묻는다).
+        /// </summary>
+        public static string BatchSkipReason(GitStatusSnapshot snapshot)
+        {
+            if (snapshot == null)
+                return "상태를 읽지 못함";
+            if (snapshot.IsDetached || string.IsNullOrEmpty(snapshot.Branch))
+                return "detached HEAD";
+            if (string.IsNullOrEmpty(snapshot.Upstream))
+                return "upstream 없음";
+            return null;
         }
 
         public static List<string> Fetch(GitFetchOptions options)
