@@ -104,6 +104,16 @@ namespace Folderss.SearchTests
         // ── 출력 파서 ───────────────────────────────────────────────────────────
 
         [Fact]
+        public void BatchSkipReason_SkipsUnreadDetachedAndNoUpstream_AllowsTrackedBranch()
+        {
+            Assert.Equal("상태를 읽지 못함", GitSyncCommands.BatchSkipReason(null));
+            Assert.Equal("detached HEAD", GitSyncCommands.BatchSkipReason(new GitStatusSnapshot { IsDetached = true, Branch = null }));
+            Assert.Equal("detached HEAD", GitSyncCommands.BatchSkipReason(new GitStatusSnapshot { Branch = "" }));
+            Assert.Equal("upstream 없음", GitSyncCommands.BatchSkipReason(new GitStatusSnapshot { Branch = "feature", Upstream = null }));
+            Assert.Null(GitSyncCommands.BatchSkipReason(new GitStatusSnapshot { Branch = "main", Upstream = "origin/main", Ahead = 0 }));
+        }
+
+        [Fact]
         public void ParseStatusV2_ReadsBranchHeaders_AndAllRecordKinds()
         {
             var output = string.Join("\0",
