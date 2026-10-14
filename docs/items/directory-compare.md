@@ -1,6 +1,6 @@
 # 폴더 비교 창 — 좌우 폴더 패널 방식 재설계
 
-- 상태: In Progress
+- 상태: In Progress — 구현 완료, Windows 화면 확인 대기
 
 ## 요구사항
 
@@ -180,18 +180,27 @@
   - `Services/CompareOverlay.cs` — 기준 상대 경로(`GetRelativeFolder`), 패널 한쪽 현재 폴더의 직속 항목 판정(`EntriesFor`, 그 쪽에 있는 것만·대소문자 무시), 패널 기준 상태(`ToSideStatus`: 이쪽만/저쪽만), 방향 색용 `GetDirection`(수정 시각, 허용 오차 안이면 없음).
   - `Services/FileOperationJournal.cs` — 이동(같은 이름은 옛 항목을 휴지통으로 보내고 교체, 교체 후 이동 실패 시 옛 항목 즉시 되살림, 드라이브가 다른 폴더는 복사 후 원본 삭제)·복사(붙여넣기와 같은 "이름 (2)")·삭제(휴지통/영구) 실행과 기록, `FindConflicts`(교체 확인용), `CheckUndo`·`Undo`(최근 작업만, 그 사이 바뀜·원래 자리 점유·휴지통에 없음이면 아무것도 안 하고 거부, 도중 실패 시 거기서 멈추고 다시 부르면 남은 항목만), `Skip`, `Load`(7일 지난 파일 삭제, 읽지 못한 줄은 `LoadWarnings`), "끝" 없는 작업은 `Interrupted`. 휴지통은 `IRecycleBin`으로 주입.
   - `FileOperationService` — `ValidateTransfer`·`CopyDirectory`·`GetUniquePath`를 `internal`로(작업 이력이 같은 규칙을 쓰도록). 동작 변화 없음.
+- 2차 2단계: `Services/WindowsRecycleBin.cs` — 보내기는 `FileOperationService.MoveToRecycleBin`, 되살리기는 `$Recycle.Bin\<SID>\$I…` 정보 파일(버전 1·2)에서 원래 경로·삭제 시각을 읽어 ±2분 안의 가장 가까운 항목의 `$R…`를 원래 자리로 옮김. 셸 COM은 표시 이름에서 확장자가 숨겨질 수 있어 쓰지 않음. 고정 드라이브가 아니면 보내기를 거부(네트워크·이동식은 휴지통이 없어 영구 삭제가 됨).
+- 2차 3단계: `FolderBrowser` — `SafeMode`(끌어다 놓기 들여오기·내보내기, 잘라내기, 목록·트리 셸 우클릭 막음, 붙여넣기·목록 우클릭은 `PasteRequested`/`ContextMenuRequested`), `SetCompareOverlay`(새로 고칠 때마다 다시 입힘)·`비교` 열(넣고 빼기)·`HideCompareSame`·`SetPreviewVisible`(숨기면 미리보기 파일을 읽지 않음)·`SelectByName`·`SelectNextDifference`·`SelectedItemsChanged`. `FileSystemItem`에 `CompareMark/Text/Tip`. 테마 7개(설계의 "8개"는 `Controls.xaml`을 잘못 셈)에 색 키 5개, 행 스타일에서 선택·hover 트리거를 비교 색 뒤에 둬 선택이 가려지지 않게 함.
+- 2차 4단계: `DirectoryCompareWindow` 재작성 — 좌우 패널(안전 모드)·가운데 분할선(40px, 위에 ▶◀ 버튼, 두 번 누르면 반반)·작업 이력 패널(☰로 열고 닫기). 툴바: 비교(F5)·▾·중지·차이만 보기·이전/다음 차이·좌우 바꾸기. 동기 이동, 같은 이름 따라 선택, 기준 밖·반대편 없음 알림. 앱 메뉴(우클릭): 반대쪽으로 이동·복사·붙여넣기·삭제·반대쪽 같은 이름 파일과 비교·선택한 두 파일 비교·경로 복사·탐색기에서 위치 열기. 확인 창 `CompareConfirmDialog`(목록·경고·체크, 영구 삭제는 체크 필수). 옵션 대화상자에 표시·이동 묶음, 옵션에 `DirectionColors`·`ShowFolderTree`·`ShowPreview`·`HideSame`·`MoveConfirmThreshold`(판정 기준이 바뀔 때만 다시 비교). `MainWindow.IsCutPending`(잘라낸 클립보드 붙여넣기 거절용) 추가. 작업 이력에 "원본을 품은 폴더는 교체하지 않음" 보호 추가.
+- 2차 5단계: `DirectoryCompareView` 삭제, README·architecture·CLAUDE.md(테마 키 목록) 갱신.
+- 설계와 달라진 점:
+  - 트리를 보이면 `FolderBrowser`가 트리 루트를 자동 고정하므로, 비교 창 이동·삭제의 잠금 검사는 패널 자체 고정이 아니라 메인 창 잠금(`MainWindow.IsPathPinLocked` 등)만 본다.
+  - `DirectoryCompareService.CopyEntry`/`CanCopy`는 앱에서 더 쓰지 않지만 테스트가 있어 남겼다(필요 없으면 별도 정리).
+  - 단축키는 F5(다시 비교)·Delete·Shift+Delete만. 되돌리기 단축키(Ctrl+Z)와 Ctrl+←/→ 이동은 넣지 않았다.
 
 ## 변경 파일
 
 - 1차: `Folderss/Models/DirectoryCompareModels.cs`, `Folderss/Services/DirectoryCompareService.cs`, `Folderss/Services/CompareSettingsService.cs`, `Folderss/Controls/ComparePairHeader.cs`, `Folderss/Controls/DirectoryCompareView.cs`, `Folderss/DirectoryCompareWindow.cs`, `Folderss/FileCompareWindow.cs`, `Folderss/MainWindow.xaml(.cs)`, `Folderss/Controls/FolderBrowser.xaml.cs`, `Folderss/GitWindow.xaml`, `Folderss/Themes/Controls.xaml`, `tests/Folderss.SearchTests/DirectoryCompareServiceTests.cs`
 - 2차 1단계: 신규 `Folderss/Services/CompareOverlay.cs`, `Folderss/Services/FileOperationJournal.cs`, `tests/Folderss.SearchTests/CompareOverlayTests.cs`, `tests/Folderss.SearchTests/FileOperationJournalTests.cs`. 수정 `Folderss/Services/FileOperationService.cs`(접근 수준만), `tests/Folderss.SearchTests/Folderss.SearchTests.csproj`(링크 3개).
-- 2차 예정(2단계 이후): 수정 `Models/FileSystemItem.cs`, `Models/DirectoryCompareModels.cs`, `Services/CompareSettingsService.cs`, `Controls/FolderBrowser.xaml(.cs)`, `MainWindow.xaml.cs`, `DirectoryCompareWindow.cs`, `Themes/*.xaml` 8개. 삭제 `Controls/DirectoryCompareView.cs`
+- 2차 2~5단계: 신규 `Folderss/Services/WindowsRecycleBin.cs`, `tests/Folderss.SearchTests/WindowsRecycleBinTests.cs`. 수정 `Folderss/Models/FileSystemItem.cs`, `Folderss/Models/DirectoryCompareModels.cs`, `Folderss/Services/CompareSettingsService.cs`, `Folderss/Services/CompareOverlay.cs`(`Describe`), `Folderss/Services/FileOperationJournal.cs`(`CountFiles`, 원본 품은 폴더 보호), `Folderss/Controls/FolderBrowser.xaml(.cs)`, `Folderss/MainWindow.xaml.cs`(`IsCutPending`), `Folderss/DirectoryCompareWindow.cs`, `Folderss/Themes/*.xaml` 7개, 테스트, `README.md`, `docs/architecture.md`, `CLAUDE.md`. 삭제 `Folderss/Controls/DirectoryCompareView.cs`
 
 ## 검증
 
 - 1차: 빌드 성공, 단위 테스트 12건 통과(전체 260 통과·4 건너뜀). 사용자 화면 확인 결과 방식 불만족 → 재설계.
 - 2차 1단계: 새 테스트 29건 통과(`CompareOverlayTests` 13, `FileOperationJournalTests` 16). 되돌리기 순서를 일부러 FIFO로 바꾸면 3건이 실패함을 확인(LIFO를 테스트가 지킴). 전체 290 통과·1 건너뜀·2 실패 — 실패 2건은 master에서도 나는 Linux 전용 기존 실패(`DirectoryCompareServiceTests`: 테스트의 `\` 경로 미정규화, Linux에서 점 파일이 숨김 취급). CI(Windows)와 무관. 앱 본체는 Linux에서 `EnableWindowsTargeting`으로 컴파일해 새 파일 오류 없음 확인(콘솔 패널의 Windows 전용 터미널 패키지 오류 1종은 기존).
-- 2차 이후: 2단계 Windows 휴지통 확인, 3~4단계 Windows 화면 확인(분할선·동기 이동·같은 이름 따라 선택·차이만 보기·`>`/`<` 교체·개수 확인 체크·Ctrl+C/V·Delete·작업 이력 되돌리기·휴지통 복원·재시작 후 이력·안전 모드에서 셸 메뉴/끌어다 놓기/잘라내기 막힘·8개 테마 색).
+- 2차 2~5단계(Linux): 전체 297 통과·2 건너뜀(Windows 전용 휴지통 테스트 1, 기존 1)·2 실패(위 Linux 전용 기존 실패). 추가 테스트: 휴지통 정보 파일 해석 3, Windows 휴지통 보내기·되살리기 1(Windows CI에서만 실행), 옵션 왕복·기본값 1, 행 표시 1, 하위 파일 세기 1, 원본 품은 폴더 교체 거부 1(수정 전 실패 재현 후 통과). 앱 본체는 Linux 컴파일로 새 오류·새 경고 없음 확인.
+- **Windows에서 확인할 것(미완)**: 앱 실행 후 폴더 비교 창 — 분할선 끌기·두 번 눌러 반반, 동기 이동·기준 밖·반대편 없음 알림, 같은 이름 따라 선택, 차이만 보기·이전/다음 차이·좌우 바꾸기, ▶◀ 이동(교체 확인·대상이 더 최신 표시·큰 폴더 개수 확인과 "확인하였습니다"), Ctrl+C/V(잘라낸 항목 거절), Delete·Shift+Delete, 작업 이력 되돌리기(휴지통 복원 포함)·넘기기·재시작 후 이력, 안전 모드(셸 메뉴·끌어다 놓기·잘라내기 막힘), 옵션 표시 묶음, 7개 테마에서 행 색과 선택 표시, 메인 창 패널 동작 변화 없음(끌어다 놓기·셸 메뉴·붙여넣기).
 
 ## 변경 이력
 
@@ -204,3 +213,4 @@
 - 2026-10-15: 사용자 결정 — 빈 줄로 줄을 맞추지 않고 각 패널은 실제 상태만 표시(같은 이름 따라 선택으로 보완). 반대쪽에 폴더가 없으면 알림만(옵션 제거). `>`/`<`는 이동(같은 이름은 확인 후 교체, 대상 옛 항목은 휴지통), 복사는 Ctrl+C/V. 큰 폴더 이동 확인에 "확인하였습니다" 체크. 이 창의 이동·복사·삭제를 작업 이력 사이드 패널에 기록하고 되돌리기(파일 내용 편집은 제외). 메인 창 연결은 별도 인터페이스 대신 Owner로 메인 창을 찾는 도우미로 해결.
 - 2026-10-15: 사용자 결정 — 이력에 남지 않는 작업(셸 우클릭 메뉴·끌어다 놓기·잘라내기)은 비교 창에서 막고 앱 자체 메뉴로 대체(안전 모드). 작업 이력은 로그 포함 디스크 저장, 7일 후 삭제. 되돌리기는 최근부터(LIFO — 사용자는 FIFO를 언급했으나 오래된 것부터 되돌리면 경로가 꼬여 LIFO로 설명·확인 요청). 1차 표 화면은 버림.
 - 2026-10-15: 미결 사항 제안대로 확정(교체 확인은 항상, 이름 바꾸기·새 폴더 제외). 붙여넣기는 비교 창이 작업 이력으로 직접 실행하도록 바꿔 메인 창 수정이 필요 없어짐. 1단계(`CompareOverlay`, `FileOperationJournal`과 테스트) 구현. 기존 폴더 이동이 다른 드라이브로 안 되는 점 발견 — 작업 이력 쪽에서 처리, 메인 창 F6은 범위 밖.
+- 2026-10-15: 2~5단계 구현 — Windows 휴지통, 폴더 패널 비교 표시·안전 모드, 비교 창 재작성, 1차 표 목록 삭제, 문서. 구현 중 발견: 기준이 겹칠 때 원본을 품은 폴더가 교체 대상이 되는 경우(보호 추가), 비교 색이 선택 표시를 가리는 문제(트리거 순서), 트리 자동 고정과 잠금 검사 충돌(메인 창 잠금만 검사). Windows 화면 확인 대기.

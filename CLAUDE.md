@@ -88,6 +88,7 @@ WindowBackground, PanelBackground, SurfaceBackground, ControlBackground
 ControlHoverBrush, ControlPressedBrush, BorderBrush
 PrimaryText, SecondaryText, DisabledTextBrush
 AccentBrush, AccentHoverBrush, SelectionBrush, RowHoverBrush
+CompareDifferentBrush, CompareThisOnlyBrush, CompareTypeMismatchBrush, CompareNewerBrush, CompareOlderBrush (폴더 비교 창 행 배경, 반투명)
 ```
 SystemColors 오버라이드 4쌍도 반드시 포함.
 
