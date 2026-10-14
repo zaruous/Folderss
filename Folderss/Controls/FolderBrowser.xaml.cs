@@ -56,6 +56,17 @@ namespace Folderss.Controls
         public event EventHandler<string[]> CompareFilesRequested;
         /// <summary>폴더 두 개를 골라 "선택한 두 폴더 비교"를 눌렀다. 목록 순서대로 [왼쪽, 오른쪽].</summary>
         public event EventHandler<string[]> CompareFoldersRequested;
+        /// <summary>안전 모드에서 Ctrl+V. 붙여넣기는 호스트(폴더 비교 창)가 작업 이력으로 실행한다.</summary>
+        public event EventHandler PasteRequested;
+        /// <summary>안전 모드에서 목록 우클릭. 호스트가 이력에 남는 동작만 담은 메뉴를 띄운다(선택은 이미 맞춰져 있음).</summary>
+        public event EventHandler ContextMenuRequested;
+        /// <summary>목록 선택이 바뀌었다(폴더 비교 창이 반대쪽 같은 이름을 따라 고를 때 쓴다).</summary>
+        public event EventHandler SelectedItemsChanged;
+
+        private bool _safeMode;
+        private Action<FileSystemItem> _compareDecorator;
+        private bool _hideCompareSame;
+        private GridViewColumn _compareColumn;
 
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
@@ -93,6 +104,129 @@ namespace Folderss.Controls
         public IList<FileSystemItem> SelectedItems
         {
             get { return FileList.SelectedItems.Cast<FileSystemItem>().ToList(); }
+        }
+
+        /// <summary>
+        /// 폴더 비교 창용 "이력에 남는 작업만" 모드. 켜면 끌어다 놓기(들여오기·내보내기)·잘라내기·Windows 셸 우클릭 메뉴를 막고,
+        /// 붙여넣기와 목록 우클릭은 <see cref="PasteRequested"/>/<see cref="ContextMenuRequested"/>로 호스트에 넘긴다.
+        /// 메인 창 패널은 끈 채로 쓴다.
+        /// </summary>
+        public bool SafeMode
+        {
+            get { return _safeMode; }
+            set
+            {
+                _safeMode = value;
+                FileList.AllowDrop = !value;
+            }
+        }
+
+        /// <summary>
+        /// 목록 항목마다 비교 표시(<see cref="FileSystemItem.CompareMark"/> 등)를 채우는 함수를 건다. 새로 고칠 때마다 다시 입힌다.
+        /// null이면 비교 표시와 비교 열을 없앤다.
+        /// </summary>
+        public void SetCompareOverlay(Action<FileSystemItem> decorate)
+        {
+            _compareDecorator = decorate;
+            UpdateCompareColumn();
+            ApplyCompareOverlay();
+            if (FileList.ItemsSource != null)
+                ApplyFilter();
+        }
+
+        /// <summary>비교 표시가 "같음"인 항목을 숨긴다(차이만 보기).</summary>
+        public bool HideCompareSame
+        {
+            get { return _hideCompareSame; }
+            set
+            {
+                _hideCompareSame = value;
+                if (FileList.ItemsSource != null)
+                    ApplyFilter();
+            }
+        }
+
+        /// <summary>아래쪽 내용 미리보기·속성 영역을 보이거나 숨긴다.</summary>
+        public void SetPreviewVisible(bool visible)
+        {
+            var visibility = visible ? Visibility.Visible : Visibility.Collapsed;
+            PreviewArea.Visibility = visibility;
+            PreviewSplitter.Visibility = visibility;
+            PreviewSplitterRow.Height = visible ? new GridLength(6) : new GridLength(0);
+            PreviewRow.MinHeight = visible ? 120 : 0;
+            PreviewRow.Height = visible ? new GridLength(3, GridUnitType.Star) : new GridLength(0);
+        }
+
+        /// <summary>이름(대소문자 무시)이 같은 항목을 하나만 골라 보이게 한다. 없으면 선택을 비운다.</summary>
+        public void SelectByName(string name)
+        {
+            var match = FileList.Items.Cast<FileSystemItem>()
+                .FirstOrDefault(item => string.Equals(item.Name, name, StringComparison.OrdinalIgnoreCase));
+            FileList.SelectedItems.Clear();
+            if (match == null)
+                return;
+            FileList.SelectedItem = match;
+            FileList.ScrollIntoView(match);
+        }
+
+        /// <summary>보이는 순서에서 선택 항목 다음(<paramref name="forward"/>가 false면 이전)의 차이 항목을 골라 보이게 한다. 없으면 false.</summary>
+        public bool SelectNextDifference(bool forward)
+        {
+            var items = FileList.Items.Cast<FileSystemItem>().ToList();
+            if (items.Count == 0)
+                return false;
+            var start = FileList.SelectedItem is FileSystemItem current ? items.IndexOf(current) : (forward ? -1 : items.Count);
+            for (var i = start + (forward ? 1 : -1); i >= 0 && i < items.Count; i += forward ? 1 : -1)
+            {
+                var mark = items[i].CompareMark;
+                if (mark == null || mark == "Same")
+                    continue;
+                FileList.SelectedItems.Clear();
+                FileList.SelectedItem = items[i];
+                FileList.ScrollIntoView(items[i]);
+                return true;
+            }
+            return false;
+        }
+
+        private void ApplyCompareOverlay()
+        {
+            foreach (var item in _items)
+            {
+                item.CompareMark = null;
+                item.CompareText = null;
+                item.CompareTip = null;
+                _compareDecorator?.Invoke(item);
+            }
+        }
+
+        /// <summary>비교 표시가 걸려 있을 때만 "비교" 열을 맨 끝에 둔다(GridViewColumn은 숨길 수 없어 넣고 뺀다).</summary>
+        private void UpdateCompareColumn()
+        {
+            var gridView = FileList.View as GridView;
+            if (gridView == null)
+                return;
+
+            if (_compareDecorator == null)
+            {
+                if (_compareColumn != null)
+                    gridView.Columns.Remove(_compareColumn);
+                return;
+            }
+            if (_compareColumn == null)
+            {
+                var cell = new FrameworkElementFactory(typeof(TextBlock));
+                cell.SetBinding(TextBlock.TextProperty, new Binding("CompareText"));
+                cell.SetBinding(ToolTipProperty, new Binding("CompareTip"));
+                _compareColumn = new GridViewColumn
+                {
+                    Width = 90,
+                    Header = new GridViewColumnHeader { Content = GetBaseHeaderLabel("CompareText"), Tag = "CompareText" },
+                    CellTemplate = new DataTemplate { VisualTree = cell }
+                };
+            }
+            if (!gridView.Columns.Contains(_compareColumn))
+                gridView.Columns.Add(_compareColumn);
         }
 
         public FolderBrowser()
@@ -265,6 +399,7 @@ namespace Folderss.Controls
                 foreach (var item in entries)
                     _items.Add(item);
 
+                ApplyCompareOverlay();
                 ApplyFilter();
                 UpdateStatusText();
             }
@@ -330,12 +465,15 @@ namespace Folderss.Controls
             var query = SearchBox.Text.Trim();
             var resultFiles = _resultFilterFiles;
             var resultFolders = _resultFilterFolders;
+            var hideSame = _hideCompareSame && _compareDecorator != null;
             view.Filter = item =>
             {
                 var fileItem = item as FileSystemItem;
                 if (fileItem == null)
                     return false;
                 if (query.Length > 0 && fileItem.Name.IndexOf(query, StringComparison.CurrentCultureIgnoreCase) < 0)
+                    return false;
+                if (hideSame && fileItem.CompareMark == "Same")
                     return false;
                 if (resultFiles == null)
                     return true;
@@ -344,7 +482,7 @@ namespace Folderss.Controls
                     : resultFiles.Contains(fileItem.FullPath);
             };
             view.Refresh();
-            var filtering = query.Length > 0 || resultFiles != null;
+            var filtering = query.Length > 0 || resultFiles != null || hideSame;
             FilteredCountText.Text = !filtering
                 ? string.Format("{0:N0}개", _items.Count)
                 : string.Format("{0:N0}/{1:N0}개", view.Cast<object>().Count(), _items.Count);
@@ -841,7 +979,7 @@ namespace Folderss.Controls
 
         private void FileList_PreviewMouseMove(object sender, MouseEventArgs e)
         {
-            if (!_dragPending || e.LeftButton != MouseButtonState.Pressed)
+            if (_safeMode || !_dragPending || e.LeftButton != MouseButtonState.Pressed)
                 return;
 
             var currentPoint = e.GetPosition(FileList);
@@ -867,6 +1005,12 @@ namespace Folderss.Controls
 
         private void FileList_DragOver(object sender, DragEventArgs e)
         {
+            if (_safeMode)
+            {
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
             var paths = GetDroppedPaths(e.Data);
             var destination = GetDropDestination(e.OriginalSource as DependencyObject);
             if (paths.Length == 0 || string.IsNullOrWhiteSpace(destination) || !Directory.Exists(destination))
@@ -897,6 +1041,12 @@ namespace Folderss.Controls
 
         private void FileList_Drop(object sender, DragEventArgs e)
         {
+            if (_safeMode)
+            {
+                e.Effects = DragDropEffects.None;
+                e.Handled = true;
+                return;
+            }
             var paths = GetDroppedPaths(e.Data);
             var destination = GetDropDestination(e.OriginalSource as DependencyObject);
             var effect = GetDropEffect(e, paths, destination);
@@ -1060,8 +1210,12 @@ namespace Folderss.Controls
 
         private async void FileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
+            SelectedItemsChanged?.Invoke(this, EventArgs.Empty);
             var requestId = ++_previewRequestId;
             ResetPreview();
+            // 미리보기를 숨겼으면(폴더 비교 창 기본) 파일을 읽지 않는다.
+            if (PreviewArea.Visibility != Visibility.Visible)
+                return;
 
             var selected = SelectedItems;
             if (selected.Count == 0)
@@ -1217,6 +1371,12 @@ namespace Folderss.Controls
 
         private void FileList_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
+            if (_safeMode)
+            {
+                ContextMenuRequested?.Invoke(this, EventArgs.Empty);
+                e.Handled = true;
+                return;
+            }
             var selectedPaths = SelectedItems.Select(item => item.FullPath).ToList();
 
             if (selectedPaths.Count == 0)
@@ -1490,7 +1650,8 @@ namespace Folderss.Controls
 
         private void Cut_CanExecute(object sender, CanExecuteRoutedEventArgs e)
         {
-            e.CanExecute = SelectedItems.Count > 0;
+            // 잘라낸 것을 다른 곳(탐색기 등)에 붙여넣으면 이력 밖에서 이동되므로 안전 모드에서는 막는다.
+            e.CanExecute = !_safeMode && SelectedItems.Count > 0;
             e.Handled = true;
         }
 
@@ -1531,6 +1692,12 @@ namespace Folderss.Controls
 
         private void Paste_Executed(object sender, ExecutedRoutedEventArgs e)
         {
+            if (_safeMode)
+            {
+                PasteRequested?.Invoke(this, EventArgs.Empty);
+                e.Handled = true;
+                return;
+            }
             var window = Window.GetWindow(this) as MainWindow;
             if (window != null && window.TryPasteFromClipboardInto(this))
                 e.Handled = true;
@@ -1742,6 +1909,7 @@ namespace Folderss.Controls
                 case "ModifiedAt": return "수정한 날짜";
                 case "Kind": return "유형";
                 case "Size": return "크기";
+                case "CompareText": return "비교";
                 default: return property;
             }
         }
@@ -1784,6 +1952,9 @@ namespace Folderss.Controls
         private void FolderTree_MouseRightButtonUp(object sender, MouseButtonEventArgs e)
         {
             Activate();
+            // 셸 메뉴는 이력에 남지 않는 작업(삭제·이름 바꾸기 등)을 할 수 있어 안전 모드에서는 띄우지 않는다.
+            if (_safeMode)
+                return;
 
             var container = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
             var path = container == null ? _treeRootPath : container.Tag as string;
