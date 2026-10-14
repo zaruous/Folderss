@@ -37,6 +37,7 @@ namespace Folderss.Services
                 new KeyBindingEntry { CommandId = "NewFile",         DisplayName = "새 파일",          Key = Key.N,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "AddPanel",        DisplayName = "폴더 패널 추가",   Key = Key.T,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "CopyClipboard",   DisplayName = "복사 (클립보드)",  Key = Key.C,     Modifiers = ModifierKeys.Control },
+                new KeyBindingEntry { CommandId = "CopyFolderPath",  DisplayName = "폴더 경로 복사",   Key = Key.C,     Modifiers = ModifierKeys.Control | ModifierKeys.Shift },
                 new KeyBindingEntry { CommandId = "CutClipboard",    DisplayName = "잘라내기",         Key = Key.X,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "PasteClipboard",  DisplayName = "붙여넣기",         Key = Key.V,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "NavigateBack",    DisplayName = "뒤로",             Key = Key.Left,  Modifiers = ModifierKeys.Alt },

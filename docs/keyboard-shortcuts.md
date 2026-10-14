@@ -25,6 +25,7 @@
 | `NewFile` | 새 파일 | `Ctrl+N` | MainWindow | 활성 패널에 새 파일 생성 |
 | `AddPanel` | 폴더 패널 추가 | `Ctrl+T` | MainWindow | 새 폴더 브라우저 탭 추가 |
 | `CopyClipboard` | 복사 (클립보드) | `Ctrl+C` | MainWindow | 선택 항목 클립보드 복사; 즐겨찾기 패널에서는 경로 복사 |
+| `CopyFolderPath` | 폴더 경로 복사 | `Ctrl+Shift+C` | MainWindow | 폴더 패널 트리뷰에 포커스가 있을 때 선택한 폴더의 전체 경로를 텍스트로 복사 (FileDrop 없음). 파일 목록 포커스에서는 동작 안 함 |
 | `CutClipboard` | 잘라내기 | `Ctrl+X` | MainWindow | 선택 항목 잘라내기 |
 | `PasteClipboard` | 붙여넣기 | `Ctrl+V` | MainWindow | 클립보드 항목 붙여넣기 |
 | `NavigateBack` | 뒤로 | `Alt+←` | MainWindow | 활성 패널 히스토리 뒤로 |
@@ -161,7 +162,7 @@ Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)
 | `Ctrl+W` | 현재 탭(패널) 닫기 | 높음 | `Ctrl+T`(추가)와 쌍을 이루는 기능 |
 | `Ctrl+L` / `F4` | 경로 입력란 포커스 | 중간 | Windows 탐색기, 브라우저 공통 |
 | `Ctrl+D` | 즐겨찾기에 현재 폴더 추가 | 중간 | 브라우저 북마크 패턴 |
-| `Ctrl+Shift+C` | 파일 경로 복사 | 중간 | VS Code 등에서 자주 사용 |
+| `Ctrl+Shift+C` | 파일 목록에서 선택한 파일 경로 복사 | 중간 | 트리뷰 폴더 경로 복사(`CopyFolderPath`)는 구현됨. 파일 목록까지 넓힐지 검토 |
 | `Ctrl+Z` | 실행 취소 (마지막 파일 작업) | 낮음 | 구현 복잡도 높음 |
 | `Ctrl+H` | 숨김 파일 표시 토글 | 낮음 | 편의 기능 |
 | `Space` | 빠른 미리보기 (Quick Look) | 낮음 | macOS Finder 스타일 |

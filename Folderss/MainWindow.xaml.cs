@@ -1849,6 +1849,12 @@ namespace Folderss
                     e.Handled = true;
                 }
             }
+            else if (kb.Matches(e, "CopyFolderPath"))
+            {
+                // 트리에 키보드 포커스가 있는 패널만 복사한다(파일 목록 포커스면 아무 것도 하지 않음)
+                if (GetFolderBrowsers().Any(pane => pane.CopyFolderTreePathToClipboard()))
+                    e.Handled = true;
+            }
             else if (kb.Matches(e, "CutClipboard"))
             {
                 if (ActivePane.SelectedItems.Count > 0)
