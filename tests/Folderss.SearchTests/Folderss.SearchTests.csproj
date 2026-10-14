@@ -56,6 +56,7 @@
     <Compile Include="..\..\Folderss\Services\CompareOverlay.cs" Link="Linked\CompareOverlay.cs" />
     <Compile Include="..\..\Folderss\Services\FileOperationJournal.cs" Link="Linked\FileOperationJournal.cs" />
     <Compile Include="..\..\Folderss\Services\FileOperationService.cs" Link="Linked\FileOperationService.cs" />
+    <Compile Include="..\..\Folderss\Services\WindowsRecycleBin.cs" Link="Linked\WindowsRecycleBin.cs" />
   </ItemGroup>
 
   <ItemGroup>
