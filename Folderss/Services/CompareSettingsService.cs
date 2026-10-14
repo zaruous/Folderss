@@ -32,6 +32,12 @@ namespace Folderss.Services
                 options.ApplyIgnoreRules = ReadBool(root, "applyIgnoreRules", options.ApplyIgnoreRules);
                 options.Recursive = ReadBool(root, "recursive", options.Recursive);
                 options.IncludeHidden = ReadBool(root, "includeHidden", options.IncludeHidden);
+                options.DirectionColors = ReadBool(root, "directionColors", options.DirectionColors);
+                options.ShowFolderTree = ReadBool(root, "showFolderTree", options.ShowFolderTree);
+                options.ShowPreview = ReadBool(root, "showPreview", options.ShowPreview);
+                options.HideSame = ReadBool(root, "hideSame", options.HideSame);
+                if (int.TryParse(root.GetAttribute("moveConfirmThreshold"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var threshold) && threshold >= 0)
+                    options.MoveConfirmThreshold = threshold;
                 if (int.TryParse(root.GetAttribute("maxDepth"), NumberStyles.Integer, CultureInfo.InvariantCulture, out var depth) && depth >= 0)
                     options.MaxDepth = depth;
                 if (double.TryParse(root.GetAttribute("timestampToleranceSeconds"), NumberStyles.Float, CultureInfo.InvariantCulture, out var seconds)
@@ -61,6 +67,11 @@ namespace Folderss.Services
             root.SetAttribute("recursive", options.Recursive ? "true" : "false");
             root.SetAttribute("maxDepth", options.MaxDepth.ToString(CultureInfo.InvariantCulture));
             root.SetAttribute("includeHidden", options.IncludeHidden ? "true" : "false");
+            root.SetAttribute("directionColors", options.DirectionColors ? "true" : "false");
+            root.SetAttribute("showFolderTree", options.ShowFolderTree ? "true" : "false");
+            root.SetAttribute("showPreview", options.ShowPreview ? "true" : "false");
+            root.SetAttribute("hideSame", options.HideSame ? "true" : "false");
+            root.SetAttribute("moveConfirmThreshold", options.MoveConfirmThreshold.ToString(CultureInfo.InvariantCulture));
             doc.AppendChild(root);
             SettingsFile.Write(path, doc.Save);
         }

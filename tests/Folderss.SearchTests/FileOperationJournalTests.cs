@@ -135,6 +135,22 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
+        public void Move_RefusesToReplaceAFolderThatContainsTheSource()
+        {
+            // 왼쪽 기준 D:\a\b, 오른쪽 기준 D:\a 처럼 겹칠 때: b\b를 a로 옮기면 교체 대상 a\b가 원본을 품고 있다.
+            var outer = Path.Combine(_left, "b");
+            var source = Path.Combine(outer, "b");
+            Write(source, "x.txt", "X");
+            var journal = NewJournal();
+
+            var op = journal.Move(new[] { source }, _left);
+
+            Assert.False(op.Items[0].Succeeded);
+            Assert.Equal(0, _bin.SendCount);   // 원본을 품은 폴더를 휴지통에 보내 보지도 않는다
+            Assert.Equal("X", File.ReadAllText(Path.Combine(source, "x.txt")));
+        }
+
+        [Fact]
         public void Move_PartialFailure_UndoRevertsOnlySucceededItems()
         {
             var a = Write(_left, "a.txt", "A");
@@ -353,6 +369,18 @@ namespace Folderss.SearchTests
             Assert.Single(reloaded.LoadWarnings);
         }
 
+        [Fact]
+        public void CountFiles_CountsRecursively_AndStopsAtLimit()
+        {
+            for (var i = 0; i < 5; i++)
+                Write(_left, Path.Combine("big", "sub" + i, "f.txt"), "x");
+            var big = Path.Combine(_left, "big");
+
+            Assert.Equal(5, FileOperationJournal.CountFiles(new[] { big }, 100));
+            Assert.Equal(3, FileOperationJournal.CountFiles(new[] { big }, 3));
+            Assert.Equal(0, FileOperationJournal.CountFiles(new[] { Path.Combine(_left, "missing") }, 100));
+        }
+
         /// <summary>원래 경로·보낸 시각으로 찾아 되살리는 휴지통 흉내.</summary>
         private sealed class FakeRecycleBin : IRecycleBin
         {
@@ -365,8 +393,11 @@ namespace Folderss.SearchTests
                 Directory.CreateDirectory(folder);
             }
 
+            public int SendCount;
+
             public DateTime Send(string path)
             {
+                SendCount++;
                 var stored = Path.Combine(_folder, Guid.NewGuid().ToString("N"));
                 if (Directory.Exists(path))
                     Directory.Move(path, stored);

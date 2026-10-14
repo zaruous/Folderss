@@ -244,5 +244,33 @@ namespace Folderss.SearchTests
             Assert.Equal(3, loaded.MaxDepth);
             Assert.True(loaded.IncludeHidden);
         }
+
+        [Fact]
+        public void Settings_DisplayAndMoveOptions_DefaultsAreSafest_AndRoundTrip()
+        {
+            var path = Path.Combine(_root, "compare-settings.xml");
+            var defaults = CompareSettingsService.Load(path);
+            Assert.False(defaults.DirectionColors);   // 수정 시각 방향은 오판 위험이 있어 기본 끔
+            Assert.False(defaults.ShowFolderTree);
+            Assert.False(defaults.ShowPreview);
+            Assert.False(defaults.HideSame);
+            Assert.Equal(100, defaults.MoveConfirmThreshold);
+
+            CompareSettingsService.Save(new DirectoryCompareOptions
+            {
+                DirectionColors = true,
+                ShowFolderTree = true,
+                ShowPreview = true,
+                HideSame = true,
+                MoveConfirmThreshold = 0
+            }, path);
+            var loaded = CompareSettingsService.Load(path);
+
+            Assert.True(loaded.DirectionColors);
+            Assert.True(loaded.ShowFolderTree);
+            Assert.True(loaded.ShowPreview);
+            Assert.True(loaded.HideSame);
+            Assert.Equal(0, loaded.MoveConfirmThreshold);
+        }
     }
 }

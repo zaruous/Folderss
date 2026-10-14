@@ -38,6 +38,21 @@ namespace Folderss.Models
         /// <summary>숨김·시스템 파일도 비교한다.</summary>
         public bool IncludeHidden { get; set; }
 
+        // 아래는 판정이 아니라 비교 창 표시·동작 옵션이다(바꿔도 다시 스캔하지 않는다). 처음 값은 가장 안전한 쪽.
+
+        /// <summary>다른 파일을 수정 시각으로 최신/오래됨 색으로 칠한다. 시각만 바뀐 파일을 최신으로 잘못 보일 수 있어 기본 끔.</summary>
+        public bool DirectionColors { get; set; }
+
+        public bool ShowFolderTree { get; set; }
+
+        public bool ShowPreview { get; set; }
+
+        /// <summary>같은 항목을 숨긴다(차이만 보기). 툴바 체크와 같은 값.</summary>
+        public bool HideSame { get; set; }
+
+        /// <summary>이동할 폴더의 하위 파일이 이 수 이상이면 확인한다. 0이면 폴더 이동은 늘 확인.</summary>
+        public int MoveConfirmThreshold { get; set; } = 100;
+
         public DirectoryCompareOptions Clone() => (DirectoryCompareOptions)MemberwiseClone();
     }
 

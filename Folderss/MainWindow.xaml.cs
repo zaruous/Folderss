@@ -2152,6 +2152,12 @@ namespace Folderss
             ClearCutState();
         }
 
+        /// <summary>클립보드의 파일 목록이 이 창에서 잘라낸 것인가(붙여넣으면 이동이 되는 상태). 폴더 비교 창이 잘라낸 항목 붙여넣기를 거절할 때 쓴다.</summary>
+        public bool IsCutPending(IEnumerable<string> files)
+        {
+            return _isCut && files != null && _cutPaths.SetEquals(files);
+        }
+
         public void SetCutStateFromClipboard(IEnumerable<string> paths)
         {
             _isCut = true;

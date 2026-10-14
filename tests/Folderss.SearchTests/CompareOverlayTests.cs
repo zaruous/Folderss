@@ -129,6 +129,32 @@ namespace Folderss.SearchTests
             Assert.Equal(CompareDirection.None, CompareOverlay.GetDirection(folder, CompareSide.Left, tolerance));
         }
 
+        [Fact]
+        public void Describe_MarksAndTexts()
+        {
+            var t = new DateTime(2026, 10, 1, 9, 0, 0);
+            var tolerance = TimeSpan.FromSeconds(2);
+            var leftNewer = E("a.txt", CompareStatus.Different, leftModified: t.AddMinutes(5), rightModified: t);
+
+            Assert.Equal("Different", CompareOverlay.Describe(leftNewer, CompareSide.Left, false, tolerance).Mark);
+            Assert.Equal("Newer", CompareOverlay.Describe(leftNewer, CompareSide.Left, true, tolerance).Mark);
+            Assert.Equal("Older", CompareOverlay.Describe(leftNewer, CompareSide.Right, true, tolerance).Mark);
+            Assert.Equal("≠ 하위 차이", CompareOverlay.Describe(E("d", CompareStatus.Different, isDirectory: true), CompareSide.Left, true, tolerance).Text);
+            Assert.Equal("Same", CompareOverlay.Describe(E("s", CompareStatus.Same), CompareSide.Left, false, tolerance).Mark);
+
+            var leftOnly = CompareOverlay.Describe(E("n", CompareStatus.LeftOnly), CompareSide.Left, false, tolerance);
+            Assert.Equal("ThisOnly", leftOnly.Mark);
+            Assert.Equal("◀ 왼쪽만", leftOnly.Text);
+            Assert.Equal("▶ 오른쪽만", CompareOverlay.Describe(E("o", CompareStatus.RightOnly), CompareSide.Right, false, tolerance).Text);
+            Assert.Equal("TypeMismatch", CompareOverlay.Describe(E("x", CompareStatus.TypeMismatch), CompareSide.Left, false, tolerance).Mark);
+            Assert.Equal("Unknown", CompareOverlay.Describe(E("u", CompareStatus.Unknown), CompareSide.Left, false, tolerance).Mark);
+
+            // 비교 결과에 없는 항목은 색 없이 표시만(차이만 보기로 숨기지 않는다).
+            var missing = CompareOverlay.Describe(null, CompareSide.Left, false, tolerance);
+            Assert.Null(missing.Mark);
+            Assert.Equal("—", missing.Text);
+        }
+
         private static string[] Sorted(System.Collections.Generic.IEnumerable<string> keys)
         {
             var array = new System.Collections.Generic.List<string>(keys).ToArray();

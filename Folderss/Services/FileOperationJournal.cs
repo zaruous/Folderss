@@ -115,6 +115,25 @@ namespace Folderss.Services
                 .ToList();
         }
 
+        /// <summary>
+        /// 폴더들 아래 파일 수. <paramref name="stopAt"/>에 닿으면 더 세지 않고 그 값을 돌려준다(큰 폴더 이동 확인용 — 기준만 넘으면 된다).
+        /// 읽지 못하는 하위 폴더는 건너뛴다.
+        /// </summary>
+        public static int CountFiles(IEnumerable<string> folders, int stopAt)
+        {
+            var count = 0;
+            var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = 0 };
+            foreach (var folder in folders.Where(Directory.Exists))
+            {
+                foreach (var _ in Directory.EnumerateFiles(folder, "*", options))
+                {
+                    if (++count >= stopAt)
+                        return count;
+                }
+            }
+            return count;
+        }
+
         /// <summary>7일 지난 기록 파일을 지우고 남은 기록을 읽는다.</summary>
         public void Load()
         {
@@ -181,6 +200,10 @@ namespace Folderss.Services
                 var destination = Path.Combine(destinationDirectory, Path.GetFileName(TrimEnd(source)));
                 if (Exists(destination))
                 {
+                    // 비교 기준이 겹치면(D:\a\b ↔ D:\a) 교체 대상이 원본을 품은 상위 폴더일 수 있다 — 휴지통에 보내면 원본도 같이 간다.
+                    if (Path.GetFullPath(source).StartsWith(Path.TrimEndingDirectorySeparator(Path.GetFullPath(destination)) + Path.DirectorySeparatorChar,
+                            StringComparison.OrdinalIgnoreCase))
+                        throw new IOException("교체할 대상 폴더가 원본을 품고 있어 이동할 수 없습니다: " + destination);
                     item.ReplacedPath = destination;
                     item.RecycledUtc = _recycleBin.Send(destination);
                 }

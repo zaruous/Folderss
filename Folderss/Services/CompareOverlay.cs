@@ -88,6 +88,48 @@ namespace Folderss.Services
             return leftNewer == (side == CompareSide.Left) ? CompareDirection.Newer : CompareDirection.Older;
         }
 
+        /// <summary>패널 행에 붙일 표시. <see cref="Mark"/>는 행 색 키(FolderBrowser 행 스타일과 같은 이름).</summary>
+        public sealed class Marker
+        {
+            public string Mark { get; set; }
+            public string Text { get; set; }
+            public string Tip { get; set; }
+        }
+
+        /// <summary>
+        /// 비교 결과 항목을 그 쪽 패널 행 표시로 바꾼다. <paramref name="entry"/>가 null이면(비교 뒤 새로 생겼거나 비교에서 제외됨) 색 없이 "—".
+        /// 방향 색은 다른 파일만, 수정 시각 차이가 허용 오차를 넘을 때만 최신/오래됨으로 칠한다.
+        /// </summary>
+        public static Marker Describe(CompareEntry entry, CompareSide side, bool directionColors, TimeSpan tolerance)
+        {
+            if (entry == null)
+                return new Marker { Text = "—", Tip = "비교 결과에 없음 — 비교 뒤 생겼거나 비교에서 제외된 항목(ignore·숨김 옵션)" };
+
+            switch (ToSideStatus(entry.Status, side))
+            {
+                case OverlayStatus.Same:
+                    return new Marker { Mark = "Same", Text = "= 같음", Tip = entry.Reason };
+                case OverlayStatus.Different:
+                    if (entry.IsDirectory)
+                        return new Marker { Mark = "Different", Text = "≠ 하위 차이", Tip = entry.Reason };
+                    var direction = directionColors ? GetDirection(entry, side, tolerance) : CompareDirection.None;
+                    if (direction == CompareDirection.Newer)
+                        return new Marker { Mark = "Newer", Text = "≠ 최신", Tip = entry.Reason };
+                    if (direction == CompareDirection.Older)
+                        return new Marker { Mark = "Older", Text = "≠ 오래됨", Tip = entry.Reason };
+                    return new Marker { Mark = "Different", Text = "≠ 다름", Tip = entry.Reason };
+                case OverlayStatus.ThisSideOnly:
+                    return new Marker { Mark = "ThisOnly", Text = side == CompareSide.Left ? "◀ 왼쪽만" : "▶ 오른쪽만", Tip = entry.Reason ?? "반대쪽에 없음" };
+                case OverlayStatus.TypeMismatch:
+                    return new Marker { Mark = "TypeMismatch", Text = "⚠ 유형 다름", Tip = entry.Reason };
+                case OverlayStatus.OtherSideOnly:
+                    // 그 쪽 패널에는 없는 항목이라 보통 오지 않는다(EntriesFor가 거름).
+                    return new Marker { Text = "—", Tip = entry.Reason };
+                default:
+                    return new Marker { Mark = "Unknown", Text = "? 비교 불가", Tip = entry.Reason };
+            }
+        }
+
         private static string ParentOf(string relativePath)
         {
             var index = relativePath.LastIndexOf(Path.DirectorySeparatorChar);
