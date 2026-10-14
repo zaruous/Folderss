@@ -9,6 +9,8 @@ Folderss/
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
 │   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
+│   ├── ComparePairHeader.cs        — 비교 창 공용 머리글 "왼쪽 | ⇄ 좌우 바꾸기 | 오른쪽" (이름·위치, 선택적 … 경로 고르기 버튼). 두 파일 비교·폴더 비교 창이 사용
+│   ├── DirectoryCompareView.cs     — 폴더 비교 결과 목록 (들여쓴 상대 경로, 상태 배지, 양쪽 크기·시각, 사유, 차이만 보기, 우클릭 메뉴는 이벤트로만 올림)
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
@@ -22,6 +24,7 @@ Folderss/
 ├── Models/
 │   ├── FileSystemItem.cs           — 파일·폴더 뷰모델
 │   ├── GitModels.cs                — Git 저장소·상태 항목·커밋·브랜치 모델
+│   ├── DirectoryCompareModels.cs   — 폴더 비교 상태(CompareStatus)·옵션(DirectoryCompareOptions, 기본값 = 권장값)·항목·결과
 │   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델, 그룹 위쪽 고정 바로가기(FavoritesConfiguration.Pinned) 포함
 │   ├── DriveUsageInfo.cs           — 드라이브 총량·사용량·여유 공간(GB, 비율) 모델
 │   ├── SearchResult.cs             — 파일 검색 결과 모델
@@ -43,6 +46,8 @@ Folderss/
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
 │   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
+│   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
+│   ├── CompareSettingsService.cs   — 폴더 비교 옵션 저장 (compare-settings.xml)
 │   ├── CaptureSettingsService.cs   — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더(없으면 사용자 폴더), 설정 창 입력 검증 `Validate`)
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
@@ -85,7 +90,8 @@ Folderss/
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
-├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, 이름·위치 헤더, 좌우 바꾸기, GitDiffView + `git diff --no-index`), 코드로 구성
+├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `git diff --no-index`), 코드로 구성
+├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, ComparePairHeader + DirectoryCompareView, 비교/▾ 옵션/중지/차이만 보기, 복사·탐색기). 같은 파일에 `DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
@@ -399,6 +405,12 @@ Folderss/
   원래 경로로 되돌릴 수 없어, UTF-16 BOM 재비교는 `GitEncodingDiff.ExpandAsync`(저장소 상대 경로) 대신 받은 두 경로를 직접 읽는
   `ExpandFilesAsync`로 한다. `GitDiffView`의 보기 모드 상자는 `NoIndex && OldSide == null`(추적 안 됨 = 전체 추가)일 때만 숨긴다.
   외부 도구는 `git difftool --no-index -- <왼쪽> <오른쪽>`(임시 복사본이 아니라 원래 파일을 넘김, 차이 있으면 종료 코드 1이 정상). git이 없으면 오류 문구만 보인다.
+- 폴더 비교: ⋯ 메뉴 `폴더 비교…`(활성 패널에서 폴더 두 개를 골랐으면 그 둘, 아니면 활성 패널 = 왼쪽·반대편 패널 = 오른쪽, 패널이 하나면 오른쪽은 창에서 고름)
+  또는 폴더 두 개 우클릭 `선택한 두 폴더 비교`(`FolderBrowser.GetSelectedFolderPair`). `MainWindow.OpenDirectoryCompare`가 `DirectoryCompareWindow`를 연다.
+  판정은 `DirectoryCompareService.CompareAsync`(백그라운드, 진행은 읽은 폴더 수). 폴더 쌍 상태는 자식 집계라 개수에서 빼고, 한쪽에만 있는 폴더·링크 폴더는 들어가지 않는다.
+  옵션은 `compare-settings.xml`(기본값 = 권장값)이고 비교 버튼은 그 값으로 바로 실행, ▾(`OptionArrowButton`, 공용 스타일 `Themes/Controls.xaml`)에서만 바꾼다.
+  양쪽에 있는 파일은 더블클릭·Enter로 `FileCompareWindow`를 연다. 복사는 파일 덮어쓰기와 한쪽에만 있는 폴더 통째 복사만 하고(양쪽에 있는 폴더 병합은 동기화라 범위 밖),
+  덮어쓰기가 있으면 경고 후 확인을 받는다. 상태 색은 행 배경이 아니라 비교 칸 배지에만 칠해 선택·hover 표시를 가리지 않는다(테마 키 불필요).
 - 외부 도구 실행 공용: `DiffToolLauncher.RunAsync`가 미지정·실행 파일 없음·git 설정 difftool 없음 안내와 실행을 맡는다. 결과 표시는 호출 측
   (Git 창은 출력 창, 두 파일 비교 창은 메시지 상자). 성공 판정은 `GitDiffCommands.IsSuccess(result, request.NoIndex)` + stderr 없음.
 - HTML 보고서: `GitDiffView.TextLoader`(호스트가 설정 — 요청과 범위를 받아 diff 텍스트를 돌려주고 실패는 예외)가 있으면 `HTML 보고서…` 버튼이 보인다.

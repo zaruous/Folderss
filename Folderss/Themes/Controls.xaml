@@ -57,6 +57,14 @@
         </Setter>
     </Style>
 
+    <!-- 기본 동작 버튼 옆의 ▾: 누를 때만 옵션 대화상자를 연다(버튼 자체는 기본 옵션으로 바로 실행). Git 창·폴더 비교 창 공용. -->
+    <Style x:Key="OptionArrowButton" TargetType="Button" BasedOn="{StaticResource {x:Type Button}}">
+        <Setter Property="Content" Value="▾"/>
+        <Setter Property="Padding" Value="5,7"/>
+        <Setter Property="Margin" Value="-2,3,3,3"/>
+        <Setter Property="MinWidth" Value="0"/>
+    </Style>
+
     <Style x:Key="CompactToolButtonStyle" TargetType="Button">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>

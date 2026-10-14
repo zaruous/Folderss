@@ -22,10 +22,8 @@ namespace Folderss
         private DiffSettings _settings;
         private readonly Action _openDiffSettings;
         private readonly GitDiffView _view = new GitDiffView();
-        private readonly TextBlock _leftName = new TextBlock();
-        private readonly TextBlock _leftFolder = new TextBlock();
-        private readonly TextBlock _rightName = new TextBlock();
-        private readonly TextBlock _rightFolder = new TextBlock();
+        private readonly ComparePairHeader _header = new ComparePairHeader(
+            "왼쪽 (변경 전)", "오른쪽 (변경 후)", "왼쪽(변경 전)과 오른쪽(변경 후)을 바꿔 다시 비교합니다");
         private readonly CancellationTokenSource _lifetime = new CancellationTokenSource();
 
         /// <param name="openDiffSettings">외부 도구가 지정되지 않았을 때 설정 창의 비교 탭을 연다.</param>
@@ -49,9 +47,14 @@ namespace Folderss
             FontSize = 13;
 
             var root = new DockPanel { Margin = new Thickness(8) };
-            var header = BuildHeader();
-            DockPanel.SetDock(header, Dock.Top);
-            root.Children.Add(header);
+            _header.SwapRequested += async (sender, args) =>
+            {
+                (_oldFile, _newFile) = (_newFile, _oldFile);
+                UpdateHeader();
+                await LoadAsync();
+            };
+            DockPanel.SetDock(_header, Dock.Top);
+            root.Children.Add(_header);
             root.Children.Add(_view);
             Content = root;
 
@@ -79,68 +82,10 @@ namespace Folderss
                 await LoadAsync();
         }
 
-        private Grid BuildHeader()
-        {
-            // 왼쪽 | 좌우 바꾸기 | 오른쪽 — 파일 이름(굵게)과 위치(폴더 경로, 흐리게)를 보인다.
-            var grid = new Grid { Margin = new Thickness(2, 0, 2, 8) };
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
-            grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
-
-            var left = BuildSide("왼쪽 (변경 전)", _leftName, _leftFolder);
-            var right = BuildSide("오른쪽 (변경 후)", _rightName, _rightFolder);
-            var swap = new Button
-            {
-                Content = "⇄ 좌우 바꾸기",
-                Margin = new Thickness(10, 0, 10, 0),
-                Padding = new Thickness(10, 4, 10, 4),
-                VerticalAlignment = VerticalAlignment.Center,
-                ToolTip = "왼쪽(변경 전)과 오른쪽(변경 후)을 바꿔 다시 비교합니다"
-            };
-            swap.Click += async (sender, args) =>
-            {
-                (_oldFile, _newFile) = (_newFile, _oldFile);
-                UpdateHeader();
-                await LoadAsync();
-            };
-
-            Grid.SetColumn(left, 0);
-            Grid.SetColumn(swap, 1);
-            Grid.SetColumn(right, 2);
-            grid.Children.Add(left);
-            grid.Children.Add(swap);
-            grid.Children.Add(right);
-            return grid;
-        }
-
-        private static StackPanel BuildSide(string caption, TextBlock name, TextBlock folder)
-        {
-            var panel = new StackPanel();
-            var label = new TextBlock { Text = caption, FontSize = 11 };
-            label.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
-            name.FontWeight = FontWeights.SemiBold;
-            name.TextTrimming = TextTrimming.CharacterEllipsis;
-            folder.FontSize = 12;
-            folder.TextTrimming = TextTrimming.CharacterEllipsis;
-            folder.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
-            panel.Children.Add(label);
-            panel.Children.Add(name);
-            panel.Children.Add(folder);
-            return panel;
-        }
-
         private void UpdateHeader()
         {
             Title = "파일 비교 - " + Path.GetFileName(_oldFile) + " ↔ " + Path.GetFileName(_newFile);
-            SetSide(_leftName, _leftFolder, _oldFile);
-            SetSide(_rightName, _rightFolder, _newFile);
-        }
-
-        private static void SetSide(TextBlock name, TextBlock folder, string path)
-        {
-            name.Text = Path.GetFileName(path);
-            folder.Text = Path.GetDirectoryName(path) ?? string.Empty;
-            name.ToolTip = folder.ToolTip = path;
+            _header.SetPaths(_oldFile, _newFile);
         }
 
         private GitDiffRequest CreateRequest()

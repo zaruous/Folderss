@@ -50,6 +50,9 @@
     <Compile Include="..\..\Folderss\Services\PluginAppSettings.cs" Link="Linked\PluginAppSettings.cs" />
     <Compile Include="..\..\Folderss\Services\PluginSessionRecord.cs" Link="Linked\PluginSessionRecord.cs" />
     <Compile Include="..\..\Folderss\Services\ConsoleSettingsService.cs" Link="Linked\ConsoleSettingsService.cs" />
+    <Compile Include="..\..\Folderss\Models\DirectoryCompareModels.cs" Link="Linked\DirectoryCompareModels.cs" />
+    <Compile Include="..\..\Folderss\Services\DirectoryCompareService.cs" Link="Linked\DirectoryCompareService.cs" />
+    <Compile Include="..\..\Folderss\Services\CompareSettingsService.cs" Link="Linked\CompareSettingsService.cs" />
   </ItemGroup>
 
   <ItemGroup>

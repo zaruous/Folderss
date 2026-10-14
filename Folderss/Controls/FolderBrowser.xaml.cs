@@ -54,6 +54,8 @@ namespace Folderss.Controls
         public event EventHandler<string> FileOpenRequested;
         /// <summary>파일 두 개를 골라 "선택한 두 파일 비교"를 눌렀다. 목록 순서대로 [왼쪽(변경 전), 오른쪽(변경 후)].</summary>
         public event EventHandler<string[]> CompareFilesRequested;
+        /// <summary>폴더 두 개를 골라 "선택한 두 폴더 비교"를 눌렀다. 목록 순서대로 [왼쪽, 오른쪽].</summary>
+        public event EventHandler<string[]> CompareFoldersRequested;
 
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
@@ -75,6 +77,15 @@ namespace Folderss.Controls
         {
             var selected = SelectedItems;
             if (selected.Count != 2 || selected.Any(item => item.IsDirectory))
+                return null;
+            return selected.OrderBy(item => FileList.Items.IndexOf(item)).Select(item => item.FullPath).ToArray();
+        }
+
+        /// <summary>폴더 두 개(파일 제외)만 골랐으면 [왼쪽, 오른쪽] 경로, 아니면 null. 규칙은 <see cref="GetSelectedFilePair"/>와 같다.</summary>
+        public string[] GetSelectedFolderPair()
+        {
+            var selected = SelectedItems;
+            if (selected.Count != 2 || selected.Any(item => !item.IsDirectory))
                 return null;
             return selected.OrderBy(item => FileList.Items.IndexOf(item)).Select(item => item.FullPath).ToArray();
         }
@@ -1240,6 +1251,16 @@ namespace Folderss.Controls
                 {
                     Label = "선택한 두 파일 비교",
                     Invoke = () => CompareFilesRequested?.Invoke(this, pair)
+                });
+            }
+
+            var folderPair = GetSelectedFolderPair();
+            if (folderPair != null)
+            {
+                customItems.Insert(0, new ShellContextMenuService.CustomMenuItem
+                {
+                    Label = "선택한 두 폴더 비교",
+                    Invoke = () => CompareFoldersRequested?.Invoke(this, folderPair)
                 });
             }
 

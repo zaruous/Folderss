@@ -726,10 +726,12 @@ namespace Folderss
             browser.PathChanged -= FolderBrowser_PathChanged;
             browser.FileOpenRequested -= Browser_FileOpenRequested;
             browser.CompareFilesRequested -= Browser_CompareFilesRequested;
+            browser.CompareFoldersRequested -= Browser_CompareFoldersRequested;
             browser.Activated += Pane_Activated;
             browser.PathChanged += FolderBrowser_PathChanged;
             browser.FileOpenRequested += Browser_FileOpenRequested;
             browser.CompareFilesRequested += Browser_CompareFilesRequested;
+            browser.CompareFoldersRequested += Browser_CompareFoldersRequested;
         }
 
         private void Browser_CompareFilesRequested(object sender, string[] files)
@@ -756,6 +758,32 @@ namespace Folderss
             window = new FileCompareWindow(files[0], files[1], CurrentDiffSettings, CurrentGitSettings.GitExecutablePath,
                 () => OpenSettings(window, "Diff")) { Owner = this };
             window.Show();
+        }
+
+        private void Browser_CompareFoldersRequested(object sender, string[] folders)
+        {
+            OpenDirectoryCompare(folders[0], folders[1]);
+        }
+
+        /// <summary>
+        /// 활성 패널에서 폴더 두 개를 골랐으면 그 둘, 아니면 활성 패널 현재 폴더(왼쪽)와 반대편 패널 현재 폴더(오른쪽).
+        /// 폴더 패널이 하나뿐이면 오른쪽은 비워 두고 창에서 고르게 한다.
+        /// </summary>
+        private void CompareFolders_Click(object sender, RoutedEventArgs e)
+        {
+            var pair = ActivePane?.GetSelectedFolderPair();
+            if (pair != null)
+            {
+                OpenDirectoryCompare(pair[0], pair[1]);
+                return;
+            }
+            var target = TargetPane;
+            OpenDirectoryCompare(ActivePane?.CurrentPath, ReferenceEquals(target, ActivePane) ? null : target?.CurrentPath);
+        }
+
+        private void OpenDirectoryCompare(string left, string right)
+        {
+            new DirectoryCompareWindow(left, right, (oldFile, newFile) => OpenFileCompare(new[] { oldFile, newFile })) { Owner = this }.Show();
         }
 
         private void Browser_FileOpenRequested(object sender, string filePath)
