@@ -1,121 +1,210 @@
-# 폴더 비교 창 (디렉터리 비교)
+# 폴더 비교 창 — Beyond Compare 방식 재설계
 
-- 상태: Ready for Verification
+- 상태: In Progress
 
 ## 요구사항
 
-### 기능
+### 배경
 
-1. 두 폴더를 **별도 비교 창(비모달 팝업)**에서 비교한다. 폴더 패널 화면은 건드리지 않는다.
-2. 진입: ⋯ 메뉴 `폴더 비교…` — 활성 패널에서 폴더 두 개를 골랐으면 그 둘, 아니면 활성 패널 현재 폴더(왼쪽)와 반대편 패널 현재 폴더(오른쪽). 폴더 패널이 하나뿐이면 오른쪽은 비워 두고 창에서 고른다. 폴더 두 개를 골라 우클릭 > `선택한 두 폴더 비교`도 같다.
-3. 상태 여섯 가지: **같음**, **다름**(크기 또는 수정 시각, 옵션으로 내용 해시), **왼쪽만**, **오른쪽만**, **유형 다름**(폴더↔파일, 한쪽만 링크), **비교 불가**(접근 거부 등).
-4. 하위 폴더는 재귀 비교하고, 폴더 쌍은 자식 중 차이가 하나라도 있으면 **다름**.
-5. 창 기능: 왼쪽/오른쪽 폴더 표시와 `…` 경로 고르기, `⇄ 좌우 바꾸기`, `비교`(다시 비교), `▾` 옵션, `중지`, `차이만 보기`, 요약(개수), 현재 옵션 한 줄 표시.
-6. 결과 항목 동작: 양쪽에 있는 파일 더블클릭·Enter → 두 파일 비교 창. 우클릭 → 두 파일 비교, 왼쪽 → 오른쪽 복사, 오른쪽 → 왼쪽 복사, 탐색기로 열기(왼쪽/오른쪽).
-7. 비교는 백그라운드에서 돌고 중지할 수 있다(중지하면 지금까지의 결과를 보인다).
+- 2026-10-14에 전용 비교 창 1차 구현(커밋 `69298e2`)을 했다. 결과를 한 목록에 표로 늘어놓는 방식이다.
+- 2026-10-15 사용자 확인 결과 마음에 들지 않음: "Beyond Compare의 폴더 비교 방식 조사가 덜 됐다", "폴더 패널을 좌우 두 개 배치해서 비교하는 방식이 좋다".
+- Beyond Compare(이하 BC) 공식 도움말을 조사해(아래 "조사 자료") **좌우 두 트리를 줄 맞춰 나란히 놓는 방식**으로 다시 설계한다.
 
-### 선택적인 동작은 옵션으로 (권장값이 기본)
+### 1차 구현과 BC의 차이 (고칠 점)
 
-여러 방식 중 하나를 골라야 하는 것은 하나로 고정하지 않고 옵션으로 둔다. `비교` 버튼은 저장된 옵션으로 바로 실행하고, 옵션은 옆 `▾`를 누를 때만 연다(Git 창과 같은 규칙). 처음 값이 권장값이며 대화상자에 `권장값으로` 버튼이 있다.
-
-| 옵션 | 권장(기본) | 다른 선택 |
+| 항목 | 1차 구현 | BC 방식 (목표) |
 |---|---|---|
-| 판정 기준 | 크기와 수정 시각 | 내용 해시(SHA-256, 느림, 시각 무시) |
-| 수정 시각 허용 오차 | 2초 (FAT·네트워크 드라이브 해상도) | 0 ~ 86400초 |
-| ignore 규칙(.gitignore/.folderssignore) | 적용 | 무시 |
-| 하위 폴더 | 전체 재귀 | 안 봄 / 최대 깊이 N |
-| 숨김·시스템 파일 | 제외 | 포함 |
-| 차이만 보기 | 켬 | 끔 (창의 체크박스, 저장 안 함) |
+| 화면 | 한 목록 + 왼쪽/오른쪽 열 | **왼쪽 트리 · 가운데 칸 · 오른쪽 트리**, 같은 이름은 같은 줄 |
+| 한쪽에만 있는 항목 | 같은 행에 "왼쪽만" 배지 | **반대쪽 줄은 빈칸** — 두 트리가 끝까지 줄이 맞음 |
+| 판정 | 다름 하나 | **방향 있음**: 이쪽이 최신(빨강) / 이쪽이 오래됨(회색) / 한쪽만(보라) / 같음(기본색), 쪽마다 따로 칠함 |
+| 폴더 | 들여쓰기만, 항상 다 펼침 | **트리 펼치기·접기**, 폴더 색 = 쪽마다 내용 집계 |
+| 필터 | 차이만 보기 하나 | 전체 / 차이 / 같음 / 한쪽만 / 왼쪽 최신 / 오른쪽 최신 / 차이(한쪽만 제외) |
+| 경로 | 머리글 이름 + `…` | 쪽마다 **경로 입력란**(입력·찾아보기·상위·뒤로/앞으로), 하위 폴더를 기준으로 삼기 |
+| 동작 | 복사, 탐색기 | 복사·이동(쪽 지정), 삭제, 최신/한쪽만 선택, 다음/이전 차이, **동기화 프리셋**(갱신·미러) |
 
-옵션은 `%LOCALAPPDATA%\Folderss\compare-settings.xml`에 저장한다.
+### 기능 요구사항
 
-### 범위 밖
+1. **좌우 정렬 트리**: 왼쪽 폴더 트리와 오른쪽 폴더 트리를 나란히 보이고, 같은 상대 경로는 같은 줄에 둔다(이름 대소문자 무시). 한쪽에만 있으면 반대쪽 칸은 빈칸. 두 쪽은 같이 스크롤된다.
+2. **가운데 칸**: 줄의 판정 기호(같음 `=`, 다름 `≠`, 한쪽만 `◀`/`▶`, 유형 다름 `⚠`, 비교 불가 `?`, 내용 비교로 확정된 같음/다름 표시). 가운데를 누르면 양쪽이 함께 선택된다.
+3. **쪽별 색** (BC 기본값을 따름, 사용자에게 익숙함):
+   - 빨강 = 이쪽이 더 최신이거나 다름
+   - 회색 = 이쪽이 더 오래됨 / 알 수 없음
+   - 보라 = 반대쪽에 없음(한쪽만)
+   - 기본 글자색 = 같음
+   - 폴더 색은 그 쪽 내용의 집계(안에 빨강이 있으면 빨강, 보라만 있으면 보라 …). 검사 중인 폴더는 흐린 아이콘, 열지 못한 폴더는 빨간 ✕.
+   - 선택으로 줄 색이 가려져도 보이게 이름 왼쪽에 색 점을 둔다.
+4. **트리 탐색**: 폴더 펼치기/접기(양쪽 같이), 모두 펼치기·모두 접기, 하위까지 펼치기. 선택한 폴더를 **비교 기준으로 삼기**(양쪽 기준 경로가 그 폴더로 바뀜), 상위 폴더로, 뒤로/앞으로(기준 경로 이력), 좌우 맞바꾸기.
+5. **경로 입력란** (쪽마다): 경로 직접 입력(Enter), `…` 찾아보기, `↑` 상위, 최근 경로 드롭다운. 폴더 패널에서 폴더를 끌어다 놓아도 된다.
+6. **표시 필터** (툴바, 마지막 선택 기억): 전체 / 차이 / 같음 / 한쪽만 / 왼쪽이 최신 / 오른쪽이 최신 / 차이(한쪽만 제외). 폴더 표시: 내용에 맞는 폴더만(기본) / 폴더 항상 표시. 범례 버튼.
+7. **동작** (우클릭 메뉴·툴바·단축키):
+   - 열기: 양쪽에 있는 파일 더블클릭·Enter → 두 파일 비교 창. 서로 다른 줄의 파일 두 개를 골라 "선택한 두 파일 비교".
+   - 복사: 오른쪽으로 / 왼쪽으로 / 반대쪽으로(선택한 쪽 기준). 덮어쓰기 확인.
+   - 이동: 오른쪽으로 / 왼쪽으로. 삭제(휴지통). 경로 복사, 탐색기로 열기.
+   - 선택 도우미: 최신인 것 선택(왼쪽/오른쪽), 한쪽만 선택(왼쪽/오른쪽), 다음 차이 / 이전 차이.
+   - 다시 비교(전체 / 선택 항목만).
+8. **동기화 프리셋** (`동기화 ▾`, 실행 전 미리보기 목록과 확인 필수):
+   - 오른쪽 갱신: 왼쪽이 최신인 것과 왼쪽에만 있는 것을 오른쪽으로 복사.
+   - 왼쪽 갱신: 반대 방향.
+   - 양쪽 갱신: 최신·한쪽만인 것을 서로 반대쪽으로 복사.
+   - 오른쪽으로 미러: 오른쪽을 왼쪽과 똑같이(다른 것 덮어쓰기, **오른쪽에만 있는 것 삭제**). 왼쪽으로 미러는 반대.
+   - 미러는 삭제가 들어가므로 경고 + 확인 체크(프로젝트 규칙: 되돌릴 수 없는 선택은 경고와 확인 체크).
+9. **판정 기준** (`비교 ▾` 옵션, 처음 값이 권장값 — 1차 구현의 옵션 유지 + 추가):
+   - 빠른 검사: 크기 + 수정 시각(허용 오차 기본 2초). **방향은 수정 시각으로** 정한다(최신 = 더 늦은 시각).
+   - 내용 비교: 없음(권장) / SHA-256 / 바이트 비교. "내용 비교가 빠른 검사를 덮어씀"(시각만 다르고 내용 같으면 같음) — 기본 켬.
+   - ignore 규칙 적용(권장), 숨김 파일 제외(권장).
+   - 폴더 자체의 수정 시각은 판정에 쓰지 않는다(BC와 같음).
+10. 비교는 백그라운드에서 돌고, 결과는 폴더 단위로 점진 반영한다. 중지 가능.
 
-- 동기화 실행(양쪽에 있는 폴더 병합, 삭제 포함 미러링, dry-run) — `docs/아이디어.md`의 "단방향 폴더 동기화".
-- 세 폴더 이상 비교, 원격(FTP/SFTP) 비교.
+### 범위 밖 (이번 재설계에서 하지 않음)
+
+- 이름이 다른 폴더끼리 줄 맞추기(BC Pro "Align With"), 폴더 구조 무시(평면) 보기, 세션 저장, 비교 보고서, 3방향 병합.
+- 메인 창의 좌우 폴더 패널 자체에 비교를 겹치는 방식 — `folder-panel-compare-mode.md`(이 창 완성 후 필요 여부 재판단).
 
 ## 원인 분석 또는 설계
 
-### 방식 결정 (2026-10-14)
-
-처음 설계(2026-09-22)는 좌우 폴더 패널 위에 비교 결과를 겹쳐 보이는 방식이었다. 사용자와 논의해 **전용 비교 창**으로 바꿨다.
-
-- 폴더 패널(`FolderBrowser`)을 고치지 않아 회귀 위험이 없다(자리표시자 행이 복사·삭제 경로에 새는 위험, 동기 이동 핑퐁, 트리뷰 고정과의 상호작용이 모두 사라짐).
-- 패널 배치와 무관하게 아무 두 폴더나 비교할 수 있다.
-- 대신 창 안에 복사 동작을 새로 둔다. 복사는 파일 덮어쓰기와 한쪽에만 있는 폴더 통째 복사로 한정한다.
-
-### 재사용 구조
-
-재사용 가능한 부분은 컨트롤로 감쌌다.
-
-- `Controls/ComparePairHeader` — "왼쪽 | ⇄ 좌우 바꾸기 | 오른쪽" 머리글(이름·위치, 선택적 `…`). 기존 `FileCompareWindow`의 머리글 코드를 옮겨 두 창이 같이 쓴다.
-- `Controls/DirectoryCompareView` — 결과 목록(ListView). 표시와 선택만 맡고 동작은 이벤트(`CompareRequested`, `CopyRequested`, `RevealRequested`)로 올린다. 나중에 도킹 패널 등 다른 곳에 담을 수 있다.
-- `OptionArrowButton` 스타일 — `GitWindow.xaml` 지역 리소스에서 `Themes/Controls.xaml` 공용으로 옮겼다.
-- `DirectoryCompareService` — UI 없는 순수 System.IO. 단위 테스트로 검증한다.
-
-### 판정 (`DirectoryCompareService.Compare`)
-
-1. 폴더마다 양쪽 직속 항목을 읽어 이름(대소문자 무시)으로 짝짓는다. 화면 순서는 깊이 우선, 각 폴더 안에서 폴더 먼저·이름순, 폴더 항목이 자식보다 앞.
-2. ignore 규칙을 적용하면 양쪽 모두 걸리는(또는 한쪽만 있고 그쪽에서 걸리는) 항목은 뺀다. 한쪽에서만 걸리면 비교에 남기고 사유에 적는다 — 규칙 파일 차이 자체가 찾고 싶은 차이일 수 있다.
-3. 한쪽에만 있으면 왼쪽만/오른쪽만이고 안으로 들어가지 않는다(복사하면 통째로 간다).
-4. 폴더↔파일, 한쪽만 링크면 유형 다름. 양쪽 다 링크면 `LinkTarget`을 비교하고 안으로 들어가지 않는다(순환 방지).
-5. 파일: 크기가 다르면 다름. 같으면 해시 옵션일 때 SHA-256, 아니면 수정 시각 차이가 허용 오차를 넘으면 다름.
-6. 폴더 쌍: 자식 집계(차이 있으면 다름, 비교 불가만 있으면 비교 불가). 하위를 보지 않는 옵션이면 비교 불가("하위 폴더는 비교하지 않음"). 폴더 쌍은 요약 개수에서 뺀다.
-7. 폴더를 읽지 못하면 그 폴더는 비교 불가이고 나머지는 계속한다. 취소되면 예외 없이 `IsComplete = false`인 부분 결과를 돌려준다.
-
-### 복사 (`DirectoryCompareService.CopyEntry`)
-
-- 파일: 반대쪽 같은 상대 경로에 덮어쓴다. 없는 상위 폴더는 만든다.
-- 폴더: 반대쪽에 없을 때만 통째로 복사한다. 양쪽에 있는 폴더는 메뉴가 비활성(병합은 동기화라 범위 밖), 유형 다름도 복사하지 않는다.
-- 창은 실행 전 항목 목록(최대 10개)과 방향을 보이고, 덮어쓰는 파일이 있으면 "되돌릴 수 없음" 경고와 함께 확인을 받는다(기본 버튼 = 취소). 끝나면 다시 비교한다.
-
-### 화면
+### 화면 배치
 
 ```
-┌ 폴더 비교 - src ↔ src ───────────────────────────────────────────────┐
-│ 왼쪽                          ⇄ 좌우 바꾸기   오른쪽                   │
-│ src                     […]                  src                 […] │
-│ D:\work\proj                                 D:\backup\proj           │
-│ [비교][▾][중지] ☑ 차이만 보기   같음 28 · 다름 5 · 왼쪽만 4 · 오른쪽만 3 │
-│ 기준: 크기·수정 시각(±2초) · ignore 규칙 적용 · 하위 폴더 전체 · 숨김 제외 │
-│ 이름                 │ 비교      │ 왼쪽 크기 │ 왼쪽 수정 │ 오른쪽 … │ 사유 │
-│ 📁 Services          │ ≠ 다름    │           │ …         │          │ 하위에 차이 있음 │
-│    📄 GitService.cs  │ ≠ 다름    │ 12 KB     │ …         │ 11 KB    │ 크기 … ≠ … │
-│ 📄 Notes.md          │ ◀ 왼쪽만  │ 3 KB      │ …         │          │      │
-└──────────────────────────────────────────────────────────────────────┘
+┌ 폴더 비교 ────────────────────────────────────────────────────────────────────────┐
+│ [←][→] [⇄] [⟳ 비교][▾]  필터:[차이 ▾]  [⊞ 모두 펼치기][⊟ 모두 접기]  [▲ 이전 차이][▼ 다음 차이]  [동기화 ▾] [범례] │
+│ ┌ 왼쪽 ──────────────────────────────────┐   ┌ 오른쪽 ─────────────────────────────────┐ │
+│ │ [D:\work\proj\src            ▾][↑][…] │   │ [D:\backup\proj\src          ▾][↑][…] │ │
+│ ├────────────────────────────────────────┤   ├────────────────────────────────────────┤ │
+│ │ 이름                 크기   수정한 날짜 │ = │ 이름                 크기   수정한 날짜 │ │
+│ │ ▾📁 Services (빨강)                     │ ≠ │ ▾📁 Services (회색)                     │ │
+│ │   ●GitService.cs 12KB 10-14 22:40 (빨강)│ ≠ │   ●GitService.cs 11KB 10-01 09:10 (회색)│ │
+│ │   ●NewFeature.cs  3KB 10-14 21:00 (보라)│ ◀ │                                        │ │
+│ │                                        │ ▶ │   ●Legacy.cs      5KB 09-01 10:00 (보라)│ │
+│ │ ▸📁 Themes                              │ = │ ▸📁 Themes                              │ │
+│ │  ●App.xaml.cs      1KB 10-14 (기본색)    │ = │  ●App.xaml.cs      1KB 10-14 (기본색)    │ │
+│ └────────────────────────────────────────┘   └────────────────────────────────────────┘ │
+│ 같음 28 · 다름 5(왼쪽 최신 4, 오른쪽 최신 1) · 왼쪽만 4 · 오른쪽만 3 · 비교 불가 0   기준: 크기·시각(±2초) · ignore 적용 │
+└───────────────────────────────────────────────────────────────────────────────────┘
 ```
 
-상태 색은 행 배경이 아니라 `비교` 칸 배지에만 반투명으로 칠한다. 행 배경을 바꾸면 선택·hover 표시를 덮고, 반투명이라 모든 테마에서 읽혀 테마별 색 키가 필요 없다.
+### WPF 구현 방식 — 하나의 가상화 목록에 "줄"을 그린다
+
+두 개의 `TreeView`를 따로 두면 펼침 상태·스크롤·줄 높이를 맞추기 어렵고, 한쪽에만 있는 항목의 빈 줄을 만들 수 없다. 그래서:
+
+- 화면의 한 줄 = `CompareRow` 하나(왼쪽 칸 + 가운데 칸 + 오른쪽 칸). 펼쳐진 노드만 평면 목록(`ObservableCollection<CompareRow>`)으로 만들고, 펼치기/접기는 그 자리에 자식 줄을 끼우거나 뺀다.
+- 목록은 가상화 `ListView` 하나(10만 줄에서도 스크롤 가능). 각 줄 템플릿은 `Grid` 3열: 왼쪽 칸(들여쓰기 + 펼침 단추 + 색 점 + 아이콘 + 이름 + 크기 + 시각) | 가운데(기호) | 오른쪽 칸(같은 구성). 한쪽만이면 반대 칸은 비어 있다.
+- 열 머리글은 목록 위에 따로 두고 왼쪽/오른쪽 칸 너비를 `GridSplitter`로 함께 조절한다(두 쪽 열 너비를 같은 값에 묶음).
+- **쪽별 선택**: WPF 기본 선택은 줄 단위라, 줄 선택 + `SelectedSide`(Left/Right/Both) 상태를 따로 둔다. 왼쪽 칸 클릭 → Left, 오른쪽 칸 → Right, 가운데 → Both. 선택 칸만 강조하고, 동작(복사 방향 등)은 이 값을 쓴다. Shift+←/→로 선택 쪽을 바꾼다.
+- 색: 쪽별 글자색 키 `CompareNewerBrush`(빨강), `CompareOlderBrush`(회색), `CompareOrphanBrush`(보라)를 `Themes/*.xaml` 8개에 추가한다(어두운 테마에서도 읽히는 명도로). 같음은 `PrimaryText`. 선택 시에도 색 점은 남긴다.
+
+### 재사용 / 교체
+
+| 1차 구현 | 처리 |
+|---|---|
+| `DirectoryCompareService` | **확장**: 쪽별 판정(방향), 트리 노드 결과, 폴더 단위 점진 보고, 선택 항목만 다시 비교, 동기화 계획·실행 |
+| `DirectoryCompareOptions` / `CompareSettingsService` | **확장**: 내용 비교 방식(없음/해시/바이트), 내용 비교가 빠른 검사를 덮어씀, 마지막 표시 필터 |
+| `DirectoryCompareOptionsDialog` | **확장**: 위 옵션 추가 |
+| `DirectoryCompareView`(표 목록) | **교체**: `Controls/FolderCompareTreeView`(좌우 정렬 트리) 새로 작성 후 삭제 |
+| `DirectoryCompareWindow` | **재작성**: 툴바·경로 입력란·필터·동기화 |
+| `ComparePairHeader` | 폴더 비교에서는 쪽별 경로 입력란(`Controls/ComparePathBar`)으로 대체. 두 파일 비교 창은 계속 사용 |
+| `OptionArrowButton` 공용 스타일, 진입 메뉴(⋯ `폴더 비교…`, 우클릭 `선택한 두 폴더 비교`) | 유지 |
+
+### 데이터 모델 (변경안)
+
+```csharp
+public enum CompareStatus { Same, Different, LeftOnly, RightOnly, TypeMismatch, Unknown }   // 줄 판정(가운데 칸)
+
+/// <summary>한 쪽 칸의 색. 줄 판정 + 방향에서 나온다.</summary>
+public enum SideState { None /*빈칸*/, Same, Newer, Older, Orphan, Unknown }
+
+public sealed class CompareNode                     // 트리 노드 = 상대 경로 하나
+{
+    public string Name, RelativePath; public bool IsDirectory;
+    public CompareStatus Status;
+    public SideState LeftState, RightState;        // 파일: 시각 비교로 Newer/Older, 폴더: 자식 집계
+    public FileFacts Left, Right;                   // null이면 그 쪽 없음 (크기·시각·속성·링크 대상)
+    public bool ContentChecked;                     // 내용 비교로 확정됨(가운데 칸 표시용)
+    public bool IsScanned;                          // 폴더: 하위 판정 끝남(흐린 아이콘 해제)
+    public string Reason;
+    public List<CompareNode> Children;              // 폴더만, 화면 순서(폴더 먼저·이름순)
+}
+```
+
+- 파일 쌍: 크기·시각이 허용 오차 안이면 Same. 아니면 Different이고 방향은 수정 시각(늦은 쪽 Newer, 이른 쪽 Older). 시각이 같고 크기만 다르면 양쪽 Newer(BC의 "다름"과 같은 빨강).
+- 내용 비교 옵션이 켜져 있고 "덮어씀"이면 빠른 검사가 Different여도 내용이 같으면 Same.
+- 폴더 쪽 상태 집계(쪽마다): 자식 중 Newer가 있으면 Newer, 아니면 Orphan이 있으면 Orphan, 아니면 Older가 있으면 Older, Unknown만 있으면 Unknown, 아니면 Same. 한쪽에만 있는 폴더는 그 쪽 Orphan, 반대쪽 None.
+- 요약 개수는 1차 구현과 같이 양쪽에 있는 폴더를 뺀 항목 기준 + "다름" 안에서 왼쪽 최신/오른쪽 최신을 나눠 센다.
+
+### 서비스 (변경안)
+
+- `CompareTreeAsync(left, right, options, IProgress<CompareNode> folderDone, token)` → 루트 `CompareNode`. 폴더 하나의 직속 판정이 끝날 때마다 보고해 화면이 점진 갱신(흐린 폴더 → 색). 1차의 짝짓기·ignore·링크·접근 거부·취소 정책은 그대로 옮긴다.
+- `RecompareAsync(root, nodes)` — 선택 항목만 다시 판정하고 상위 폴더 집계를 다시 계산.
+- `PlanSync(root, SyncPreset, filterVisibleOnly)` → `SyncPlan`(복사·덮어쓰기·삭제 목록). 순수 계산이라 단위 테스트한다. `ExecuteSync(plan, progress, token)` — 삭제는 휴지통(`FileOperationService`의 삭제 경로 재사용 검토).
+- 복사·이동은 1차의 `CopyEntry` 규칙(파일 덮어쓰기, 반대쪽에 없는 폴더 통째)을 노드 기준으로 옮기고, 양쪽에 있는 폴더 복사는 "안의 차이 항목만 복사"로 확장(BC와 같음).
+
+### 단축키 (창 안에서만)
+
+| 키 | 동작 |
+|---|---|
+| Enter / 더블클릭 | 파일: 두 파일 비교, 폴더: 펼치기/접기 |
+| → / ← | 폴더 펼치기 / 접기 |
+| Shift+→ / Shift+← | 선택 쪽 바꾸기 |
+| Ctrl+→ / Ctrl+← | 오른쪽으로 복사 / 왼쪽으로 복사 |
+| F7 / Shift+F7 | 다음 차이 / 이전 차이 |
+| F5 | 다시 비교 |
+| Delete | 선택 쪽 삭제(확인) |
+| Ctrl+Shift+C | 경로 복사 |
+
+착수 시 기존 전역 단축키와 겹치는지 `KeyBindingService` 기본 매핑을 확인한다(창 안에서만 처리하므로 전역 등록은 하지 않음).
+
+## 구현 단계 (내일부터)
+
+1. **서비스·모델 확장 + 테스트** — `CompareNode`/`SideState`, 방향 판정, 폴더 쪽별 집계, 내용 비교 덮어쓰기, 점진 보고, `PlanSync`. 1차 테스트 12건을 새 모델로 옮기고 방향·집계·동기화 계획 테스트 추가. (35%)
+2. **좌우 정렬 트리 컨트롤** — `FolderCompareTreeView`: 평면 줄 목록, 펼치기/접기, 3칸 줄 템플릿, 쪽별 선택, 색 점·쪽별 색, 테마 키 8개 파일. (30%)
+3. **창 재작성** — 경로 입력란(`ComparePathBar`), 툴바(필터·펼치기·다음 차이·비교 ▾), 기준 폴더 이동·이력·맞바꾸기, 요약 줄, 범례. (15%)
+4. **동작·동기화** — 복사/이동/삭제/선택 도우미, 동기화 프리셋 미리보기·확인 대화상자. (15%)
+5. **정리·문서** — `DirectoryCompareView` 삭제, README·architecture·이 문서, 체크리스트(테마 키). (5%)
+
+단계마다 빌드·테스트 후 커밋한다. 2단계부터는 Windows에서 화면 확인이 필요하다.
+
+## 미결 사항 (착수 시 사용자 확인)
+
+1. 쪽별 색을 BC 기본(빨강/회색/보라)으로 할지, 앱 테마에 맞춘 다른 색으로 할지. — 제안: BC 기본(익숙함), 테마별 명도만 조절.
+2. 방향 기준: BC처럼 수정 시각으로 최신/오래됨을 정한다. 시각이 같고 크기만 다를 때 양쪽 빨강으로 할지. — 제안: 양쪽 빨강.
+3. 미러 동기화의 삭제를 휴지통으로 할지 영구 삭제로 할지. — 제안: 휴지통.
+4. 메인 창 좌우 폴더 패널에 비교를 겹치는 방식(`folder-panel-compare-mode.md`)을 이 창 완성 후에도 할지.
+
+## 조사 자료 (Beyond Compare 공식 도움말)
+
+- 화면·색 의미: https://www.scootersoftware.com/v5help/dir_understanding_the_display.html
+- 명령 전체(세션·동작·편집·검색·보기): https://www.scootersoftware.com/v4help/commandsdir.html
+- 표시 필터: https://www.scootersoftware.com/v5help/dir_filtering_the_view.html , https://www.scootersoftware.com/v5help/display_filters.html
+- 비교 방법(빠른 검사/내용 비교, 줄 맞춤, 폴더 집계): https://www.scootersoftware.com/v5help/dir_how_to_compare.html
+- 차이 맞추기(선택 규칙, 동작): https://www.scootersoftware.com/v5help/dir_reconciling_differences.html
+- 동기화 프리셋: https://www.scootersoftware.com/v5help/dir_sync_how_to_sync.html
+- 색 설정: https://scootersoftware.com/v4help/optionsdircolor.html
+
+조사 요점:
+- 같은 이름은 좌우 같은 줄, 한쪽만이면 반대쪽 빈칸. 가운데 칸은 내용 비교 결과, 가운데 클릭은 양쪽 선택.
+- 색: 빨강 = 최신/다름, 회색 = 오래됨/알 수 없음, 보라 = 한쪽만, 검정 = 같음. 폴더 색은 내용 집계, 검사 중이면 빈 폴더 아이콘, 열지 못하면 빨간 ✕. 선택돼도 색 점은 남음.
+- 폴더 자체 시각은 판정에 안 씀. 내용 비교가 빠른 검사 결과를 덮어쓸 수 있음(설정).
+- 필터: 전체/차이/같음/한쪽만/왼쪽 최신/오른쪽 최신/한쪽만 제외 등 조합, 마지막 선택 저장.
+- 동작: 오른쪽·왼쪽·반대쪽으로 복사/이동, 맞교환, 삭제, 이름 변경, 시각 변경, 제외, 최신·한쪽만 선택, 다음/이전 차이, 기준 폴더로 삼기, 상위 폴더, 뒤로/앞으로, 좌우 맞바꾸기, 모두 펼치기/접기.
+- 동기화: 왼쪽/오른쪽/양쪽 갱신(최신 + 한쪽만 복사), 왼쪽/오른쪽으로 미러(다른 것 덮어쓰기 + 대상에만 있는 것 삭제).
 
 ## 구현 내용
 
-- 모델: `CompareStatus`, `DirectoryCompareOptions`(이름이 `System.Globalization.CompareOptions`와 겹쳐 접두어를 붙임), `CompareEntry`, `CompareResult`.
-- 서비스: `DirectoryCompareService`(`Compare`/`CompareAsync`, `CanCopy`, `CopyEntry`), `CompareSettingsService`(Load/Save, 깨진 값은 그 값만 기본값).
-- 컨트롤: `ComparePairHeader`, `DirectoryCompareView`.
-- 창: `DirectoryCompareWindow`, `DirectoryCompareOptionsDialog`(`GitDialogBase` 상속).
-- 진입: `MainWindow` ⋯ 메뉴 `폴더 비교…`(`CompareFolders_Click`), `FolderBrowser.GetSelectedFolderPair` + 우클릭 `선택한 두 폴더 비교`(`CompareFoldersRequested`).
-- 리팩터링: `FileCompareWindow` 머리글을 `ComparePairHeader`로 교체, `OptionArrowButton` 스타일을 공용으로 이동.
+- 1차(2026-10-14, 커밋 `69298e2`): 표 목록 방식 전용 창. 서비스·옵션·옵션 대화상자·진입 메뉴·`ComparePairHeader`·공용 `OptionArrowButton`. 이 중 서비스·옵션·진입은 재설계에서 확장해 재사용한다.
+- 2차(BC 방식): 미착수.
 
 ## 변경 파일
 
-- 신규: `Folderss/Models/DirectoryCompareModels.cs`, `Folderss/Services/DirectoryCompareService.cs`, `Folderss/Services/CompareSettingsService.cs`, `Folderss/Controls/ComparePairHeader.cs`, `Folderss/Controls/DirectoryCompareView.cs`, `Folderss/DirectoryCompareWindow.cs`, `tests/Folderss.SearchTests/DirectoryCompareServiceTests.cs`
-- 수정: `Folderss/FileCompareWindow.cs`, `Folderss/MainWindow.xaml`, `Folderss/MainWindow.xaml.cs`, `Folderss/Controls/FolderBrowser.xaml.cs`, `Folderss/GitWindow.xaml`, `Folderss/Themes/Controls.xaml`, `tests/Folderss.SearchTests/Folderss.SearchTests.csproj`, `README.md`, `docs/architecture.md`
+- 1차: `Folderss/Models/DirectoryCompareModels.cs`, `Folderss/Services/DirectoryCompareService.cs`, `Folderss/Services/CompareSettingsService.cs`, `Folderss/Controls/ComparePairHeader.cs`, `Folderss/Controls/DirectoryCompareView.cs`, `Folderss/DirectoryCompareWindow.cs`, `Folderss/FileCompareWindow.cs`, `Folderss/MainWindow.xaml(.cs)`, `Folderss/Controls/FolderBrowser.xaml.cs`, `Folderss/GitWindow.xaml`, `Folderss/Themes/Controls.xaml`, `tests/Folderss.SearchTests/DirectoryCompareServiceTests.cs`
+- 2차 예정: 위 서비스·모델·옵션·창 수정, 신규 `Controls/FolderCompareTreeView.cs`, `Controls/ComparePathBar.cs`, 동기화 대화상자, `Themes/*.xaml` 8개(색 키 3개), 테스트 확장, `DirectoryCompareView.cs` 삭제
 
 ## 검증
 
-- `dotnet build .\Folderss.sln -c Debug` 성공(오류 0).
-- `dotnet test tests/Folderss.SearchTests` — `DirectoryCompareServiceTests` 12건: 상태 6종, 시각 허용 오차 경계(1.9초 같음 / 2.1초 다름), 해시 옵션, 폴더 집계와 개수, 대소문자 무시 짝짓기, 한쪽 폴더 미진입, ignore 규칙(양쪽 제외·한쪽만 사유), 하위 미비교 옵션, 취소 시 부분 결과, 복사(덮어쓰기·상위 생성·폴더 제한), 옵션 저장 왕복.
-- Windows 앱에서 확인할 것(사용자):
-  - [ ] ⋯ 메뉴 `폴더 비교…`로 좌우 패널 폴더 비교 창이 열리고 요약·배지 색이 보임 (여러 테마에서)
-  - [ ] 폴더 두 개 우클릭 `선택한 두 폴더 비교`
-  - [ ] `⇄ 좌우 바꾸기`, `…`로 폴더 바꾸기, `차이만 보기` 토글, `중지`
-  - [ ] `▾` 옵션 변경 → 다시 비교, 앱 재시작 후 옵션 유지, `권장값으로`
-  - [ ] 다름 파일 더블클릭 → 두 파일 비교 창 (머리글이 예전과 같게 보이고 `⇄ 좌우 바꾸기` 동작)
-  - [ ] 복사(덮어쓰기 경고 포함), 탐색기로 열기
-  - [ ] Git 창의 `▾` 버튼 모양이 예전과 같음(스타일 공용 이동)
+- 1차: 빌드 성공, 단위 테스트 12건 통과(전체 260 통과·4 건너뜀). 사용자 화면 확인 결과 방식 불만족 → 재설계.
+- 2차: 단계별 빌드·단위 테스트, Windows 화면 확인(정렬·빈칸·색·펼치기·필터·복사·동기화 미리보기, 8개 테마 색).
 
 ## 변경 이력
 
 - 2026-09-22: Cursor 제안을 바탕으로 상세설계서 작성 (Todo) — 패널 오버레이 방식
 - 2026-10-14: 사용자 결정으로 전용 비교 창(팝업) 방식으로 변경, 선택적 동작은 ▾ 옵션(권장값 기본)으로. 재사용 부분은 컨트롤로 분리. 구현·빌드·단위 테스트 완료, 사용자 확인 대기.
 - 2026-10-15: 사용자 확인 중 좌우 폴더 패널 비교 방식 요청 — 다음 아이템 `folder-panel-compare-mode.md`로 분리 기록.
+- 2026-10-15: 1차 결과 불만족("Beyond Compare 폴더 비교 조사 부족"). BC 공식 도움말 조사 후 좌우 정렬 트리·쪽별 방향 색·필터·동기화 프리셋으로 재설계(In Progress). 다음 작업은 "구현 단계" 1단계부터.
