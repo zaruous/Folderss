@@ -1,6 +1,6 @@
 # 콘솔 패널 Ctrl+C 단축키 충돌 해소 (선택 인식 복사)
 
-- 상태: Verified (2026-07-14 사용자 확인 완료)
+- 상태: Done
 
 ## 요구사항
 
@@ -60,3 +60,4 @@ Microsoft.Terminal.Wpf는 EasyWindowsTerminalControl의 전이 의존성이라 �
 - 2026-07-14: DLL 확인 결과 리플렉션 후보 프로퍼티가 전무해 선택 복사가 동작하지 않던 것을
   `Microsoft.Terminal.Wpf.TerminalControl.GetSelectedText()` 직접 호출로 교체
 - 2026-07-14: 선택 복사 사용자 검증 완료 — 전 항목 확인 종료
+- 2026-10-14: 상태 표기를 `Verified (2026-07-14 사용자 확인 완료)`에서 표준값 `Done`으로 통일.

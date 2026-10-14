@@ -1,6 +1,6 @@
 # 폴더 패널 두 파일 비교
 
-- 상태: Ready for Verification
+- 상태: Done
 
 ## 요구사항
 
@@ -110,3 +110,4 @@
 
 - 2026-09-30: 요청 접수, Git diff 재사용으로 구현, 자체 검증 → Ready for Verification.
 - 2026-09-30: 2차 요청(비교 설정 분리, 외부 도구, HTML 보고서, ⋯ 메뉴, 위치·이름 표시, 좌우 바꾸기) 구현·자체 검증 → Ready for Verification.
+- 2026-10-14: `v1.8.0` 태그에 포함(PR #33, 브랜치 `ccr-ce8604f5-fueg7d`, 머지 `69a73a3`). 태그 릴리스 기준으로 완료(Done) 처리.

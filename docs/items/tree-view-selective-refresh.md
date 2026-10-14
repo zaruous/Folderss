@@ -1,6 +1,6 @@
 # 트리뷰 새로고침 시 선택 폴더 하위만 갱신
 
-- 상태: Ready for Verification
+- 상태: Done
 
 ## 요구사항
 
@@ -38,3 +38,4 @@
 ## 변경 이력
 
 - 2026-09-22: 초기 구현
+- 2026-10-14: `v1.7.0` 태그에 포함(PR #28, 브랜치 `claude/selective-tree-refresh-tzqiaa`, 머지 `85a8cbc`). 태그 릴리스 기준으로 완료(Done) 처리.

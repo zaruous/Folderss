@@ -1,6 +1,6 @@
 # GitHub Actions 프리뷰 빌드
 
-- 상태: Ready for Verification
+- 상태: Done
 
 ## 요구사항
 
@@ -41,3 +41,4 @@
 
 - 2026-09-30: 요청 접수, preview.yml 추가.
 - 2026-09-30: 첫 실행 성공(build·test), 결과 기록. 상태 Ready for Verification.
+- 2026-10-14: `v1.8.0` 태그에 포함(PR #29, 브랜치 `ccr-803aeac2-nkp3gd`, 머지 `911de6e`). 태그 릴리스 기준으로 완료(Done) 처리.

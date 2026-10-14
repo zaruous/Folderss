@@ -1,6 +1,6 @@
 # Monaco 뷰어 Ctrl+F 검색 충돌
 
-- 상태: Ready for Verification (빌드는 사용자 환경에서 확인 필요)
+- 상태: Done
 
 ## 요구사항
 
@@ -36,3 +36,4 @@ WebView2(Monaco)가 네이티브 키다운을 받지 못했다.
 ## 변경 이력
 
 - 2026-07-15: 원인 분석 및 수정 구현. 빌드 검증은 Windows 환경에서 별도 확인 필요.
+- 2026-10-14: `v1.5.7` 태그에 포함(PR #22, 브랜치 `claude/monaco-command-palette-search-51a9le`, 머지 `dc6774c`). 태그 릴리스 기준으로 완료(Done) 처리.

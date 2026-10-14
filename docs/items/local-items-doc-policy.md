@@ -1,6 +1,6 @@
 # 로컬 개발 아이템 관리 문서화
 
-- 상태: Ready for Verification
+- 상태: Done
 
 ## 요구사항
 
@@ -38,3 +38,4 @@
 ## 변경 이력
 
 - 2026-06-28: GitHub Project 중심 관리 문구를 로컬 `docs/items/` 중심 관리 문구로 변경하고 `docs/architecture.md`를 최신화했다.
+- 2026-10-14: `v1.5.1` 태그에 포함(커밋 `bbd8e68`). 태그 릴리스 기준으로 완료(Done) 처리.

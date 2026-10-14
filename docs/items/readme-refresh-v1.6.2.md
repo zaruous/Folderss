@@ -1,6 +1,6 @@
 # README.md 최신화 (v1.6.2 기준)
 
-- 상태: Ready for Verification
+- 상태: Done
 
 ## 요구사항
 
@@ -41,3 +41,4 @@ README.md가 v1.4.5 기준으로 멈춰 있어, 현재 코드(v1.6.2 태그 + �
 ## 변경 이력
 
 - 2026-09-22: README 전체 최신화, 항목 생성 (Ready for Verification)
+- 2026-10-14: `v1.7.0` 태그에 포함(커밋 `514ebe2`). 태그 릴리스 기준으로 완료(Done) 처리.

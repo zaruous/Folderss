@@ -1,6 +1,6 @@
 # 뷰어 패널 리프레시 버튼 추가
 
-- 상태: Ready for Verification
+- 상태: Done
 
 ## 요구사항
 
@@ -36,3 +36,4 @@ ViewerHost에 상단 툴바를 추가하고, 현재 파일 경로 표시와 리�
 ## 변경 이력
 
 - 2026-06-30: 초기 구현
+- 2026-10-14: `v1.5.3` 태그에 포함(PR #17, 브랜치 `claude/folder-panel-paste-path-b86oxj`, 머지 `fe124dc`). 태그 릴리스 기준으로 완료(Done) 처리.
