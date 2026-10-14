@@ -204,7 +204,7 @@ namespace Folderss.Services
             return path;
         }
 
-        private static void CopyDirectory(string source, string destination)
+        internal static void CopyDirectory(string source, string destination)
         {
             Directory.CreateDirectory(destination);
 
@@ -215,7 +215,7 @@ namespace Folderss.Services
                 CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
         }
 
-        private static void ValidateTransfer(string source, string destinationDirectory, bool move)
+        internal static void ValidateTransfer(string source, string destinationDirectory, bool move)
         {
             var sourceFullPath = NormalizePath(source);
             var destinationFullPath = NormalizePath(destinationDirectory);
@@ -246,7 +246,7 @@ namespace Folderss.Services
                 : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
-        private static string GetUniquePath(string requestedPath, bool isDirectory)
+        internal static string GetUniquePath(string requestedPath, bool isDirectory)
         {
             if (!File.Exists(requestedPath) && !Directory.Exists(requestedPath))
                 return requestedPath;

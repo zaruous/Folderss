@@ -72,15 +72,16 @@
 | `FileOperationJournal`(신규, 순수 로직 + 파일 작업) | 작업 이력 기록, 되돌리기 가능 여부 판정, 되돌리기 실행 |
 | `FileSystemItem` | `CompareStatus`, `CompareReason` 추가 |
 | `FolderBrowser` | 오버레이 적용·해제(`RefreshItems` 뒤 다시 입힘), `비교` 열, 차이만 보기 필터, 메인 창 찾기 도우미 |
-| `MainWindow` | 붙여넣기가 실행한 작업 목록을 돌려주도록 확장(이력 기록용) |
 | `DirectoryCompareWindow` | **재작성**: 좌우 패널·분할선·`>`/`<`·툴바·작업 이력 패널·동기 이동·Delete |
 | `DirectoryCompareView`, 폴더 비교에서의 `ComparePairHeader` | 삭제 / 폴더 비교에서 제거(두 파일 비교 창은 계속 사용) |
 
 ### 기존 결합 (코드 확인 결과)
 
 - `FolderBrowser`는 `Window.GetWindow(this) as MainWindow`로 메인 창을 찾는다(붙여넣기 `Paste_Executed`, 잘라내기 표시, 끌어다 놓기, 패널 잠금 검사 등 7곳). 비교 창 안에서는 null이라 **붙여넣기·놓기가 조용히 아무것도 안 한다**.
-  → 도우미 하나로 해결: "내 창이 `MainWindow`가 아니면 그 창의 `Owner`가 `MainWindow`인지" 본다. 비교 창은 `Owner = MainWindow`로 열리므로 붙여넣기·잘라내기 상태·잠금 검사가 메인 창 것을 그대로 쓴다(비교 창에서 잘라내고 메인 창에 붙여넣기도 됨). 끌어다 놓기도 덤으로 동작한다.
+  → 안전 모드에서는 이 경로들을 쓰지 않는다: 끌어다 놓기·잘라내기는 막고, 붙여넣기(Ctrl+V)는 패널이 이벤트로 올려 비교 창이 작업 이력(`FileOperationJournal.Copy`)으로 직접 실행한다. 그래서 "기록 먼저, 실행 나중"이 붙여넣기에도 그대로 적용되고 메인 창 코드는 바꾸지 않는다. 패널 잠금 검사는 비교 창이 소유자 메인 창의 `IsPathPinLocked`/`IsDestinationPinLocked`를 부른다.
+  - 클립보드가 잘라내기(메인 창의 잘라내기 상태 또는 탐색기 잘라내기)면 비교 창에서는 붙여넣지 않고 "복사(Ctrl+C) 후 붙여넣거나 `>`/`<`를 쓰세요"를 보인다 — 원본 쪽 삭제가 이력 밖 위치에서 일어나기 때문.
 - F5/F6/Delete는 `MainWindow.Window_KeyDown`이 `ActivePane`/`TargetPane`으로 처리한다. 비교 창에는 해당하지 않으므로 `>`/`<`/Delete를 비교 창이 직접 처리한다. 패널 잠금 검사는 메인 창의 `IsPathPinLocked`/`IsDestinationPinLocked`를 부른다.
+- **기존 폴더 이동은 다른 드라이브로 안 된다**: `FileOperationService.Move`는 폴더에 `Directory.Move`를 써서 드라이브가 다르면 실패한다(메인 창 F6도 같음 — 이번 범위 밖). 작업 이력의 이동은 드라이브가 다르면 복사 후 원본 삭제로 처리한다.
 - **기존 이동은 같은 이름을 덮어쓰지 않는다**: `FileOperationService.Move`는 대상에 같은 이름이 있으면 `App (2).cs`처럼 번호를 붙인다(`GetUniquePath`). `>`/`<`의 교체는 "대상 옛 항목을 휴지통으로 → 이동"을 비교 창 쪽에서 순서대로 한다. Ctrl+V 붙여넣기는 기존 동작(번호 붙이기)을 그대로 둔다.
 - `NavigateTo`는 없는 폴더면 메시지 상자를 띄운다. 동기 이동은 반대쪽에 폴더가 있는지 먼저 확인하고 부른다.
 
@@ -95,7 +96,7 @@
 | 끌어다 내보내기 (`DoDragDrop`, 이동 허용) | 탐색기로 끌면 이동될 수 있음 | 막음 |
 | 잘라내기 Ctrl+X | 붙여넣는 곳에서 이동 | 막음 |
 | 복사 Ctrl+C | 클립보드에 넣기만 함 | 그대로(원본은 안 바뀜) |
-| 붙여넣기 Ctrl+V | 메인 창이 처리 | 메인 창 처리 + 결과를 이력에 기록 |
+| 붙여넣기 Ctrl+V | 메인 창이 처리 | 비교 창이 작업 이력으로 복사 실행(같은 이름이면 "이름 (2)", 붙여넣기와 같은 규칙). 잘라낸 항목은 거부 |
 | 더블클릭·Enter 열기 | 기본 프로그램으로 열기 | 그대로(파일 내용 편집은 이력 범위 밖), 양쪽에 있는 파일은 두 파일 비교 |
 
 - "탐색기에서 위치 열기"는 앱 밖으로 나가는 통로지만, 거기서 한 작업은 앱이 막을 수 없다. 비교 창에서 바뀐 것을 감지하면 "변경됨"으로만 알린다.
@@ -124,6 +125,7 @@
 - **저장**: `%LOCALAPPDATA%\Folderss\compare-history\<yyyy-MM-dd>.jsonl` — 한 줄이 기록 하나(작업 시작·항목별 결과·작업 끝·되돌리기). 비교 창을 열 때 7일 지난 파일을 지운다. 재시작 후에도 이력이 보이고 되돌리기는 위 조건 검사를 거친다.
 - **기록 먼저, 실행 나중**: 작업마다 "시작(계획)"을 먼저 쓰고 실행 후 "끝"을 쓴다. 기록 쓰기가 실패하면 작업을 실행하지 않고 이유를 보인다(이력에 안 남는 작업을 막는다는 원칙). 예외는 빈 `catch`로 삼키지 않는다(프로젝트 규칙). "시작"만 있고 "끝"이 없는 작업(도중 종료)은 이력에 "중단됨 — 확인 필요"로 보이고 항목별 결과까지만 되돌린다.
 - 7일 삭제는 기록만 지운다. 휴지통에 간 항목은 Windows 휴지통 규칙을 따른다.
+- 작업 이력 객체는 앱 전체에 하나만 두고 모든 비교 창이 같이 쓴다. 창마다 따로 두면 같은 파일에 번갈아 쓰면서 "최근 작업"이 창마다 달라진다. 파일 작업은 한 번에 하나씩(다른 창의 작업이 끝날 때까지 `>`/`<` 등 비활성).
 
 ### 옵션 (`비교 ▾` 대화상자)
 
@@ -150,16 +152,14 @@
 1. **순수 로직 + 테스트** — 완료 조건: 아래 테스트 통과.
    - `CompareOverlay`: 현재 폴더 직속 항목만, 이름 대소문자 무시 짝짓기, 폴더 집계 상태, 이쪽만/유형 다름, 기준 밖 경로는 오버레이 없음.
    - `FileOperationJournal`: 이동·교체·복사·삭제 기록과 되돌리기(임시 폴더 실제 파일), 최근 작업만 되돌리기 가능, 그 사이 바뀐 파일·원래 자리에 새로 생긴 이름이면 되돌리기 거부, 영구 삭제는 불가 표시, 기록 쓰기 실패 시 작업 미실행, "끝" 없는 작업은 중단됨, 7일 지난 기록 파일 삭제, 저장 후 다시 읽어 같은 이력. 휴지통 복원은 Windows 전용이라 단위 테스트에서는 휴지통 대신 쓰는 경로를 주입해 검사한다.
-2. **메인 창 찾기 도우미 + 붙여넣기 결과 반환** — 완료 조건: 빌드·기존 테스트 통과, 메인 창의 붙여넣기·놓기·잠금 동작 변화 없음(Windows 확인).
+2. **Windows 휴지통(`IRecycleBin` 구현)** — 보내기는 `FileOperationService.MoveToRecycleBin`, 되살리기는 셸 휴지통(`Shell.Application` 네임스페이스 10)에서 원래 경로·삭제 시각으로 찾는다. Windows에서만 확인 가능.
 3. **FolderBrowser 오버레이·안전 모드** — `FileSystemItem` 필드, 오버레이 적용·해제, `비교` 열, 차이만 보기, 테마 색 키(`Themes/*.xaml` 8개), 안전 모드(셸 메뉴 → 앱 메뉴, 끌어다 놓기·잘라내기 막기). 완료 조건에 메인 창 패널은 안전 모드가 꺼져 기존과 같음을 포함.
 4. **비교 창 재작성** — 좌우 패널·분할선·`>`/`<`(교체·개수 확인 창)·Delete·툴바·옵션·동기 이동·같은 이름 따라 선택·작업 이력 패널·되돌리기·휴지통 복원.
 5. **정리·문서** — `DirectoryCompareView` 삭제, README·architecture, CLAUDE.md 테마 체크리스트에 색 키 추가.
 
-## 미결 사항 (착수 전 사용자 확인)
+## 미결 사항
 
-- 결정됨: 작업 이력은 로그 포함 디스크 저장·7일 후 삭제, 되돌리기는 최근부터(LIFO), 셸 메뉴·끌어다 놓기·잘라내기는 비교 창에서 막음, 1차 표 화면은 버림(배포하지 않음 — 2차 완료 전에 태그를 찍게 되면 진입 메뉴를 숨긴다).
-1. **교체 확인 생략**: "확인하였습니다" 체크로 개수 확인만 생략하고, 교체(휴지통으로 보냄) 확인은 항상 띄울지. — 제안: 교체 확인은 항상.
-2. **이름 바꾸기·새 폴더**: 비교 창 우클릭 메뉴에 이력에 남는 동작으로 넣을지. — 제안: 이번에는 넣지 않음(필요해지면 추가).
+- 없음. 결정: 작업 이력은 로그 포함 디스크 저장·7일 후 삭제, 되돌리기는 최근부터(LIFO), 셸 메뉴·끌어다 놓기·잘라내기는 비교 창에서 막음, 1차 표 화면은 버림(배포하지 않음 — 2차 완료 전에 태그를 찍게 되면 진입 메뉴를 숨긴다), "확인하였습니다" 체크는 개수 확인만 생략하고 교체 확인은 항상 띄움, 이름 바꾸기·새 폴더는 이번에 넣지 않음.
 
 ## 조사 자료 (Beyond Compare 공식 도움말)
 
@@ -176,17 +176,22 @@
 ## 구현 내용
 
 - 1차(2026-10-14, 커밋 `69298e2`): 표 목록 방식 전용 창. 서비스·옵션·옵션 대화상자·진입 메뉴·`ComparePairHeader`·공용 `OptionArrowButton`.
-- 2차(좌우 폴더 패널 방식): 미착수.
+- 2차(좌우 폴더 패널 방식) 1단계 완료:
+  - `Services/CompareOverlay.cs` — 기준 상대 경로(`GetRelativeFolder`), 패널 한쪽 현재 폴더의 직속 항목 판정(`EntriesFor`, 그 쪽에 있는 것만·대소문자 무시), 패널 기준 상태(`ToSideStatus`: 이쪽만/저쪽만), 방향 색용 `GetDirection`(수정 시각, 허용 오차 안이면 없음).
+  - `Services/FileOperationJournal.cs` — 이동(같은 이름은 옛 항목을 휴지통으로 보내고 교체, 교체 후 이동 실패 시 옛 항목 즉시 되살림, 드라이브가 다른 폴더는 복사 후 원본 삭제)·복사(붙여넣기와 같은 "이름 (2)")·삭제(휴지통/영구) 실행과 기록, `FindConflicts`(교체 확인용), `CheckUndo`·`Undo`(최근 작업만, 그 사이 바뀜·원래 자리 점유·휴지통에 없음이면 아무것도 안 하고 거부, 도중 실패 시 거기서 멈추고 다시 부르면 남은 항목만), `Skip`, `Load`(7일 지난 파일 삭제, 읽지 못한 줄은 `LoadWarnings`), "끝" 없는 작업은 `Interrupted`. 휴지통은 `IRecycleBin`으로 주입.
+  - `FileOperationService` — `ValidateTransfer`·`CopyDirectory`·`GetUniquePath`를 `internal`로(작업 이력이 같은 규칙을 쓰도록). 동작 변화 없음.
 
 ## 변경 파일
 
 - 1차: `Folderss/Models/DirectoryCompareModels.cs`, `Folderss/Services/DirectoryCompareService.cs`, `Folderss/Services/CompareSettingsService.cs`, `Folderss/Controls/ComparePairHeader.cs`, `Folderss/Controls/DirectoryCompareView.cs`, `Folderss/DirectoryCompareWindow.cs`, `Folderss/FileCompareWindow.cs`, `Folderss/MainWindow.xaml(.cs)`, `Folderss/Controls/FolderBrowser.xaml.cs`, `Folderss/GitWindow.xaml`, `Folderss/Themes/Controls.xaml`, `tests/Folderss.SearchTests/DirectoryCompareServiceTests.cs`
-- 2차 예정: 신규 `Services/CompareOverlay.cs`, `Services/FileOperationJournal.cs`, 테스트. 수정 `Models/FileSystemItem.cs`, `Models/DirectoryCompareModels.cs`, `Services/CompareSettingsService.cs`, `Controls/FolderBrowser.xaml(.cs)`, `MainWindow.xaml.cs`, `DirectoryCompareWindow.cs`, `Themes/*.xaml` 8개. 삭제 `Controls/DirectoryCompareView.cs`
+- 2차 1단계: 신규 `Folderss/Services/CompareOverlay.cs`, `Folderss/Services/FileOperationJournal.cs`, `tests/Folderss.SearchTests/CompareOverlayTests.cs`, `tests/Folderss.SearchTests/FileOperationJournalTests.cs`. 수정 `Folderss/Services/FileOperationService.cs`(접근 수준만), `tests/Folderss.SearchTests/Folderss.SearchTests.csproj`(링크 3개).
+- 2차 예정(2단계 이후): 수정 `Models/FileSystemItem.cs`, `Models/DirectoryCompareModels.cs`, `Services/CompareSettingsService.cs`, `Controls/FolderBrowser.xaml(.cs)`, `MainWindow.xaml.cs`, `DirectoryCompareWindow.cs`, `Themes/*.xaml` 8개. 삭제 `Controls/DirectoryCompareView.cs`
 
 ## 검증
 
 - 1차: 빌드 성공, 단위 테스트 12건 통과(전체 260 통과·4 건너뜀). 사용자 화면 확인 결과 방식 불만족 → 재설계.
-- 2차: 1단계 단위 테스트, 2단계 메인 창 회귀 확인, 3~4단계 Windows 화면 확인(분할선·동기 이동·같은 이름 따라 선택·차이만 보기·`>`/`<` 교체·개수 확인 체크·Ctrl+C/V·Delete·작업 이력 되돌리기·휴지통 복원·재시작 후 이력·안전 모드에서 셸 메뉴/끌어다 놓기/잘라내기 막힘·8개 테마 색).
+- 2차 1단계: 새 테스트 29건 통과(`CompareOverlayTests` 13, `FileOperationJournalTests` 16). 되돌리기 순서를 일부러 FIFO로 바꾸면 3건이 실패함을 확인(LIFO를 테스트가 지킴). 전체 290 통과·1 건너뜀·2 실패 — 실패 2건은 master에서도 나는 Linux 전용 기존 실패(`DirectoryCompareServiceTests`: 테스트의 `\` 경로 미정규화, Linux에서 점 파일이 숨김 취급). CI(Windows)와 무관. 앱 본체는 Linux에서 `EnableWindowsTargeting`으로 컴파일해 새 파일 오류 없음 확인(콘솔 패널의 Windows 전용 터미널 패키지 오류 1종은 기존).
+- 2차 이후: 2단계 Windows 휴지통 확인, 3~4단계 Windows 화면 확인(분할선·동기 이동·같은 이름 따라 선택·차이만 보기·`>`/`<` 교체·개수 확인 체크·Ctrl+C/V·Delete·작업 이력 되돌리기·휴지통 복원·재시작 후 이력·안전 모드에서 셸 메뉴/끌어다 놓기/잘라내기 막힘·8개 테마 색).
 
 ## 변경 이력
 
@@ -198,3 +203,4 @@
 - 2026-10-15: 사용자 요청 — 두 패널 사이에 분할선을 두어 너비 조절, 미결이던 선택 사항(상태 색·반대쪽에 폴더 없을 때·트리·미리보기)과 차이만 보기를 `비교 ▾` 표시 옵션으로(처음 값은 가장 안전한 쪽).
 - 2026-10-15: 사용자 결정 — 빈 줄로 줄을 맞추지 않고 각 패널은 실제 상태만 표시(같은 이름 따라 선택으로 보완). 반대쪽에 폴더가 없으면 알림만(옵션 제거). `>`/`<`는 이동(같은 이름은 확인 후 교체, 대상 옛 항목은 휴지통), 복사는 Ctrl+C/V. 큰 폴더 이동 확인에 "확인하였습니다" 체크. 이 창의 이동·복사·삭제를 작업 이력 사이드 패널에 기록하고 되돌리기(파일 내용 편집은 제외). 메인 창 연결은 별도 인터페이스 대신 Owner로 메인 창을 찾는 도우미로 해결.
 - 2026-10-15: 사용자 결정 — 이력에 남지 않는 작업(셸 우클릭 메뉴·끌어다 놓기·잘라내기)은 비교 창에서 막고 앱 자체 메뉴로 대체(안전 모드). 작업 이력은 로그 포함 디스크 저장, 7일 후 삭제. 되돌리기는 최근부터(LIFO — 사용자는 FIFO를 언급했으나 오래된 것부터 되돌리면 경로가 꼬여 LIFO로 설명·확인 요청). 1차 표 화면은 버림.
+- 2026-10-15: 미결 사항 제안대로 확정(교체 확인은 항상, 이름 바꾸기·새 폴더 제외). 붙여넣기는 비교 창이 작업 이력으로 직접 실행하도록 바꿔 메인 창 수정이 필요 없어짐. 1단계(`CompareOverlay`, `FileOperationJournal`과 테스트) 구현. 기존 폴더 이동이 다른 드라이브로 안 되는 점 발견 — 작업 이력 쪽에서 처리, 메인 창 F6은 범위 밖.

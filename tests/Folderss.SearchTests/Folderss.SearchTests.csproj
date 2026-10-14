@@ -53,6 +53,9 @@
     <Compile Include="..\..\Folderss\Models\DirectoryCompareModels.cs" Link="Linked\DirectoryCompareModels.cs" />
     <Compile Include="..\..\Folderss\Services\DirectoryCompareService.cs" Link="Linked\DirectoryCompareService.cs" />
     <Compile Include="..\..\Folderss\Services\CompareSettingsService.cs" Link="Linked\CompareSettingsService.cs" />
+    <Compile Include="..\..\Folderss\Services\CompareOverlay.cs" Link="Linked\CompareOverlay.cs" />
+    <Compile Include="..\..\Folderss\Services\FileOperationJournal.cs" Link="Linked\FileOperationJournal.cs" />
+    <Compile Include="..\..\Folderss\Services\FileOperationService.cs" Link="Linked\FileOperationService.cs" />
   </ItemGroup>
 
   <ItemGroup>
