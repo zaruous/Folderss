@@ -173,8 +173,8 @@ namespace Folderss.SearchTests
             // 화면 순서: 폴더가 자식보다 앞, 폴더 먼저·이름순
             var order = result.Entries.Select(e => e.RelativePath).ToList();
             string P(string r) => N(r);
-            Assert.True(order.IndexOf("src") < order.IndexOf(@"src\a.txt"));
-            Assert.True(order.IndexOf(@"src\deep") < order.IndexOf(@"src\a.txt"));
+            Assert.True(order.IndexOf(P("src")) < order.IndexOf(P(@"src\a.txt")));
+            Assert.True(order.IndexOf(P(@"src\deep")) < order.IndexOf(P(@"src\a.txt")));
         }
 
         [Fact]
@@ -210,7 +210,8 @@ namespace Folderss.SearchTests
             Write(_left, "app.log", "x");
             Write(_right, "app.log", "x");
 
-            var result = Run();
+            // Linux의 .NET은 점 파일을 숨김으로 보므로 숨김을 포함해야 규칙 파일 자체가 비교에 남는다.
+            var result = Run(new DirectoryCompareOptions { IncludeHidden = true });
 
             Assert.DoesNotContain(result.Entries, e => e.RelativePath == "bin");
             Assert.Contains("왼쪽에서만", Find(result, "app.log").Reason);
