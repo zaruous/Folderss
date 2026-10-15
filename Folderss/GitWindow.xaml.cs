@@ -194,12 +194,21 @@ namespace Folderss
 
         private async void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            if (!await CheckGitAsync())
+            // git이 있는지는 파일 확인이라 바로 본다. 버전 확인은 git 프로세스라(회사 PC에서 1~2초) 탐색과 동시에 돌리고
+            // 맞지 않으면 그때 창을 닫는다. 탐색·상태 읽기는 LibGit2Sharp라 git을 기다릴 필요가 없다.
+            if (!CheckGitExists())
             {
                 Close();
                 return;
             }
-            await ScanAsync();
+            var versionCheck = CheckGitVersionAsync();
+            var scan = ScanAsync();
+            if (!await versionCheck)
+            {
+                Close();
+                return;
+            }
+            await scan;
         }
 
         private void Window_Closed(object sender, EventArgs e)
@@ -209,16 +218,23 @@ namespace Folderss
             GitCommandRunner.Completed -= GitCommand_Completed;
         }
 
-        private async Task<bool> CheckGitAsync()
-        {
-            if (GitCommandRunner.FindGit() == null)
-            {
-                MessageBox.Show(this,
-                    "git 실행 파일을 찾을 수 없습니다.\nGit for Windows를 설치하고 PATH에 등록한 뒤 다시 여세요.",
-                    "Git", MessageBoxButton.OK, MessageBoxImage.Warning);
-                return false;
-            }
+        /// <summary>git 실행 파일 확인 후 버전 확인(설정에서 git 경로를 바꿨을 때 — 사용자가 바꾼 것이라 순서대로 기다린다).</summary>
+        private async Task<bool> CheckGitAsync() => CheckGitExists() && await CheckGitVersionAsync();
 
+        /// <summary>git 실행 파일이 있는지(파일 확인이라 바로 끝남). 없으면 안내하고 false.</summary>
+        private bool CheckGitExists()
+        {
+            if (GitCommandRunner.FindGit() != null)
+                return true;
+            MessageBox.Show(this,
+                "git 실행 파일을 찾을 수 없습니다.\nGit for Windows를 설치하고 PATH에 등록한 뒤 다시 여세요.",
+                "Git", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return false;
+        }
+
+        /// <summary><c>git --version</c>으로 최소 버전을 확인한다. 안 맞거나 실행할 수 없으면 안내하고 false.</summary>
+        private async Task<bool> CheckGitVersionAsync()
+        {
             try
             {
                 var result = await GitCommandRunner.RunAsync(null, new[] { "--version" }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
