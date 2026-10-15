@@ -95,6 +95,9 @@ namespace Folderss
         /// <summary>환경 변수 <c>FOLDERSS_GIT_TIMING=1</c>이면 git 명령·화면 갱신 시간을 출력창에 ⏱ 줄로 남긴다(실측용).</summary>
         private static readonly bool TimingEnabled = Environment.GetEnvironmentVariable("FOLDERSS_GIT_TIMING") == "1";
 
+        /// <summary>네이티브 libgit2를 불러오지 못했으면 true — 이후 조회는 LibGit2Sharp를 건너뛰고 git CLI로만 읽는다.</summary>
+        private static bool _libGit2Unavailable;
+
         /// <param name="basePath">탐색 기준 폴더.</param>
         /// <param name="countModifiedDocumentsUnder">폴더 아래 경로로 열린 미저장 뷰어 개수 — 브랜치 전환·pull 전 경고용.</param>
         /// <param name="openFile">파일 더블클릭 시 기존 뷰어로 연다.</param>
@@ -158,6 +161,8 @@ namespace Folderss
         /// </summary>
         private async Task<(bool Ok, T Value)> ReadLibAsync<T>(RepositoryRow row, string what, Func<T> read)
         {
+            if (_libGit2Unavailable)
+                return (false, default);
             var watch = Stopwatch.StartNew();
             try
             {
@@ -168,6 +173,13 @@ namespace Folderss
             catch (NotSupportedException ex)
             {
                 Timing(string.Format("LibGit2Sharp {0} 건너뜀({1}) → git으로    [{2}]", what, ex.Message, row.Info.DisplayPath));
+            }
+            catch (Exception ex) when (ex is TypeInitializationException || ex is DllNotFoundException || ex is BadImageFormatException)
+            {
+                // 네이티브 libgit2(runtimes\<rid>\native\git2-*.dll)를 못 불러오면 다시 시도해도 같다. 앱을 다시 켤 때까지 git CLI만 쓴다.
+                _libGit2Unavailable = true;
+                AppendOutput("LibGit2Sharp를 불러오지 못해 git 명령으로만 읽습니다(느림). runtimes 폴더의 git2 DLL이 함께 배포됐는지 확인하세요: "
+                    + (ex.InnerException ?? ex).Message);
             }
             catch (Exception ex)
             {

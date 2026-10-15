@@ -101,6 +101,23 @@
     처음 잰 13 ms보다 큰 것은 git과 같은 순서를 위해 전체 히스토리를 C#에서 정렬하고, 호출마다 저장소를 열고 닫기 때문.
 - 남는 것: status(1회 약 1.3초)는 그대로라 창을 열 때·쓰기 작업 뒤에는 여전히 초 단위. 2단계 후보.
 
+### 앱 헤드리스 실측 (2026-10-15)
+
+빌드된 `Folderss.dll`의 실제 `GitWindow`를 화면 밖에 띄우고 저장소 선택을 코드로 5회 반복, 출력창 `⏱` 줄을 모았다(측정 프로그램은 세션 임시 폴더).
+변경 전 = `36cbd7b`(계측만), 변경 후 = LibGit2Sharp 조회. 대상 Gargoyle, 사용자 Git 설정 그대로(`--all` 로그 300개).
+
+| 장면 | 변경 전 | 변경 후 | 감소 |
+|---|---|---|---|
+| 저장소 선택 → 상세 완료 (`⏱ 저장소 선택 → 상세 읽기 전체`) | 6,288~6,397 ms | 177~225 ms | −97% |
+| 같은 장면, 바깥에서 잰 값(클릭~완료) | 6,313~6,417 ms | 183~246 ms | −96% |
+| 창 열기 → 첫 저장소 상세 완료 | 6,905 ms | 3,218 ms | −53% |
+
+- 변경 후 선택 1회 내역: 브랜치 55~126 ms, 로그 51~88 ms, upstream 비교 11~15 ms, 워킹트리 4~8 ms, stash 2~3 ms, 로그 그리기 0~2 ms.
+- 창 열기에 남은 3.2초는 `git --version`(1.3초, git 확인)과 `status`(1.6초).
+- 발견: 측정 프로그램에서 처음엔 네이티브 libgit2를 못 찾아(실행 파일의 deps.json이 달라서) 모든 조회가 CLI로 되돌아갔다 — 대체 경로는 정상 동작했지만
+  선택할 때마다 실패 안내가 5줄씩 쌓였다. 네이티브 로드 실패(`TypeInitializationException`·`DllNotFoundException`·`BadImageFormatException`)는
+  한 번만 알리고 앱을 다시 켤 때까지 LibGit2Sharp를 건너뛰게 고쳤다. 실제 `Folderss.deps.json`에는 `runtimes/win-*/native/git2-5853918.dll`이 등록돼 있다.
+
 ## 변경 파일
 
 - `Services/GitCommandRunner.cs` — `GitResult.WaitMilliseconds`/`ElapsedMilliseconds`, `Completed` 이벤트
