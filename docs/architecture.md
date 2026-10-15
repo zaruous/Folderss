@@ -167,6 +167,14 @@ Folderss/
   - `Viewers/WebViewIdleSaver`가 뷰어가 화면에서 가려지면 메모리 목표를 `Low`로, 30초 넘게 가려지면 `TrySuspendAsync`로 일시 중지하고, 다시 보이면 재개한다.
     가려진 탭에 오는 테마 변경·제목 이동은 미뤘다가 다시 보일 때(`OnBecameVisible`) 적용한다.
   - 세 뷰어 모두 `IDisposable`로 탭을 닫을 때 `WebView.Dispose()`한다.
+
+### MarkdownViewer 원격 이미지와 네트워크 설정 (network-settings.xml)
+- 판정은 `Services/RemoteContentPolicy`(순수 로직, 단위 테스트), 설정은 `Services/NetworkSettingsService`(`Current`, 저장 시 `Changed`). 설정 창 "네트워크" 탭.
+- `OnWebResourceRequested`: 이미지 요청이고 `RouteImage == Direct`(https: 표시 설정 켜짐 또는 localhost)면 WebView2가 직접 받는다. 그 밖의 외부 요청은 403.
+- http 이미지: `markdown-app.js resolveImageSrc`가 `https://folderss-doc-asset/remote?u=<원래 주소>`로 바꾸고, `ProxyRemoteImage`가 `RouteImage == Proxy`
+  (localhost 또는 표시+http 허용)일 때만 `HttpClient`로 받아 전달한다(`image/*`, 20MB, 15초). 뷰어 페이지가 https라 http 이미지는 혼합 콘텐츠로 막히기 때문.
+- 인증서: Windows 저장소로 먼저 검증하고, 실패하면 `ServerCertificateErrorDetected`(WebView2)·`ServerCertificateCustomValidationCallback`(HttpClient)에서
+  `ShouldAllowCertificateError`(localhost·오류 허용·추가한 내부 인증서로 체인+호스트 이름 확인)로 다시 판정한다. 설정 저장 시 `ClearServerCertificateErrorActionsAsync`.
 - 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
   그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
 
