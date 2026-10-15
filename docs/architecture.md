@@ -34,7 +34,7 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
-│   ├── GitLibReader.cs             — 조회(브랜치·로그·upstream 비교·stash·워킹트리)를 LibGit2Sharp로, 결과는 CLI+파서와 동일
+│   ├── GitLibReader.cs             — 조회(status·브랜치·로그·upstream 비교·stash·워킹트리)를 LibGit2Sharp로, 결과는 CLI+파서와 동일
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제(로컬·원격)·브랜치 업데이트(base ← compare) 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
@@ -328,7 +328,8 @@ Folderss/
 - 조회 경로: 저장소 선택 시 브랜치·로그·upstream 비교·stash·워킹트리는 `GitLibReader`(LibGit2Sharp)로 프로세스 없이 읽는다(`GitWindow.ReadLibAsync`).
   저장소는 호출마다 열고 닫는다(팩 파일 잠금·스레드 안전 문제 회피). 링크된 워킹트리·upstream 없음 등은 `NotSupportedException`으로
   조용히, 그 밖의 예외는 출력창에 알린 뒤 아래 CLI 경로로 다시 읽는다. 결과가 CLI+`GitOutputParser`와 같은지는 `GitLibReaderTests`가 비교한다
-  (로그 순서는 git `--topo-order` 알고리즘을 그대로 옮김, `%D` 참조 표시도 git 2.53 규칙). status·쓰기·네트워크·diff는 CLI.
+  (로그 순서는 git `--topo-order` 알고리즘을 그대로 옮김, `%D` 참조 표시도 git 2.53 규칙). status도 `ReadStatus`로 읽되
+  서브모듈·인덱스 v3 이상·sparse checkout·`filter=` 속성·복사 감지 저장소는 CLI. 쓰기·네트워크·diff는 CLI.
 - 실행: 그 밖의 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
   표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
 - 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.

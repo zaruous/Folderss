@@ -1,6 +1,6 @@
 # Git 창 속도 개선 — 실측 먼저
 
-- 상태: In Progress — 1단계(조회를 LibGit2Sharp로, status 제외) 구현·테스트 완료, Windows 화면 확인 대기
+- 상태: In Progress — 1단계(조회, master 머지됨)·2단계(status) 구현·테스트 완료, Windows 화면 확인 대기
 
 ## 요구사항
 
@@ -117,6 +117,31 @@
 - 발견: 측정 프로그램에서 처음엔 네이티브 libgit2를 못 찾아(실행 파일의 deps.json이 달라서) 모든 조회가 CLI로 되돌아갔다 — 대체 경로는 정상 동작했지만
   선택할 때마다 실패 안내가 5줄씩 쌓였다. 네이티브 로드 실패(`TypeInitializationException`·`DllNotFoundException`·`BadImageFormatException`)는
   한 번만 알리고 앱을 다시 켤 때까지 LibGit2Sharp를 건너뛰게 고쳤다. 실제 `Folderss.deps.json`에는 `runtimes/win-*/native/git2-5853918.dll`이 등록돼 있다.
+
+## 2단계: status도 LibGit2Sharp로 (2026-10-15)
+
+- `GitLibReader.ReadStatus`: `git status --porcelain=v2 --branch -z --untracked-files=all` + `ParseStatusV2`와 같은 스냅숏.
+  - 헤더: HEAD 해시(최초 커밋 전 null), 브랜치/detached, upstream(사라진 upstream도 이름은 내고 ahead/behind는 0), ahead/behind.
+  - 항목: XY(A·M·D·R·T / M·D·T), 스테이지된 이름 변경(`status.renames`→`diff.renames`, 기본 켜짐), 충돌 단계 조합 → UU·AA·DU·UD·AU·UA·DD,
+    `git rm --cached`는 추적 항목 + `?` 두 개, 추적 안 되는 파일은 하위 폴더까지(저장소 안 저장소는 `nested/`).
+  - 순서: 추적 항목 경로순 → 추적 안 되는 항목 경로순(UTF-8 바이트 순, git strcmp와 같음).
+  - git 명령으로 읽는 경우(`NotSupportedException`): 서브모듈(.gitmodules·gitlink), 인덱스 v2가 아님(skip-worktree·`add -N` 등 확장 플래그),
+    sparse checkout, 루트 `.gitattributes`·`info/attributes`에 `filter=`(LFS 등 외부 필터를 libgit2는 실행하지 않음), 복사 감지(`copies`).
+  - 남은 차이 가능성: 하위 폴더 `.gitattributes`의 `filter=`, 유사도 50% 언저리 이름 변경(libgit2와 git의 유사도 계산이 조금 다름), 같은 이름의 로컬·원격 브랜치가 있을 때 upstream 짧은 이름.
+- `GitWindow.RefreshStatusAsync`: `ReadLibAsync`로 읽고 실패하면 기존 CLI.
+- 검증: `GitLibReaderTests`에 status 5개(일반 변경·이름 변경·rm --cached·한글/공백·무시 파일 / 헤더 ahead·behind·gone·upstream 없음·detached·최초 커밋 전 /
+  merge 충돌 UU·AA·DU·UD / autocrlf + 수정 시각만 바뀐 파일 + 저장소 안 저장소 / 미지원 저장소 판정). 실제 저장소 3곳 status도 CLI와 같음.
+- 헤드리스 실측(Release, 1단계 master vs 2단계)
+
+| 장면 | 1단계 | 2단계 |
+|---|---|---|
+| Gargoyle status 1회 | 1,634 ms (git) | 211 ms |
+| Gargoyle 창 열기 → 첫 상세 완료 | 3,319 ms | 2,307 ms |
+| `C:\Users\USER\git\cshap`(저장소 8개) 탐색 + 상태 전체 | 4,297 ms | 202 ms |
+| 같은 폴더 창 열기 → 탐색 완료 | 5,719 ms | 2,148 ms |
+
+- 창 열기에 남은 약 2초는 `git --version`(git 설치·버전 확인)이다. 쓰기·네트워크 명령 자체는 여전히 git 프로세스(1회 1.5초 안팎).
+- 링크된 워킹트리가 있는 저장소는 워킹트리 목록만 git으로 읽어 선택 시 1.6초가 더 든다(예: file_agent).
 
 ## 변경 파일
 
