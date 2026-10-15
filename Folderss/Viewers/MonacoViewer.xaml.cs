@@ -4,6 +4,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -62,6 +63,8 @@ namespace Folderss.Viewers
         private readonly DispatcherTimer _fileReloadTimer;
         private bool _disposed;
         private bool _reloadPromptOpen;
+        private WebViewIdleSaver _idleSaver;
+        private string _pageTheme;
 
         public UIElement View => this;
         public ViewerCapabilities Capabilities => ViewerCapabilities.Edit;
@@ -103,12 +106,21 @@ namespace Folderss.Viewers
             }
             catch (Exception ex)
             {
+                if (_disposed)
+                    return;
                 WebView.Visibility = Visibility.Collapsed;
                 ErrorText.Text = "WebView2 초기화 오류:\n" + ex.GetType().Name + "\n" + ex.Message;
                 ErrorText.Visibility = Visibility.Visible;
                 return;
             }
 
+            // 초기화를 기다리는 사이 탭이 닫혀 Dispose됐으면 해제된 컨트롤을 건드리지 않는다.
+            if (_disposed)
+                return;
+
+            // 이 뷰어는 내부 가상 호스트(folderss-viewer) 페이지만 열고 다른 주소 이동은 NavigationStarting에서 막으므로
+            // SmartScreen 평판 검사가 지킬 것이 없다. 사내망 등에서 검사 서버 응답을 기다리느라 페이지 표시가 매번 약 2초 늦어져 끈다.
+            WebView.CoreWebView2.Settings.IsReputationCheckingRequired = false;
             WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "folderss-viewer", ResourcesPath,
                 CoreWebView2HostResourceAccessKind.Allow);
@@ -120,6 +132,7 @@ namespace Folderss.Viewers
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
             _webViewReady = true;
+            _idleSaver = new WebViewIdleSaver(this, WebView, OnBecameVisible);
             WebView.CoreWebView2.Navigate("https://folderss-viewer/monaco-app.html");
             WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
         }
@@ -147,22 +160,36 @@ namespace Folderss.Viewers
 
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            var json = e.WebMessageAsJson;
-            var type = ExtractJsonString(json, "type");
-
-            switch (type)
+            // 직접 문자열을 훑으면 이스케이프 처리를 놓쳐 저장 본문이 깨질 수 있으므로 JSON 파서로 읽는다.
+            using (var document = JsonDocument.Parse(e.WebMessageAsJson))
             {
-                case "modified":
-                    var val = json.Contains("\"value\":true");
-                    _modified = val;
-                    ModifiedChanged?.Invoke(this, val);
-                    break;
-                case "save-request":
-                    var content = ExtractJsonString(json, "content");
-                    if (content != null)
-                        Save(content);
-                    break;
+                var message = document.RootElement;
+                if (message.ValueKind != JsonValueKind.Object)
+                    return;
+
+                switch (GetJsonString(message, "type"))
+                {
+                    case "modified":
+                        JsonElement value;
+                        var val = message.TryGetProperty("value", out value) && value.ValueKind == JsonValueKind.True;
+                        _modified = val;
+                        ModifiedChanged?.Invoke(this, val);
+                        break;
+                    case "save-request":
+                        var content = GetJsonString(message, "content");
+                        if (content != null)
+                            Save(content);
+                        break;
+                }
             }
+        }
+
+        private static string GetJsonString(JsonElement obj, string name)
+        {
+            JsonElement property;
+            return obj.TryGetProperty(name, out property) && property.ValueKind == JsonValueKind.String
+                ? property.GetString()
+                : null;
         }
 
         public void Load(string filePath)
@@ -206,6 +233,7 @@ namespace Folderss.Viewers
 
             _pendingContent = null;
             _pendingLanguage = null;
+            _pageTheme = ThemeName(_currentTheme);
 
             var script = string.Format(
                 "app.open({0},{1},{2},{3},{4},{5})",
@@ -224,10 +252,8 @@ namespace Folderss.Viewers
 
             try
             {
-                var tmp = _filePath + ".tmp";
-                File.WriteAllText(tmp, content, _encoding);
-                File.Delete(_filePath);
-                File.Move(tmp, _filePath);
+                // 원본을 먼저 지우고 옮기면 옮기기가 실패할 때 원본이 사라진다. 임시 파일에 쓴 뒤 덮어쓰기 이동으로 교체한다.
+                SettingsFile.WriteAllText(_filePath, content, _encoding);
                 _lastLoadedContent = content;
                 var _ = WebView.CoreWebView2.ExecuteScriptAsync("app.markSaved()");
             }
@@ -241,10 +267,26 @@ namespace Folderss.Viewers
         public void ApplyTheme(AppTheme theme)
         {
             _currentTheme = theme;
-            if (!_webViewReady) return;
+            if (_disposed) return;
+            // 편집기가 그려지기 전에 보이는 바탕을 테마 색으로 맞춰 깜빡임을 없앤다.
+            WebView.DefaultBackgroundColor = PageBackground(theme);
+            // 가려진 탭은 다시 보일 때(OnBecameVisible) 적용한다. 일시 중지된 WebView에 스크립트를 보내지 않는다.
+            if (!_webViewReady || !IsVisible) return;
+            SendTheme();
+        }
 
+        private void SendTheme()
+        {
+            _pageTheme = ThemeName(_currentTheme);
             var _ = WebView.CoreWebView2.ExecuteScriptAsync(
-                string.Format("app.setTheme({0})", JsonString(ThemeName(theme))));
+                string.Format("app.setTheme({0})", JsonString(_pageTheme)));
+        }
+
+        // 탭이 다시 보일 때 가려진 동안 바뀐 테마를 적용한다.
+        private void OnBecameVisible()
+        {
+            if (_webViewReady && _pageTheme != null && _pageTheme != ThemeName(_currentTheme))
+                SendTheme();
         }
 
         public void Export(ExportFormat format, string destPath)
@@ -396,6 +438,12 @@ namespace Folderss.Viewers
                 WebView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
                 WebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
             }
+
+            // WPF WebView2는 화면에서 빠져도 스스로 정리되지 않아, 탭을 닫을 때마다 브라우저 프로세스와 메모리가 남는다.
+            // 준비 플래그를 내려 이후 들어오는 ExecuteScriptAsync 호출(테마 변경 등)이 해제된 컨트롤을 건드리지 않게 한다.
+            _webViewReady = false;
+            _idleSaver?.Dispose();
+            WebView.Dispose();
         }
 
         private static Encoding DetectEncoding(string filePath)
@@ -417,6 +465,14 @@ namespace Folderss.Viewers
             return ExtToLanguage.TryGetValue(ext, out lang) ? lang : "plaintext";
         }
 
+        // monaco-app.html의 편집기 테마 배경(folderss-dark #0e1013, folderss-light #ffffff)과 같은 색
+        private static System.Drawing.Color PageBackground(AppTheme theme)
+        {
+            return theme == AppTheme.Light || theme == AppTheme.GitHub
+                ? System.Drawing.ColorTranslator.FromHtml("#ffffff")
+                : System.Drawing.ColorTranslator.FromHtml("#0e1013");
+        }
+
         private static string ThemeName(AppTheme theme)
         {
             switch (theme)
@@ -425,54 +481,6 @@ namespace Folderss.Viewers
                 case AppTheme.GitHub: return "github";
                 default: return "dark";
             }
-        }
-
-        private static string ExtractJsonString(string json, string key)
-        {
-            var pattern = "\"" + key + "\":";
-            var i = json.IndexOf(pattern, StringComparison.Ordinal);
-            if (i < 0) return null;
-            i += pattern.Length;
-            while (i < json.Length && char.IsWhiteSpace(json[i])) i++;
-            if (i >= json.Length || json[i] != '"') return null;
-            i++;
-            var sb = new StringBuilder();
-            while (i < json.Length)
-            {
-                var c = json[i++];
-                if (c == '"') break;
-                if (c == '\\' && i < json.Length)
-                {
-                    var e = json[i++];
-                    switch (e)
-                    {
-                        case '"': sb.Append('"'); break;
-                        case '\\': sb.Append('\\'); break;
-                        case '/': sb.Append('/'); break;
-                        case 'b': sb.Append('\b'); break;
-                        case 'f': sb.Append('\f'); break;
-                        case 'n': sb.Append('\n'); break;
-                        case 'r': sb.Append('\r'); break;
-                        case 't': sb.Append('\t'); break;
-                        case 'u':
-                            if (i + 4 <= json.Length)
-                            {
-                                var hex = json.Substring(i, 4);
-                                sb.Append((char)Convert.ToInt32(hex, 16));
-                                i += 4;
-                            }
-                            break;
-                        default:
-                            sb.Append(e);
-                            break;
-                    }
-                }
-                else
-                {
-                    sb.Append(c);
-                }
-            }
-            return sb.ToString();
         }
 
         private static string JsonString(string value)

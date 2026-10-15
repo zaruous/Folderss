@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta http-equiv="Content-Security-Policy"
-  content="default-src 'self' https://folderss-viewer; script-src 'self' https://folderss-viewer 'unsafe-inline'; style-src 'self' https://folderss-viewer 'unsafe-inline'; font-src 'self' https://folderss-viewer data:; img-src 'self' https://folderss-viewer https://folderss-doc-asset data: http: https:;">
+  content="default-src 'self' https://folderss-viewer; script-src 'self' https://folderss-viewer; style-src 'self' https://folderss-viewer 'unsafe-inline'; font-src 'self' https://folderss-viewer data:; img-src 'self' https://folderss-viewer https://folderss-doc-asset data: http: https:;">
 <title>Markdown Viewer</title>
 <link rel="stylesheet" href="katex.min.css">
 <style>
@@ -56,15 +56,20 @@ body.github {
   --fg2: #656d76; --accent: #0969da; --hover: #f3f4f6; --sel: #ddf4ff;
 }
 
+/* 테마를 받기 전(app.open 전)에는 배경을 비워 C#이 지정한 WebView 기본 배경색(현재 테마 색)이 보이게 하고, 툴바도 숨긴다.
+   기본 테마 색으로 먼저 그렸다가 바뀌며 깜빡이는 것을 막는다. */
+body.theme-pending { background: transparent; }
+body.theme-pending #mdv-root { visibility: hidden; }
+
 /* ── Layout ──────────────────────────────── */
-#root {
+#mdv-root {
   display: flex;
   flex-direction: column;
   height: 100vh;
 }
 
 /* toolbar */
-#toolbar {
+#mdv-toolbar {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -154,14 +159,14 @@ mark.md-find-hit.active {
 }
 
 /* main area */
-#main {
+#mdv-main {
   display: flex;
   flex: 1;
   overflow: hidden;
 }
 
 /* toc */
-#toc-panel {
+#mdv-toc-panel {
   width: var(--toc-w);
   min-width: 80px;
   max-width: 400px;
@@ -171,9 +176,9 @@ mark.md-find-hit.active {
   flex-shrink: 0;
   background: var(--panel);
 }
-#toc-panel.hidden { display: none; }
+#mdv-toc-panel.hidden { display: none; }
 
-#toc-panel .toc-item {
+#mdv-toc-panel .toc-item {
   display: block;
   padding: 3px 12px;
   color: var(--fg2);
@@ -185,13 +190,13 @@ mark.md-find-hit.active {
   text-overflow: ellipsis;
   border-left: 2px solid transparent;
 }
-#toc-panel .toc-item:hover { background: var(--hover); color: var(--fg); }
-#toc-panel .toc-item.active { border-left-color: var(--accent); color: var(--accent); }
-#toc-panel .toc-h2 { padding-left: 20px; }
-#toc-panel .toc-h3 { padding-left: 32px; }
-#toc-panel .toc-h4 { padding-left: 44px; }
-#toc-panel .toc-h5 { padding-left: 56px; }
-#toc-panel .toc-h6 { padding-left: 68px; }
+#mdv-toc-panel .toc-item:hover { background: var(--hover); color: var(--fg); }
+#mdv-toc-panel .toc-item.active { border-left-color: var(--accent); color: var(--accent); }
+#mdv-toc-panel .toc-h2 { padding-left: 20px; }
+#mdv-toc-panel .toc-h3 { padding-left: 32px; }
+#mdv-toc-panel .toc-h4 { padding-left: 44px; }
+#mdv-toc-panel .toc-h5 { padding-left: 56px; }
+#mdv-toc-panel .toc-h6 { padding-left: 68px; }
 
 /* resize handle */
 .resize-handle {
@@ -204,20 +209,20 @@ mark.md-find-hit.active {
 .resize-handle:hover, .resize-handle.dragging { background: var(--accent); }
 
 /* content area */
-#content-area {
+#mdv-content-area {
   flex: 1;
   display: flex;
   overflow: hidden;
 }
 
 /* editor pane */
-#editor-pane {
+#mdv-editor-pane {
   flex: 1;
   overflow: hidden;
   display: flex;
   flex-direction: row;
 }
-#editor-gutter {
+#mdv-editor-gutter {
   flex-shrink: 0;
   width: 4ch;
   overflow: hidden;
@@ -233,7 +238,7 @@ mark.md-find-hit.active {
   white-space: pre;
   user-select: none;
 }
-#editor-textarea {
+#mdv-editor-textarea {
   flex: 1;
   width: 100%;
   background: var(--bg);
@@ -251,38 +256,38 @@ mark.md-find-hit.active {
 }
 
 /* preview pane */
-#preview-pane {
+#mdv-preview-pane {
   flex: 1;
   position: relative;
   overflow-y: auto;
   padding: 20px 28px;
   scroll-padding-top: 12px;
 }
-#preview-pane::after {
+#mdv-preview-pane::after {
   content: '';
   display: block;
   height: max(45vh, 220px);
 }
 
 /* ── Markdown prose styles ───────────────── */
-#preview-pane {
+#mdv-preview-pane {
   line-height: 1.7;
   font-family: var(--font-sans);
 }
-#preview-pane h1,#preview-pane h2,#preview-pane h3,
-#preview-pane h4,#preview-pane h5,#preview-pane h6 {
+#mdv-preview-pane h1,#mdv-preview-pane h2,#mdv-preview-pane h3,
+#mdv-preview-pane h4,#mdv-preview-pane h5,#mdv-preview-pane h6 {
   margin: 1.2em 0 .4em;
   font-weight: 600;
   line-height: 1.3;
   color: var(--fg);
 }
-#preview-pane h1 { font-size: 1.7em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
-#preview-pane h2 { font-size: 1.35em; border-bottom: 1px solid var(--border); padding-bottom: .2em; }
-#preview-pane h3 { font-size: 1.15em; }
-#preview-pane p  { margin: .7em 0; }
-#preview-pane a  { color: var(--accent); }
-#preview-pane a:hover { text-decoration: underline; }
-#preview-pane code {
+#mdv-preview-pane h1 { font-size: 1.7em; border-bottom: 1px solid var(--border); padding-bottom: .3em; }
+#mdv-preview-pane h2 { font-size: 1.35em; border-bottom: 1px solid var(--border); padding-bottom: .2em; }
+#mdv-preview-pane h3 { font-size: 1.15em; }
+#mdv-preview-pane p  { margin: .7em 0; }
+#mdv-preview-pane a  { color: var(--accent); }
+#mdv-preview-pane a:hover { text-decoration: underline; }
+#mdv-preview-pane code {
   font-family: var(--font-mono);
   font-size: .88em;
   background: var(--panel);
@@ -290,7 +295,7 @@ mark.md-find-hit.active {
   border-radius: 3px;
   padding: .1em .4em;
 }
-#preview-pane pre {
+#mdv-preview-pane pre {
   background: var(--panel);
   border: 1px solid var(--border);
   border-radius: 6px;
@@ -298,31 +303,31 @@ mark.md-find-hit.active {
   overflow-x: auto;
   margin: .8em 0;
 }
-#preview-pane pre code {
+#mdv-preview-pane pre code {
   background: transparent;
   border: none;
   padding: 0;
   font-size: .9em;
 }
-#preview-pane blockquote {
+#mdv-preview-pane blockquote {
   border-left: 4px solid var(--accent);
   margin: .8em 0;
   padding: .3em 0 .3em 1em;
   color: var(--fg2);
 }
-#preview-pane ul, #preview-pane ol { padding-left: 1.8em; margin: .5em 0; }
-#preview-pane li { margin: .2em 0; }
-#preview-pane table { border-collapse: collapse; margin: .8em 0; width: 100%; }
-#preview-pane th, #preview-pane td {
+#mdv-preview-pane ul, #mdv-preview-pane ol { padding-left: 1.8em; margin: .5em 0; }
+#mdv-preview-pane li { margin: .2em 0; }
+#mdv-preview-pane table { border-collapse: collapse; margin: .8em 0; width: 100%; }
+#mdv-preview-pane th, #mdv-preview-pane td {
   border: 1px solid var(--border);
   padding: 6px 12px;
   text-align: left;
 }
-#preview-pane th { background: var(--panel); font-weight: 600; }
-#preview-pane tr:hover { background: var(--hover); }
-#preview-pane img { max-width: 100%; border-radius: 4px; }
-#preview-pane hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
-#preview-pane input[type=checkbox] { margin-right: .4em; }
+#mdv-preview-pane th { background: var(--panel); font-weight: 600; }
+#mdv-preview-pane tr:hover { background: var(--hover); }
+#mdv-preview-pane img { max-width: 100%; border-radius: 4px; }
+#mdv-preview-pane hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
+#mdv-preview-pane input[type=checkbox] { margin-right: .4em; }
 
 /* front-matter box */
 .frontmatter-box {
@@ -349,72 +354,72 @@ mark.md-find-hit.active {
 ::-webkit-scrollbar-thumb:hover { background: var(--fg2); }
 
 /* mode: preview only / edit only / split */
-body.mode-preview #editor-pane { display: none; }
-body.mode-edit    #preview-pane { display: none; }
-body.mode-edit    #toc-panel,
-body.mode-split   #toc-panel   { display: none !important; }
+body.mode-preview #mdv-editor-pane { display: none; }
+body.mode-edit    #mdv-preview-pane { display: none; }
+body.mode-edit    #mdv-toc-panel,
+body.mode-split   #mdv-toc-panel   { display: none !important; }
 
 /* split resize handle between editor and preview */
-#split-handle { display: none; }
-body.mode-split #split-handle {
+#mdv-split-handle { display: none; }
+body.mode-split #mdv-split-handle {
   display: block;
   width: 4px;
   cursor: col-resize;
   background: var(--border);
   flex-shrink: 0;
 }
-body.mode-split #split-handle:hover { background: var(--accent); }
+body.mode-split #mdv-split-handle:hover { background: var(--accent); }
 
 /* operation surface used by print/save/share; the application toolbar is excluded */
-#operation-surface { display: none; }
+#mdv-operation-surface { display: none; }
 @media print {
   html, body { height: auto; overflow: visible; background: #fff; }
-  #root { display: none !important; }
-  #operation-surface {
+  #mdv-root { display: none !important; }
+  #mdv-operation-surface {
     display: flex !important;
     width: 100%;
     min-height: 0;
     color: #000;
     background: #fff;
   }
-  #operation-surface .operation-toc {
+  #mdv-operation-surface .operation-toc {
     width: 190px;
     flex: 0 0 190px;
     padding: 0 16px 0 0;
     border-right: 1px solid #bbb;
   }
-  #operation-surface .operation-content { flex: 1; min-width: 0; padding: 0 18px; }
-  #operation-surface .operation-pane { flex: 1; min-width: 0; padding: 0 14px; }
-  #operation-surface .operation-pane + .operation-pane { border-left: 1px solid #bbb; }
-  #operation-surface .operation-editor {
+  #mdv-operation-surface .operation-content { flex: 1; min-width: 0; padding: 0 18px; }
+  #mdv-operation-surface .operation-pane { flex: 1; min-width: 0; padding: 0 14px; }
+  #mdv-operation-surface .operation-pane + .operation-pane { border-left: 1px solid #bbb; }
+  #mdv-operation-surface .operation-editor {
     margin: 0;
     white-space: pre-wrap;
     overflow-wrap: anywhere;
     font: 10pt/1.55 var(--font-mono);
   }
-  #operation-surface .operation-preview { font: 10pt/1.6 var(--font-sans); }
-  #operation-surface pre, #operation-surface table, #operation-surface img,
-  #operation-surface blockquote { break-inside: avoid; }
-  #operation-surface img { max-width: 100%; }
+  #mdv-operation-surface .operation-preview { font: 10pt/1.6 var(--font-sans); }
+  #mdv-operation-surface pre, #mdv-operation-surface table, #mdv-operation-surface img,
+  #mdv-operation-surface blockquote { break-inside: avoid; }
+  #mdv-operation-surface img { max-width: 100%; }
 
-  /* 미리보기 프로즈 스타일은 #preview-pane 스코프라 복제본에는 적용되지 않으므로
+  /* 미리보기 프로즈 스타일은 #mdv-preview-pane 스코프라 복제본에는 적용되지 않으므로
      인쇄/PDF용 흑백 프로즈 스타일을 여기서 별도로 정의한다. */
-  #operation-surface { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
-  #operation-surface .operation-preview { line-height: 1.6; }
-  #operation-surface .operation-preview h1, #operation-surface .operation-preview h2,
-  #operation-surface .operation-preview h3, #operation-surface .operation-preview h4,
-  #operation-surface .operation-preview h5, #operation-surface .operation-preview h6 {
+  #mdv-operation-surface { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #mdv-operation-surface .operation-preview { line-height: 1.6; }
+  #mdv-operation-surface .operation-preview h1, #mdv-operation-surface .operation-preview h2,
+  #mdv-operation-surface .operation-preview h3, #mdv-operation-surface .operation-preview h4,
+  #mdv-operation-surface .operation-preview h5, #mdv-operation-surface .operation-preview h6 {
     margin: 1.2em 0 .4em;
     font-weight: 600;
     line-height: 1.3;
     color: #000;
   }
-  #operation-surface .operation-preview h1 { font-size: 1.6em; border-bottom: 1px solid #bbb; padding-bottom: .3em; }
-  #operation-surface .operation-preview h2 { font-size: 1.3em; border-bottom: 1px solid #bbb; padding-bottom: .2em; }
-  #operation-surface .operation-preview h3 { font-size: 1.15em; }
-  #operation-surface .operation-preview p  { margin: .7em 0; }
-  #operation-surface .operation-preview a  { color: #0550ae; text-decoration: none; }
-  #operation-surface .operation-preview code {
+  #mdv-operation-surface .operation-preview h1 { font-size: 1.6em; border-bottom: 1px solid #bbb; padding-bottom: .3em; }
+  #mdv-operation-surface .operation-preview h2 { font-size: 1.3em; border-bottom: 1px solid #bbb; padding-bottom: .2em; }
+  #mdv-operation-surface .operation-preview h3 { font-size: 1.15em; }
+  #mdv-operation-surface .operation-preview p  { margin: .7em 0; }
+  #mdv-operation-surface .operation-preview a  { color: #0550ae; text-decoration: none; }
+  #mdv-operation-surface .operation-preview code {
     font-family: var(--font-mono);
     font-size: .88em;
     background: #f2f2f2;
@@ -422,7 +427,7 @@ body.mode-split #split-handle:hover { background: var(--accent); }
     border-radius: 3px;
     padding: .1em .4em;
   }
-  #operation-surface .operation-preview pre {
+  #mdv-operation-surface .operation-preview pre {
     background: #f6f8fa;
     border: 1px solid #ddd;
     border-radius: 6px;
@@ -431,24 +436,24 @@ body.mode-split #split-handle:hover { background: var(--accent); }
     white-space: pre-wrap;
     overflow-wrap: anywhere;
   }
-  #operation-surface .operation-preview pre code { background: transparent; border: none; padding: 0; font-size: .9em; }
-  #operation-surface .operation-preview blockquote {
+  #mdv-operation-surface .operation-preview pre code { background: transparent; border: none; padding: 0; font-size: .9em; }
+  #mdv-operation-surface .operation-preview blockquote {
     border-left: 4px solid #999;
     margin: .8em 0;
     padding: .3em 0 .3em 1em;
     color: #555;
   }
-  #operation-surface .operation-preview ul, #operation-surface .operation-preview ol { padding-left: 1.8em; margin: .5em 0; }
-  #operation-surface .operation-preview li { margin: .2em 0; }
-  #operation-surface .operation-preview table { border-collapse: collapse; margin: .8em 0; width: 100%; }
-  #operation-surface .operation-preview th, #operation-surface .operation-preview td {
+  #mdv-operation-surface .operation-preview ul, #mdv-operation-surface .operation-preview ol { padding-left: 1.8em; margin: .5em 0; }
+  #mdv-operation-surface .operation-preview li { margin: .2em 0; }
+  #mdv-operation-surface .operation-preview table { border-collapse: collapse; margin: .8em 0; width: 100%; }
+  #mdv-operation-surface .operation-preview th, #mdv-operation-surface .operation-preview td {
     border: 1px solid #999;
     padding: 6px 12px;
     text-align: left;
   }
-  #operation-surface .operation-preview th { background: #f0f0f0; font-weight: 600; }
-  #operation-surface .operation-preview hr { border: none; border-top: 1px solid #bbb; margin: 1.5em 0; }
-  #operation-surface .operation-preview .frontmatter-box {
+  #mdv-operation-surface .operation-preview th { background: #f0f0f0; font-weight: 600; }
+  #mdv-operation-surface .operation-preview hr { border: none; border-top: 1px solid #bbb; margin: 1.5em 0; }
+  #mdv-operation-surface .operation-preview .frontmatter-box {
     background: #f6f8fa;
     border: 1px solid #ddd;
     border-radius: 6px;
@@ -459,7 +464,7 @@ body.mode-split #split-handle:hover { background: var(--accent); }
     color: #555;
     white-space: pre-wrap;
   }
-  #operation-surface .operation-toc .toc-item {
+  #mdv-operation-surface .operation-toc .toc-item {
     display: block;
     padding: 2px 0;
     color: #555;
@@ -467,779 +472,63 @@ body.mode-split #split-handle:hover { background: var(--accent); }
     font-size: 9pt;
     border-left: none;
   }
-  #operation-surface .operation-toc .toc-h2 { padding-left: 10px; }
-  #operation-surface .operation-toc .toc-h3 { padding-left: 20px; }
-  #operation-surface .operation-toc .toc-h4 { padding-left: 30px; }
-  #operation-surface .operation-toc .toc-h5 { padding-left: 40px; }
-  #operation-surface .operation-toc .toc-h6 { padding-left: 50px; }
+  #mdv-operation-surface .operation-toc .toc-h2 { padding-left: 10px; }
+  #mdv-operation-surface .operation-toc .toc-h3 { padding-left: 20px; }
+  #mdv-operation-surface .operation-toc .toc-h4 { padding-left: 30px; }
+  #mdv-operation-surface .operation-toc .toc-h5 { padding-left: 40px; }
+  #mdv-operation-surface .operation-toc .toc-h6 { padding-left: 50px; }
 }
 </style>
 </head>
-<body class="dark mode-preview">
+<body class="theme-pending mode-preview">
 
-<div id="root">
+<div id="mdv-root">
   <!-- toolbar -->
-  <div id="toolbar">
-    <button class="tb" id="btnEdit"    onclick="setMode('edit')"    title="편집 모드">Edit</button>
-    <button class="tb" id="btnSplit"   onclick="setMode('split')"   title="분할 모드">Split</button>
-    <button class="tb active" id="btnPreview" onclick="setMode('preview')" title="미리보기 모드">Preview</button>
+  <div id="mdv-toolbar">
+    <button class="tb" id="btnEdit"    title="편집 모드">Edit</button>
+    <button class="tb" id="btnSplit"   title="분할 모드">Split</button>
+    <button class="tb active" id="btnPreview" title="미리보기 모드">Preview</button>
     <div class="tb-sep"></div>
-    <button class="tb" id="btnFind" onclick="openFindBar()" title="검색">Search</button>
+    <button class="tb" id="btnFind" title="검색">Search</button>
     <div class="tb-sep"></div>
-    <button class="tb" id="btnToc"     onclick="toggleToc()"        title="목차 토글">≡</button>
+    <button class="tb" id="btnToc"     title="목차 토글">≡</button>
     <div style="flex:1"></div>
     <div class="tb-dropdown">
-      <button class="tb" onclick="toggleExportMenu()" title="내보내기">Export ▾</button>
+      <button class="tb" id="btnExport" title="내보내기">Export ▾</button>
       <div id="exportMenu">
-        <button onclick="exportHtml()">HTML로 저장</button>
-        <button onclick="exportPdf()">PDF로 저장</button>
+        <button id="btnExportHtml">HTML로 저장</button>
+        <button id="btnExportPdf">PDF로 저장</button>
       </div>
     </div>
   </div>
   <div id="findBar">
     <input id="findInput" type="text" autocomplete="off" spellcheck="false" aria-label="검색">
     <span id="findCount">0 / 0</span>
-    <button class="tb" id="findPrev" title="이전" onclick="findPrevious()">↑</button>
-    <button class="tb" id="findNext" title="다음" onclick="findNext()">↓</button>
-    <button class="tb" id="findClose" title="닫기" onclick="closeFindBar()">×</button>
+    <button class="tb" id="findPrev" title="이전">↑</button>
+    <button class="tb" id="findNext" title="다음">↓</button>
+    <button class="tb" id="findClose" title="닫기">×</button>
   </div>
   <!-- main -->
-  <div id="main">
+  <div id="mdv-main">
     <!-- TOC -->
-    <div id="toc-panel"></div>
-    <div class="resize-handle" id="toc-handle"></div>
+    <div id="mdv-toc-panel"></div>
+    <div class="resize-handle" id="mdv-toc-handle"></div>
 
     <!-- content -->
-    <div id="content-area">
-      <div id="editor-pane">
-        <div id="editor-gutter" aria-hidden="true"></div>
-        <textarea id="editor-textarea" spellcheck="false" wrap="off"></textarea>
+    <div id="mdv-content-area">
+      <div id="mdv-editor-pane">
+        <div id="mdv-editor-gutter" aria-hidden="true"></div>
+        <textarea id="mdv-editor-textarea" spellcheck="false" wrap="off"></textarea>
       </div>
-      <div class="resize-handle" id="split-handle"></div>
-      <div id="preview-pane"></div>
+      <div class="resize-handle" id="mdv-split-handle"></div>
+      <div id="mdv-preview-pane"></div>
     </div>
   </div>
 </div>
-<div id="operation-surface" aria-hidden="true"></div>
+<div id="mdv-operation-surface" aria-hidden="true"></div>
 
 <script src="marked.min.js"></script>
-<script src="mermaid.min.js"></script>
-<script src="katex.min.js"></script>
-<script src="katex-auto-render.min.js"></script>
-<script src="highlight.min.js"></script>
-<script>
-'use strict';
-
-// ── State ─────────────────────────────────
-var _content = '';
-var _mode    = 'preview';
-var _theme   = 'dark';
-var _modified = false;
-var _renderTimer = null;
-var _tocVisible = true;
-var _largeFileMode = false;
-var _tocObserver = null;
-var _findHits = [];
-var _findIndex = -1;
-var _findQuery = '';
-var _findMatches = [];
-var _printSurfaceReady = false;
-
-// ── Init ──────────────────────────────────
-mermaid.initialize({ startOnLoad: false, securityLevel: 'strict', theme: 'dark' });
-marked.use({ gfm: true, breaks: false, allowDangerousHtml: false });
-
-// 상대 경로(또는 로컬 절대 경로) 이미지 링크는 브라우저 오리진(folderss-viewer, Resources 폴더)이 아니라
-// 현재 열려 있는 마크다운 파일 기준으로 찾아야 하므로, 스킴이 없는 경로는 전용 가상 호스트로 우회시켜
-// C# 쪽(MarkdownViewer.ResolveLocalLinkPath)에서 실제 파일을 읽어오게 한다.
-marked.use({
-  renderer: {
-    image: function(href, title, text) {
-      var src = resolveImageSrc(href);
-      var html = '<img src="' + escapeHtmlAttr(src) + '" alt="' + escapeHtmlAttr(text || '') + '"';
-      if (title) html += ' title="' + escapeHtmlAttr(title) + '"';
-      html += '>';
-      return html;
-    }
-  }
-});
-
-function resolveImageSrc(href) {
-  if (!href) return href;
-  // data:, http(s):, file: 등 실제 웹/스킴 링크는 그대로 둔다.
-  // (Windows 절대 경로 "C:\..."도 콜론을 포함하지만 스킴이 아니므로 별도로 걸러낸다.)
-  if (/^(https?|data|file|ftp|mailto):/i.test(href))
-    return href;
-  return 'https://folderss-doc-asset/resolve?p=' + encodeURIComponent(href);
-}
-
-function escapeHtmlAttr(s) {
-  return String(s).replace(/&/g,'&amp;').replace(/"/g,'&quot;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-// ── Toolbar mode buttons ──────────────────
-function resetEditorPaneSizeIfNotSplit(mode) {
-  // split 모드의 드래그 리사이즈로 남은 고정폭을 해제해, split이 아닐 때는 화면 너비에 맞게 채운다
-  if (mode === 'split')
-    return;
-  var editorPane = document.getElementById('editor-pane');
-  editorPane.style.flex = '';
-  editorPane.style.width = '';
-}
-
-function setMode(mode) {
-  _mode = mode;
-  document.body.className = _theme + ' mode-' + mode;
-  document.getElementById('btnEdit').classList.toggle('active', mode === 'edit');
-  document.getElementById('btnSplit').classList.toggle('active', mode === 'split');
-  document.getElementById('btnPreview').classList.toggle('active', mode === 'preview');
-  resetEditorPaneSizeIfNotSplit(mode);
-  // TOC only in preview mode
-  var tocPanel = document.getElementById('toc-panel');
-  var tocHandle = document.getElementById('toc-handle');
-  if (mode === 'preview') {
-    tocPanel.classList.toggle('hidden', !_tocVisible);
-    tocHandle.style.display = _tocVisible ? '' : 'none';
-  }
-  updateFindHighlights();
-}
-
-function toggleToc() {
-  _tocVisible = !_tocVisible;
-  var tocPanel = document.getElementById('toc-panel');
-  var tocHandle = document.getElementById('toc-handle');
-  if (_mode === 'preview') {
-    tocPanel.classList.toggle('hidden', !_tocVisible);
-    tocHandle.style.display = _tocVisible ? '' : 'none';
-  }
-}
-
-// ── Export menu ───────────────────────────
-function toggleExportMenu() {
-  document.getElementById('exportMenu').classList.toggle('open');
-}
-document.addEventListener('click', function(e) {
-  if (!e.target.closest('.tb-dropdown'))
-    document.getElementById('exportMenu').classList.remove('open');
-});
-
-document.addEventListener('keydown', function(e) {
-  if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 'f') {
-    e.preventDefault();
-    openFindBar();
-    return;
-  }
-  if (e.key === 'Escape' && document.getElementById('findBar').classList.contains('open')) {
-    e.preventDefault();
-    closeFindBar();
-    return;
-  }
-  if (e.key === 'Enter' && document.activeElement === document.getElementById('findInput')) {
-    e.preventDefault();
-    if (e.shiftKey) findPrevious();
-    else findNext();
-  }
-});
-
-function exportHtml() {
-  document.getElementById('exportMenu').classList.remove('open');
-  var full = buildStandaloneHtml();
-  window.chrome.webview.postMessage({ type: 'export-html', content: full });
-}
-
-function exportPdf() {
-  document.getElementById('exportMenu').classList.remove('open');
-  // PDF에서는 목차가 있어도 제외하고 본문만 내보낸다.
-  createOperationSurface({ includeToc: false });
-  // PrintToPdfAsync가 beforeprint를 발화시키면 아래 리스너가 surface를 목차 포함으로
-  // 재빌드해버리므로, 미리 구성한 surface를 그대로 쓰도록 플래그로 보호한다.
-  _printSurfaceReady = true;
-  window.chrome.webview.postMessage({ type: 'export-pdf' });
-}
-
-function clearOperationSurface() {
-  _printSurfaceReady = false;
-  document.getElementById('operation-surface').innerHTML = '';
-}
-
-function createOperationSurface(options) {
-  var includeToc = !options || options.includeToc !== false;
-  var surface = document.getElementById('operation-surface');
-  surface.innerHTML = '';
-
-  if (includeToc && _mode === 'preview' && _tocVisible) {
-    var toc = document.getElementById('toc-panel').cloneNode(true);
-    toc.removeAttribute('id');
-    toc.className = 'operation-toc';
-    // 목차 클릭 이동은 JS 핸들러(data-target) 기반이라 내보낸 HTML에서는 동작하지
-    // 않으므로, 본문 제목 id를 가리키는 실제 앵커(href="#h-N")로 바꿔준다.
-    Array.from(toc.querySelectorAll('a[data-target]')).forEach(function(a) {
-      a.setAttribute('href', '#' + a.dataset.target);
-      a.classList.remove('active');
-    });
-    surface.appendChild(toc);
-  }
-
-  if (_mode === 'edit' || _mode === 'split') {
-    var editorPane = document.createElement('section');
-    editorPane.className = _mode === 'split' ? 'operation-pane' : 'operation-content';
-    var pre = document.createElement('pre');
-    pre.className = 'operation-editor';
-    pre.textContent = editor.value;
-    editorPane.appendChild(pre);
-    surface.appendChild(editorPane);
-  }
-
-  if (_mode === 'preview' || _mode === 'split') {
-    var previewPane = document.createElement('section');
-    previewPane.className = (_mode === 'split' ? 'operation-pane ' : 'operation-content ') + 'operation-preview';
-    previewPane.innerHTML = document.getElementById('preview-pane').innerHTML;
-    surface.appendChild(previewPane);
-  }
-  return surface;
-}
-
-function operationStyles() {
-  // 복제해온 페이지 CSS의 html,body{height:100%;overflow:hidden}을 덮어써
-  // 내보낸 HTML 문서가 스크롤되도록 한다 (이 스타일이 뒤에 삽입되므로 우선함).
-  // body에 overflow:auto를 주면 body가 별도 스크롤 컨테이너가 되어 목차의
-  // position:sticky가 뷰포트에 걸리지 않으므로, 스크롤은 html에만 준다.
-  return 'html,body{height:auto}html{overflow:auto}body{overflow:visible}'
-    + 'html{scroll-behavior:smooth}'
-    + '.operation-preview{overflow:visible}'
-    + '.operation-preview::after{content:none;height:0}'
-    + 'body{margin:24px;color:var(--fg,#24292f);background:var(--bg,#fff);font:14px/1.7 var(--font-sans,Segoe UI,Arial,sans-serif)}'
-    + '.operation-layout{display:flex;align-items:flex-start;gap:0}'
-    // 뷰어처럼 스크롤 중에도 목차가 화면에 고정되도록 sticky 사이드바로 렌더링
-    + '.operation-toc{width:190px;flex:0 0 190px;align-self:flex-start;position:sticky;top:0;'
-    + 'max-height:100vh;overflow-y:auto;padding:12px 16px 12px 0;border-right:1px solid var(--border,#ddd)}'
-    + '.operation-toc a{display:block;color:var(--fg2,#555);text-decoration:none;padding:3px 0;'
-    + 'font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}'
-    + '.operation-toc a:hover{color:var(--accent,#0550ae)}'
-    + '.operation-toc .toc-h2{padding-left:12px}.operation-toc .toc-h3{padding-left:24px}'
-    + '.operation-toc .toc-h4{padding-left:36px}.operation-toc .toc-h5{padding-left:48px}'
-    + '.operation-toc .toc-h6{padding-left:60px}'
-    + '.operation-content,.operation-pane{flex:1;min-width:0;padding:0 18px}'
-    + '.operation-pane+.operation-pane{border-left:1px solid var(--border,#ddd)}'
-    + '.operation-editor{margin:0;white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.6 var(--font-mono,Consolas,monospace)}'
-    + '.operation-preview img{max-width:100%}.operation-preview table{border-collapse:collapse;width:100%}'
-    + '.operation-preview th,.operation-preview td{border:1px solid var(--border,#ddd);padding:6px 10px}'
-    + '.operation-preview pre{white-space:pre-wrap;background:var(--panel,#f6f8fa);padding:12px}'
-    + '@media print{pre,table,img,blockquote{break-inside:avoid}}';
-}
-
-function renderedContentStyles() {
-  return Array.from(document.styleSheets)
-    .map(function(sheet) {
-      try {
-        return Array.from(sheet.cssRules).map(function(rule) { return rule.cssText; }).join('\n');
-      } catch (e) { return ''; }
-    })
-    .join('\n')
-    .replace(/#preview-pane/g, '.operation-preview');
-}
-
-function buildStandaloneHtml() {
-  var surface = createOperationSurface();
-  var html = '<!DOCTYPE html><html lang="ko"><head><meta charset="utf-8"><title>'
-    + escapeHtml(document.title) + '</title><style>' + renderedContentStyles() + '\n'
-    + operationStyles() + '</style></head><body class="' + _theme + '">'
-    + '<main class="operation-layout">' + surface.innerHTML + '</main></body></html>';
-  clearOperationSurface();
-  return html;
-}
-
-function printContent() {
-  createOperationSurface();
-  window.print();
-}
-
-async function shareContent() {
-  var surface = createOperationSurface();
-  var text = surface.innerText;
-  clearOperationSurface();
-  if (navigator.share) {
-    try { await navigator.share({ title: document.title, text: text }); } catch (e) {}
-    return;
-  }
-  if (navigator.clipboard)
-    await navigator.clipboard.writeText(text);
-}
-
-window.addEventListener('beforeprint', function() {
-  // exportPdf()가 목차 없는 surface를 이미 준비해둔 경우 덮어쓰지 않는다.
-  if (_printSurfaceReady) return;
-  createOperationSurface();
-});
-window.addEventListener('afterprint', clearOperationSurface);
-
-// ── Rendering ─────────────────────────────
-function renderPreview() {
-  if (_largeFileMode) {
-    var previewLarge = document.getElementById('preview-pane');
-    previewLarge.innerHTML = '<p style="color:var(--fg2);padding:16px">대용량 Markdown 파일은 성능 보호를 위해 미리보기를 렌더링하지 않습니다.</p>';
-    document.getElementById('toc-panel').innerHTML = '';
-    return;
-  }
-
-  var raw = _content;
-  var frontmatter = '';
-
-  // strip YAML front matter
-  if (raw.startsWith('---\n') || raw.startsWith('---\r\n')) {
-    var end = raw.indexOf('\n---', 3);
-    if (end > 0) {
-      frontmatter = raw.substring(4, end);
-      raw = raw.substring(end + 4).replace(/^\r?\n/, '');
-    }
-  }
-
-  var html = '';
-  if (frontmatter)
-    html += '<div class="frontmatter-box">' + escapeHtml(frontmatter) + '</div>';
-
-  html += marked.parse(raw);
-
-  var preview = document.getElementById('preview-pane');
-  preview.innerHTML = html;
-  clearFindHighlights();
-
-  // syntax highlight code blocks
-  preview.querySelectorAll('pre code').forEach(function(el) {
-    hljs.highlightElement(el);
-  });
-
-  // mermaid
-  var mermaidBlocks = [];
-  preview.querySelectorAll('code.language-mermaid').forEach(function(el) {
-    var wrap = document.createElement('div');
-    wrap.className = 'mermaid-wrap';
-    var inner = document.createElement('div');
-    inner.className = 'mermaid';
-    inner.textContent = el.textContent;
-    wrap.appendChild(inner);
-    el.parentNode.parentNode.replaceChild(wrap, el.parentNode);
-    mermaidBlocks.push(inner);
-  });
-  if (mermaidBlocks.length) {
-    mermaid.run({ nodes: mermaidBlocks }).catch(function(){});
-  }
-
-  // KaTeX
-  renderMathInElement(preview, {
-    delimiters: [
-      { left: '$$', right: '$$', display: true },
-      { left: '$', right: '$', display: false },
-      { left: '\\[', right: '\\]', display: true },
-      { left: '\\(', right: '\\)', display: false }
-    ],
-    throwOnError: false
-  });
-
-  // intercept links
-  preview.querySelectorAll('a[href]').forEach(function(a) {
-    a.addEventListener('click', function(e) {
-      var href = a.getAttribute('href') || '';
-      if (href.charAt(0) === '#')
-        return;
-      e.preventDefault();
-      window.chrome.webview.postMessage({ type: 'open-link', uri: a.href, href: href });
-    });
-  });
-
-  buildToc();
-  updateFindHighlights();
-}
-
-function escapeHtml(s) {
-  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-}
-
-// ── Find ──────────────────────────────────
-var findInput = document.getElementById('findInput');
-findInput.addEventListener('input', function() {
-  searchMarkdown(findInput.value);
-});
-
-function openFindBar() {
-  document.getElementById('findBar').classList.add('open');
-  document.getElementById('btnFind').classList.add('active');
-  findInput.focus();
-  findInput.select();
-  searchMarkdown(findInput.value);
-}
-
-function closeFindBar() {
-  document.getElementById('findBar').classList.remove('open');
-  document.getElementById('btnFind').classList.remove('active');
-  findInput.value = '';
-  clearSearch();
-}
-
-function clearSearch() {
-  _findQuery = '';
-  _findMatches = [];
-  _findIndex = -1;
-  clearFindHighlights();
-  postFindResult();
-}
-
-function findNext() {
-  if (!_findMatches.length) return;
-  setActiveFindHit((_findIndex + 1) % _findMatches.length, true);
-}
-
-function findPrevious() {
-  if (!_findMatches.length) return;
-  setActiveFindHit((_findIndex + _findMatches.length - 1) % _findMatches.length, true);
-}
-
-function updateFindHighlights() {
-  var query = _findQuery;
-  clearFindHighlights();
-  _findMatches = [];
-  if (!query) {
-    _findIndex = -1;
-    postFindResult();
-    return;
-  }
-
-  _findMatches = findTextMatches(editor.value, query);
-  if (!_findMatches.length) {
-    _findIndex = -1;
-    postFindResult();
-    return;
-  }
-
-  _findIndex = 0;
-  if (_mode === 'preview' || _mode === 'split') {
-    highlightTextNodes(document.getElementById('preview-pane'), query);
-    _findHits = Array.from(document.getElementById('preview-pane').querySelectorAll('mark.md-find-hit'));
-    activatePreviewHit(_findIndex, false);
-  }
-
-  postFindResult();
-}
-
-function findTextMatches(text, query) {
-  var matches = [];
-  var lowerText = text.toLowerCase();
-  var lowerQuery = query.toLowerCase();
-  var pos = lowerText.indexOf(lowerQuery);
-  while (pos >= 0) {
-    matches.push({ start: pos, end: pos + query.length });
-    pos = lowerText.indexOf(lowerQuery, pos + query.length);
-  }
-  return matches;
-}
-
-function selectEditorMatch(index) {
-  var match = _findMatches[index];
-  if (!match) return;
-  editor.setSelectionRange(match.start, match.end);
-  var before = editor.value.substring(0, match.start);
-  var line = before.split(/\r\n|\r|\n/).length - 1;
-  var lineHeight = parseFloat(getComputedStyle(editor).lineHeight) || 20;
-  editor.scrollTop = Math.max(0, line * lineHeight - editor.clientHeight / 2);
-}
-
-function activatePreviewHit(index, focusEditor) {
-  _findHits.forEach(function(hit) { hit.classList.remove('active'); });
-  var hit = _findHits[index];
-  if (!hit)
-    return;
-
-  hit.classList.add('active');
-  hit.scrollIntoView({ block: 'center', inline: 'nearest' });
-  if (focusEditor)
-    editor.focus();
-}
-
-function clearFindHighlights() {
-  document.querySelectorAll('mark.md-find-hit').forEach(function(mark) {
-    var text = document.createTextNode(mark.textContent);
-    mark.parentNode.replaceChild(text, mark);
-    text.parentNode.normalize();
-  });
-  _findHits = [];
-}
-
-function highlightTextNodes(root, query) {
-  var lowerQuery = query.toLowerCase();
-  var walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT, {
-    acceptNode: function(node) {
-      if (!node.nodeValue || !node.nodeValue.toLowerCase().includes(lowerQuery))
-        return NodeFilter.FILTER_REJECT;
-      var parent = node.parentElement;
-      if (!parent || parent.closest('script,style,textarea,mark'))
-        return NodeFilter.FILTER_REJECT;
-      return NodeFilter.FILTER_ACCEPT;
-    }
-  });
-  var nodes = [];
-  while (walker.nextNode()) nodes.push(walker.currentNode);
-  nodes.forEach(function(node) { wrapMatches(node, query); });
-}
-
-function wrapMatches(node, query) {
-  var text = node.nodeValue;
-  var lowerText = text.toLowerCase();
-  var lowerQuery = query.toLowerCase();
-  var frag = document.createDocumentFragment();
-  var pos = 0;
-  var idx = lowerText.indexOf(lowerQuery);
-  while (idx >= 0) {
-    if (idx > pos)
-      frag.appendChild(document.createTextNode(text.substring(pos, idx)));
-    var mark = document.createElement('mark');
-    mark.className = 'md-find-hit';
-    mark.textContent = text.substring(idx, idx + query.length);
-    frag.appendChild(mark);
-    pos = idx + query.length;
-    idx = lowerText.indexOf(lowerQuery, pos);
-  }
-  if (pos < text.length)
-    frag.appendChild(document.createTextNode(text.substring(pos)));
-  node.parentNode.replaceChild(frag, node);
-}
-
-function setActiveFindHit(index, focusEditor) {
-  _findIndex = index;
-  if (_mode === 'edit' || _mode === 'split')
-    selectEditorMatch(_findIndex);
-  if (_mode === 'preview' || _mode === 'split')
-    activatePreviewHit(_findIndex, false);
-  if (focusEditor && _mode === 'edit')
-    editor.focus();
-  postFindResult();
-}
-
-function searchMarkdown(query) {
-  _findQuery = query || '';
-  updateFindHighlights();
-}
-
-function postFindResult() {
-  document.getElementById('findCount').textContent =
-    _findMatches.length > 0 && _findIndex >= 0
-      ? (_findIndex + 1) + ' / ' + _findMatches.length
-      : '0 / 0';
-}
-
-// ── TOC ───────────────────────────────────
-function buildToc() {
-  var preview = document.getElementById('preview-pane');
-  var tocPanel = document.getElementById('toc-panel');
-  var headings = Array.from(preview.querySelectorAll('h1,h2,h3,h4,h5,h6'));
-
-  if (_tocObserver) {
-    _tocObserver.disconnect();
-    _tocObserver = null;
-  }
-
-  if (!headings.length) {
-    tocPanel.innerHTML = '';
-    return;
-  }
-
-  var frag = document.createDocumentFragment();
-  headings.forEach(function(h, i) {
-    var id = 'h-' + i;
-    h.id = id;
-    var a = document.createElement('a');
-    a.className = 'toc-item toc-' + h.tagName.toLowerCase();
-    a.textContent = h.textContent;
-    a.href = '#';
-    a.dataset.target = id;
-    a.addEventListener('click', function(e) {
-      e.preventDefault();
-      scrollPreviewToHeading(id);
-      setActiveTocItem(id);
-    });
-    frag.appendChild(a);
-  });
-  tocPanel.innerHTML = '';
-  tocPanel.appendChild(frag);
-
-  // IntersectionObserver for active highlight
-  _tocObserver = new IntersectionObserver(function(entries) {
-    entries.forEach(function(entry) {
-      if (!entry.isIntersecting) return;
-      setActiveTocItem(entry.target.id);
-    });
-  }, { root: preview, rootMargin: '-10% 0px -80% 0px', threshold: 0 });
-
-  headings.forEach(function(h) { _tocObserver.observe(h); });
-}
-
-function scrollPreviewToHeading(id) {
-  var preview = document.getElementById('preview-pane');
-  var heading = document.getElementById(id);
-  if (!preview || !heading) return;
-
-  var targetTop = heading.offsetTop - 12;
-  preview.scrollTo({ top: Math.max(0, targetTop), behavior: 'smooth' });
-}
-
-function setActiveTocItem(id) {
-  var tocPanel = document.getElementById('toc-panel');
-  tocPanel.querySelectorAll('.toc-item.active').forEach(function(el){ el.classList.remove('active'); });
-  var link = tocPanel.querySelector('[data-target="' + id + '"]');
-  if (link) link.classList.add('active');
-}
-
-// ── Editor ────────────────────────────────
-var editor = document.getElementById('editor-textarea');
-var editorGutter = document.getElementById('editor-gutter');
-var _gutterLineCount = 0;
-
-function updateLineNumbers() {
-  var lineCount = editor.value.split('\n').length;
-  if (lineCount !== _gutterLineCount) {
-    var lines = new Array(lineCount);
-    for (var i = 0; i < lineCount; i++) lines[i] = i + 1;
-    editorGutter.textContent = lines.join('\n');
-    editorGutter.style.width = (String(lineCount).length + 2) + 'ch';
-    _gutterLineCount = lineCount;
-  }
-  editorGutter.scrollTop = editor.scrollTop;
-}
-
-editor.addEventListener('input', function() {
-  _content = editor.value;
-  if (!_modified) {
-    _modified = true;
-    window.chrome.webview.postMessage({ type: 'modified', value: true });
-  }
-  updateLineNumbers();
-  clearTimeout(_renderTimer);
-  if (!_largeFileMode)
-    _renderTimer = setTimeout(renderPreview, 300);
-});
-
-editor.addEventListener('scroll', function() {
-  editorGutter.scrollTop = editor.scrollTop;
-});
-
-editor.addEventListener('keydown', function(e) {
-  // Ctrl+S
-  if (e.ctrlKey && e.key === 's') {
-    e.preventDefault();
-    window.chrome.webview.postMessage({ type: 'save-request', content: editor.value });
-  }
-  // Tab insert
-  if (e.key === 'Tab') {
-    e.preventDefault();
-    var s = editor.selectionStart, end = editor.selectionEnd;
-    editor.value = editor.value.substring(0, s) + '    ' + editor.value.substring(end);
-    editor.selectionStart = editor.selectionEnd = s + 4;
-    updateLineNumbers();
-  }
-});
-
-// ── Resize handles ────────────────────────
-function makeResizeHandle(handleEl, getLeftEl, setSize) {
-  handleEl.addEventListener('mousedown', function(e) {
-    e.preventDefault();
-    handleEl.classList.add('dragging');
-    var startX = e.clientX;
-    var startSize = getLeftEl().getBoundingClientRect().width;
-
-    function onMove(ev) { setSize(startSize + ev.clientX - startX); }
-    function onUp()   {
-      handleEl.classList.remove('dragging');
-      document.removeEventListener('mousemove', onMove);
-      document.removeEventListener('mouseup', onUp);
-    }
-    document.addEventListener('mousemove', onMove);
-    document.addEventListener('mouseup', onUp);
-  });
-}
-
-makeResizeHandle(
-  document.getElementById('toc-handle'),
-  function() { return document.getElementById('toc-panel'); },
-  function(w) {
-    var clamped = Math.max(80, Math.min(400, w));
-    document.getElementById('toc-panel').style.width = clamped + 'px';
-  }
-);
-
-makeResizeHandle(
-  document.getElementById('split-handle'),
-  function() { return document.getElementById('editor-pane'); },
-  function(w) {
-    var ca = document.getElementById('content-area');
-    var total = ca.getBoundingClientRect().width;
-    var clamped = Math.max(100, Math.min(total - 100, w));
-    document.getElementById('editor-pane').style.flex = 'none';
-    document.getElementById('editor-pane').style.width = clamped + 'px';
-  }
-);
-
-// ── Public API (called from C# via ExecuteScriptAsync) ────
-var app = {
-  printContent: printContent,
-  saveContentAs: exportHtml,
-  shareContent: shareContent,
-  clearOperationSurface: clearOperationSurface,
-  open: function(content, theme, mode, largeFileMode) {
-    _content = content;
-    _theme   = theme || 'dark';
-    _mode    = mode  || 'preview';
-    _largeFileMode = largeFileMode === true;
-    _modified = false;
-    document.body.className = _theme + ' mode-' + _mode;
-    resetEditorPaneSizeIfNotSplit(_mode);
-    editor.value = content;
-    updateLineNumbers();
-    renderPreview();
-    // restore mode buttons
-    document.getElementById('btnEdit').classList.toggle('active', _mode === 'edit');
-    document.getElementById('btnSplit').classList.toggle('active', _mode === 'split');
-    document.getElementById('btnPreview').classList.toggle('active', _mode === 'preview');
-    // mermaid theme
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict',
-      theme: (_theme === 'light' || _theme === 'github') ? 'default' : 'dark' });
-  },
-
-  setTheme: function(theme) {
-    _theme = theme || 'dark';
-    document.body.className = _theme + ' mode-' + _mode;
-    mermaid.initialize({ startOnLoad: false, securityLevel: 'strict',
-      theme: (_theme === 'light' || _theme === 'github') ? 'default' : 'dark' });
-    renderPreview();
-  },
-
-  openFind: openFindBar,
-  search: searchMarkdown,
-  findNext: findNext,
-  findPrevious: findPrevious,
-  clearSearch: clearSearch,
-
-  markSaved: function() {
-    _modified = false;
-    window.chrome.webview.postMessage({ type: 'modified', value: false });
-  },
-
-  reloadContent: function(content, largeFileMode) {
-    var previewPane = document.getElementById('preview-pane');
-    var previewScrollTop = previewPane.scrollTop;
-    var editorScrollTop = editor.scrollTop;
-
-    _content = content;
-    _largeFileMode = largeFileMode === true;
-    _modified = false;
-    editor.value = content;
-    updateLineNumbers();
-    renderPreview();
-    window.chrome.webview.postMessage({ type: 'modified', value: false });
-
-    previewPane.scrollTop = previewScrollTop;
-    editor.scrollTop = editorScrollTop;
-    editorGutter.scrollTop = editorScrollTop;
-  }
-};
-</script>
+<script src="purify.min.js"></script>
+<script src="markdown-app.js"></script>
 </body>
 </html>

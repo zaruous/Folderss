@@ -93,6 +93,10 @@ FolderBrowser에서 `ApplicationCommands` CommandBinding으로 등록:
 | 키 | 동작 | 비고 |
 |----|------|------|
 | `Ctrl+F` | 마크다운 내 텍스트 검색 (find) | KeyBindingService `ShowSearch` 매핑 사용 |
+| `Ctrl+S` | 저장 (Edit·Split·Preview 모두) | `markdown-app.html` 하드코딩 |
+| `Tab` / `Shift+Tab` | 편집기: 공백 4칸 넣기, 여러 줄 선택 시 들여쓰기 / 내어쓰기 | `markdown-app.html` 하드코딩 |
+| `Enter` | 편집기: 목록 줄 끝에서 다음 항목 표시(`-`, `1.`, `- [ ]`) 이어 쓰기, 빈 항목이면 목록 끝내기 | IME 조합 중에는 동작 안 함 |
+| `Ctrl+V` (이미지) | 편집기: 클립보드 이미지를 문서 옆 `images/`에 저장하고 링크 삽입 | |
 
 ### MonacoViewer
 

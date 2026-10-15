@@ -10,8 +10,9 @@
   * { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
 
+  /* 테마를 받기 전(theme-pending)에는 --bg가 없어 투명 → C#이 지정한 WebView 기본 배경색(현재 테마 색)이 보인다. */
   body {
-    background: var(--bg, #1e1e1e);
+    background: var(--bg, transparent);
     color: var(--fg, #d4d4d4);
     font-family: 'Cascadia Code', 'Consolas', monospace;
     font-size: 13px;
@@ -83,7 +84,7 @@
   }
 </style>
 </head>
-<body class="dark">
+<body class="theme-pending">
 <div id="container">
   <div class="line-numbers-wrap">
     <div class="line-numbers" id="lineNums"></div>

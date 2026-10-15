@@ -1,8 +1,11 @@
 using Folderss.Services;
 using Microsoft.Web.WebView2.Core;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Text;
+using System.Text.Json;
+using System.Text.RegularExpressions;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
@@ -38,6 +41,8 @@ namespace Folderss.Viewers
         private CoreWebView2ContextMenuItem _printMenuItem;
         private CoreWebView2ContextMenuItem _saveAsMenuItem;
         private CoreWebView2ContextMenuItem _shareMenuItem;
+        private WebViewIdleSaver _idleSaver;
+        private string _pageTheme;
 
         private string _pendingContent;
 
@@ -83,12 +88,21 @@ namespace Folderss.Viewers
             }
             catch (Exception ex)
             {
+                if (_disposed)
+                    return;
                 WebView.Visibility = Visibility.Collapsed;
                 ErrorText.Text = "WebView2 초기화 오류:\n" + ex.GetType().Name + "\n" + ex.Message;
                 ErrorText.Visibility = Visibility.Visible;
                 return;
             }
 
+            // 초기화를 기다리는 사이 탭이 닫혀 Dispose됐으면 해제된 컨트롤을 건드리지 않는다.
+            if (_disposed)
+                return;
+
+            // 이 뷰어는 내부 가상 호스트(folderss-viewer) 페이지만 열고 다른 주소 이동은 NavigationStarting에서 막으므로
+            // SmartScreen 평판 검사가 지킬 것이 없다. 사내망 등에서 검사 서버 응답을 기다리느라 페이지 표시가 매번 약 2초 늦어져 끈다.
+            WebView.CoreWebView2.Settings.IsReputationCheckingRequired = false;
             WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "folderss-viewer", ResourcesPath,
                 CoreWebView2HostResourceAccessKind.Allow);
@@ -103,6 +117,7 @@ namespace Folderss.Viewers
             InitializeContentContextMenuItems();
 
             _webViewReady = true;
+            _idleSaver = new WebViewIdleSaver(this, WebView, OnBecameVisible);
             WebView.CoreWebView2.Navigate("https://folderss-viewer/markdown-app.html");
         }
 
@@ -207,41 +222,58 @@ namespace Folderss.Viewers
 
         private void OnWebMessageReceived(object sender, CoreWebView2WebMessageReceivedEventArgs e)
         {
-            var json = e.WebMessageAsJson;
-            var type = ExtractJsonString(json, "type");
-
-            switch (type)
+            // 직접 문자열을 훑으면 \uXXXX 이스케이프 등을 놓쳐 저장 본문이 깨질 수 있으므로 JSON 파서로 읽는다.
+            using (var document = JsonDocument.Parse(e.WebMessageAsJson))
             {
-                case "modified":
-                    var val = json.Contains("\"value\":true");
-                    _modified = val;
-                    ModifiedChanged?.Invoke(this, val);
-                    break;
+                var message = document.RootElement;
+                if (message.ValueKind != JsonValueKind.Object)
+                    return;
 
-                case "save-request":
-                    var content = ExtractJsonString(json, "content");
-                    if (content != null)
-                        Save(content);
-                    break;
+                switch (GetJsonString(message, "type"))
+                {
+                    case "modified":
+                        JsonElement value;
+                        var val = message.TryGetProperty("value", out value) && value.ValueKind == JsonValueKind.True;
+                        _modified = val;
+                        ModifiedChanged?.Invoke(this, val);
+                        break;
 
-                case "export-html":
-                    var html = ExtractJsonString(json, "content");
-                    if (html != null)
-                        ExportHtmlContent(html);
-                    break;
+                    case "save-request":
+                        var content = GetJsonString(message, "content");
+                        if (content != null)
+                            Save(content);
+                        break;
 
-                case "export-pdf":
-                    ExportPdfAsync();
-                    break;
+                    case "export-html":
+                        var html = GetJsonString(message, "content");
+                        if (html != null)
+                            ExportHtmlContent(html);
+                        break;
 
-                case "open-link":
-                    var uri = ExtractJsonString(json, "uri");
-                    var href = ExtractJsonString(json, "href");
-                    if (uri != null || href != null)
-                        HandleLinkClick(uri, href);
-                    break;
+                    case "export-pdf":
+                        ExportPdfAsync();
+                        break;
 
+                    case "paste-image":
+                        SavePastedImage(GetJsonString(message, "mime"), GetJsonString(message, "data"));
+                        break;
+
+                    case "open-link":
+                        var uri = GetJsonString(message, "uri");
+                        var href = GetJsonString(message, "href");
+                        if (uri != null || href != null)
+                            HandleLinkClick(uri, href);
+                        break;
+                }
             }
+        }
+
+        private static string GetJsonString(JsonElement obj, string name)
+        {
+            JsonElement property;
+            return obj.TryGetProperty(name, out property) && property.ValueKind == JsonValueKind.String
+                ? property.GetString()
+                : null;
         }
 
         private void OnContextMenuRequested(object sender, CoreWebView2ContextMenuRequestedEventArgs e)
@@ -319,13 +351,16 @@ namespace Folderss.Viewers
             }
 
             _pendingContent = null;
+            _pageTheme = ThemeName(_currentTheme);
             var script = string.Format(
-                "app.open({0},{1},{2},{3})",
+                "app.open({0},{1},{2},{3},{4})",
                 JsonString(content),
                 JsonString(ThemeName(_currentTheme)),
                 JsonString(_largeFileMode ? "edit" : "preview"),
-                _largeFileMode ? "true" : "false");
+                _largeFileMode ? "true" : "false",
+                JsonString(_filePath));
             await WebView.CoreWebView2.ExecuteScriptAsync(script);
+            await ConsumePendingAnchorAsync();
         }
 
         private async System.Threading.Tasks.Task CallAppReloadContent(string content)
@@ -349,10 +384,8 @@ namespace Folderss.Viewers
             if (_filePath == null) return;
             try
             {
-                var tmp = _filePath + ".tmp";
-                File.WriteAllText(tmp, content, _encoding);
-                File.Delete(_filePath);
-                File.Move(tmp, _filePath);
+                // 원본을 먼저 지우고 옮기면 옮기기가 실패할 때 원본이 사라진다. 임시 파일에 쓴 뒤 덮어쓰기 이동으로 교체한다.
+                SettingsFile.WriteAllText(_filePath, content, _encoding);
                 _lastLoadedContent = content;
                 _pendingExternalReload = false;
                 var _ = WebView.CoreWebView2.ExecuteScriptAsync("app.markSaved()");
@@ -367,9 +400,29 @@ namespace Folderss.Viewers
         public void ApplyTheme(AppTheme theme)
         {
             _currentTheme = theme;
-            if (!_webViewReady) return;
+            if (_disposed) return;
+            // 페이지가 그려지기 전(테마를 받기 전)에 보이는 바탕을 테마 색으로 맞춰 흰색·검은색 깜빡임을 없앤다.
+            WebView.DefaultBackgroundColor = PageBackground(theme);
+            // 가려진 탭은 다시 보일 때(OnBecameVisible) 적용한다. 탭마다 미리보기를 다시 그리지 않고, 일시 중지된 WebView에 스크립트를 보내지 않는다.
+            if (!_webViewReady || !_pageReady || !IsVisible) return;
+            SendTheme();
+        }
+
+        private void SendTheme()
+        {
+            _pageTheme = ThemeName(_currentTheme);
             var _ = WebView.CoreWebView2.ExecuteScriptAsync(
-                string.Format("app.setTheme({0})", JsonString(ThemeName(theme))));
+                string.Format("app.setTheme({0})", JsonString(_pageTheme)));
+        }
+
+        // 탭이 다시 보일 때: 가려진 동안 바뀐 테마와, 다른 문서 링크로 넘어온 제목 이동을 적용한다.
+        private void OnBecameVisible()
+        {
+            if (!_webViewReady || !_pageReady)
+                return;
+            if (_pageTheme != null && _pageTheme != ThemeName(_currentTheme))
+                SendTheme();
+            _ = ConsumePendingAnchorAsync();
         }
 
         public bool HandleShortcut(KeyEventArgs e, KeyBindingService kb)
@@ -406,8 +459,34 @@ namespace Folderss.Viewers
                 dlg.DefaultExt = "html";
                 dlg.FileName = Path.GetFileNameWithoutExtension(_filePath ?? "export");
                 if (dlg.ShowDialog() != WinForms.DialogResult.OK) return;
-                File.WriteAllText(dlg.FileName, html, new UTF8Encoding(true));
+                File.WriteAllText(dlg.FileName, InlineDocAssets(html), new UTF8Encoding(true));
             }
+        }
+
+        private static readonly Regex DocAssetUrlRegex = new Regex(
+            @"https://" + DocAssetHost + @"/resolve\?p=([^""'\s)&<>]*)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
+        /// <summary>
+        /// 미리보기의 로컬 이미지는 이 뷰어만 응답하는 <c>folderss-doc-asset</c> 주소를 쓰므로, 내보낸 HTML을 앱 밖에서 열면 깨진다.
+        /// 내보낼 때 해당 이미지를 data URI로 넣어 파일 하나로 열리게 한다. 찾을 수 없는 이미지는 주소를 그대로 둔다.
+        /// </summary>
+        private string InlineDocAssets(string html)
+        {
+            return DocAssetUrlRegex.Replace(html, match =>
+            {
+                try
+                {
+                    var path = ResolveLocalLinkPath(Uri.UnescapeDataString(match.Groups[1].Value));
+                    if (path == null || !File.Exists(path))
+                        return match.Value;
+                    return "data:" + GetImageContentType(path) + ";base64," + Convert.ToBase64String(File.ReadAllBytes(path));
+                }
+                catch (Exception)
+                {
+                    return match.Value;
+                }
+            });
         }
 
         private async void ExportPdfAsync()
@@ -449,6 +528,18 @@ namespace Folderss.Viewers
                          ext.Equals(".markdown", StringComparison.OrdinalIgnoreCase)) &&
                         File.Exists(path))
                     {
+                        var fragment = ExtractFragment(link);
+                        if (_filePath != null && string.Equals(path, Path.GetFullPath(_filePath), StringComparison.OrdinalIgnoreCase))
+                        {
+                            // 같은 문서를 가리키는 링크(this.md#제목)는 탭을 다시 열지 않고 제목으로만 이동한다.
+                            if (fragment != null)
+                                _ = ScrollToAnchorAsync(fragment);
+                            return;
+                        }
+
+                        // 다른 문서의 제목(other.md#제목)은 그 문서를 연 뷰어가 열기·활성화 직후 꺼내 이동한다.
+                        if (fragment != null)
+                            PendingAnchors[path] = fragment;
                         var handler = FileOpenRequested;
                         if (handler != null)
                             handler(this, path);
@@ -457,6 +548,10 @@ namespace Folderss.Viewers
 
                     if (File.Exists(path) || Directory.Exists(path))
                     {
+                        // 받은 문서의 링크 한 번 클릭으로 프로그램·스크립트가 실행되지 않도록 확인을 받는다.
+                        if (File.Exists(path) && FileOperationService.IsExecutable(path) && !ConfirmRunExecutable(path))
+                            return;
+
                         System.Diagnostics.Process.Start(
                             new System.Diagnostics.ProcessStartInfo(path) { UseShellExecute = true });
                         return;
@@ -473,6 +568,70 @@ namespace Folderss.Viewers
             catch { }
         }
 
+        /// <summary>
+        /// 편집기에 붙여넣은 클립보드 이미지를 문서 옆 <c>images</c> 폴더에 "문서이름-날짜시각" 이름으로 저장하고
+        /// 커서 위치에 상대 경로 이미지 링크를 넣는다.
+        /// </summary>
+        private async void SavePastedImage(string mime, string base64)
+        {
+            if (_filePath == null || string.IsNullOrEmpty(base64))
+                return;
+
+            string extension;
+            switch (mime)
+            {
+                case "image/png":  extension = ".png"; break;
+                case "image/jpeg": extension = ".jpg"; break;
+                case "image/gif":  extension = ".gif"; break;
+                case "image/webp": extension = ".webp"; break;
+                case "image/bmp":  extension = ".bmp"; break;
+                default: return;
+            }
+
+            string link;
+            try
+            {
+                var bytes = Convert.FromBase64String(base64);
+                var directory = Path.Combine(Path.GetDirectoryName(_filePath), "images");
+                Directory.CreateDirectory(directory);
+
+                var baseName = Path.GetFileNameWithoutExtension(_filePath) + "-" + DateTime.Now.ToString("yyyyMMdd-HHmmss");
+                var path = Path.Combine(directory, baseName + extension);
+                for (var n = 1; File.Exists(path); n++)
+                    path = Path.Combine(directory, baseName + "-" + n + extension);
+                File.WriteAllBytes(path, bytes);
+
+                // 공백·괄호가 있으면 마크다운 링크가 끊기므로 인코딩한다 (ResolveLocalLinkPath가 다시 푼다).
+                var fileName = Path.GetFileName(path);
+                var encoded = fileName.Replace("%", "%25").Replace(" ", "%20").Replace("(", "%28").Replace(")", "%29");
+                link = "![" + Path.GetFileNameWithoutExtension(fileName) + "](images/" + encoded + ")";
+            }
+            catch (Exception ex)
+            {
+                var owner = Window.GetWindow(this);
+                if (owner != null)
+                    MessageBox.Show(owner, ex.Message, "이미지 붙여넣기 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                else
+                    MessageBox.Show(ex.Message, "이미지 붙여넣기 오류", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            if (!_disposed && _pageReady)
+                await WebView.CoreWebView2.ExecuteScriptAsync("app.insertText(" + JsonString(link) + ")");
+        }
+
+        private bool ConfirmRunExecutable(string path)
+        {
+            const string message = "링크가 실행 파일을 가리킵니다. 열면 프로그램이나 스크립트가 실행됩니다.\n\n{0}\n\n실행할까요?";
+            var owner = Window.GetWindow(this);
+            var answer = owner != null
+                ? MessageBox.Show(owner, string.Format(message, path), "실행 확인",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)
+                : MessageBox.Show(string.Format(message, path), "실행 확인",
+                    MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+            return answer == MessageBoxResult.Yes;
+        }
+
         public bool IsModified => _modified;
 
         public void SetActive(bool isActive)
@@ -480,6 +639,41 @@ namespace Folderss.Viewers
             _isActive = isActive;
             if (_isActive && _pendingExternalReload)
                 ScheduleExternalReload();
+            // 이미 열린 탭으로 다른 문서의 제목 링크가 들어오면 탭 활성화 때 이동한다.
+            if (_isActive)
+                _ = ConsumePendingAnchorAsync();
+        }
+
+        /// <summary>
+        /// 다른 문서의 "파일#제목" 링크로 열 때 이동할 제목. 키는 대상 파일 전체 경로.
+        /// 링크를 누른 뷰어가 넣고, 그 파일을 새로 열거나 이미 열린 탭을 활성화한 뷰어가 꺼낸다.
+        /// </summary>
+        private static readonly Dictionary<string, string> PendingAnchors =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+
+        private async System.Threading.Tasks.Task ConsumePendingAnchorAsync()
+        {
+            string fragment;
+            // 아직 가려져 있으면(일시 중지됐을 수 있음) 꺼내지 않고 두었다가 보일 때(OnBecameVisible) 처리한다.
+            if (_filePath == null || !_webViewReady || !_pageReady || _pendingContent != null || !IsVisible ||
+                !PendingAnchors.TryGetValue(Path.GetFullPath(_filePath), out fragment))
+                return;
+
+            PendingAnchors.Remove(Path.GetFullPath(_filePath));
+            await ScrollToAnchorAsync(fragment);
+        }
+
+        private async System.Threading.Tasks.Task ScrollToAnchorAsync(string fragment)
+        {
+            if (_disposed || !_webViewReady || !_pageReady)
+                return;
+            await WebView.CoreWebView2.ExecuteScriptAsync("app.scrollToAnchor(" + JsonString(fragment) + ")");
+        }
+
+        private static string ExtractFragment(string link)
+        {
+            var hash = link.IndexOf('#');
+            return hash >= 0 && hash < link.Length - 1 ? link.Substring(hash + 1) : null;
         }
 
         // ── Helpers ──────────────────────────────────────────────────────
@@ -663,17 +857,59 @@ namespace Folderss.Viewers
                 WebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
                 WebView.CoreWebView2.ContextMenuRequested -= OnContextMenuRequested;
             }
+
+            // WPF WebView2는 화면에서 빠져도 스스로 정리되지 않아, 탭을 닫을 때마다 브라우저 프로세스와 메모리가 남는다.
+            // 준비 플래그를 내려 이후 들어오는 ExecuteScriptAsync 호출(테마 변경 등)이 해제된 컨트롤을 건드리지 않게 한다.
+            _webViewReady = false;
+            _pageReady = false;
+            _idleSaver?.Dispose();
+            WebView.Dispose();
         }
 
+        private static readonly UTF8Encoding StrictUtf8 = new UTF8Encoding(false, true);
+
+        /// <summary>
+        /// BOM이 있으면 그 인코딩, 없으면 UTF-8. 단 BOM 없는 파일이 UTF-8로 읽히지 않으면(한국어 Windows의 오래된 CP949 문서 등)
+        /// 시스템 ANSI 코드 페이지로 읽는다. 저장도 읽은 인코딩 그대로 하므로 원래 인코딩이 유지된다.
+        /// </summary>
         private static Encoding DetectEncoding(string filePath)
         {
-            var bom = new byte[4];
-            using (var fs = File.OpenRead(filePath))
-                fs.Read(bom, 0, 4);
-            if (bom[0] == 0xEF && bom[1] == 0xBB && bom[2] == 0xBF) return Encoding.UTF8;
-            if (bom[0] == 0xFF && bom[1] == 0xFE) return Encoding.Unicode;
-            if (bom[0] == 0xFE && bom[1] == 0xFF) return Encoding.BigEndianUnicode;
-            return new UTF8Encoding(false);
+            byte[] bytes;
+            using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+            using (var ms = new MemoryStream())
+            {
+                fs.CopyTo(ms);
+                bytes = ms.ToArray();
+            }
+
+            if (bytes.Length >= 3 && bytes[0] == 0xEF && bytes[1] == 0xBB && bytes[2] == 0xBF) return Encoding.UTF8;
+            if (bytes.Length >= 2 && bytes[0] == 0xFF && bytes[1] == 0xFE) return Encoding.Unicode;
+            if (bytes.Length >= 2 && bytes[0] == 0xFE && bytes[1] == 0xFF) return Encoding.BigEndianUnicode;
+
+            try
+            {
+                StrictUtf8.GetCharCount(bytes);
+                return new UTF8Encoding(false);
+            }
+            catch (DecoderFallbackException)
+            {
+                return GitTextDecoder.Resolve(GitFallbackEncoding.SystemAnsi) ?? new UTF8Encoding(false);
+            }
+        }
+
+        // markdown-app.html 테마 토큰 --bg와 같은 색
+        private static System.Drawing.Color PageBackground(AppTheme theme)
+        {
+            switch (theme)
+            {
+                case AppTheme.Light:      return System.Drawing.ColorTranslator.FromHtml("#ffffff");
+                case AppTheme.Nord:       return System.Drawing.ColorTranslator.FromHtml("#2e3440");
+                case AppTheme.Catppuccin: return System.Drawing.ColorTranslator.FromHtml("#1e1e2e");
+                case AppTheme.Solarized:  return System.Drawing.ColorTranslator.FromHtml("#002b36");
+                case AppTheme.Dracula:    return System.Drawing.ColorTranslator.FromHtml("#282a36");
+                case AppTheme.GitHub:     return System.Drawing.ColorTranslator.FromHtml("#ffffff");
+                default:                  return System.Drawing.ColorTranslator.FromHtml("#1e1e1e");
+            }
         }
 
         private static string ThemeName(AppTheme theme)
@@ -756,37 +992,6 @@ namespace Folderss.Viewers
             if (query >= 0 && query < end)
                 end = query;
             return value.Substring(0, end);
-        }
-
-        // Minimal JSON string extractor — no external deps
-        private static string ExtractJsonString(string json, string key)
-        {
-            var search = "\"" + key + "\":\"";
-            var idx = json.IndexOf(search, StringComparison.Ordinal);
-            if (idx < 0) return null;
-            idx += search.Length;
-            var sb = new StringBuilder();
-            for (var i = idx; i < json.Length; i++)
-            {
-                var c = json[i];
-                if (c == '"') break;
-                if (c == '\\' && i + 1 < json.Length)
-                {
-                    i++;
-                    switch (json[i])
-                    {
-                        case '"':  sb.Append('"');  break;
-                        case '\\': sb.Append('\\'); break;
-                        case 'n':  sb.Append('\n'); break;
-                        case 'r':  sb.Append('\r'); break;
-                        case 't':  sb.Append('\t'); break;
-                        default:   sb.Append(json[i]); break;
-                    }
-                    continue;
-                }
-                sb.Append(c);
-            }
-            return sb.ToString();
         }
 
     }

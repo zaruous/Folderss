@@ -42,7 +42,7 @@ Folderss/
 │   ├── MonacoViewer        — Monaco Editor 기반 코드/텍스트 편집기, 외부 변경 감시
 │   ├── TextViewer          — 읽기 전용 텍스트 뷰어
 │   ├── IFileViewer         — 뷰어 공통 인터페이스
-│   └── Resources/          — 뷰어 HTML/JS/CSS (marked, Mermaid, KaTeX, highlight.js, Monaco, CodeMirror)
+│   └── Resources/          — 뷰어 HTML/JS/CSS (marked, DOMPurify, Mermaid, KaTeX·글꼴, highlight.js, Monaco, CodeMirror)
 ├── Models/
 │   ├── FileSystemItem      — 파일·폴더 뷰모델
 │   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델 (폴더/파일 구분)
@@ -225,7 +225,7 @@ tests/
 
 | 뷰어 | 기본 확장자 | 주요 기능 |
 |---|---|---|
-| Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기, Edit/Split 모드 라인번호 표시, `Ctrl+F` 문서 내 검색, TOC, front matter 표시, Mermaid, KaTeX, 상대 경로 이미지 표시, 로컬 파일 링크 클릭 시 새 뷰어 탭으로 열기, HTML/PDF 내보내기, 우클릭 메뉴의 인쇄·다른 이름으로 저장·공유, 외부 변경 자동 반영(스크롤 위치 유지) |
+| Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기(파일별 마지막 모드 기억, 분할 보기 스크롤 동기화), Edit/Split 모드 라인번호 표시, 편집 보조(목록 이어 쓰기, `Tab`/`Shift+Tab` 여러 줄 들여쓰기·내어쓰기, 이미지 붙여넣기 시 `images/`에 저장), `Ctrl+F` 문서 내 검색, TOC(표시 여부·너비 기억), 문서 안 `#제목`·다른 문서 `파일.md#제목` 링크(GitHub 앵커 규칙), front matter 표시, Mermaid, KaTeX 수식(`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), 상대 경로 이미지 표시(HTML `<img>` 태그 포함), 로컬 파일 링크 클릭 시 새 뷰어 탭으로 열기(실행 파일은 확인 후 실행), 본문 HTML의 스크립트 차단, BOM 없는 CP949 문서 자동 인식, HTML/PDF 내보내기, 우클릭 메뉴의 인쇄·다른 이름으로 저장·공유, 외부 변경 자동 반영(스크롤 위치 유지) |
 | Monaco | `.json`, `.jsonl`, `.xml` | Monaco Editor 기반 편집, 구문 강조, `Ctrl+F` 내장 검색(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1`), 대용량 파일 모드, 외부 변경 감지. `.jsonl`(JSON Lines)은 전용 언어로 열려 줄마다 JSON으로 강조하고, `Format Document`는 레코드를 한 줄로 압축, 커맨드 팔레트의 `JSONL: 레코드 펼쳐 보기`는 들여쓰기해 펼침(값·키 순서·큰 정수는 원문 그대로, 파싱 안 되는 줄은 손대지 않음) |
 | Text | 사용자 매핑 | 읽기 전용 텍스트 보기와 구문 강조 |
 
@@ -233,7 +233,7 @@ tests/
 - 뷰어 탭 툴바의 `다시 읽기` 버튼으로 디스크 내용을 다시 불러올 수 있습니다.
 - Markdown·Monaco 뷰어에서 편집 후 저장하지 않으면 탭 제목 끝에 ` *`가 붙습니다. 그 상태로 탭을 닫으면 변경을 버릴지 묻고, 앱을 종료할 때도 미저장 문서 수를 알려 확인합니다. 저장은 뷰어 안에서 `Ctrl+S`입니다.
 - 뷰어 안에서 `Home`/`End` 단독 입력은 문서 탭 전환에 쓰지 않고 편집기에 그대로 전달됩니다.
-- Markdown `HTML로 저장`으로 만든 파일은 앱 밖에서 열리므로 상대 경로 이미지는 표시되지 않습니다 (미리보기와 PDF 내보내기는 정상).
+- Markdown `HTML로 저장`은 문서의 로컬 이미지를 파일 안에 넣어 저장하므로, 앱 밖에서 열어도 이미지가 표시됩니다.
 
 ## 열기 프로그램
 

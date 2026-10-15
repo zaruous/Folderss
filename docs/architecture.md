@@ -133,8 +133,42 @@ Folderss/
 - 쿼리 문자열에 원본 경로를 담아 브라우저의 URL 정규화(가상 호스트 폴더 매핑은 상위 폴더로 못 올라감)를 우회하므로
   `../`로 상위 폴더의 이미지를 참조해도 정상 동작한다.
 - CSP `img-src`에 `folderss-doc-asset`과 `data:`, `http(s):`을 추가해 로컬 리졸브 이미지·데이터 URI·원격 이미지를 모두 허용한다.
-- 알려진 제약: "HTML로 내보내기"(`exportHtml`)로 저장한 독립 HTML 파일은 앱 밖에서 열리므로 `folderss-doc-asset` 스킴이 동작하지 않아
-  상대 경로 이미지가 다시 깨진다 (미리보기·인쇄/PDF 내보내기는 같은 WebView2 세션 안에서 렌더링되므로 영향 없음).
+- "HTML로 내보내기"(`exportHtml`)로 저장한 독립 HTML 파일은 앱 밖에서 열리므로 `folderss-doc-asset` 주소가 동작하지 않는다.
+  그래서 `MarkdownViewer.InlineDocAssets`가 저장 직전에 이 주소들을 같은 경로 해석으로 읽은 data URI로 바꾼다
+  (미리보기·인쇄/PDF 내보내기는 같은 WebView2 세션 안에서 렌더링되므로 바꿀 필요 없음).
+
+### MarkdownViewer 본문 HTML 정화와 링크 실행 확인
+- marked는 본문의 HTML을 그대로 통과시키고 페이지 CSP가 인라인 스크립트를 허용하므로, `renderPreview`가
+  `marked.parse` 결과를 `DOMPurify.sanitize`(`Resources/purify.min.js`)로 거른 뒤 `innerHTML`에 넣는다.
+  걸러내지 않으면 문서 안 스크립트가 `chrome.webview.postMessage`로 파일 저장(`save-request`)이나 로컬 파일 실행(`open-link`)을 요청할 수 있다.
+- URI 허용 목록(`SANITIZE_OPTIONS.ALLOWED_URI_REGEXP`)은 DOMPurify 기본값에 `file:`와 Windows 드라이브 경로(`C:\`, `C:/`, marked가 인코딩한 `C:%5C`)를 더했다.
+- Mermaid·KaTeX·highlight.js는 정화된 DOM 위에서 동작하므로 영향이 없다.
+- `HandleLinkClick`은 `.md`가 아닌 로컬 파일을 열기 전에 `FileOperationService.IsExecutable`로 실행 형식을 판정하고,
+  실행 형식이면 확인창(기본값 "아니요")을 띄운다.
+
+### MarkdownViewer 렌더링 보조 (수식·Mermaid·화면 상태)
+- 수식: marked 확장(`mathBlock`, `mathInline`)이 `$…$`(Pandoc 규칙)·`$$…$$`·`\(…\)`·`\[…\]` 구간을 marked 처리 전에 떼어 `data-tex`에 담고,
+  정화 뒤 `renderMath`가 `katex.render`로 그린다. KaTeX auto-render는 쓰지 않는다.
+- Mermaid: "테마 + 원문"을 키로 그린 SVG를 `_mermaidCache`에 두고 바뀌지 않은 다이어그램은 다시 그리지 않는다.
+- 화면 상태: 파일별 보기 모드와 공통 목차 표시·너비를 페이지 `localStorage`(`folderss.markdown.prefs`)에 저장한다.
+  `app.open`의 다섯 번째 인자가 파일 경로다.
+
+### MarkdownViewer 페이지 구조 (스크립트·CSP·요소 id)
+- 페이지는 `markdown-app.html`(마크업·CSS)과 `markdown-app.js`(전체 스크립트, `app` 공개 API)로 나뉜다.
+  CSP는 `script-src 'self' https://folderss-viewer`로 인라인 스크립트·`onclick` 속성을 허용하지 않으므로, 버튼 동작은 `markdown-app.js` 끝의 "Toolbar wiring"에서 연결한다.
+  C#의 `ExecuteScriptAsync`는 CSP 영향을 받지 않는다.
+- 소문자로만 된 앱 요소 id는 `mdv-` 접두사를 쓴다(`mdv-preview-pane`, `mdv-editor-textarea` 등). 문서 제목 앵커(항상 소문자)와 겹치지 않게 하기 위함이다.
+- KaTeX 글꼴은 `Resources/fonts/`(KaTeX 0.16.9 `woff2`)에 있다.
+- Mermaid·KaTeX·highlight.js는 페이지에 고정으로 넣지 않고, 렌더링한 문서에 다이어그램·수식·코드 블록이 있을 때 `loadLib`/`withLib`로 불러온다.
+- WebView2 뷰어(Markdown·Monaco·Text)는 `CoreWebView2Settings.IsReputationCheckingRequired = false`로 SmartScreen 평판 검사를 끈다.
+  내부 가상 호스트만 열기 때문에 검사가 보호할 대상이 없고, 검사 서버를 기다리느라 페이지 표시가 약 2초 늦어졌다(`docs/items/webview-smartscreen-load-delay.md`).
+- WebView2 뷰어 공통 동작:
+  - `ApplyTheme`이 `WebView.DefaultBackgroundColor`를 페이지 테마 배경과 같은 색으로 지정하고, 페이지는 테마를 받기 전 배경을 투명하게 둬 로딩 중 깜빡임을 없앤다.
+  - `Viewers/WebViewIdleSaver`가 뷰어가 화면에서 가려지면 메모리 목표를 `Low`로, 30초 넘게 가려지면 `TrySuspendAsync`로 일시 중지하고, 다시 보이면 재개한다.
+    가려진 탭에 오는 테마 변경·제목 이동은 미뤘다가 다시 보일 때(`OnBecameVisible`) 적용한다.
+  - 세 뷰어 모두 `IDisposable`로 탭을 닫을 때 `WebView.Dispose()`한다.
+- 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
+  그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
 
 ### KeyBindingService
 - 기본 단축키 매핑을 코드에서 정의
