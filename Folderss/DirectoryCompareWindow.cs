@@ -597,6 +597,11 @@ namespace Folderss
         /// </summary>
         private void OpenFile(string path)
         {
+            if (FileOperationService.IsExecutable(path) &&
+                MessageBox.Show(this,
+                    "실행 파일입니다. 열면 프로그램이나 스크립트가 실행됩니다.\n\n" + path + "\n\n실행할까요?",
+                    "실행 확인", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
             try
             {
                 Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
