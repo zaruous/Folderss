@@ -485,92 +485,33 @@ WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍�
 
 ## 흐름 다이어그램
 
-구성 요소 전체 개요는 [README의 아키텍처 다이어그램](../README.md#아키텍처-다이어그램)을 참고한다. 아래는 주요 기능별 흐름이다.
+구성 요소 전체 개요는 [README의 아키텍처 다이어그램](../README.md#아키텍처-다이어그램)을 참고한다. 아래는 주요 기능별 흐름이다. 이미지는 diagram-design 스킬로 그린 `docs/diagrams/*.html`의 SVG를 PNG로 내보낸 것이므로, 고칠 때는 원본 HTML을 수정한 뒤 다시 내보낸다.
 
 ### 파일 열기 (MainWindow → ViewerHost)
 
-```mermaid
-sequenceDiagram
-    actor U as 사용자
-    participant FB as FolderBrowser
-    participant MW as MainWindow
-    participant VH as ViewerHost
-    participant VC as ViewerConfigService
-    participant V as IFileViewer<br/>(Markdown/Monaco/Text)
-    participant OS as Windows 셸
+![파일 열기 흐름](images/flow-file-open.png)
 
-    U->>FB: 더블클릭 / Enter
-    FB->>MW: 파일 열기 요청
-    MW->>MW: TryActivateExistingViewerDocument
-    alt 같은 파일 탭이 이미 열림
-        MW-->>U: 기존 탭 활성화
-    else 새로 열기
-        MW->>VH: new ViewerHost(viewerConfig)
-        VH->>VC: Resolve(확장자)
-        alt 매핑된 내장 뷰어 있음
-            MW->>MW: LayoutDocument 생성<br/>ApplyPanelLockState · "+ 새 패널" 앞에 삽입
-            MW->>VH: OpenFile(path)
-            VH->>V: 로드 (WebView2)
-            V-->>VH: TitleChanged / ModifiedChanged
-            VH-->>MW: 탭 제목 갱신 (" *" 미저장 표시)
-        else 매핑 없음
-            MW->>OS: Process.Start(UseShellExecute)
-        end
-    end
-```
+> 원본: [`diagrams/flow-file-open.html`](diagrams/flow-file-open.html)
 
 ### Git 창 조회 (LibGit2Sharp 우선, 실패 시 git CLI)
 
-```mermaid
-flowchart LR
-    Open["GitWindow 열기<br/>(⋯ 메뉴 > Git 저장소…)"] --> Ver["GitCommandRunner<br/>git --version 확인"]
-    Ver --> Scan["GitRepositoryScanner.Scan<br/>기준 폴더 아래·위 저장소 탐색"]
-    Scan --> Rows["저장소 목록"]
-    Rows --> Status["git status --porcelain=v2<br/>(CLI) → GitOutputParser"]
-    Rows --> Lib{"GitLibReader<br/>(LibGit2Sharp)"}
-    Lib -- "성공" --> View["브랜치·로그·upstream·<br/>stash·워킹트리 표시"]
-    Lib -- "NotSupported / 예외" --> CLI["GitCommandRunner<br/>git CLI + GitOutputParser"]
-    CLI --> View
-    Status --> Tree["GitChangeTree<br/>변경 파일 트리"]
-    View --> Graph["GitGraphLayout<br/>→ GitGraphCell"]
-    Act["쓰기 작업<br/>stage·commit·pull·push·reset…"] --> Args["Git*Commands<br/>(인수 생성, 순수 로직)"]
-    Args --> CLI2["GitCommandRunner.RunAsync<br/>타임아웃·취소·동시 4개"]
-    CLI2 --> Rows
-```
+![Git 창 조회 흐름](images/flow-git-query.png)
+
+> 원본: [`diagrams/flow-git-query.html`](diagrams/flow-git-query.html)
 
 조회만 LibGit2Sharp로 읽고(`GitWindow.ReadLibAsync`), 쓰기 작업은 항상 git CLI를 쓴다. `FOLDERSS_GIT_TIMING=1`이면 각 조회 소요 시간을 출력창에 남긴다.
 
 ### 플러그인 설치·로드
 
-```mermaid
-flowchart TB
-    Src["로컬 zip 또는<br/>GitHub 최신 릴리스"] -->|PluginGitHubSource<br/>100MB 제한·SHA-256 확인| Pkg
-    Pkg["PluginPackage<br/>plugin.json·계약 버전 검증"] -->|"plugins\{id}.zip 등록<br/>PluginSourceStore 출처 기록"| List["⋯ 메뉴 / 트레이 > 플러그인"]
-    List -->|실행| Load["PluginManager.TryLoad"]
-    Load --> Ext["PluginPackage.Extract<br/>해시별 폴더 · Zip Slip 차단"]
-    Ext --> ALC["PluginLoadContext<br/>(플러그인별 AssemblyLoadContext,<br/>계약 DLL은 본체 것 공유)"]
-    ALC --> Init["IFolderssPlugin.Initialize(PluginHost)"]
-    Init --> Host["PluginHost : IPluginManager<br/>팝업 창·IFolderPanel·설정·본체 설정 읽기"]
-    Host --> Store["PluginSettingsStore<br/>plugin-data\{id}\settings.json"]
-    Load -. "로드 기록" .-> Sess["PluginSessionLog<br/>plugin-sessions\{pid}.json"]
-    Sess -. "다음 시작 때 남아 있으면<br/>비정상 종료 알림" .-> Log["plugin-log.txt"]
-```
+![플러그인 설치·로드 흐름](images/flow-plugin.png)
+
+> 원본: [`diagrams/flow-plugin.html`](diagrams/flow-plugin.html)
 
 ### 폴더 비교
 
-```mermaid
-flowchart LR
-    Start["⋯ 메뉴 > 폴더 비교… /<br/>두 폴더 선택 우클릭"] --> DCW["DirectoryCompareWindow<br/>좌·우 FolderBrowser (안전 모드)"]
-    Opt["CompareSettingsService<br/>compare-settings.xml"] --> DCW
-    DCW -->|CompareAsync| DCS["DirectoryCompareService<br/>상대 경로 짝짓기 · 크기/시각 또는 SHA-256<br/>IgnoreRuleSet · 취소 시 부분 결과"]
-    DCS --> Res["비교 결과<br/>(DirectoryCompareModels)"]
-    Res --> Ov["CompareOverlay<br/>현재 폴더 항목에 상태·방향 색 입힘"]
-    Ov --> DCW
-    DCW -->|"▶◀ 이동 · 복사 · 삭제"| J["FileOperationJournal<br/>compare-history\*.jsonl (7일)"]
-    J --> RB["WindowsRecycleBin<br/>(IRecycleBin)"]
-    J -->|"최근부터 되돌리기"| DCW
-    DCW -->|"반대쪽 같은 이름 파일과 비교"| FCW["FileCompareWindow<br/>git diff --no-index → GitDiffView"]
-```
+![폴더 비교 흐름](images/flow-directory-compare.png)
+
+> 원본: [`diagrams/flow-directory-compare.html`](diagrams/flow-directory-compare.html)
 
 ## 데이터 흐름
 
