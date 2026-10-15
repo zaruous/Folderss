@@ -1,0 +1,302 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using Folderss.Models;
+using LibGit2Sharp;
+
+namespace Folderss.Services
+{
+    /// <summary>
+    /// Git 창의 조회(브랜치·로그·upstream 비교·stash·워킹트리)를 git 프로세스 없이 LibGit2Sharp로 읽는다.
+    /// 회사 PC처럼 프로세스 실행이 1초 넘게 걸리는 환경에서 저장소 선택이 수 초 걸리던 문제용(docs/items/git-performance.md).
+    /// - 결과는 <see cref="GitOutputParser"/>가 CLI 출력에서 만드는 것과 같아야 한다(GitLibReaderTests가 비교).
+    /// - 저장소는 호출마다 열고 닫는다. 열어 두면 팩 파일이 잠겨 콘솔의 git gc/repack과 부딪히고, Repository는 스레드 안전하지 않다.
+    /// - 같게 만들 수 없는 경우(링크된 워킹트리, upstream 없음 등)는 <see cref="NotSupportedException"/>을 던진다. 호출자는 CLI로 다시 읽는다
+    ///   (그 밖의 예외도 마찬가지로 CLI로 다시 읽되, 예상 밖이므로 출력창에 알린다).
+    /// status·쓰기·네트워크·diff는 여기서 다루지 않는다(계속 git CLI).
+    /// </summary>
+    public static class GitLibReader
+    {
+        /// <summary><c>git for-each-ref refs/heads refs/remotes</c> + <see cref="GitOutputParser.ParseBranches"/>와 같은 목록.</summary>
+        public static List<GitBranchInfo> ReadBranches(string root)
+        {
+            using (var repo = new Repository(root))
+            {
+                var list = new List<GitBranchInfo>();
+                foreach (var branch in repo.Branches.OrderBy(b => b.CanonicalName, StringComparer.Ordinal))
+                {
+                    var name = branch.CanonicalName;
+                    GitBranchInfo info;
+                    if (name.StartsWith("refs/heads/", StringComparison.Ordinal))
+                    {
+                        info = new GitBranchInfo { Name = name.Substring("refs/heads/".Length) };
+                        info.Upstream = branch.TrackedBranch?.FriendlyName ?? string.Empty;
+                    }
+                    else if (name.StartsWith("refs/remotes/", StringComparison.Ordinal))
+                    {
+                        if (name.EndsWith("/HEAD", StringComparison.Ordinal))
+                            continue;
+                        info = new GitBranchInfo { Name = name.Substring("refs/remotes/".Length), IsRemote = true, Upstream = string.Empty };
+                    }
+                    else
+                    {
+                        continue;
+                    }
+                    info.IsCurrent = branch.IsCurrentRepositoryHead;
+                    info.Subject = branch.Tip?.MessageShort ?? string.Empty;
+                    list.Add(info);
+                }
+                return list;
+            }
+        }
+
+        /// <summary><c>git log --topo-order -n limit [--all]</c> + <see cref="GitOutputParser.LogFormat"/>와 같은 목록.</summary>
+        public static List<GitCommitInfo> ReadLog(string root, int limit, bool allRefs)
+        {
+            using (var repo = new Repository(root))
+            {
+                var starts = new List<Commit>();
+                if (allRefs)
+                {
+                    // --all: refs/ 아래 모든 참조(이름 순) + HEAD. notes·사용자 정의 참조 포함, 커밋이 아닌 것(트리·blob 태그)은 건너뛴다.
+                    foreach (var reference in repo.Refs.OrderBy(r => r.CanonicalName, StringComparer.Ordinal))
+                    {
+                        var commit = PeelToCommit(repo, reference);
+                        if (commit != null)
+                            starts.Add(commit);
+                    }
+                }
+                if (repo.Head.Tip != null)
+                    starts.Add(repo.Head.Tip);
+                if (starts.Count == 0)
+                    return new List<GitCommitInfo>();
+
+                var reachable = repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = starts, SortBy = CommitSortStrategies.None })
+                    .ToDictionary(c => c.Sha, StringComparer.Ordinal);
+                return ToInfos(repo, TopoOrder(starts, reachable).Take(limit));
+            }
+        }
+
+        /// <summary>
+        /// git <c>--topo-order</c>(sort_in_topological_order, REV_SORT_IN_GRAPH_ORDER)를 그대로 옮긴 것.
+        /// libgit2의 위상 정렬도 올바르지만 merge 뒤 어느 부모 줄기를 먼저 내는지가 달라 그래프가 콘솔 git과 어긋난다.
+        /// - 집합 안 자식이 없는 커밋(tip)을 커밋 날짜 내림차순(같으면 시작 순서)으로 늘어놓고, 스택(LIFO)으로 꺼낸다.
+        /// - 커밋을 꺼내면 부모의 남은 자식 수를 줄이고, 0이 된 부모를 부모 순서대로 스택에 넣는다 → 마지막 부모 줄기가 먼저 나온다.
+        /// </summary>
+        private static IEnumerable<Commit> TopoOrder(List<Commit> starts, Dictionary<string, Commit> reachable)
+        {
+            var children = new Dictionary<string, int>(StringComparer.Ordinal);
+            foreach (var commit in reachable.Values)
+                foreach (var parent in commit.Parents)
+                    if (reachable.ContainsKey(parent.Sha))
+                        children[parent.Sha] = children.TryGetValue(parent.Sha, out var n) ? n + 1 : 1;
+
+            var tips = starts
+                .Where(c => !children.ContainsKey(c.Sha))
+                .GroupBy(c => c.Sha, StringComparer.Ordinal).Select(g => g.First())
+                .Select((c, order) => (Commit: c, Order: order))
+                .OrderByDescending(t => t.Commit.Committer.When.ToUnixTimeSeconds()).ThenBy(t => t.Order)
+                .Select(t => t.Commit)
+                .ToList();
+
+            var stack = new Stack<Commit>();
+            for (var i = tips.Count - 1; i >= 0; i--)
+                stack.Push(tips[i]);
+            while (stack.Count > 0)
+            {
+                var commit = stack.Pop();
+                foreach (var parent in commit.Parents)
+                {
+                    if (!children.TryGetValue(parent.Sha, out var left))
+                        continue;
+                    if (left == 1)
+                    {
+                        children.Remove(parent.Sha);
+                        stack.Push(reachable[parent.Sha]);
+                    }
+                    else
+                    {
+                        children[parent.Sha] = left - 1;
+                    }
+                }
+                yield return commit;
+            }
+        }
+
+        /// <summary>
+        /// 현재 브랜치와 upstream의 차이: 보낼 커밋(<c>@{u}..HEAD</c>)과 받을 커밋(<c>HEAD..@{u}</c>), 각각 최대 <paramref name="limit"/>개.
+        /// upstream이 없거나 원격 추적 브랜치가 없으면(gone) 예외 — CLI가 그 오류 문구를 그대로 보여 준다.
+        /// </summary>
+        public static (List<GitCommitInfo> Outgoing, List<GitCommitInfo> Incoming) ReadUpstreamRanges(string root, int limit)
+        {
+            using (var repo = new Repository(root))
+            {
+                var head = repo.Head.Tip ?? throw new NotSupportedException("HEAD 커밋 없음");
+                var upstream = repo.Head.TrackedBranch?.Tip ?? throw new NotSupportedException("upstream 커밋 없음");
+                return (Range(repo, upstream, head, limit), Range(repo, head, upstream, limit));
+            }
+        }
+
+        private static List<GitCommitInfo> Range(Repository repo, Commit exclude, Commit include, int limit)
+        {
+            var filter = new CommitFilter
+            {
+                IncludeReachableFrom = include,
+                ExcludeReachableFrom = exclude,
+                SortBy = CommitSortStrategies.Time
+            };
+            return ToInfos(repo, repo.Commits.QueryBy(filter).Take(limit));
+        }
+
+        /// <summary><c>git stash list</c> + <see cref="GitStashCommands.List"/> 형식과 같은 목록(최신이 stash@{0}).</summary>
+        public static List<GitStashInfo> ReadStashes(string root)
+        {
+            using (var repo = new Repository(root))
+            {
+                var list = new List<GitStashInfo>();
+                if (repo.Refs["refs/stash"] == null)
+                    return list;
+                var index = 0;
+                foreach (var entry in repo.Refs.Log("refs/stash"))
+                {
+                    var commit = repo.Lookup<Commit>(entry.To);
+                    list.Add(new GitStashInfo
+                    {
+                        Ref = "stash@{" + index++ + "}",
+                        Hash = entry.To.Sha,
+                        Parents = commit?.Parents.Select(p => p.Sha).ToArray() ?? Array.Empty<string>(),
+                        Time = commit == null ? default : AuthorTime(commit),
+                        Subject = (entry.Message ?? string.Empty).TrimEnd('\n')
+                    });
+                }
+                return list;
+            }
+        }
+
+        /// <summary>
+        /// <c>git worktree list --porcelain</c>과 같은 목록. 링크된 워킹트리가 없을 때(주 작업 트리 하나)만 다룬다 —
+        /// 링크된 워킹트리의 잠김·prune 판정은 git 내부 규칙이라 흉내 내지 않고 예외를 던져 CLI로 읽게 한다.
+        /// </summary>
+        public static List<GitWorktreeInfo> ReadWorktrees(string root)
+        {
+            using (var repo = new Repository(root))
+            {
+                if (repo.Info.IsBare || repo.Info.WorkingDirectory == null)
+                    throw new NotSupportedException("bare 저장소");
+                var gitDir = repo.Info.Path.TrimEnd('\\', '/');
+                // 링크된 워킹트리 자신이면 .git이 파일이고 gitdir이 <공통>/worktrees/<이름> 아래다.
+                if (File.Exists(Path.Combine(repo.Info.WorkingDirectory, ".git")))
+                    throw new NotSupportedException("링크된 워킹트리");
+                var linked = Path.Combine(gitDir, "worktrees");
+                if (Directory.Exists(linked) && Directory.EnumerateFileSystemEntries(linked).Any())
+                    throw new NotSupportedException("링크된 워킹트리 있음");
+
+                var info = new GitWorktreeInfo
+                {
+                    // git은 Windows에서도 슬래시로, 끝 구분자 없이 낸다.
+                    Path = repo.Info.WorkingDirectory.TrimEnd('\\', '/').Replace('\\', '/'),
+                    Head = repo.Head.Tip?.Sha ?? new string('0', 40),
+                    IsDetached = repo.Info.IsHeadDetached,
+                    IsMain = true
+                };
+                if (!info.IsDetached)
+                    info.Branch = repo.Head.CanonicalName.StartsWith("refs/heads/", StringComparison.Ordinal)
+                        ? repo.Head.CanonicalName.Substring("refs/heads/".Length)
+                        : repo.Head.CanonicalName;
+                return new List<GitWorktreeInfo> { info };
+            }
+        }
+
+        private static List<GitCommitInfo> ToInfos(Repository repo, IEnumerable<Commit> commits)
+        {
+            var decorations = Decorations(repo);
+            return commits.Select(c => new GitCommitInfo
+            {
+                Hash = c.Sha,
+                Parents = c.Parents.Select(p => p.Sha).ToArray(),
+                Author = c.Author.Name,
+                Time = AuthorTime(c),
+                Refs = decorations.TryGetValue(c.Sha, out var refs) ? refs : string.Empty,
+                Subject = c.MessageShort
+            }).ToList();
+        }
+
+        /// <summary>
+        /// 커밋별 <c>%D</c> 문자열. git 2.53 기본 규칙: HEAD·refs/heads·refs/remotes·refs/tags·refs/stash만,
+        /// 참조 이름 역순(바이트 순), HEAD가 가리키면 맨 앞(브랜치면 "HEAD -> 이름"으로 합침), 태그는 "tag: ".
+        /// </summary>
+        private static Dictionary<string, string> Decorations(Repository repo)
+        {
+            var byCommit = new Dictionary<string, List<(string RefName, string Label)>>(StringComparer.Ordinal);
+            foreach (var reference in repo.Refs)
+            {
+                var name = reference.CanonicalName;
+                string label;
+                if (name.StartsWith("refs/heads/", StringComparison.Ordinal))
+                    label = name.Substring("refs/heads/".Length);
+                else if (name.StartsWith("refs/remotes/", StringComparison.Ordinal))
+                    label = name.Substring("refs/remotes/".Length);
+                else if (name.StartsWith("refs/tags/", StringComparison.Ordinal))
+                    label = "tag: " + name.Substring("refs/tags/".Length);
+                else if (name == "refs/stash")
+                    label = name;
+                else
+                    continue;
+
+                var commit = PeelToCommit(repo, reference);
+                if (commit == null)
+                    continue;
+                if (!byCommit.TryGetValue(commit.Sha, out var list))
+                    byCommit[commit.Sha] = list = new List<(string, string)>();
+                list.Add((name, label));
+            }
+
+            var headSha = repo.Head.Tip?.Sha;
+            var headBranch = repo.Info.IsHeadDetached ? null : repo.Head.CanonicalName;
+            var result = new Dictionary<string, string>(StringComparer.Ordinal);
+            foreach (var pair in byCommit)
+            {
+                var labels = pair.Value.OrderByDescending(r => r.RefName, StringComparer.Ordinal).ToList();
+                var parts = new List<string>();
+                if (pair.Key == headSha)
+                {
+                    var current = labels.FindIndex(r => r.RefName == headBranch);
+                    if (current >= 0)
+                    {
+                        parts.Add("HEAD -> " + labels[current].Label);
+                        labels.RemoveAt(current);
+                    }
+                    else
+                    {
+                        parts.Add("HEAD");
+                    }
+                }
+                parts.AddRange(labels.Select(r => r.Label));
+                result[pair.Key] = string.Join(", ", parts);
+            }
+            // 참조는 없고 HEAD만 가리키는 커밋(detached).
+            if (headSha != null && !result.ContainsKey(headSha))
+                result[headSha] = "HEAD";
+            return result;
+        }
+
+        private static Commit PeelToCommit(Repository repo, Reference reference)
+        {
+            try
+            {
+                return reference.ResolveToDirectReference()?.Target?.Peel<Commit>();
+            }
+            catch (LibGit2SharpException)
+            {
+                return null;
+            }
+        }
+
+        private static DateTimeOffset AuthorTime(Commit commit)
+        {
+            // %at는 초 단위 유닉스 시각이다. ParseLog도 FromUnixTimeSeconds로 만든다(오프셋 0).
+            return DateTimeOffset.FromUnixTimeSeconds(commit.Author.When.ToUnixTimeSeconds());
+        }
+    }
+}

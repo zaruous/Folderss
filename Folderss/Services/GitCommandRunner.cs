@@ -20,6 +20,12 @@ namespace Folderss.Services
         public string StdErr { get; set; } = string.Empty;
         public string CommandLine { get; set; }
         public bool TimedOut { get; set; }
+
+        /// <summary>동시 실행 제한(<c>throttle</c>)을 기다린 시간(ms).</summary>
+        public long WaitMilliseconds { get; set; }
+
+        /// <summary>프로세스 시작부터 종료·출력 읽기까지 걸린 시간(ms). 기다린 시간은 빼고 잰다.</summary>
+        public long ElapsedMilliseconds { get; set; }
         public bool Success => !TimedOut && ExitCode == 0;
     }
 
@@ -39,6 +45,9 @@ namespace Folderss.Services
         // 여러 저장소 상태를 한꺼번에 읽을 때 프로세스를 너무 많이 띄우지 않는다.
         private static readonly SemaphoreSlim Concurrency = new SemaphoreSlim(4);
         private static readonly UTF8Encoding Utf8NoBom = new UTF8Encoding(false);
+
+        /// <summary>명령이 끝날 때마다(취소 제외) 저장소 경로와 결과로 부른다. 스레드 풀에서 불릴 수 있다. 실측 계측용.</summary>
+        public static event Action<string, GitResult> Completed;
 
         private static string _gitPath;
         private static string _configuredGitPath = string.Empty;
@@ -155,8 +164,11 @@ namespace Folderss.Services
 
             var result = new GitResult { CommandLine = FormatCommandLine(userArgs) };
 
+            var stopwatch = Stopwatch.StartNew();
             if (throttle)
                 await Concurrency.WaitAsync(cancellationToken).ConfigureAwait(false);
+            result.WaitMilliseconds = stopwatch.ElapsedMilliseconds;
+            stopwatch.Restart();
             try
             {
                 using (var process = new Process { StartInfo = startInfo })
@@ -220,6 +232,8 @@ namespace Folderss.Services
                 if (throttle)
                     Concurrency.Release();
             }
+            result.ElapsedMilliseconds = stopwatch.ElapsedMilliseconds;
+            Completed?.Invoke(repository, result);
             return result;
         }
 

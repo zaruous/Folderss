@@ -210,6 +210,32 @@ namespace Folderss.SearchTests
             GitCommandRunner.RunAsync(repo, args, GitCommandRunner.QueryTimeout, CancellationToken.None);
 
         [SkippableFact]
+        public async Task RealGit_Completed_ReportsRepositoryAndElapsedTime()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            GitResult reported = null;
+            Action<string, GitResult> handler = (repository, result) =>
+            {
+                // 다른 테스트가 동시에 git을 돌릴 수 있으므로 이 저장소 것만 받는다.
+                if (repository == _root)
+                    reported = result;
+            };
+            GitCommandRunner.Completed += handler;
+            try
+            {
+                var run = await Git(_root, "init", "-q");
+                Assert.True(run.Success, run.StdErr);
+                Assert.Same(run, reported);
+                Assert.True(run.ElapsedMilliseconds > 0);
+                Assert.True(run.WaitMilliseconds >= 0);
+            }
+            finally
+            {
+                GitCommandRunner.Completed -= handler;
+            }
+        }
+
+        [SkippableFact]
         public async Task RealGit_AddCommitStatusBranchLog_RoundTrip()
         {
             Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");

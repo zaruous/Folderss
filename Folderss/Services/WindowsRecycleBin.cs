@@ -107,7 +107,13 @@ namespace Folderss.Services
                 throw new FormatException("휴지통 정보 파일이 너무 짧습니다.");
 
             var version = BitConverter.ToInt64(data, 0);
-            var deleted = DateTime.FromFileTimeUtc(BitConverter.ToInt64(data, 16));
+            // 이름만 $I로 시작하는 다른 파일도 있으므로 버전을 먼저 보고, 시각이 범위를 벗어나면 형식 오류로 건너뛰게 한다.
+            if (version != 1 && version != 2)
+                throw new FormatException("알 수 없는 휴지통 정보 파일 버전: " + version);
+            var fileTime = BitConverter.ToInt64(data, 16);
+            if (fileTime < 0 || fileTime > DateTime.MaxValue.ToFileTimeUtc())
+                throw new FormatException("휴지통 정보 파일의 삭제 시각이 잘못되었습니다.");
+            var deleted = DateTime.FromFileTimeUtc(fileTime);
             string path;
             if (version == 1)
             {

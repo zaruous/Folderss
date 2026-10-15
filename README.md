@@ -2,13 +2,25 @@
 
 Windows용 듀얼 패널 파일 관리자입니다. WPF와 `net8.0-windows` 기반으로 구현했으며, AvalonDock을 활용한 자유로운 패널 도킹·탭·분리 창을 지원합니다.
 
-현재 버전: **v1.6.2**
+현재 버전: **v1.8.4**
 
 ![Folderss 스크린샷](<docs/images/program image.png>)
 
 ## 개요
 
 경로 탐색, 검색, 파일 목록은 재사용 가능한 `Controls/FolderBrowser` 컴포넌트 하나로 구성되며, 이 컴포넌트를 AvalonDock 레이아웃 위에 여러 개 배치합니다. 왼쪽 열에는 디스크 사용량 미니 패널과 즐겨찾기 패널이, 폴더 패널 아래에는 선택 파일 미리보기·메타정보 영역이 붙어 있습니다. 파일을 열 때는 확장자 매핑에 따라 Markdown, Monaco, Text 뷰어를 별도 탭으로 띄우거나 Windows 기본 프로그램으로 넘깁니다.
+
+### 아키텍처 다이어그램
+
+![Folderss 아키텍처](docs/images/architecture.png)
+
+> 원본: [`docs/diagrams/architecture.html`](docs/diagrams/architecture.html) (diagram-design 스킬로 작성한 SVG, 수정 후 PNG로 다시 내보냄)
+
+- **UI 계층**: `MainWindow`가 AvalonDock 위에 폴더 패널(`FolderBrowser`)·즐겨찾기·검색·콘솔·뷰어 탭을 배치하고, Git·비교·캡쳐·설정은 별도 창으로 띄웁니다.
+- **서비스 계층**: 파일 작업·검색·Git 명령 인수·비교 판정 같은 로직은 UI 없는 정적/순수 서비스로 분리돼 `tests/Folderss.SearchTests`에서 단독 테스트합니다.
+- **외부 의존**: 설정·세션은 모두 `%LOCALAPPDATA%\Folderss\`(→ [사용자 설정 파일](#사용자-설정-파일)), Git 조회는 LibGit2Sharp 우선·실패 시 git CLI, 업데이트와 플러그인 설치는 GitHub Releases를 씁니다.
+
+파일 열기, Git 조회, 플러그인 로드, 폴더 비교의 상세 흐름 다이어그램은 [`docs/architecture.md`](docs/architecture.md#흐름-다이어그램)에 있습니다.
 
 ### 아키텍처 요약
 
@@ -19,6 +31,7 @@ Folderss/
 │   ├── FavoritesPanel      — 즐겨찾기 패널 (그룹, 폴더·파일 즐겨찾기)
 │   ├── GitDiffView         — Git 창의 읽기 전용 diff 뷰 (줄 번호, 추가·삭제 색)
 │   ├── GitGraphCell        — 로그 목록 한 행의 브랜치 그래프 그리기
+│   ├── ComparePairHeader   — 두 파일 비교 창 머리글 (왼쪽 | ⇄ 좌우 바꾸기 | 오른쪽)
 │   ├── SearchPanel         — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 토글)
 │   ├── ConsolePanel        — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel      — 드라이브별 디스크 사용량 패널 (가로바, GB 단위)
@@ -34,6 +47,7 @@ Folderss/
 │   ├── FileSystemItem      — 파일·폴더 뷰모델
 │   ├── FavoriteLocation    — 즐겨찾기 그룹·항목 모델 (폴더/파일 구분)
 │   ├── GitModels           — Git 저장소·상태·커밋·브랜치 모델
+│   ├── DirectoryCompareModels — 폴더 비교 상태·옵션·항목·결과
 │   ├── DriveUsageInfo      — 드라이브 총량·사용량·여유 공간 모델
 │   ├── KeyBindingEntry     — 단축키 설정 모델
 │   ├── OpenWithEntry       — 사용자 지정 열기 프로그램 모델
@@ -44,6 +58,7 @@ Folderss/
 │   ├── FilePreviewService      — 텍스트·이미지 미리보기 + 메타데이터 (링크 대상 포함)
 │   ├── GitRepositoryScanner    — 기준 폴더 아래(와 위) Git 저장소 탐색 (중첩·워크트리·서브모듈)
 │   ├── GitCommandRunner        — git CLI 실행 (인수 목록 전달, 타임아웃·취소, UTF-8)
+│   ├── GitLibReader            — 브랜치·로그·upstream 비교·stash·워킹트리 조회를 git 프로세스 없이 LibGit2Sharp로 (실패 시 CLI)
 │   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref`·unified diff 출력 파서
 │   ├── GitDiffCommands         — diff·upstream 비교 명령 인수 (UI·테스트 공용)
 │   ├── GitGraphLayout          — 부모 해시로 브랜치 그래프 레인 계산
@@ -54,7 +69,15 @@ Folderss/
 │   ├── GitStashCommands        — stash 저장·적용·삭제 옵션과 명령 인수
 │   ├── GitSyncCommands         — pull·push·fetch·커밋·브랜치 삭제·브랜치 업데이트 옵션과 명령 인수
 │   ├── GitEncodingDiff         — UTF-16/32(BOM) 파일을 텍스트로 다시 비교
+│   ├── GitConfigCommands       — 저장소 설정(git config --global/--local) 파서·set/unset 인수
 │   ├── GitSettingsService      — Git 창 옵션 저장 (pull 방식, 탐색 깊이·제외 폴더 등)
+│   ├── DirectoryCompareService — 두 폴더 비교 (상대 경로 짝짓기, 크기·시각 또는 SHA-256, ignore 규칙, 취소 시 부분 결과)
+│   ├── CompareOverlay          — 비교 결과를 폴더 패널 항목에 입히는 규칙 (이쪽만/저쪽만, 방향 색)
+│   ├── CompareSettingsService  — 폴더 비교 옵션 저장
+│   ├── FileOperationJournal    — 폴더 비교 창의 이동·복사·삭제 기록(7일 보관)과 최근부터 되돌리기
+│   ├── WindowsRecycleBin       — 휴지통 보내기·되살리기 (IRecycleBin 구현, 고정 드라이브만)
+│   ├── DiffSettingsService     — 비교(diff) 설정 저장 (보기·공백·인코딩·외부 도구)
+│   ├── DiffHtmlReport          — diff → HTML 보고서 한 장 (양옆/한 줄)
 │   ├── IgnoreRuleSet           — .gitignore/.folderssignore 규칙 매처 (목록 ignore 필터)
 │   ├── DockLayoutService       — AvalonDock 레이아웃 저장·복원 (XML)
 │   ├── SessionStateService     — 열린 폴더 경로 세션 저장·복원 (XML)
@@ -88,10 +111,12 @@ Folderss/
 │   ├── Black / Light / Nord / Catppuccin / Solarized / Dracula / GitHub
 │   └── Controls.xaml           — 공통 컨트롤 스타일
 ├── MainWindow                  — 메인 창, AvalonDock 호스트, 전역 단축키, 문서 탭 컨텍스트 메뉴
-├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔·Git 설정
-├── GitDialogs                  — Git reset·새 브랜치·체크아웃·워킹트리 선택 대화상자
+├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔·Git·비교·캡쳐 설정
+├── GitDialogs                  — Git 대화상자 공통 기반(GitDialogBase) + reset·브랜치·체크아웃·워킹트리·원격 브랜치 삭제·저장소 설정
 ├── GitWindow                   — 다중 저장소 Git 창 (상태·스테이지·커밋·브랜치·로그·fetch/pull/push)
 ├── FileCompareWindow           — 폴더 패널에서 고른 두 파일 비교 창 (Git diff 뷰 재사용, 좌우 바꾸기)
+├── DirectoryCompareWindow      — 폴더 비교 창 (좌우 폴더 패널 안전 모드, ▶◀ 이동, 작업 이력·되돌리기)
+├── PluginDialogs               — 플러그인 관리·GitHub 설치 대화상자
 ├── DiffReportDialog            — diff HTML 보고서 형식 선택 (양옆/한 줄 × 변경점만/전체)
 ├── DiffToolLauncher            — 외부 비교 도구 실행 (Git 창·파일 비교 공용)
 ├── KeyCaptureWindow            — 단축키 입력 캡처 팝업
@@ -106,7 +131,7 @@ samples/
 └── HelloPlugin              — 폴더 패널 팝업 + 설정 탭 예제 플러그인 (빌드하면 HelloPlugin.zip 생성)
 
 tests/
-└── Folderss.SearchTests        — 검색 로직 xUnit 회귀 테스트 (`net8.0`, 앱 솔루션과 분리)
+└── Folderss.SearchTests        — 순수 로직 xUnit 회귀 테스트 (검색·Git·비교·캡쳐·플러그인 패키지 등, 앱 솔루션과 분리)
 ```
 
 ### 설계 특징
@@ -419,7 +444,10 @@ Folderss\Themes\Controls.xaml
 | `viewer-config.json` | 확장자별 뷰어 매핑 (`version` 2 형식, 기본값과 다른 재정의만 저장) |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
 | `console-settings.xml` | 콘솔 설정(기본 프로필, 사용자 정의 프로필 등) |
-| `git-settings.xml` | Git 설정(git 경로, 기준 폴더 규칙, pull 방식, 탐색, 로그, diff·외부 비교 도구) |
+| `git-settings.xml` | Git 설정(git 경로, 기준 폴더 규칙, pull 방식, 탐색, 로그) |
+| `git-window.xml` | Git 창 보기 상태(트리 보기, 목록 너비, 변경됨/스테이지됨 높이 비율) |
+| `diff-settings.xml` | 비교(diff) 설정(보기·공백·인코딩·외부 비교 도구, 프리셋) |
+| `capture-settings.xml` | 화면 캡쳐 기본 저장 폴더 |
 | `compare-settings.xml` | 폴더 비교 옵션(판정 기준·범위·표시·이동 확인 기준) |
 | `compare-history\*.jsonl` | 폴더 비교 창 작업 이력(이동·복사·삭제, 7일 보관) |
 | `favorites.xml` | 즐겨찾기 그룹·항목 |
@@ -428,6 +456,7 @@ Folderss\Themes\Controls.xaml
 | `dock-layout.xml` | AvalonDock 패널 배치 |
 | `dock-layout.xml.version` | 레이아웃 호환성 버전 |
 | `plugins\<id>.zip` | 등록한 플러그인 (`plugins\extracted\`에 압축 해제본) |
+| `plugins\sources.json` | 플러그인별 설치 출처 (로컬 / GitHub 저장소) |
 | `plugin-data\<id>\settings.json` | 플러그인별 설정 |
 | `plugin-log.txt` | 플러그인 오류·비정상 종료 로그 |
 | `plugin-sessions\<pid>.json` | 플러그인을 로드한 실행의 기록 (정상 종료 시 삭제, 남아 있으면 다음 시작 때 비정상 종료로 알림) |
@@ -499,6 +528,7 @@ Folderss\Themes\Controls.xaml
 
 - `Dirkster.AvalonDock` 4.74.1
 - `EasyWindowsTerminalControl` 1.0.36
+- `LibGit2Sharp` 0.32.0 (Git 창 조회용, 네이티브 `git2-*.dll` 동봉)
 - `CI.Microsoft.Windows.Console.ConPTY` 1.22.250314001
 - `Microsoft.Web.WebView2` 1.0.2739.15
 - `System.IO.FileSystem.AccessControl` 5.0.0
@@ -534,7 +564,7 @@ dotnet build .\Folderss.sln -c Release
 
 ### 테스트
 
-검색 로직(`SearchService`)은 순수 `System.IO` 코드라 `net8.0` xUnit 프로젝트로 분리해 단독 실행합니다. 앱 솔루션에는 포함되지 않습니다.
+검색·Git 명령 인수·폴더 비교·캡쳐 계산·플러그인 패키지처럼 UI 없는 서비스 로직은 xUnit 프로젝트로 분리해 단독 실행합니다. 앱 솔루션에는 포함되지 않습니다.
 
 ```powershell
 dotnet test tests\Folderss.SearchTests
@@ -569,7 +599,8 @@ Folderss\bin\Release\net8.0-windows\Folderss.exe
 | 문서 | 내용 |
 |---|---|
 | `CLAUDE.md` | 개발 가이드, 기능별 수정 체크리스트 |
-| `docs/architecture.md` | 파일 구조, 서비스 역할, 확장 포인트 |
+| `docs/architecture.md` | 파일 구조, 서비스 역할, 확장 포인트, 흐름 다이어그램 |
+| `docs/diagrams/` | 다이어그램 원본 HTML/SVG (`docs/images/*.png`로 내보낸 이미지의 원본) |
 | `docs/PROJECT.md` | 개발 아이템 파일 형식과 상태 전환 규칙 |
 | `docs/items/` | 개발 아이템별 요구사항·설계·검증 기록 |
 | `docs/done/DONE.md` | 릴리스별 완료 이력 |

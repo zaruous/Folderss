@@ -34,6 +34,7 @@
     <Compile Include="..\..\Folderss\Services\GitSettingsService.cs" Link="Linked\GitSettingsService.cs" />
     <Compile Include="..\..\Folderss\Services\DiffSettingsService.cs" Link="Linked\DiffSettingsService.cs" />
     <Compile Include="..\..\Folderss\Services\GitGraphLayout.cs" Link="Linked\GitGraphLayout.cs" />
+    <Compile Include="..\..\Folderss\Services\GitLibReader.cs" Link="Linked\GitLibReader.cs" />
     <Compile Include="..\..\Folderss\Services\GitChangeTree.cs" Link="Linked\GitChangeTree.cs" />
     <Compile Include="..\..\Folderss\Services\GitRefCommands.cs" Link="Linked\GitRefCommands.cs" />
     <Compile Include="..\..\Folderss\Services\GitConfigCommands.cs" Link="Linked\GitConfigCommands.cs" />
@@ -61,6 +62,7 @@
 
   <ItemGroup>
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
+    <PackageReference Include="LibGit2Sharp" Version="0.32.0" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" Version="17.11.1" />
     <PackageReference Include="xunit" Version="2.9.2" />
     <PackageReference Include="Xunit.SkippableFact" Version="1.4.13" />

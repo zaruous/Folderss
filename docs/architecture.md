@@ -34,6 +34,7 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
+│   ├── GitLibReader.cs             — 조회(브랜치·로그·upstream 비교·stash·워킹트리)를 LibGit2Sharp로, 결과는 CLI+파서와 동일
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제(로컬·원격)·브랜치 업데이트(base ← compare) 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
@@ -96,7 +97,7 @@ Folderss/
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
-├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
+├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 플러그인)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── CaptureOverlayWindow.cs         — 화면 캡쳐: 가상 화면 전체를 GDI로 찍고(`CaptureVirtualScreen`) 모든 모니터를 덮는 창에 깔아 드래그로 영역 선택, 코드로 구성
 ├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 메뉴(다른 이름으로 저장, 기본 저장 폴더 탐색기로 열기), 저장 후 탐색기 열기 확인 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
@@ -324,9 +325,15 @@ Folderss/
   드라이브 루트면 한 번 확인. 창은 비모달(`Show`)이고 여러 개 열 수 있다.
 - 탐색: `GitRepositoryScanner.Scan`이 `.git` 폴더/파일을 저장소로 보고, 찾아도 안으로 계속 내려간다(중첩 저장소).
   reparse point·제외 폴더·`.git`은 들어가지 않는다. 상위 저장소(`IsAncestor`)는 맨 앞. 찾는 즉시 행을 추가하고 status를 읽는다.
-- 실행: 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
+- 조회 경로: 저장소 선택 시 브랜치·로그·upstream 비교·stash·워킹트리는 `GitLibReader`(LibGit2Sharp)로 프로세스 없이 읽는다(`GitWindow.ReadLibAsync`).
+  저장소는 호출마다 열고 닫는다(팩 파일 잠금·스레드 안전 문제 회피). 링크된 워킹트리·upstream 없음 등은 `NotSupportedException`으로
+  조용히, 그 밖의 예외는 출력창에 알린 뒤 아래 CLI 경로로 다시 읽는다. 결과가 CLI+`GitOutputParser`와 같은지는 `GitLibReaderTests`가 비교한다
+  (로그 순서는 git `--topo-order` 알고리즘을 그대로 옮김, `%D` 참조 표시도 git 2.53 규칙). status·쓰기·네트워크·diff는 CLI.
+- 실행: 그 밖의 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
   표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
 - 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.
+- 계측: `GitResult`에 대기·실행 시간(ms), 명령마다 정적 이벤트 `GitCommandRunner.Completed`. 환경 변수 `FOLDERSS_GIT_TIMING=1`이면 Git 창이
+  출력창에 `⏱` 줄(명령별 시간, 선택·작업 전체 시간, 로그 파싱·그리기 시간)을 남긴다. 자세한 것은 `docs/items/git-performance.md`.
 - 동시성: 창 안의 쓰기 작업은 `RunBusyAsync`로 한 번에 하나(버튼 잠금 + 취소 버튼). 여러 저장소 동작은 status와 툴바 `전체` 그룹의
   fetch·pull·push(`RunOnAllAsync` — 저장소마다 `Task.WhenAll`로 동시에, 성공·실패·건너뜀 요약). 일괄 pull/push는 `GitSyncCommands.BatchSkipReason`으로
   detached HEAD·upstream 없는 저장소를 건너뛰고 `-u`를 붙이지 않는다(원격 선택은 단일 push에서만).
@@ -475,6 +482,36 @@ WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍�
 `Controls.xaml`의 `<Style TargetType="ContextMenu">` ControlTemplate으로 해결됨.
 
 ---
+
+## 흐름 다이어그램
+
+구성 요소 전체 개요는 [README의 아키텍처 다이어그램](../README.md#아키텍처-다이어그램)을 참고한다. 아래는 주요 기능별 흐름이다. 이미지는 diagram-design 스킬로 그린 `docs/diagrams/*.html`의 SVG를 PNG로 내보낸 것이므로, 고칠 때는 원본 HTML을 수정한 뒤 다시 내보낸다.
+
+### 파일 열기 (MainWindow → ViewerHost)
+
+![파일 열기 흐름](images/flow-file-open.png)
+
+> 원본: [`diagrams/flow-file-open.html`](diagrams/flow-file-open.html)
+
+### Git 창 조회 (LibGit2Sharp 우선, 실패 시 git CLI)
+
+![Git 창 조회 흐름](images/flow-git-query.png)
+
+> 원본: [`diagrams/flow-git-query.html`](diagrams/flow-git-query.html)
+
+조회만 LibGit2Sharp로 읽고(`GitWindow.ReadLibAsync`), 쓰기 작업은 항상 git CLI를 쓴다. `FOLDERSS_GIT_TIMING=1`이면 각 조회 소요 시간을 출력창에 남긴다.
+
+### 플러그인 설치·로드
+
+![플러그인 설치·로드 흐름](images/flow-plugin.png)
+
+> 원본: [`diagrams/flow-plugin.html`](diagrams/flow-plugin.html)
+
+### 폴더 비교
+
+![폴더 비교 흐름](images/flow-directory-compare.png)
+
+> 원본: [`diagrams/flow-directory-compare.html`](diagrams/flow-directory-compare.html)
 
 ## 데이터 흐름
 

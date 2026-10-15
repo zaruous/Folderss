@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -10,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Folderss.Controls;
 using Folderss.Models;
 using Folderss.Services;
@@ -90,6 +92,12 @@ namespace Folderss
         private int _busyCount;
         private List<GitBranchInfo> _branches = new List<GitBranchInfo>();
 
+        /// <summary>환경 변수 <c>FOLDERSS_GIT_TIMING=1</c>이면 git 명령·화면 갱신 시간을 출력창에 ⏱ 줄로 남긴다(실측용).</summary>
+        private static readonly bool TimingEnabled = Environment.GetEnvironmentVariable("FOLDERSS_GIT_TIMING") == "1";
+
+        /// <summary>네이티브 libgit2를 불러오지 못했으면 true — 이후 조회는 LibGit2Sharp를 건너뛰고 git CLI로만 읽는다.</summary>
+        private static bool _libGit2Unavailable;
+
         /// <param name="basePath">탐색 기준 폴더.</param>
         /// <param name="countModifiedDocumentsUnder">폴더 아래 경로로 열린 미저장 뷰어 개수 — 브랜치 전환·pull 전 경고용.</param>
         /// <param name="openFile">파일 더블클릭 시 기존 뷰어로 연다.</param>
@@ -122,6 +130,62 @@ namespace Folderss
             RepoList.ItemsSource = _rows;
             SectionNav.SelectedIndex = 0;
             UpdateButtons();
+            if (TimingEnabled)
+                GitCommandRunner.Completed += GitCommand_Completed;
+        }
+
+        // ── 실측 계측 ─────────────────────────────────────────────────────────
+
+        private void GitCommand_Completed(string repository, GitResult result)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // 다른 Git 창의 명령은 찍지 않는다(이벤트가 정적이라 모든 창에 온다).
+                var row = repository == null ? null : _rows.FirstOrDefault(r => string.Equals(r.RootPath, repository, StringComparison.OrdinalIgnoreCase));
+                if (repository != null && row == null)
+                    return;
+                Timing(string.Format("{0} ms (대기 {1} ms)  {2}{3}", result.ElapsedMilliseconds, result.WaitMilliseconds,
+                    result.CommandLine, row == null ? string.Empty : "    [" + row.Info.DisplayPath + "]"));
+            }));
+        }
+
+        private void Timing(string text)
+        {
+            if (TimingEnabled)
+                AppendOutput("⏱ " + text);
+        }
+
+        /// <summary>
+        /// 조회를 git 프로세스 없이 LibGit2Sharp로 읽는다(<see cref="GitLibReader"/>). 실패하면 Ok=false — 호출자가 git CLI로 다시 읽는다.
+        /// 지원하지 않는 경우(링크된 워킹트리, upstream 없음 등)는 조용히, 그 밖의 예외는 출력창에 알리고 넘어간다.
+        /// </summary>
+        private async Task<(bool Ok, T Value)> ReadLibAsync<T>(RepositoryRow row, string what, Func<T> read)
+        {
+            if (_libGit2Unavailable)
+                return (false, default);
+            var watch = Stopwatch.StartNew();
+            try
+            {
+                var value = await Task.Run(read);
+                Timing(string.Format("{0} ms  LibGit2Sharp {1}    [{2}]", watch.ElapsedMilliseconds, what, row.Info.DisplayPath));
+                return (true, value);
+            }
+            catch (NotSupportedException ex)
+            {
+                Timing(string.Format("LibGit2Sharp {0} 건너뜀({1}) → git으로    [{2}]", what, ex.Message, row.Info.DisplayPath));
+            }
+            catch (Exception ex) when (ex is TypeInitializationException || ex is DllNotFoundException || ex is BadImageFormatException)
+            {
+                // 네이티브 libgit2(runtimes\<rid>\native\git2-*.dll)를 못 불러오면 다시 시도해도 같다. 앱을 다시 켤 때까지 git CLI만 쓴다.
+                _libGit2Unavailable = true;
+                AppendOutput("LibGit2Sharp를 불러오지 못해 git 명령으로만 읽습니다(느림). runtimes 폴더의 git2 DLL이 함께 배포됐는지 확인하세요: "
+                    + (ex.InnerException ?? ex).Message);
+            }
+            catch (Exception ex)
+            {
+                AppendOutput(string.Format("LibGit2Sharp로 {0}을(를) 읽지 못해 git으로 다시 읽습니다: {1}    [{2}]", what, ex.Message, row.Info.DisplayPath));
+            }
+            return (false, default);
         }
 
         private RepositoryRow SelectedRow => RepoList.SelectedItem as RepositoryRow;
@@ -142,6 +206,7 @@ namespace Folderss
         {
             // 창을 닫으면 진행 중인 탐색·git 프로세스를 모두 끝낸다(러너가 프로세스 트리를 종료).
             _lifetime.Cancel();
+            GitCommandRunner.Completed -= GitCommand_Completed;
         }
 
         private async Task<bool> CheckGitAsync()
@@ -274,6 +339,7 @@ namespace Folderss
                 var statusTasks = new List<Task>();
                 var excluded = _settings.ExcludedFolders.ToArray();
                 var depth = _settings.ScanDepth;
+                var scanWatch = Stopwatch.StartNew();
 
                 // 찾는 즉시 목록에 넣고 상태 읽기를 시작한다(동시 실행 수는 러너가 제한).
                 var result = await Task.Run(() => GitRepositoryScanner.Scan(_basePath, depth, excluded, info =>
@@ -291,6 +357,7 @@ namespace Folderss
                 }, token), token);
 
                 await Task.WhenAll(statusTasks);
+                Timing(string.Format("탐색+상태 읽기 전체 {0} ms (저장소 {1}개)", scanWatch.ElapsedMilliseconds, result.Repositories.Count));
 
                 AppendOutput(string.Format("탐색 완료: 저장소 {0}개 (깊이 {1}, 제외: {2}){3}",
                     result.Repositories.Count, depth,
@@ -606,10 +673,14 @@ namespace Folderss
             if (row == null)
                 return;
 
+            var watch = Stopwatch.StartNew();
             ShowChanges(row);
             try
             {
                 await LoadBranchesAndLogAsync(row, _lifetime.Token);
+                // 도중에 다른 저장소를 골랐으면 중간에 끝난 것이라 찍지 않는다.
+                if (ReferenceEquals(row, SelectedRow))
+                    Timing(string.Format("저장소 선택 → 상세 읽기 전체 {0} ms    [{1}]", watch.ElapsedMilliseconds, row.Info.DisplayPath));
             }
             catch (OperationCanceledException)
             {
@@ -623,15 +694,26 @@ namespace Folderss
 
         private async Task LoadBranchesAndLogAsync(RepositoryRow row, CancellationToken token)
         {
-            var branchTask = GitCommandRunner.RunAsync(row.RootPath,
-                new[] { "for-each-ref", GitOutputParser.BranchFormat, "refs/heads", "refs/remotes" },
-                GitCommandRunner.QueryTimeout, token, readOnly: true);
+            var skipLog = row.Snapshot?.HeadOid == null && !_settings.LogAllBranches;   // 최초 커밋 전: log가 실패하므로 부르지 않는다
+            var limit = _settings.LogLimit;
+            var all = _settings.LogAllBranches;
+            var libBranches = await ReadLibAsync(row, "브랜치", () => GitLibReader.ReadBranches(row.RootPath));
+            var libLog = skipLog
+                ? (Ok: false, Value: (List<GitCommitInfo>)null)
+                : await ReadLibAsync(row, "로그", () => GitLibReader.ReadLog(row.RootPath, limit, all));
 
-            var logArgs = new List<string> { "log", "--topo-order", "-z", "-n", _settings.LogLimit.ToString(), GitOutputParser.LogFormat };
-            if (_settings.LogAllBranches)
+            // LibGit2Sharp로 못 읽은 것만 git CLI로 읽는다.
+            var branchTask = libBranches.Ok
+                ? Task.FromResult<GitResult>(null)
+                : GitCommandRunner.RunAsync(row.RootPath,
+                    new[] { "for-each-ref", GitOutputParser.BranchFormat, "refs/heads", "refs/remotes" },
+                    GitCommandRunner.QueryTimeout, token, readOnly: true);
+
+            var logArgs = new List<string> { "log", "--topo-order", "-z", "-n", limit.ToString(), GitOutputParser.LogFormat };
+            if (all)
                 logArgs.Add("--all");
-            var logTask = row.Snapshot?.HeadOid == null && !_settings.LogAllBranches
-                ? Task.FromResult<GitResult>(null)   // 최초 커밋 전: log가 실패하므로 부르지 않는다
+            var logTask = skipLog || libLog.Ok
+                ? Task.FromResult<GitResult>(null)
                 : GitCommandRunner.RunAsync(row.RootPath, logArgs, GitCommandRunner.QueryTimeout, token, readOnly: true);
 
             var branchResult = await branchTask;
@@ -641,9 +723,9 @@ namespace Folderss
             if (!ReferenceEquals(row, SelectedRow))
                 return;
 
-            if (branchResult.Success)
+            if (libBranches.Ok || branchResult.Success)
             {
-                _branches = GitOutputParser.ParseBranches(branchResult.StdOut)
+                _branches = (libBranches.Ok ? libBranches.Value : GitOutputParser.ParseBranches(branchResult.StdOut))
                     .OrderBy(b => b.IsRemote).ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
                 BranchList.ItemsSource = _branches;
             }
@@ -652,12 +734,13 @@ namespace Folderss
                 AppendResult(row.Info, branchResult);
             }
 
-            if (logResult != null)
+            if (libLog.Ok || logResult != null)
             {
                 // 커밋이 하나도 없는 저장소의 log 실패는 정상이므로 출력하지 않는다.
-                if (logResult.Success)
+                if (libLog.Ok || logResult.Success)
                 {
-                    var commits = GitOutputParser.ParseLog(logResult.StdOut);
+                    var logWatch = Stopwatch.StartNew();
+                    var commits = libLog.Ok ? libLog.Value : GitOutputParser.ParseLog(logResult.StdOut);
                     var graph = GitGraphLayout.Compute(commits);
                     var maxLanes = 1;
                     for (var i = 0; i < commits.Count; i++)
@@ -666,7 +749,15 @@ namespace Folderss
                         maxLanes = Math.Max(maxLanes, graph[i].LaneCount);
                     }
                     GraphColumn.Width = GitGraphCell.WidthFor(maxLanes);
+                    var parseMs = logWatch.ElapsedMilliseconds;
                     LogList.ItemsSource = commits;
+                    if (TimingEnabled)
+                    {
+                        // Loaded 우선순위는 레이아웃·렌더 다음에 돈다 → 목록을 그리는 데 걸린 시간의 근사치.
+                        logWatch.Restart();
+                        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+                            Timing(string.Format("로그 {0}개: 파싱+그래프 {1} ms, 그리기 {2} ms", commits.Count, parseMs, logWatch.ElapsedMilliseconds))));
+                    }
                 }
                 else if (row.Snapshot?.HeadOid != null)
                     AppendResult(row.Info, logResult);
@@ -1225,27 +1316,39 @@ namespace Folderss
             }
 
             RemoteSummaryText.Text = "비교 중…";
-            var outgoingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange(GitDiffCommands.Upstream, "HEAD", RemoteLogLimit),
-                GitCommandRunner.QueryTimeout, token, readOnly: true);
-            var incomingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange("HEAD", GitDiffCommands.Upstream, RemoteLogLimit),
-                GitCommandRunner.QueryTimeout, token, readOnly: true);
-            var outgoing = await outgoingTask;
-            var incoming = await incomingTask;
-
-            if (!ReferenceEquals(row, SelectedRow))
-                return;
-
-            if (!outgoing.Success || !incoming.Success)
+            List<GitCommitInfo> outgoingCommits, incomingCommits;
+            var lib = await ReadLibAsync(row, "upstream 비교", () => GitLibReader.ReadUpstreamRanges(row.RootPath, RemoteLogLimit));
+            if (lib.Ok)
             {
-                // 원격에서 브랜치가 지워졌거나(upstream gone) 아직 fetch 전인 경우.
-                RemoteSummaryText.Text = string.Format("{0} 와(과) 비교할 수 없습니다: {1}", snapshot.Upstream,
-                    FirstLine(outgoing.Success ? incoming.StdErr : outgoing.StdErr) ?? "알 수 없는 오류");
-                OutgoingDiffButton.IsEnabled = IncomingDiffButton.IsEnabled = WorkTreeDiffButton.IsEnabled = false;
-                return;
+                if (!ReferenceEquals(row, SelectedRow))
+                    return;
+                (outgoingCommits, incomingCommits) = lib.Value;
             }
+            else
+            {
+                // upstream이 사라졌으면 LibGit2Sharp가 건너뛰고 여기서 git의 오류 문구를 그대로 보여 준다.
+                var outgoingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange(GitDiffCommands.Upstream, "HEAD", RemoteLogLimit),
+                    GitCommandRunner.QueryTimeout, token, readOnly: true);
+                var incomingTask = GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.LogRange("HEAD", GitDiffCommands.Upstream, RemoteLogLimit),
+                    GitCommandRunner.QueryTimeout, token, readOnly: true);
+                var outgoing = await outgoingTask;
+                var incoming = await incomingTask;
 
-            var outgoingCommits = GitOutputParser.ParseLog(outgoing.StdOut);
-            var incomingCommits = GitOutputParser.ParseLog(incoming.StdOut);
+                if (!ReferenceEquals(row, SelectedRow))
+                    return;
+
+                if (!outgoing.Success || !incoming.Success)
+                {
+                    // 원격에서 브랜치가 지워졌거나(upstream gone) 아직 fetch 전인 경우.
+                    RemoteSummaryText.Text = string.Format("{0} 와(과) 비교할 수 없습니다: {1}", snapshot.Upstream,
+                        FirstLine(outgoing.Success ? incoming.StdErr : outgoing.StdErr) ?? "알 수 없는 오류");
+                    OutgoingDiffButton.IsEnabled = IncomingDiffButton.IsEnabled = WorkTreeDiffButton.IsEnabled = false;
+                    return;
+                }
+
+                outgoingCommits = GitOutputParser.ParseLog(outgoing.StdOut);
+                incomingCommits = GitOutputParser.ParseLog(incoming.StdOut);
+            }
             OutgoingList.ItemsSource = outgoingCommits;
             IncomingList.ItemsSource = incomingCommits;
             OutgoingHeader.Text = string.Format("보낼 커밋 (push) — {0}{1}개", outgoingCommits.Count, outgoingCommits.Count >= RemoteLogLimit ? "+" : string.Empty);
@@ -1297,6 +1400,7 @@ namespace Folderss
             var argList = args.ToList();
             return RunBusyAsync(status, async token =>
             {
+                var watch = Stopwatch.StartNew();
                 GitResult result;
                 try
                 {
@@ -1311,6 +1415,7 @@ namespace Folderss
                 onDone?.Invoke(result);
                 if (ReferenceEquals(row, SelectedRow))
                     await LoadBranchesAndLogAsync(row, _lifetime.Token);
+                Timing(string.Format("작업 전체(명령+다시 읽기) {0} ms  {1}", watch.ElapsedMilliseconds, result.CommandLine));
             });
         }
 
@@ -1738,6 +1843,16 @@ namespace Folderss
 
         private async Task LoadWorktreesAsync(RepositoryRow row, CancellationToken token)
         {
+            var lib = await ReadLibAsync(row, "워킹트리", () => GitLibReader.ReadWorktrees(row.RootPath));
+            if (lib.Ok)
+            {
+                if (!ReferenceEquals(row, SelectedRow))
+                    return;
+                _worktrees = lib.Value;
+                WorktreeList.ItemsSource = _worktrees;
+                return;
+            }
+
             var result = await GitCommandRunner.RunAsync(row.RootPath, GitRefCommands.WorktreeList, GitCommandRunner.QueryTimeout, token, readOnly: true);
             if (!ReferenceEquals(row, SelectedRow))
                 return;
@@ -1895,6 +2010,16 @@ namespace Folderss
 
         private async Task LoadStashesAsync(RepositoryRow row, CancellationToken token)
         {
+            var lib = await ReadLibAsync(row, "stash", () => GitLibReader.ReadStashes(row.RootPath));
+            if (lib.Ok)
+            {
+                if (!ReferenceEquals(row, SelectedRow))
+                    return;
+                StashList.ItemsSource = lib.Value;
+                StashDiff.Clear("stash를 선택하면 변경을 보여 줍니다.");
+                return;
+            }
+
             var result = await GitCommandRunner.RunAsync(row.RootPath, GitStashCommands.List, GitCommandRunner.QueryTimeout, token, readOnly: true);
             if (!ReferenceEquals(row, SelectedRow))
                 return;
