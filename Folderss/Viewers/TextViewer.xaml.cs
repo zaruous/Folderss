@@ -91,6 +91,9 @@ namespace Folderss.Viewers
                 return;
             }
 
+            // 이 뷰어는 내부 가상 호스트(folderss-viewer) 페이지만 열고 다른 주소 이동은 NavigationStarting에서 막으므로
+            // SmartScreen 평판 검사가 지킬 것이 없다. 사내망 등에서 검사 서버 응답을 기다리느라 페이지 표시가 매번 약 2초 늦어져 끈다.
+            WebView.CoreWebView2.Settings.IsReputationCheckingRequired = false;
             WebView.CoreWebView2.SetVirtualHostNameToFolderMapping(
                 "folderss-viewer", ResourcesPath,
                 CoreWebView2HostResourceAccessKind.Allow);
