@@ -103,6 +103,8 @@ Folderss/
 │   ├── ClipboardService        — 클립보드 읽기·쓰기 (다른 프로그램이 점유 중이면 알리고 실패 반환)
 │   ├── ScreenCaptureService    — 화면 캡쳐 순수 계산 (선택 영역 → 픽셀 사각형, 저장 파일 이름, 확장자 → 형식)
 │   ├── CaptureSettingsService  — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더)
+│   ├── NetworkSettingsService  — 네트워크 설정 저장 (network-settings.xml: 원격 이미지·http·인증서 오류 허용, 추가 신뢰 인증서)
+│   ├── RemoteContentPolicy     — 원격 이미지 허용 경로·localhost 판정·내부 인증서 체인 검증 (순수 로직)
 │   ├── CaptureAnnotation       — 캡쳐 편집 도형 값 (이동·핸들·선택 판정·자르기/크기 조절 변환)
 │   └── ThemeManager            — 테마 전환 및 저장
 ├── Converters/
@@ -217,6 +219,7 @@ tests/
 - 설정 창에서 사용자 지정 열기 프로그램 등록 및 확장자 마스크 관리
 - 설정 창에서 콘솔 디폴트 커맨드라인과 추가 실행 항목 관리
 - 설정 창의 `캡쳐`에서 화면 캡쳐 기본 저장 폴더 변경 (기본: 사진 폴더)
+- 설정 창의 `네트워크`에서 마크다운 원격 이미지 표시(기본: https 허용), http 이미지 허용, 인증서 오류 사이트 허용(기본 꺼짐), 추가로 신뢰할 사내 인증서(.cer/.crt/.pem) 관리. localhost 같은 이 PC 안의 주소는 항상 허용
 - GitHub 최신 릴리스 기반 업데이트 확인 및 안전한 설치 파일 적용
 
 ## 내장 뷰어
@@ -225,7 +228,7 @@ tests/
 
 | 뷰어 | 기본 확장자 | 주요 기능 |
 |---|---|---|
-| Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기(파일별 마지막 모드 기억, 분할 보기 스크롤 동기화), Edit/Split 모드 라인번호 표시, 편집 보조(목록 이어 쓰기, `Tab`/`Shift+Tab` 여러 줄 들여쓰기·내어쓰기, 이미지 붙여넣기 시 `images/`에 저장), `Ctrl+F` 문서 내 검색, TOC(표시 여부·너비 기억), 문서 안 `#제목`·다른 문서 `파일.md#제목` 링크(GitHub 앵커 규칙), front matter 표시, Mermaid, KaTeX 수식(`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), 상대 경로 이미지 표시(HTML `<img>` 태그 포함), 로컬 파일 링크 클릭 시 새 뷰어 탭으로 열기(실행 파일은 확인 후 실행), 본문 HTML의 스크립트 차단, BOM 없는 CP949 문서 자동 인식, HTML/PDF 내보내기, 우클릭 메뉴의 인쇄·다른 이름으로 저장·공유, 외부 변경 자동 반영(스크롤 위치 유지) |
+| Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기(파일별 마지막 모드 기억, 분할 보기 스크롤 동기화), Edit/Split 모드 라인번호 표시, 편집 보조(목록 이어 쓰기, `Tab`/`Shift+Tab` 여러 줄 들여쓰기·내어쓰기, 이미지 붙여넣기 시 `images/`에 저장), `Ctrl+F` 문서 내 검색, TOC(표시 여부·너비 기억), 문서 안 `#제목`·다른 문서 `파일.md#제목` 링크(GitHub 앵커 규칙), front matter 표시, Mermaid, KaTeX 수식(`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), 상대 경로·원격(https 기본, http는 설정) 이미지 표시(HTML `<img>` 태그 포함), 로컬 파일 링크 클릭 시 새 뷰어 탭으로 열기(실행 파일은 확인 후 실행), 본문 HTML의 스크립트 차단, BOM 없는 CP949 문서 자동 인식, HTML/PDF 내보내기, 우클릭 메뉴의 인쇄·다른 이름으로 저장·공유, 외부 변경 자동 반영(스크롤 위치 유지) |
 | Monaco | `.json`, `.jsonl`, `.xml` | Monaco Editor 기반 편집, 구문 강조, `Ctrl+F` 내장 검색(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1`), 대용량 파일 모드, 외부 변경 감지. `.jsonl`(JSON Lines)은 전용 언어로 열려 줄마다 JSON으로 강조하고, `Format Document`는 레코드를 한 줄로 압축, 커맨드 팔레트의 `JSONL: 레코드 펼쳐 보기`는 들여쓰기해 펼침(값·키 순서·큰 정수는 원문 그대로, 파싱 안 되는 줄은 손대지 않음) |
 | Text | 사용자 매핑 | 읽기 전용 텍스트 보기와 구문 강조 |
 
@@ -448,6 +451,7 @@ Folderss\Themes\Controls.xaml
 | `git-window.xml` | Git 창 보기 상태(트리 보기, 목록 너비, 변경됨/스테이지됨 높이 비율) |
 | `diff-settings.xml` | 비교(diff) 설정(보기·공백·인코딩·외부 비교 도구, 프리셋) |
 | `capture-settings.xml` | 화면 캡쳐 기본 저장 폴더 |
+| `network-settings.xml` | 네트워크 설정(원격 이미지·http 허용·인증서 오류 허용, 추가 신뢰 인증서 PEM) |
 | `compare-settings.xml` | 폴더 비교 옵션(판정 기준·범위·표시·이동 확인 기준) |
 | `compare-history\*.jsonl` | 폴더 비교 창 작업 이력(이동·복사·삭제, 7일 보관) |
 | `favorites.xml` | 즐겨찾기 그룹·항목 |
