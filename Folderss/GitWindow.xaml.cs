@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.IO;
 using System.Linq;
 using System.Text;
@@ -10,6 +11,7 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
+using System.Windows.Threading;
 using Folderss.Controls;
 using Folderss.Models;
 using Folderss.Services;
@@ -90,6 +92,9 @@ namespace Folderss
         private int _busyCount;
         private List<GitBranchInfo> _branches = new List<GitBranchInfo>();
 
+        /// <summary>환경 변수 <c>FOLDERSS_GIT_TIMING=1</c>이면 git 명령·화면 갱신 시간을 출력창에 ⏱ 줄로 남긴다(실측용).</summary>
+        private static readonly bool TimingEnabled = Environment.GetEnvironmentVariable("FOLDERSS_GIT_TIMING") == "1";
+
         /// <param name="basePath">탐색 기준 폴더.</param>
         /// <param name="countModifiedDocumentsUnder">폴더 아래 경로로 열린 미저장 뷰어 개수 — 브랜치 전환·pull 전 경고용.</param>
         /// <param name="openFile">파일 더블클릭 시 기존 뷰어로 연다.</param>
@@ -122,6 +127,29 @@ namespace Folderss
             RepoList.ItemsSource = _rows;
             SectionNav.SelectedIndex = 0;
             UpdateButtons();
+            if (TimingEnabled)
+                GitCommandRunner.Completed += GitCommand_Completed;
+        }
+
+        // ── 실측 계측 ─────────────────────────────────────────────────────────
+
+        private void GitCommand_Completed(string repository, GitResult result)
+        {
+            Dispatcher.BeginInvoke(new Action(() =>
+            {
+                // 다른 Git 창의 명령은 찍지 않는다(이벤트가 정적이라 모든 창에 온다).
+                var row = repository == null ? null : _rows.FirstOrDefault(r => string.Equals(r.RootPath, repository, StringComparison.OrdinalIgnoreCase));
+                if (repository != null && row == null)
+                    return;
+                Timing(string.Format("{0} ms (대기 {1} ms)  {2}{3}", result.ElapsedMilliseconds, result.WaitMilliseconds,
+                    result.CommandLine, row == null ? string.Empty : "    [" + row.Info.DisplayPath + "]"));
+            }));
+        }
+
+        private void Timing(string text)
+        {
+            if (TimingEnabled)
+                AppendOutput("⏱ " + text);
         }
 
         private RepositoryRow SelectedRow => RepoList.SelectedItem as RepositoryRow;
@@ -142,6 +170,7 @@ namespace Folderss
         {
             // 창을 닫으면 진행 중인 탐색·git 프로세스를 모두 끝낸다(러너가 프로세스 트리를 종료).
             _lifetime.Cancel();
+            GitCommandRunner.Completed -= GitCommand_Completed;
         }
 
         private async Task<bool> CheckGitAsync()
@@ -274,6 +303,7 @@ namespace Folderss
                 var statusTasks = new List<Task>();
                 var excluded = _settings.ExcludedFolders.ToArray();
                 var depth = _settings.ScanDepth;
+                var scanWatch = Stopwatch.StartNew();
 
                 // 찾는 즉시 목록에 넣고 상태 읽기를 시작한다(동시 실행 수는 러너가 제한).
                 var result = await Task.Run(() => GitRepositoryScanner.Scan(_basePath, depth, excluded, info =>
@@ -291,6 +321,7 @@ namespace Folderss
                 }, token), token);
 
                 await Task.WhenAll(statusTasks);
+                Timing(string.Format("탐색+상태 읽기 전체 {0} ms (저장소 {1}개)", scanWatch.ElapsedMilliseconds, result.Repositories.Count));
 
                 AppendOutput(string.Format("탐색 완료: 저장소 {0}개 (깊이 {1}, 제외: {2}){3}",
                     result.Repositories.Count, depth,
@@ -606,10 +637,14 @@ namespace Folderss
             if (row == null)
                 return;
 
+            var watch = Stopwatch.StartNew();
             ShowChanges(row);
             try
             {
                 await LoadBranchesAndLogAsync(row, _lifetime.Token);
+                // 도중에 다른 저장소를 골랐으면 중간에 끝난 것이라 찍지 않는다.
+                if (ReferenceEquals(row, SelectedRow))
+                    Timing(string.Format("저장소 선택 → 상세 읽기 전체 {0} ms    [{1}]", watch.ElapsedMilliseconds, row.Info.DisplayPath));
             }
             catch (OperationCanceledException)
             {
@@ -657,6 +692,7 @@ namespace Folderss
                 // 커밋이 하나도 없는 저장소의 log 실패는 정상이므로 출력하지 않는다.
                 if (logResult.Success)
                 {
+                    var logWatch = Stopwatch.StartNew();
                     var commits = GitOutputParser.ParseLog(logResult.StdOut);
                     var graph = GitGraphLayout.Compute(commits);
                     var maxLanes = 1;
@@ -666,7 +702,15 @@ namespace Folderss
                         maxLanes = Math.Max(maxLanes, graph[i].LaneCount);
                     }
                     GraphColumn.Width = GitGraphCell.WidthFor(maxLanes);
+                    var parseMs = logWatch.ElapsedMilliseconds;
                     LogList.ItemsSource = commits;
+                    if (TimingEnabled)
+                    {
+                        // Loaded 우선순위는 레이아웃·렌더 다음에 돈다 → 목록을 그리는 데 걸린 시간의 근사치.
+                        logWatch.Restart();
+                        Dispatcher.BeginInvoke(DispatcherPriority.Loaded, new Action(() =>
+                            Timing(string.Format("로그 {0}개: 파싱+그래프 {1} ms, 그리기 {2} ms", commits.Count, parseMs, logWatch.ElapsedMilliseconds))));
+                    }
                 }
                 else if (row.Snapshot?.HeadOid != null)
                     AppendResult(row.Info, logResult);
@@ -1297,6 +1341,7 @@ namespace Folderss
             var argList = args.ToList();
             return RunBusyAsync(status, async token =>
             {
+                var watch = Stopwatch.StartNew();
                 GitResult result;
                 try
                 {
@@ -1311,6 +1356,7 @@ namespace Folderss
                 onDone?.Invoke(result);
                 if (ReferenceEquals(row, SelectedRow))
                     await LoadBranchesAndLogAsync(row, _lifetime.Token);
+                Timing(string.Format("작업 전체(명령+다시 읽기) {0} ms  {1}", watch.ElapsedMilliseconds, result.CommandLine));
             });
         }
 

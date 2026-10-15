@@ -327,6 +327,8 @@ Folderss/
 - 실행: 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
   표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
 - 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.
+- 계측: `GitResult`에 대기·실행 시간(ms), 명령마다 정적 이벤트 `GitCommandRunner.Completed`. 환경 변수 `FOLDERSS_GIT_TIMING=1`이면 Git 창이
+  출력창에 `⏱` 줄(명령별 시간, 선택·작업 전체 시간, 로그 파싱·그리기 시간)을 남긴다. 자세한 것은 `docs/items/git-performance.md`.
 - 동시성: 창 안의 쓰기 작업은 `RunBusyAsync`로 한 번에 하나(버튼 잠금 + 취소 버튼). 여러 저장소 동작은 status와 툴바 `전체` 그룹의
   fetch·pull·push(`RunOnAllAsync` — 저장소마다 `Task.WhenAll`로 동시에, 성공·실패·건너뜀 요약). 일괄 pull/push는 `GitSyncCommands.BatchSkipReason`으로
   detached HEAD·upstream 없는 저장소를 건너뛰고 `-u`를 붙이지 않는다(원격 선택은 단일 push에서만).
