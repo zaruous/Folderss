@@ -288,15 +288,19 @@ namespace Folderss.Services
             }
         }
 
+        /// <summary><see cref="GitDiffCommands.LogRange"/>(<c>--topo-order</c>)와 같은 순서. 시각 정렬은 같은 초 커밋의 순서가 CLI와 달라 쓰지 않는다.</summary>
         private static List<GitCommitInfo> Range(Repository repo, Commit exclude, Commit include, int limit)
         {
             var filter = new CommitFilter
             {
                 IncludeReachableFrom = include,
                 ExcludeReachableFrom = exclude,
-                SortBy = CommitSortStrategies.Time
+                SortBy = CommitSortStrategies.None
             };
-            return ToInfos(repo, repo.Commits.QueryBy(filter).Take(limit));
+            var reachable = repo.Commits.QueryBy(filter).ToDictionary(c => c.Sha, StringComparer.Ordinal);
+            if (!reachable.ContainsKey(include.Sha))
+                return new List<GitCommitInfo>();
+            return ToInfos(repo, TopoOrder(new List<Commit> { include }, reachable).Take(limit));
         }
 
         /// <summary><c>git stash list</c> + <see cref="GitStashCommands.List"/> 형식과 같은 목록(최신이 stash@{0}).</summary>

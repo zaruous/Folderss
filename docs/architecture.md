@@ -375,7 +375,7 @@ Folderss/
   창을 닫으면 `_lifetime` 토큰이 진행 중 프로세스를 모두 끝낸다.
 - diff: 인수는 모두 `GitDiffCommands`(공통 `--no-color --no-ext-diff -M` — 사용자 외부 diff 도구 설정 무시).
   작업 트리 `diff -- <p>`, 스테이지 `diff --cached -- [<원래 경로>] <p>`, 추적 안 됨 `diff --no-index -- /dev/null <p>`(종료 코드 1 = 차이 있음),
-  커밋 `diff <첫 부모> <hash>`(최초 커밋은 `show --format=`), 원격 비교 `log @{u}..HEAD`/`HEAD..@{u}`, `diff @{u}...HEAD`/`HEAD...@{u}`/`diff @{u}`.
+  커밋 `diff <첫 부모> <hash>`(최초 커밋은 `show --format=`), 원격 비교 `log --topo-order @{u}..HEAD`/`HEAD..@{u}`(LibGit2Sharp 경로도 같은 위상 순서 `TopoOrder`), `diff @{u}...HEAD`/`HEAD...@{u}`/`diff @{u}`.
   `GitOutputParser.ParseDiff`는 hunk 밖의 `---`/`+++`만 헤더로 보고(hunk 안 `--`로 시작하는 줄 삭제 오판 방지), 충돌 파일 combined diff(`@@@`)는
   앞 두 글자로 분류하고 줄 번호를 매기지 않는다. `GitDiffView`는 `BeginLoad`가 준 번호로만 `Complete`해 빠른 연속 선택의 늦은 결과를 버린다.
   원격 비교는 원격 추적 브랜치 기준이라 fetch 전에는 오래된 상태다(요약 문구로 알림).
