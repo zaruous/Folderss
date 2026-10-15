@@ -162,6 +162,11 @@ Folderss/
 - Mermaid·KaTeX·highlight.js는 페이지에 고정으로 넣지 않고, 렌더링한 문서에 다이어그램·수식·코드 블록이 있을 때 `loadLib`/`withLib`로 불러온다.
 - WebView2 뷰어(Markdown·Monaco·Text)는 `CoreWebView2Settings.IsReputationCheckingRequired = false`로 SmartScreen 평판 검사를 끈다.
   내부 가상 호스트만 열기 때문에 검사가 보호할 대상이 없고, 검사 서버를 기다리느라 페이지 표시가 약 2초 늦어졌다(`docs/items/webview-smartscreen-load-delay.md`).
+- WebView2 뷰어 공통 동작:
+  - `ApplyTheme`이 `WebView.DefaultBackgroundColor`를 페이지 테마 배경과 같은 색으로 지정하고, 페이지는 테마를 받기 전 배경을 투명하게 둬 로딩 중 깜빡임을 없앤다.
+  - `Viewers/WebViewIdleSaver`가 뷰어가 화면에서 가려지면 메모리 목표를 `Low`로, 30초 넘게 가려지면 `TrySuspendAsync`로 일시 중지하고, 다시 보이면 재개한다.
+    가려진 탭에 오는 테마 변경·제목 이동은 미뤘다가 다시 보일 때(`OnBecameVisible`) 적용한다.
+  - 세 뷰어 모두 `IDisposable`로 탭을 닫을 때 `WebView.Dispose()`한다.
 - 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
   그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
 

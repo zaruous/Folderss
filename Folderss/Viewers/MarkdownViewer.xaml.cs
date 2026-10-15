@@ -41,6 +41,8 @@ namespace Folderss.Viewers
         private CoreWebView2ContextMenuItem _printMenuItem;
         private CoreWebView2ContextMenuItem _saveAsMenuItem;
         private CoreWebView2ContextMenuItem _shareMenuItem;
+        private WebViewIdleSaver _idleSaver;
+        private string _pageTheme;
 
         private string _pendingContent;
 
@@ -115,6 +117,7 @@ namespace Folderss.Viewers
             InitializeContentContextMenuItems();
 
             _webViewReady = true;
+            _idleSaver = new WebViewIdleSaver(this, WebView, OnBecameVisible);
             WebView.CoreWebView2.Navigate("https://folderss-viewer/markdown-app.html");
         }
 
@@ -348,6 +351,7 @@ namespace Folderss.Viewers
             }
 
             _pendingContent = null;
+            _pageTheme = ThemeName(_currentTheme);
             var script = string.Format(
                 "app.open({0},{1},{2},{3},{4})",
                 JsonString(content),
@@ -396,9 +400,29 @@ namespace Folderss.Viewers
         public void ApplyTheme(AppTheme theme)
         {
             _currentTheme = theme;
-            if (!_webViewReady) return;
+            if (_disposed) return;
+            // 페이지가 그려지기 전(테마를 받기 전)에 보이는 바탕을 테마 색으로 맞춰 흰색·검은색 깜빡임을 없앤다.
+            WebView.DefaultBackgroundColor = PageBackground(theme);
+            // 가려진 탭은 다시 보일 때(OnBecameVisible) 적용한다. 탭마다 미리보기를 다시 그리지 않고, 일시 중지된 WebView에 스크립트를 보내지 않는다.
+            if (!_webViewReady || !_pageReady || !IsVisible) return;
+            SendTheme();
+        }
+
+        private void SendTheme()
+        {
+            _pageTheme = ThemeName(_currentTheme);
             var _ = WebView.CoreWebView2.ExecuteScriptAsync(
-                string.Format("app.setTheme({0})", JsonString(ThemeName(theme))));
+                string.Format("app.setTheme({0})", JsonString(_pageTheme)));
+        }
+
+        // 탭이 다시 보일 때: 가려진 동안 바뀐 테마와, 다른 문서 링크로 넘어온 제목 이동을 적용한다.
+        private void OnBecameVisible()
+        {
+            if (!_webViewReady || !_pageReady)
+                return;
+            if (_pageTheme != null && _pageTheme != ThemeName(_currentTheme))
+                SendTheme();
+            _ = ConsumePendingAnchorAsync();
         }
 
         public bool HandleShortcut(KeyEventArgs e, KeyBindingService kb)
@@ -630,7 +654,8 @@ namespace Folderss.Viewers
         private async System.Threading.Tasks.Task ConsumePendingAnchorAsync()
         {
             string fragment;
-            if (_filePath == null || !_webViewReady || !_pageReady || _pendingContent != null ||
+            // 아직 가려져 있으면(일시 중지됐을 수 있음) 꺼내지 않고 두었다가 보일 때(OnBecameVisible) 처리한다.
+            if (_filePath == null || !_webViewReady || !_pageReady || _pendingContent != null || !IsVisible ||
                 !PendingAnchors.TryGetValue(Path.GetFullPath(_filePath), out fragment))
                 return;
 
@@ -837,6 +862,7 @@ namespace Folderss.Viewers
             // 준비 플래그를 내려 이후 들어오는 ExecuteScriptAsync 호출(테마 변경 등)이 해제된 컨트롤을 건드리지 않게 한다.
             _webViewReady = false;
             _pageReady = false;
+            _idleSaver?.Dispose();
             WebView.Dispose();
         }
 
@@ -868,6 +894,21 @@ namespace Folderss.Viewers
             catch (DecoderFallbackException)
             {
                 return GitTextDecoder.Resolve(GitFallbackEncoding.SystemAnsi) ?? new UTF8Encoding(false);
+            }
+        }
+
+        // markdown-app.html 테마 토큰 --bg와 같은 색
+        private static System.Drawing.Color PageBackground(AppTheme theme)
+        {
+            switch (theme)
+            {
+                case AppTheme.Light:      return System.Drawing.ColorTranslator.FromHtml("#ffffff");
+                case AppTheme.Nord:       return System.Drawing.ColorTranslator.FromHtml("#2e3440");
+                case AppTheme.Catppuccin: return System.Drawing.ColorTranslator.FromHtml("#1e1e2e");
+                case AppTheme.Solarized:  return System.Drawing.ColorTranslator.FromHtml("#002b36");
+                case AppTheme.Dracula:    return System.Drawing.ColorTranslator.FromHtml("#282a36");
+                case AppTheme.GitHub:     return System.Drawing.ColorTranslator.FromHtml("#ffffff");
+                default:                  return System.Drawing.ColorTranslator.FromHtml("#1e1e1e");
             }
         }
 

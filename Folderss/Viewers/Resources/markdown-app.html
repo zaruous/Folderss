@@ -56,6 +56,11 @@ body.github {
   --fg2: #656d76; --accent: #0969da; --hover: #f3f4f6; --sel: #ddf4ff;
 }
 
+/* 테마를 받기 전(app.open 전)에는 배경을 비워 C#이 지정한 WebView 기본 배경색(현재 테마 색)이 보이게 하고, 툴바도 숨긴다.
+   기본 테마 색으로 먼저 그렸다가 바뀌며 깜빡이는 것을 막는다. */
+body.theme-pending { background: transparent; }
+body.theme-pending #mdv-root { visibility: hidden; }
+
 /* ── Layout ──────────────────────────────── */
 #mdv-root {
   display: flex;
@@ -475,7 +480,7 @@ body.mode-split #mdv-split-handle:hover { background: var(--accent); }
 }
 </style>
 </head>
-<body class="dark mode-preview">
+<body class="theme-pending mode-preview">
 
 <div id="mdv-root">
   <!-- toolbar -->

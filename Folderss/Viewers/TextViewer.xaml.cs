@@ -9,7 +9,7 @@ using System.Windows.Controls;
 
 namespace Folderss.Viewers
 {
-    public partial class TextViewer : UserControl, IFileViewer
+    public partial class TextViewer : UserControl, IFileViewer, IDisposable
     {
         private static readonly string ResourcesPath = Path.Combine(
             AppDomain.CurrentDomain.BaseDirectory,
@@ -21,6 +21,9 @@ namespace Folderss.Viewers
         private bool _webViewReady;
         private string _pendingContent;
         private string _pendingLanguage;
+        private bool _disposed;
+        private WebViewIdleSaver _idleSaver;
+        private string _pageTheme;
 
         public UIElement View => this;
 
@@ -85,11 +88,17 @@ namespace Folderss.Viewers
             }
             catch (Exception ex)
             {
+                if (_disposed)
+                    return;
                 WebView.Visibility = Visibility.Collapsed;
                 ErrorText.Text = "WebView2 초기화 오류:\n" + ex.GetType().Name + "\n" + ex.Message;
                 ErrorText.Visibility = Visibility.Visible;
                 return;
             }
+
+            // 초기화를 기다리는 사이 탭이 닫혀 Dispose됐으면 해제된 컨트롤을 건드리지 않는다.
+            if (_disposed)
+                return;
 
             // 이 뷰어는 내부 가상 호스트(folderss-viewer) 페이지만 열고 다른 주소 이동은 NavigationStarting에서 막으므로
             // SmartScreen 평판 검사가 지킬 것이 없다. 사내망 등에서 검사 서버 응답을 기다리느라 페이지 표시가 매번 약 2초 늦어져 끈다.
@@ -105,6 +114,7 @@ namespace Folderss.Viewers
             WebView.CoreWebView2.NavigationStarting += OnNavigationStarting;
 
             _webViewReady = true;
+            _idleSaver = new WebViewIdleSaver(this, WebView, OnBecameVisible);
             WebView.CoreWebView2.Navigate("https://folderss-viewer/text-app.html");
             WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
         }
@@ -155,6 +165,7 @@ namespace Folderss.Viewers
         {
             _pendingContent = null;
             _pendingLanguage = null;
+            _pageTheme = ThemeName(_currentTheme);
 
             var script = string.Format(
                 "app.open({0},{1},{2},true)",
@@ -165,10 +176,42 @@ namespace Folderss.Viewers
         public void ApplyTheme(AppTheme theme)
         {
             _currentTheme = theme;
-            if (!_webViewReady) return;
+            if (_disposed) return;
+            // 페이지가 그려지기 전(테마를 받기 전)에 보이는 바탕을 테마 색으로 맞춰 깜빡임을 없앤다.
+            WebView.DefaultBackgroundColor = PageBackground(theme);
+            // 가려진 탭은 다시 보일 때(OnBecameVisible) 적용한다. 일시 중지된 WebView에 스크립트를 보내지 않는다.
+            if (!_webViewReady || !IsVisible) return;
+            SendTheme();
+        }
 
+        private void SendTheme()
+        {
+            _pageTheme = ThemeName(_currentTheme);
             var _ = WebView.CoreWebView2.ExecuteScriptAsync(
-                string.Format("app.setTheme({0})", JsonString(ThemeName(theme))));
+                string.Format("app.setTheme({0})", JsonString(_pageTheme)));
+        }
+
+        // 탭이 다시 보일 때 가려진 동안 바뀐 테마를 적용한다.
+        private void OnBecameVisible()
+        {
+            if (_webViewReady && _pageTheme != null && _pageTheme != ThemeName(_currentTheme))
+                SendTheme();
+        }
+
+        public void Dispose()
+        {
+            _disposed = true;
+            _idleSaver?.Dispose();
+            if (WebView.CoreWebView2 != null)
+            {
+                WebView.CoreWebView2.WebResourceRequested -= OnWebResourceRequested;
+                WebView.CoreWebView2.NavigationStarting -= OnNavigationStarting;
+                WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
+            }
+
+            // WPF WebView2는 화면에서 빠져도 스스로 정리되지 않아, 탭을 닫을 때마다 브라우저 프로세스와 메모리가 남는다.
+            _webViewReady = false;
+            WebView.Dispose();
         }
 
         private static string JsonString(string value)
@@ -221,6 +264,21 @@ namespace Folderss.Viewers
             var ext = Path.GetExtension(filePath);
             string lang;
             return ExtToLanguage.TryGetValue(ext, out lang) ? lang : "plaintext";
+        }
+
+        // text-app.html 테마 토큰 --bg와 같은 색
+        private static System.Drawing.Color PageBackground(AppTheme theme)
+        {
+            switch (theme)
+            {
+                case AppTheme.Light:      return System.Drawing.ColorTranslator.FromHtml("#ffffff");
+                case AppTheme.Nord:       return System.Drawing.ColorTranslator.FromHtml("#2e3440");
+                case AppTheme.Catppuccin: return System.Drawing.ColorTranslator.FromHtml("#1e1e2e");
+                case AppTheme.Solarized:  return System.Drawing.ColorTranslator.FromHtml("#002b36");
+                case AppTheme.Dracula:    return System.Drawing.ColorTranslator.FromHtml("#282a36");
+                case AppTheme.GitHub:     return System.Drawing.ColorTranslator.FromHtml("#ffffff");
+                default:                  return System.Drawing.ColorTranslator.FromHtml("#0d1117");
+            }
         }
 
         private static string ThemeName(AppTheme theme)

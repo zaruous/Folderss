@@ -63,6 +63,8 @@ namespace Folderss.Viewers
         private readonly DispatcherTimer _fileReloadTimer;
         private bool _disposed;
         private bool _reloadPromptOpen;
+        private WebViewIdleSaver _idleSaver;
+        private string _pageTheme;
 
         public UIElement View => this;
         public ViewerCapabilities Capabilities => ViewerCapabilities.Edit;
@@ -130,6 +132,7 @@ namespace Folderss.Viewers
             WebView.CoreWebView2.WebMessageReceived += OnWebMessageReceived;
 
             _webViewReady = true;
+            _idleSaver = new WebViewIdleSaver(this, WebView, OnBecameVisible);
             WebView.CoreWebView2.Navigate("https://folderss-viewer/monaco-app.html");
             WebView.CoreWebView2.NavigationCompleted += OnNavigationCompleted;
         }
@@ -230,6 +233,7 @@ namespace Folderss.Viewers
 
             _pendingContent = null;
             _pendingLanguage = null;
+            _pageTheme = ThemeName(_currentTheme);
 
             var script = string.Format(
                 "app.open({0},{1},{2},{3},{4},{5})",
@@ -263,10 +267,26 @@ namespace Folderss.Viewers
         public void ApplyTheme(AppTheme theme)
         {
             _currentTheme = theme;
-            if (!_webViewReady) return;
+            if (_disposed) return;
+            // 편집기가 그려지기 전에 보이는 바탕을 테마 색으로 맞춰 깜빡임을 없앤다.
+            WebView.DefaultBackgroundColor = PageBackground(theme);
+            // 가려진 탭은 다시 보일 때(OnBecameVisible) 적용한다. 일시 중지된 WebView에 스크립트를 보내지 않는다.
+            if (!_webViewReady || !IsVisible) return;
+            SendTheme();
+        }
 
+        private void SendTheme()
+        {
+            _pageTheme = ThemeName(_currentTheme);
             var _ = WebView.CoreWebView2.ExecuteScriptAsync(
-                string.Format("app.setTheme({0})", JsonString(ThemeName(theme))));
+                string.Format("app.setTheme({0})", JsonString(_pageTheme)));
+        }
+
+        // 탭이 다시 보일 때 가려진 동안 바뀐 테마를 적용한다.
+        private void OnBecameVisible()
+        {
+            if (_webViewReady && _pageTheme != null && _pageTheme != ThemeName(_currentTheme))
+                SendTheme();
         }
 
         public void Export(ExportFormat format, string destPath)
@@ -422,6 +442,7 @@ namespace Folderss.Viewers
             // WPF WebView2는 화면에서 빠져도 스스로 정리되지 않아, 탭을 닫을 때마다 브라우저 프로세스와 메모리가 남는다.
             // 준비 플래그를 내려 이후 들어오는 ExecuteScriptAsync 호출(테마 변경 등)이 해제된 컨트롤을 건드리지 않게 한다.
             _webViewReady = false;
+            _idleSaver?.Dispose();
             WebView.Dispose();
         }
 
@@ -442,6 +463,14 @@ namespace Folderss.Viewers
             var ext = Path.GetExtension(filePath);
             string lang;
             return ExtToLanguage.TryGetValue(ext, out lang) ? lang : "plaintext";
+        }
+
+        // monaco-app.html의 편집기 테마 배경(folderss-dark #0e1013, folderss-light #ffffff)과 같은 색
+        private static System.Drawing.Color PageBackground(AppTheme theme)
+        {
+            return theme == AppTheme.Light || theme == AppTheme.GitHub
+                ? System.Drawing.ColorTranslator.FromHtml("#ffffff")
+                : System.Drawing.ColorTranslator.FromHtml("#0e1013");
         }
 
         private static string ThemeName(AppTheme theme)
