@@ -46,7 +46,7 @@ Folderss/
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
 │   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
-│   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
+│   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각(시각만 다르면 바이트 비교 선택) 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
 │   ├── CompareSettingsService.cs   — 폴더 비교 옵션 저장 (compare-settings.xml)
 │   ├── CompareOverlay.cs           — 비교 결과를 폴더 패널 한쪽의 현재 폴더 항목에 입히는 규칙(이쪽만/저쪽만, 방향) (순수 계산)
 │   ├── FileOperationJournal.cs     — 폴더 비교 창의 이동·복사·삭제 실행+기록(%LOCALAPPDATA%\Folderss\compare-history\*.jsonl, 7일 보관)과 최근부터 되돌리기. 휴지통은 IRecycleBin 주입

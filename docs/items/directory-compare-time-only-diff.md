@@ -1,6 +1,6 @@
 # 폴더 비교 — 수정 시각만 다른 같은 파일이 "다름"으로 표시됨
 
-- 상태: Todo
+- 상태: Ready for Verification — 구현·단위 테스트 완료, Windows 화면 확인 대기
 
 ## 요구사항
 
@@ -38,7 +38,7 @@
 
   라디오 세 개는 두 bool로 대응시킨다. 저장은 `CompareSettingsService`(compare-settings.xml)의 속성 1개를 추가하고 `TrySave` 흐름을 그대로 따른다.
   판정 기준이 바뀌면 다시 비교하도록 `DirectoryCompareWindow`의 판정 옵션 비교식(`a.UseContentHash != b.UseContentHash || …`)에 새 옵션을 추가한다.
-- 기본값: 미결(아래).
+- 기본값: **끔**(가벼운 비교). 무거운 비교(시각만 다르면 내용 확인, 내용 해시)는 옵션으로 고른다.
 
 ### 가정·위험
 
@@ -48,13 +48,17 @@
 
 ### 미결 사항
 
-1. 새 옵션의 기본값. 켜면 결과가 정확해지지만 위의 대형 저장소 경우가 느려진다. 끄면 지금 동작과 같다. 기존 사용자 설정 파일에는 속성이 없으므로 기본값이 곧 기존 사용자의 동작이 된다.
+- 없음. 기본값은 사용자 결정으로 끔(가벼운 비교 기본, 무거운 비교는 옵션). 기존 설정 파일에는 속성이 없으므로 기존 사용자의 동작은 바뀌지 않는다.
 
 ## 구현 내용
 
-- 아직 없음.
+- `DirectoryCompareOptions.VerifyContentWhenTimeDiffers`(기본 false) 추가.
+- `DirectoryCompareService.Walker.CompareFiles`: 시각 차이가 허용 오차를 넘고 옵션이 켜져 있으면 `SameBytes`(64KB 블록, 첫 차이에서 멈춤, 블록마다 취소 확인)로 다시 판정한다. 같으면 같음 + 사유 "내용 같음(수정 시각만 다름)", 다르면 기존 다름 사유, 읽기 실패면 비교 불가 + 예외 메시지.
+- `CompareSettingsService`: `verifyContentWhenTimeDiffers` 속성 읽기·쓰기.
+- `DirectoryCompareOptionsDialog`: 판정 기준 라디오 3개(크기·시각 / 크기·시각 + 시각만 다르면 내용 확인 / 내용 해시). 가운데 항목에서도 허용 오차 입력이 켜진다. `CriteriaChanged`에 새 옵션을 넣어 바꾸면 다시 비교한다. 상태 줄 기준 문구에 ", 시각만 다르면 내용 확인"을 붙인다.
+- `README.md`·`docs/architecture.md` 설명 갱신.
 
-## 변경 파일 (예정)
+## 변경 파일
 
 - `Folderss/Models/DirectoryCompareModels.cs` — 옵션 속성
 - `Folderss/Services/DirectoryCompareService.cs` — `CompareFiles` 분기, 바이트 비교
@@ -63,7 +67,7 @@
 - `tests/Folderss.SearchTests/DirectoryCompareServiceTests.cs` — 아래 테스트
 - `README.md` 폴더 비교 옵션 설명
 
-## 검증 (완료 조건)
+## 검증
 
 - 재현 테스트를 먼저 추가하고, 수정 전 실패를 확인한다. 내용이 같고 시각이 5시간 다른 쌍을 옵션을 켜고 판정하면 같음이어야 한다.
 - 함께 확인할 테스트:
@@ -75,6 +79,16 @@
 - 전체 테스트 회귀가 없어야 한다. Linux에서는 `DirectoryCompareServiceTests`의 기존 Linux 전용 실패 2건을 제외하고 확인한다.
 - Windows에서 확인할 것: 옵션 대화상자 라디오 3개, 기준을 바꾸면 다시 비교, 툴팁 사유 표시.
 
+### 결과 (Linux, .NET 8 SDK)
+
+- 수정 전 재현: `TimeOnlyDifference_IsDifferentByDefault_AndSameWhenContentVerified`, `Settings_RoundTripAndDefaults` 실패 확인.
+- 수정 후: 전체 335건 중 329 통과·3 건너뜀·3 실패. 실패 3건은 모두 master에서도 실패한다(이번 변경과 무관).
+  - `DirectoryCompareServiceTests` 2건: 기존 Linux 전용 실패.
+  - `GitLibReaderTests.UpstreamRanges_MatchCli`: 이 환경에서 master로 되돌려도 같은 실패.
+- `VerifyContent_ReadsOnlyWhenTimeDiffers_AndUnreadableIsUnknown`은 Windows 전용이라 건너뜀(Windows CI에서 실행).
+- 앱 본체를 `EnableWindowsTargeting`으로 컴파일: 기존 콘솔 패널 Windows 전용 패키지 오류 1종 외에 새 오류·경고 없음.
+
 ## 변경 이력
 
 - 2026-10-15: 외부 분석 자료로 폴더 병합 계획을 검토했으나 얻을 것이 없어 폐기했다(PR #57 닫음). 검토 중 찾은 이 판정 한계만 수정 항목으로 남겼다(Todo).
+- 2026-10-15: 사용자 결정 — 가벼운 비교를 기본으로, 무거운 비교는 옵션으로. 새 옵션 기본 끔으로 구현(Ready for Verification).

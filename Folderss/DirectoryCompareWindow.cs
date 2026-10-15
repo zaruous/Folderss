@@ -406,7 +406,8 @@ namespace Folderss
             {
                 options.UseContentHash
                     ? "기준: 내용 해시"
-                    : "기준: 크기·수정 시각(±" + options.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture) + "초)",
+                    : "기준: 크기·수정 시각(±" + options.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture) + "초)"
+                      + (options.VerifyContentWhenTimeDiffers ? ", 시각만 다르면 내용 확인" : ""),
                 options.ApplyIgnoreRules ? "ignore 규칙 적용" : "ignore 규칙 무시",
                 !options.Recursive ? "하위 폴더 안 봄" : options.MaxDepth > 0 ? "하위 폴더 " + options.MaxDepth + "단계까지" : "하위 폴더 전체",
                 options.IncludeHidden ? "숨김 파일 포함" : "숨김 파일 제외"
@@ -572,7 +573,8 @@ namespace Folderss
 
         private static bool CriteriaChanged(DirectoryCompareOptions a, DirectoryCompareOptions b)
         {
-            return a.UseContentHash != b.UseContentHash || a.TimestampTolerance != b.TimestampTolerance ||
+            return a.UseContentHash != b.UseContentHash || a.VerifyContentWhenTimeDiffers != b.VerifyContentWhenTimeDiffers ||
+                   a.TimestampTolerance != b.TimestampTolerance ||
                    a.ApplyIgnoreRules != b.ApplyIgnoreRules || a.Recursive != b.Recursive ||
                    a.MaxDepth != b.MaxDepth || a.IncludeHidden != b.IncludeHidden;
         }
@@ -1053,6 +1055,7 @@ namespace Folderss
     public sealed class DirectoryCompareOptionsDialog : GitDialogBase
     {
         private readonly RadioButton _byTime;
+        private readonly RadioButton _byTimeVerify;
         private readonly RadioButton _byHash;
         private readonly TextBox _tolerance;
         private readonly CheckBox _ignore;
@@ -1073,7 +1076,11 @@ namespace Folderss
             current = current ?? new DirectoryCompareOptions();
 
             AddLabel("판정 기준");
-            _byTime = AddRadio("criteria", "크기와 수정 시각 (권장)", "빠릅니다. 크기가 같고 수정 시각 차이가 허용 오차 안이면 같음.", !current.UseContentHash);
+            _byTime = AddRadio("criteria", "크기와 수정 시각 (권장)", "빠릅니다. 크기가 같고 수정 시각 차이가 허용 오차 안이면 같음.",
+                !current.UseContentHash && !current.VerifyContentWhenTimeDiffers);
+            _byTimeVerify = AddRadio("criteria", "크기와 수정 시각, 시각만 다르면 내용 확인",
+                "크기가 같고 수정 시각만 다른 파일을 끝까지 읽어 비교합니다. git checkout·압축 해제로 시각만 바뀐 파일이 같음이 됩니다. 그런 파일이 많으면 느립니다.",
+                !current.UseContentHash && current.VerifyContentWhenTimeDiffers);
             _byHash = AddRadio("criteria", "내용 해시 (SHA-256)", "크기가 같은 파일의 내용을 모두 읽어 비교합니다. 정확하지만 느립니다. 수정 시각은 보지 않습니다.", current.UseContentHash);
             _tolerance = AddNumber("수정 시각 허용 오차(초)", current.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture),
                 "FAT·네트워크 드라이브는 시각을 2초 단위로 저장해 기본 2초입니다.");
@@ -1099,6 +1106,7 @@ namespace Folderss
 
             _byHash.Checked += (s, e) => _tolerance.IsEnabled = false;
             _byTime.Checked += (s, e) => _tolerance.IsEnabled = true;
+            _byTimeVerify.Checked += (s, e) => _tolerance.IsEnabled = true;
             _tolerance.IsEnabled = !current.UseContentHash;
             _recursive.Click += (s, e) => _maxDepth.IsEnabled = _recursive.IsChecked == true;
             _maxDepth.IsEnabled = current.Recursive;
@@ -1115,7 +1123,8 @@ namespace Folderss
 
         private void Apply(DirectoryCompareOptions options)
         {
-            _byTime.IsChecked = !options.UseContentHash;
+            _byTime.IsChecked = !options.UseContentHash && !options.VerifyContentWhenTimeDiffers;
+            _byTimeVerify.IsChecked = !options.UseContentHash && options.VerifyContentWhenTimeDiffers;
             _byHash.IsChecked = options.UseContentHash;
             _tolerance.Text = options.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture);
             _ignore.IsChecked = options.ApplyIgnoreRules;
@@ -1155,6 +1164,7 @@ namespace Folderss
             Result = new DirectoryCompareOptions
             {
                 UseContentHash = _byHash.IsChecked == true,
+                VerifyContentWhenTimeDiffers = _byTimeVerify.IsChecked == true,
                 TimestampTolerance = TimeSpan.FromSeconds(seconds),
                 ApplyIgnoreRules = _ignore.IsChecked == true,
                 Recursive = _recursive.IsChecked == true,
