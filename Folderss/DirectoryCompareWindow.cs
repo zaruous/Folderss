@@ -35,7 +35,6 @@ namespace Folderss
         private readonly FolderBrowser _leftPanel = new FolderBrowser();
         private readonly FolderBrowser _rightPanel = new FolderBrowser();
         private readonly Action<string, string> _openFileCompare;
-        private readonly Action<string> _openFile;
         private DirectoryCompareOptions _options;
         private CompareResult _result;
         private CancellationTokenSource _run;
@@ -74,11 +73,9 @@ namespace Folderss
         private FrameworkElement _historySplitter;
 
         /// <param name="openFileCompare">같은 이름의 파일 한 쌍을 두 파일 비교 창으로 연다(왼쪽, 오른쪽 전체 경로).</param>
-        /// <param name="openFile">파일 더블클릭·Enter — 메인 창과 같은 열기(뷰어 탭, 뷰어가 없으면 기본 프로그램).</param>
-        public DirectoryCompareWindow(string left, string right, Action<string, string> openFileCompare, Action<string> openFile)
+        public DirectoryCompareWindow(string left, string right, Action<string, string> openFileCompare)
         {
             _openFileCompare = openFileCompare;
-            _openFile = openFile;
             _options = CompareSettingsService.Load();
 
             Width = 1500;
@@ -594,16 +591,12 @@ namespace Folderss
 
         // ── 파일 열기·메뉴·키 ──────────────────────────────────────
 
-        /// <summary>더블클릭·Enter는 늘 열기다(메인 창과 같은 동작). 비교는 우클릭 "반대쪽 같은 이름 파일과 비교"로 한다.</summary>
+        /// <summary>
+        /// 더블클릭·Enter는 늘 Windows 기본 프로그램으로 연다. 앱 뷰어 탭은 메인 창에 생겨 이 창(메인 창 위에 뜸)에 가려지므로 쓰지 않는다.
+        /// 비교는 우클릭 "반대쪽 같은 이름 파일과 비교"로 한다.
+        /// </summary>
         private void OpenFile(string path)
         {
-            if (_openFile != null)
-            {
-                _openFile(path);
-                // 비교 창은 메인 창이 소유해 늘 위에 있으므로, 뷰어 탭이 가려질 수 있어 어디에 열었는지 알린다.
-                _status.Text = "메인 창에서 열었습니다: " + Path.GetFileName(path);
-                return;
-            }
             try
             {
                 Process.Start(new ProcessStartInfo(path) { UseShellExecute = true });
