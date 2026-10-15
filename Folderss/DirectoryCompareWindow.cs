@@ -63,8 +63,9 @@ namespace Folderss
         private readonly TextBlock _historyWarnings = new TextBlock { TextWrapping = TextWrapping.Wrap, FontSize = 12, Visibility = Visibility.Collapsed };
         private readonly Button _undoButton = new Button { Content = "↩ 최근 작업 되돌리기", Margin = new Thickness(0, 6, 0, 0) };
         private readonly Button _skipButton = new Button { Content = "최근 작업 넘기기", Margin = new Thickness(0, 4, 0, 0), ToolTip = "되돌릴 수 없는 최근 작업을 되돌리지 않고 넘겨, 그 앞 작업을 되돌릴 수 있게 합니다(파일은 그대로)" };
-        private readonly Button _moveRight = new Button { Content = "▶", ToolTip = "왼쪽에서 고른 항목을 오른쪽 폴더로 이동", Width = 30, Height = 34 };
-        private readonly Button _moveLeft = new Button { Content = "◀", ToolTip = "오른쪽에서 고른 항목을 왼쪽 폴더로 이동", Width = 30, Height = 34, Margin = new Thickness(0, 6, 0, 0) };
+        // 공용 Button 스타일의 Padding(12,7)이 30px 폭을 다 먹어 기호가 잘리므로 여백을 0으로 덮어쓴다.
+        private readonly Button _moveRight = new Button { Content = "▶", ToolTip = "왼쪽에서 고른 항목을 오른쪽 폴더로 이동", Width = 30, Height = 34, Padding = new Thickness(0), Margin = new Thickness(0) };
+        private readonly Button _moveLeft = new Button { Content = "◀", ToolTip = "오른쪽에서 고른 항목을 왼쪽 폴더로 이동", Width = 30, Height = 34, Padding = new Thickness(0), Margin = new Thickness(0, 6, 0, 0) };
         private ColumnDefinition _leftColumn;
         private ColumnDefinition _rightColumn;
         private ColumnDefinition _historySplitterColumn;
