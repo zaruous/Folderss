@@ -18,6 +18,156 @@ namespace Folderss.Services
     /// </summary>
     public static class GitLibReader
     {
+        /// <summary>
+        /// <c>git status --porcelain=v2 --branch -z --untracked-files=all</c> + <see cref="GitOutputParser.ParseStatusV2"/>와 같은 스냅숏.
+        /// git과 결과가 갈릴 수 있는 저장소(서브모듈, 인덱스 v3 이상 = skip-worktree·intent-to-add, sparse checkout,
+        /// .gitattributes의 filter=(LFS 등 외부 필터를 libgit2는 실행하지 않음), 복사 감지)는 <see cref="NotSupportedException"/>.
+        /// 조회만 하고 인덱스 갱신은 저장하지 않는다(CLI의 GIT_OPTIONAL_LOCKS=0과 같음).
+        /// </summary>
+        public static GitStatusSnapshot ReadStatus(string root)
+        {
+            using (var repo = new Repository(root))
+            {
+                EnsureStatusSupported(repo);
+
+                var snapshot = new GitStatusSnapshot
+                {
+                    HeadOid = repo.Head.Tip?.Sha,
+                    IsDetached = repo.Info.IsHeadDetached
+                };
+                if (!snapshot.IsDetached)
+                {
+                    snapshot.Branch = repo.Head.CanonicalName.StartsWith("refs/heads/", StringComparison.Ordinal)
+                        ? repo.Head.CanonicalName.Substring("refs/heads/".Length)
+                        : repo.Head.FriendlyName;
+                    var upstream = repo.Head.TrackedBranch;
+                    if (upstream != null)
+                    {
+                        // 원격 추적 브랜치가 사라졌어도(gone) git은 upstream 이름은 내고 ahead/behind는 내지 않는다.
+                        snapshot.Upstream = upstream.FriendlyName;
+                        if (upstream.Tip != null && repo.Head.Tip != null)
+                        {
+                            snapshot.Ahead = repo.Head.TrackingDetails.AheadBy ?? 0;
+                            snapshot.Behind = repo.Head.TrackingDetails.BehindBy ?? 0;
+                        }
+                    }
+                }
+
+                var options = new StatusOptions
+                {
+                    Show = StatusShowOption.IndexAndWorkDir,
+                    IncludeUntracked = true,
+                    RecurseUntrackedDirs = true,
+                    IncludeIgnored = false,
+                    DetectRenamesInIndex = RenamesEnabled(repo),
+                    DetectRenamesInWorkDir = false,
+                    ExcludeSubmodules = true
+                };
+                var tracked = new List<GitStatusEntry>();
+                var untracked = new List<GitStatusEntry>();
+                foreach (var item in repo.RetrieveStatus(options))
+                {
+                    var state = item.State;
+                    if (state.HasFlag(FileStatus.Conflicted))
+                    {
+                        var code = ConflictCode(repo, item.FilePath);
+                        tracked.Add(new GitStatusEntry { Path = item.FilePath, IsConflicted = true, IndexState = code[0], WorkTreeState = code[1] });
+                        continue;
+                    }
+
+                    var x = state.HasFlag(FileStatus.RenamedInIndex) ? 'R'
+                        : state.HasFlag(FileStatus.NewInIndex) ? 'A'
+                        : state.HasFlag(FileStatus.DeletedFromIndex) ? 'D'
+                        : state.HasFlag(FileStatus.TypeChangeInIndex) ? 'T'
+                        : state.HasFlag(FileStatus.ModifiedInIndex) ? 'M'
+                        : '.';
+                    var y = state.HasFlag(FileStatus.DeletedFromWorkdir) ? 'D'
+                        : state.HasFlag(FileStatus.TypeChangeInWorkdir) ? 'T'
+                        : state.HasFlag(FileStatus.ModifiedInWorkdir) ? 'M'
+                        : '.';
+                    if (x != '.' || y != '.')
+                    {
+                        var entry = new GitStatusEntry { Path = item.FilePath, IndexState = x, WorkTreeState = y };
+                        if (x == 'R' && item.HeadToIndexRenameDetails != null)
+                        {
+                            entry.Path = item.HeadToIndexRenameDetails.NewFilePath;
+                            entry.OriginalPath = item.HeadToIndexRenameDetails.OldFilePath;
+                        }
+                        tracked.Add(entry);
+                    }
+                    // 인덱스에서 지운 파일이 작업 트리에 남아 있으면(git rm --cached) git은 추적 항목과 "?" 항목을 따로 낸다.
+                    if (state.HasFlag(FileStatus.NewInWorkdir))
+                        untracked.Add(new GitStatusEntry { Path = item.FilePath, IsUntracked = true });
+                }
+
+                // git 순서: 추적 항목(1·2·u) 경로 순 → 추적 안 되는 항목 경로 순. 경로 비교는 UTF-8 바이트 순(strcmp).
+                snapshot.Entries.AddRange(tracked.OrderBy(e => e.Path, Utf8Order));
+                snapshot.Entries.AddRange(untracked.OrderBy(e => e.Path, Utf8Order));
+                return snapshot;
+            }
+        }
+
+        private static void EnsureStatusSupported(Repository repo)
+        {
+            var gitDir = repo.Info.Path;
+            var indexPath = Path.Combine(gitDir, "index");
+            if (File.Exists(indexPath))
+            {
+                var header = new byte[8];
+                using (var stream = new FileStream(indexPath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
+                {
+                    if (stream.Read(header, 0, 8) == 8 && header[7] != 2)
+                        throw new NotSupportedException("인덱스 v" + header[7]);
+                }
+            }
+            if (repo.Config.Get<bool>("core.sparseCheckout")?.Value == true)
+                throw new NotSupportedException("sparse checkout");
+            var workDir = repo.Info.WorkingDirectory ?? throw new NotSupportedException("bare 저장소");
+            if (File.Exists(Path.Combine(workDir, ".gitmodules")) || repo.Index.Any(e => e.Mode == Mode.GitLink))
+                throw new NotSupportedException("서브모듈");
+            foreach (var attributes in new[] { Path.Combine(workDir, ".gitattributes"), Path.Combine(gitDir, "info", "attributes") })
+            {
+                if (File.Exists(attributes) && File.ReadAllText(attributes).Contains("filter="))
+                    throw new NotSupportedException("필터 속성(filter=)");
+            }
+        }
+
+        /// <summary>status.renames(없으면 diff.renames, 기본 true). copies면 git이 복사(C)도 찾으므로 지원하지 않는다.</summary>
+        private static bool RenamesEnabled(Repository repo)
+        {
+            var value = (repo.Config.Get<string>("status.renames")?.Value ?? repo.Config.Get<string>("diff.renames")?.Value ?? "true").Trim().ToLowerInvariant();
+            if (value == "copies" || value == "copy")
+                throw new NotSupportedException("복사 감지(" + value + ")");
+            return !(value == "false" || value == "no" || value == "off" || value == "0");
+        }
+
+        /// <summary>충돌 단계(1=공통 조상, 2=우리, 3=그들) 조합 → porcelain XY. git wt-status.c의 unmerged 표와 같다.</summary>
+        private static string ConflictCode(Repository repo, string path)
+        {
+            var conflict = repo.Index.Conflicts[path];
+            var mask = (conflict?.Ancestor != null ? 1 : 0) | (conflict?.Ours != null ? 2 : 0) | (conflict?.Theirs != null ? 4 : 0);
+            switch (mask)
+            {
+                case 1: return "DD";
+                case 2: return "AU";
+                case 3: return "UD";
+                case 4: return "UA";
+                case 5: return "DU";
+                case 6: return "AA";
+                default: return "UU";
+            }
+        }
+
+        private static readonly IComparer<string> Utf8Order = Comparer<string>.Create((a, b) =>
+        {
+            var x = System.Text.Encoding.UTF8.GetBytes(a);
+            var y = System.Text.Encoding.UTF8.GetBytes(b);
+            for (var i = 0; i < Math.Min(x.Length, y.Length); i++)
+                if (x[i] != y[i])
+                    return x[i].CompareTo(y[i]);
+            return x.Length.CompareTo(y.Length);
+        });
+
         /// <summary><c>git for-each-ref refs/heads refs/remotes</c> + <see cref="GitOutputParser.ParseBranches"/>와 같은 목록.</summary>
         public static List<GitBranchInfo> ReadBranches(string root)
         {

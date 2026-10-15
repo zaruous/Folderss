@@ -58,7 +58,7 @@ Folderss/
 │   ├── FilePreviewService      — 텍스트·이미지 미리보기 + 메타데이터 (링크 대상 포함)
 │   ├── GitRepositoryScanner    — 기준 폴더 아래(와 위) Git 저장소 탐색 (중첩·워크트리·서브모듈)
 │   ├── GitCommandRunner        — git CLI 실행 (인수 목록 전달, 타임아웃·취소, UTF-8)
-│   ├── GitLibReader            — 브랜치·로그·upstream 비교·stash·워킹트리 조회를 git 프로세스 없이 LibGit2Sharp로 (실패 시 CLI)
+│   ├── GitLibReader            — status·브랜치·로그·upstream 비교·stash·워킹트리 조회를 git 프로세스 없이 LibGit2Sharp로 (실패 시 CLI)
 │   ├── GitOutputParser         — `status --porcelain=v2`·`log`·`for-each-ref`·unified diff 출력 파서
 │   ├── GitDiffCommands         — diff·upstream 비교 명령 인수 (UI·테스트 공용)
 │   ├── GitGraphLayout          — 부모 해시로 브랜치 그래프 레인 계산

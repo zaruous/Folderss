@@ -370,18 +370,26 @@ namespace Folderss
 
         private async Task RefreshStatusAsync(RepositoryRow row, CancellationToken token)
         {
-            var result = await GitCommandRunner.RunAsync(row.RootPath,
-                GitOutputParser.StatusArguments,
-                GitCommandRunner.QueryTimeout, token, readOnly: true);
-
-            if (result.Success)
+            var lib = await ReadLibAsync(row, "status", () => GitLibReader.ReadStatus(row.RootPath));
+            if (lib.Ok)
             {
-                row.Snapshot = GitOutputParser.ParseStatusV2(result.StdOut);
+                row.Snapshot = lib.Value;
             }
             else
             {
-                row.Error = FirstLine(result.StdErr) ?? "상태를 읽지 못했습니다";
-                AppendResult(row.Info, result);
+                var result = await GitCommandRunner.RunAsync(row.RootPath,
+                    GitOutputParser.StatusArguments,
+                    GitCommandRunner.QueryTimeout, token, readOnly: true);
+
+                if (result.Success)
+                {
+                    row.Snapshot = GitOutputParser.ParseStatusV2(result.StdOut);
+                }
+                else
+                {
+                    row.Error = FirstLine(result.StdErr) ?? "상태를 읽지 못했습니다";
+                    AppendResult(row.Info, result);
+                }
             }
 
             if (ReferenceEquals(row, SelectedRow))

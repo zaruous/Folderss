@@ -14,25 +14,57 @@ namespace Folderss.SearchTests
     /// GitLibReader(LibGit2Sharp)가 git CLI 출력 + GitOutputParser와 같은 결과를 내는지 실제 git으로 만든 저장소에서 비교한다.
     /// Git 창은 둘 중 하나로 읽으므로 결과가 다르면 화면이 콘솔 git과 어긋난다.
     /// </summary>
-    public sealed class GitLibReaderTests : IDisposable
+    public sealed class GitLibReaderTests : IDisposable, IClassFixture<GitLibReaderTests.RichRepoFixture>
     {
         private readonly string _root;
+        private readonly RichRepoFixture _rich;
 
-        public GitLibReaderTests()
+        public GitLibReaderTests(RichRepoFixture rich)
         {
+            _rich = rich;
             _root = Path.Combine(Path.GetTempPath(), "folderss-lg2-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
         }
 
-        public void Dispose()
+        public void Dispose() => DeleteTree(_root);
+
+        private static void DeleteTree(string root)
         {
             try
             {
-                foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                // git 객체 파일은 읽기 전용이라 먼저 속성을 푼다(Windows).
+                foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
                     File.SetAttributes(file, FileAttributes.Normal);
-                Directory.Delete(_root, true);
+                Directory.Delete(root, true);
             }
             catch { }
+        }
+
+        /// <summary>
+        /// 여러 테스트가 쓰는 복잡한 저장소(<see cref="BuildRichRepoAsync"/>)를 클래스에서 한 번만 만든다.
+        /// git 명령이 약 60번 드는데, 프로세스 실행이 1초 넘게 걸리는 PC에서는 테스트마다 만들면 이 클래스만 15분이 넘었다.
+        /// 테스트는 <see cref="RichRepoAsync"/>로 파일 복사본을 받아 브랜치 전환·워킹트리 추가 등을 서로 영향 없이 한다.
+        /// </summary>
+        public sealed class RichRepoFixture : IAsyncLifetime
+        {
+            public string Root { get; } = Path.Combine(Path.GetTempPath(), "folderss-lg2-rich-" + Guid.NewGuid().ToString("N"));
+
+            /// <summary>만든 작업 저장소. git이 없으면 null(테스트는 Skip).</summary>
+            public string Work { get; private set; }
+
+            public async Task InitializeAsync()
+            {
+                if (GitCommandRunner.FindGit() == null)
+                    return;
+                Directory.CreateDirectory(Root);
+                Work = await BuildRichRepoAsync(Root);
+            }
+
+            public Task DisposeAsync()
+            {
+                DeleteTree(Root);
+                return Task.CompletedTask;
+            }
         }
 
         private static async Task<string> Git(string repo, params string[] args)
@@ -42,9 +74,11 @@ namespace Folderss.SearchTests
             return result.StdOut;
         }
 
-        private async Task<string> InitAsync(string name, bool bare = false)
+        private Task<string> InitAsync(string name, bool bare = false) => InitAsync(_root, name, bare);
+
+        private static async Task<string> InitAsync(string root, string name, bool bare = false)
         {
-            var repo = Path.Combine(_root, name);
+            var repo = Path.Combine(root, name);
             Directory.CreateDirectory(repo);
             if (bare)
                 await Git(repo, "init", "-q", "--bare", "-b", "main");
@@ -108,20 +142,41 @@ namespace Folderss.SearchTests
             list.Select(w => $"{w.Path}|{w.Head}|{w.Branch}|{w.IsDetached}|{w.IsBare}|{w.IsLocked}|{w.IsPrunable}|{w.IsMain}").ToList();
 
         /// <summary>
+        /// <see cref="RichRepoFixture"/>가 만든 저장소를 이 테스트의 폴더로 복사해 돌려준다(git 프로세스 없이 파일 복사만).
+        /// 원격(origin)은 복사하지 않고 픽스처 것을 그대로 가리킨다 — 테스트는 원격을 바꾸지 않는다.
+        /// </summary>
+        private Task<string> RichRepoAsync()
+        {
+            Skip.If(_rich.Work == null, "git이 설치되어 있지 않음");
+            var work = Path.Combine(_root, "work");
+            CopyTree(_rich.Work, work);
+            return Task.FromResult(work);
+        }
+
+        private static void CopyTree(string source, string target)
+        {
+            Directory.CreateDirectory(target);
+            foreach (var dir in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+                Directory.CreateDirectory(Path.Combine(target, Path.GetRelativePath(source, dir)));
+            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+                File.Copy(file, Path.Combine(target, Path.GetRelativePath(source, file)));
+        }
+
+        /// <summary>
         /// 원격·클론, 양쪽 갈라진 커밋, merge, 가벼운·주석 태그, 원격 HEAD, 사라진 upstream, notes·사용자 참조,
         /// 여러 줄 메시지·한글, 일반·새 파일 포함 stash. 커밋은 빠르게 만들어 같은 초 시각이 많다(정렬 동점).
         /// </summary>
-        private async Task<string> RichRepoAsync()
+        private static async Task<string> BuildRichRepoAsync(string root)
         {
-            var origin = await InitAsync("origin", bare: true);
-            var seed = await InitAsync("seed");
+            var origin = await InitAsync(root, "origin", bare: true);
+            var seed = await InitAsync(root, "seed");
             await CommitAsync(seed, "a.txt", "첫 커밋");
             await Git(seed, "remote", "add", "origin", origin);
             await Git(seed, "push", "-q", "origin", "main");
             await Git(seed, "push", "-q", "origin", "main:gone");
 
-            var work = Path.Combine(_root, "work");
-            await Git(_root, "clone", "-q", origin, work);
+            var work = Path.Combine(root, "work");
+            await Git(root, "clone", "-q", origin, work);
             await Configure(work);
 
             // 원격 쪽에만 있는 커밋(받을 커밋)
@@ -242,6 +297,171 @@ namespace Folderss.SearchTests
             await Git(repo, "worktree", "add", "-q", linked, "side");
             Assert.ThrowsAny<Exception>(() => GitLibReader.ReadWorktrees(repo));     // 주 저장소: 링크된 워킹트리 있음
             Assert.ThrowsAny<Exception>(() => GitLibReader.ReadWorktrees(linked));   // 링크된 워킹트리 자신
+        }
+
+        // ── status ─────────────────────────────────────────────────────────
+
+        private static async Task<GitStatusSnapshot> CliStatus(string repo)
+        {
+            var result = await GitCommandRunner.RunAsync(repo, GitOutputParser.StatusArguments, GitCommandRunner.QueryTimeout, CancellationToken.None, readOnly: true);
+            Assert.True(result.Success, result.StdErr);
+            return GitOutputParser.ParseStatusV2(result.StdOut);
+        }
+
+        private static List<string> Lines(GitStatusSnapshot s)
+        {
+            var lines = new List<string> { $"#{s.Branch}|{s.Upstream}|+{s.Ahead}|-{s.Behind}|{s.IsDetached}|{s.HeadOid}" };
+            lines.AddRange(s.Entries.Select(e => $"{e.IndexState}{e.WorkTreeState}|{e.Path}|{e.OriginalPath}|u={e.IsUntracked}|c={e.IsConflicted}"));
+            return lines;
+        }
+
+        private static async Task AssertStatusMatches(string repo)
+        {
+            Assert.Equal(Lines(await CliStatus(repo)), Lines(GitLibReader.ReadStatus(repo)));
+        }
+
+        private static void Write(string repo, string path, string text)
+        {
+            var full = Path.Combine(repo, path);
+            Directory.CreateDirectory(Path.GetDirectoryName(full));
+            File.WriteAllText(full, text);
+        }
+
+        private static readonly string Long = string.Join("\n", Enumerable.Range(1, 40).Select(i => "줄 " + i)) + "\n";
+
+        [SkippableFact]
+        public async Task Status_MatchesCli_WorkTreeIndexUntrackedRenames()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitAsync("status");
+            foreach (var name in new[] { "a.txt", "b.txt", "c.txt", "d.txt", "gone.txt", "keep.txt", "한글 파일.txt", "sp ace.txt", "dir/x.txt" })
+                Write(repo, name, name + "\n");
+            Write(repo, "e.txt", Long);
+            Write(repo, "f.txt", Long.Replace("줄", "행"));
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "base");
+
+            Write(repo, "a.txt", "작업 트리만\n");                       // .M
+            Write(repo, "b.txt", "스테이지\n");                           // M.
+            Write(repo, "c.txt", "스테이지\n");                           // MM
+            await Git(repo, "add", "b.txt", "c.txt");
+            Write(repo, "c.txt", "또 고침\n");
+            await Git(repo, "rm", "-q", "d.txt");                         // D.
+            Directory.CreateDirectory(Path.Combine(repo, "renamed"));    // git mv는 대상 폴더를 만들지 않는다
+            await Git(repo, "mv", "e.txt", "renamed/e2.txt");             // R.
+            await Git(repo, "mv", "f.txt", "f2.txt");                     // RM
+            File.AppendAllText(Path.Combine(repo, "f2.txt"), "추가 줄\n");
+            File.Delete(Path.Combine(repo, "gone.txt"));                  // .D
+            await Git(repo, "rm", "-q", "--cached", "keep.txt");          // D. + ?
+            Write(repo, "한글 파일.txt", "수정\n");
+            Write(repo, "new staged.txt", "새 파일\n");                   // A.
+            await Git(repo, "add", "new staged.txt");
+            Write(repo, "u/v/w.txt", "추적 안 됨\n");                     // ? (하위 폴더 안까지)
+            Write(repo, "새 폴더/파일.txt", "추적 안 됨\n");
+            Write(repo, ".gitignore", "*.log\nbuild/\n");
+            Write(repo, "x.log", "무시\n");
+            Write(repo, "build/out.txt", "무시\n");
+
+            await AssertStatusMatches(repo);
+        }
+
+        [SkippableFact]
+        public async Task Status_MatchesCli_BranchHeader()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await RichRepoAsync();
+            await AssertStatusMatches(repo);                              // ahead 3, behind 2
+            await Git(repo, "switch", "-q", "orphan");                    // upstream 사라짐(gone)
+            await AssertStatusMatches(repo);
+            await Git(repo, "switch", "-q", "side");                      // upstream 없음
+            await AssertStatusMatches(repo);
+            await Git(repo, "switch", "-q", "--detach", "HEAD~1");        // detached
+            await AssertStatusMatches(repo);
+
+            var unborn = await InitAsync("status-unborn");                // 최초 커밋 전 + 스테이지된 파일
+            Write(unborn, "first.txt", "처음\n");
+            await Git(unborn, "add", "first.txt");
+            Write(unborn, "later.txt", "추적 안 됨\n");
+            await AssertStatusMatches(unborn);
+        }
+
+        [SkippableFact]
+        public async Task Status_MatchesCli_MergeConflicts()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitAsync("conflict");
+            Write(repo, "m.txt", "base\n");
+            Write(repo, "du.txt", "base\n");
+            Write(repo, "ud.txt", "base\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "base");
+
+            await Git(repo, "switch", "-q", "-c", "other");
+            Write(repo, "m.txt", "그들\n");
+            Write(repo, "du.txt", "그들이 고침\n");
+            File.Delete(Path.Combine(repo, "ud.txt"));
+            Write(repo, "aa.txt", "그들이 추가\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "other");
+
+            await Git(repo, "switch", "-q", "main");
+            Write(repo, "m.txt", "우리\n");
+            File.Delete(Path.Combine(repo, "du.txt"));
+            Write(repo, "ud.txt", "우리가 고침\n");
+            Write(repo, "aa.txt", "우리가 추가\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "ours");
+
+            var merge = await GitCommandRunner.RunAsync(repo, new[] { "merge", "other" }, GitCommandRunner.QueryTimeout, CancellationToken.None);
+            Assert.False(merge.Success);                                  // 충돌로 멈춤
+            var lib = GitLibReader.ReadStatus(repo);
+            Assert.Equal(new[] { "AA", "DU", "UD", "UU" }, lib.Entries.Where(e => e.IsConflicted).Select(e => $"{e.IndexState}{e.WorkTreeState}").OrderBy(x => x));
+            await AssertStatusMatches(repo);
+        }
+
+        [SkippableFact]
+        public async Task Status_MatchesCli_AutoCrlfAndNestedRepository()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitAsync("crlf");
+            await Git(repo, "config", "core.autocrlf", "true");
+            Write(repo, "lf.txt", "한 줄\n두 줄\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "base");
+            // 내용은 같고 줄바꿈만 CRLF·수정 시각만 바뀜 → git은 변경 없음으로 본다.
+            File.WriteAllText(Path.Combine(repo, "lf.txt"), "한 줄\r\n두 줄\r\n");
+            File.SetLastWriteTimeUtc(Path.Combine(repo, "lf.txt"), DateTime.UtcNow.AddMinutes(5));
+
+            var nested = Path.Combine(repo, "nested");                    // 저장소 안의 (서브모듈 아닌) 저장소
+            Directory.CreateDirectory(nested);
+            await Git(nested, "init", "-q");
+            Write(nested, "inner.txt", "안\n");
+
+            await AssertStatusMatches(repo);
+        }
+
+        [SkippableFact]
+        public async Task Status_Throws_ForUnsupportedRepositories()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitAsync("unsupported");
+            Write(repo, "a.txt", "a\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "base");
+            GitLibReader.ReadStatus(repo);                                // 기본은 지원
+
+            await Git(repo, "update-index", "--skip-worktree", "a.txt");  // 인덱스 v3
+            Assert.Throws<NotSupportedException>(() => GitLibReader.ReadStatus(repo));
+            await Git(repo, "update-index", "--no-skip-worktree", "a.txt");
+            await Git(repo, "update-index", "--index-version", "2");
+            GitLibReader.ReadStatus(repo);
+
+            Write(repo, ".gitattributes", "*.bin filter=lfs diff=lfs merge=lfs -text\n");
+            Assert.Throws<NotSupportedException>(() => GitLibReader.ReadStatus(repo));
+            File.Delete(Path.Combine(repo, ".gitattributes"));
+
+            Write(repo, ".gitmodules", "[submodule \"s\"]\n\tpath = s\n\turl = ../s\n");
+            Assert.Throws<NotSupportedException>(() => GitLibReader.ReadStatus(repo));
         }
 
         [SkippableFact]
