@@ -155,6 +155,20 @@ namespace Folderss.SearchTests
             Assert.Equal("—", missing.Text);
         }
 
+        [Fact]
+        public void CounterpartPath_UsesRelativePathFromCompareRoots()
+        {
+            var result = Result(E("a.txt", CompareStatus.Same));
+
+            Assert.Equal(Path.Combine(RightRoot, "src", "New", "README.md"),
+                CompareOverlay.CounterpartPath(result, CompareSide.Left, Path.Combine(LeftRoot, "src", "New", "README.md")));
+            Assert.Equal(Path.Combine(LeftRoot, "a.txt"),
+                CompareOverlay.CounterpartPath(result, CompareSide.Right, Path.Combine(RightRoot, "a.txt")));
+            // 기준 밖이거나 비교 전이면 짝이 없다(반대쪽 패널이 우연히 보고 있는 폴더로 짐작하지 않는다).
+            Assert.Null(CompareOverlay.CounterpartPath(result, CompareSide.Left, Path.Combine(RightRoot, "a.txt")));
+            Assert.Null(CompareOverlay.CounterpartPath(null, CompareSide.Left, Path.Combine(LeftRoot, "a.txt")));
+        }
+
         private static string[] Sorted(System.Collections.Generic.IEnumerable<string> keys)
         {
             var array = new System.Collections.Generic.List<string>(keys).ToArray();

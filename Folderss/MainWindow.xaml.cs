@@ -783,7 +783,7 @@ namespace Folderss
 
         private void OpenDirectoryCompare(string left, string right)
         {
-            new DirectoryCompareWindow(left, right, (oldFile, newFile) => OpenFileCompare(new[] { oldFile, newFile })) { Owner = this }.Show();
+            new DirectoryCompareWindow(left, right, (oldFile, newFile) => OpenFileCompare(new[] { oldFile, newFile }), OpenViewerTab) { Owner = this }.Show();
         }
 
         private void Browser_FileOpenRequested(object sender, string filePath)

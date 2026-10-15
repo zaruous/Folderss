@@ -60,6 +60,20 @@ namespace Folderss.Services
             return map;
         }
 
+        /// <summary>
+        /// 한쪽 항목의 반대쪽 같은 상대 경로(파일이 실제로 있는지는 보지 않음). 기준 밖이거나 비교 결과가 없으면 null —
+        /// 반대쪽 패널이 우연히 보고 있는 폴더로 짐작하지 않는다(동기 이동이 끊겼을 때 엉뚱한 파일과 짝지어지는 것을 막음).
+        /// </summary>
+        public static string CounterpartPath(CompareResult result, CompareSide side, string path)
+        {
+            if (result == null || string.IsNullOrWhiteSpace(path))
+                return null;
+            var relative = GetRelativeFolder(side == CompareSide.Left ? result.LeftRoot : result.RightRoot, path);
+            if (string.IsNullOrEmpty(relative))
+                return null;
+            return Path.Combine(side == CompareSide.Left ? result.RightRoot : result.LeftRoot, relative);
+        }
+
         public static OverlayStatus ToSideStatus(CompareStatus status, CompareSide side)
         {
             switch (status)

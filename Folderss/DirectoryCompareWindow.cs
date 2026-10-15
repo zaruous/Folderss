@@ -35,6 +35,7 @@ namespace Folderss
         private readonly FolderBrowser _leftPanel = new FolderBrowser();
         private readonly FolderBrowser _rightPanel = new FolderBrowser();
         private readonly Action<string, string> _openFileCompare;
+        private readonly Action<string> _openFile;
         private DirectoryCompareOptions _options;
         private CompareResult _result;
         private CancellationTokenSource _run;
@@ -73,9 +74,11 @@ namespace Folderss
         private FrameworkElement _historySplitter;
 
         /// <param name="openFileCompare">같은 이름의 파일 한 쌍을 두 파일 비교 창으로 연다(왼쪽, 오른쪽 전체 경로).</param>
-        public DirectoryCompareWindow(string left, string right, Action<string, string> openFileCompare)
+        /// <param name="openFile">파일 더블클릭·Enter — 메인 창과 같은 열기(뷰어 탭, 뷰어가 없으면 기본 프로그램).</param>
+        public DirectoryCompareWindow(string left, string right, Action<string, string> openFileCompare, Action<string> openFile)
         {
             _openFileCompare = openFileCompare;
+            _openFile = openFile;
             _options = CompareSettingsService.Load();
 
             Width = 1500;
@@ -299,7 +302,7 @@ namespace Folderss
             panel.Activated += (s, e) => SetActivePanel(panel);
             panel.PathChanged += Panel_PathChanged;
             panel.SelectedItemsChanged += Panel_SelectedItemsChanged;
-            panel.FileOpenRequested += (s, path) => OpenFile(panel, path);
+            panel.FileOpenRequested += (s, path) => OpenFile(path);
             panel.PasteRequested += (s, e) => PasteInto(panel);
             panel.ContextMenuRequested += (s, e) => ShowPanelMenu(panel);
         }
@@ -591,16 +594,14 @@ namespace Folderss
 
         // ── 파일 열기·메뉴·키 ──────────────────────────────────────
 
-        /// <summary>반대쪽 현재 폴더에 같은 이름 파일이 있으면 두 파일 비교, 없으면 기본 프로그램으로 연다.</summary>
-        private void OpenFile(FolderBrowser panel, string path)
+        /// <summary>더블클릭·Enter는 늘 열기다(메인 창과 같은 동작). 비교는 우클릭 "반대쪽 같은 이름 파일과 비교"로 한다.</summary>
+        private void OpenFile(string path)
         {
-            var counterpart = CounterpartFile(panel, path);
-            if (counterpart != null && _openFileCompare != null)
+            if (_openFile != null)
             {
-                if (IsLeft(panel))
-                    _openFileCompare(path, counterpart);
-                else
-                    _openFileCompare(counterpart, path);
+                _openFile(path);
+                // 비교 창은 메인 창이 소유해 늘 위에 있으므로, 뷰어 탭이 가려질 수 있어 어디에 열었는지 알린다.
+                _status.Text = "메인 창에서 열었습니다: " + Path.GetFileName(path);
                 return;
             }
             try
@@ -613,13 +614,23 @@ namespace Folderss
             }
         }
 
+        /// <summary>반대쪽 같은 상대 경로의 파일과 두 파일 비교 창을 연다(왼쪽 패널 파일이 왼쪽).</summary>
+        private void CompareWithCounterpart(FolderBrowser panel, string path)
+        {
+            var counterpart = CounterpartFile(panel, path);
+            if (counterpart == null || _openFileCompare == null)
+                return;
+            if (IsLeft(panel))
+                _openFileCompare(path, counterpart);
+            else
+                _openFileCompare(counterpart, path);
+        }
+
+        /// <summary>비교 기준의 같은 상대 경로에 있는 반대쪽 파일. 비교 전·기준 밖·없으면 null.</summary>
         private string CounterpartFile(FolderBrowser panel, string path)
         {
-            var otherFolder = Other(panel).CurrentPath;
-            if (string.IsNullOrEmpty(otherFolder))
-                return null;
-            var candidate = Path.Combine(otherFolder, Path.GetFileName(path));
-            return File.Exists(candidate) ? candidate : null;
+            var candidate = CompareOverlay.CounterpartPath(_result, IsLeft(panel) ? CompareSide.Left : CompareSide.Right, path);
+            return candidate != null && File.Exists(candidate) ? candidate : null;
         }
 
         private void ShowPanelMenu(FolderBrowser panel)
@@ -638,7 +649,7 @@ namespace Folderss
                 Add(menu, "삭제 — 휴지통 (Delete)", () => DeleteSelected(panel, permanently: false));
                 menu.Items.Add(new Separator());
                 if (selected.Count == 1 && File.Exists(selected[0]) && CounterpartFile(panel, selected[0]) != null)
-                    Add(menu, "반대쪽 같은 이름 파일과 비교", () => OpenFile(panel, selected[0]));
+                    Add(menu, "반대쪽 같은 이름 파일과 비교", () => CompareWithCounterpart(panel, selected[0]));
                 var pair = panel.GetSelectedFilePair();
                 if (pair != null && _openFileCompare != null)
                     Add(menu, "선택한 두 파일 비교", () => _openFileCompare(pair[0], pair[1]));
