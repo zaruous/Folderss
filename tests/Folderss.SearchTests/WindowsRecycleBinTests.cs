@@ -62,6 +62,23 @@ namespace Folderss.SearchTests
             Assert.Throws<FormatException>(() => WindowsRecycleBin.ParseInfoFile(badLength));
         }
 
+        [Fact]
+        public void RejectsNonInfoFile_WithOutOfRangeFileTime()
+        {
+            // 실제 휴지통에서 발견된 "$I70WDTZ.tmp"처럼 이름만 $I로 시작하고 형식이 다른 파일.
+            // 버전보다 삭제 시각을 먼저 읽으면 DateTime이 ArgumentOutOfRangeException을 던져, 휴지통 검색 전체가 실패했다.
+            var data = new byte[4148];
+            BitConverter.GetBytes(4851293027410584380L).CopyTo(data, 0);
+            BitConverter.GetBytes(5928239180699157836L).CopyTo(data, 16);
+            Assert.Throws<FormatException>(() => WindowsRecycleBin.ParseInfoFile(data));
+
+            // 버전은 맞는데 시각만 범위를 벗어난 경우도 건너뛸 수 있게 FormatException이어야 한다.
+            var badTime = new byte[28];
+            Header(2).CopyTo(badTime, 0);
+            BitConverter.GetBytes(-1L).CopyTo(badTime, 16);
+            Assert.Throws<FormatException>(() => WindowsRecycleBin.ParseInfoFile(badTime));
+        }
+
         [SkippableFact]
         public void Windows_SendThenRestore_PutsFileBack()
         {
