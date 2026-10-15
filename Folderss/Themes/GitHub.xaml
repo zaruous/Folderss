@@ -32,6 +32,13 @@
     <SolidColorBrush x:Key="SelectionBrush" Color="{StaticResource SelectionColor}"/>
     <SolidColorBrush x:Key="RowHoverBrush" Color="{StaticResource RowHoverColor}"/>
 
+    <!-- 폴더 비교 창 행 배경(반투명). 다름=노랑, 이쪽만=초록, 유형 다름=빨강, 방향 색 옵션: 최신=빨강, 오래됨=회색 -->
+    <SolidColorBrush x:Key="CompareDifferentBrush" Color="#33F5B800"/>
+    <SolidColorBrush x:Key="CompareThisOnlyBrush" Color="#332EA043"/>
+    <SolidColorBrush x:Key="CompareTypeMismatchBrush" Color="#33E5534B"/>
+    <SolidColorBrush x:Key="CompareNewerBrush" Color="#33E5534B"/>
+    <SolidColorBrush x:Key="CompareOlderBrush" Color="#338B949E"/>
+
     <SolidColorBrush x:Key="{x:Static SystemColors.WindowBrushKey}" Color="{StaticResource PanelBackgroundColor}"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.WindowTextBrushKey}" Color="{StaticResource PrimaryTextColor}"/>
     <SolidColorBrush x:Key="{x:Static SystemColors.ControlBrushKey}" Color="{StaticResource ControlBackgroundColor}"/>

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Runtime.InteropServices;
 using System.Runtime.InteropServices.ComTypes;
@@ -8,6 +9,20 @@ namespace Folderss.Services
 {
     public static class FileOperationService
     {
+        // 더블클릭(ShellExecute "열기")하면 Windows가 내용을 실행하는 형식. 기본 PATHEXT에 스크립트·설치·레지스트리·바로가기를 더했다.
+        private static readonly HashSet<string> ExecutableExtensions = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ".exe", ".com", ".bat", ".cmd", ".msi", ".msc", ".scr", ".cpl", ".pif",
+            ".ps1", ".vbs", ".vbe", ".js", ".jse", ".wsf", ".wsh", ".hta",
+            ".reg", ".lnk", ".jar", ".appref-ms"
+        };
+
+        /// <summary>열면 실행되는 형식인가(확장자 기준). 폴더 비교 창이 더블클릭 전에 확인을 받는다.</summary>
+        public static bool IsExecutable(string path)
+        {
+            return ExecutableExtensions.Contains(Path.GetExtension(path ?? string.Empty));
+        }
+
         public static void Copy(string source, string destinationDirectory)
         {
             ValidateTransfer(source, destinationDirectory, false);
@@ -204,7 +219,7 @@ namespace Folderss.Services
             return path;
         }
 
-        private static void CopyDirectory(string source, string destination)
+        internal static void CopyDirectory(string source, string destination)
         {
             Directory.CreateDirectory(destination);
 
@@ -215,7 +230,7 @@ namespace Folderss.Services
                 CopyDirectory(directory, Path.Combine(destination, Path.GetFileName(directory)));
         }
 
-        private static void ValidateTransfer(string source, string destinationDirectory, bool move)
+        internal static void ValidateTransfer(string source, string destinationDirectory, bool move)
         {
             var sourceFullPath = NormalizePath(source);
             var destinationFullPath = NormalizePath(destinationDirectory);
@@ -246,7 +261,7 @@ namespace Folderss.Services
                 : fullPath.TrimEnd(Path.DirectorySeparatorChar, Path.AltDirectorySeparatorChar);
         }
 
-        private static string GetUniquePath(string requestedPath, bool isDirectory)
+        internal static string GetUniquePath(string requestedPath, bool isDirectory)
         {
             if (!File.Exists(requestedPath) && !Directory.Exists(requestedPath))
                 return requestedPath;

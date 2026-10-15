@@ -9,8 +9,7 @@ Folderss/
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
 │   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
-│   ├── ComparePairHeader.cs        — 비교 창 공용 머리글 "왼쪽 | ⇄ 좌우 바꾸기 | 오른쪽" (이름·위치, 선택적 … 경로 고르기 버튼). 두 파일 비교·폴더 비교 창이 사용
-│   ├── DirectoryCompareView.cs     — 폴더 비교 결과 목록 (들여쓴 상대 경로, 상태 배지, 양쪽 크기·시각, 사유, 차이만 보기, 우클릭 메뉴는 이벤트로만 올림)
+│   ├── ComparePairHeader.cs        — 두 파일 비교 창 머리글 "왼쪽 | ⇄ 좌우 바꾸기 | 오른쪽" (이름·위치, 선택적 … 경로 고르기 버튼)
 │   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
@@ -48,6 +47,9 @@ Folderss/
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
 │   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
 │   ├── CompareSettingsService.cs   — 폴더 비교 옵션 저장 (compare-settings.xml)
+│   ├── CompareOverlay.cs           — 비교 결과를 폴더 패널 한쪽의 현재 폴더 항목에 입히는 규칙(이쪽만/저쪽만, 방향) (순수 계산)
+│   ├── FileOperationJournal.cs     — 폴더 비교 창의 이동·복사·삭제 실행+기록(%LOCALAPPDATA%\Folderss\compare-history\*.jsonl, 7일 보관)과 최근부터 되돌리기. 휴지통은 IRecycleBin 주입
+│   ├── WindowsRecycleBin.cs        — IRecycleBin Windows 구현: 셸로 휴지통에 보내고, $I 정보 파일(원래 경로·삭제 시각)로 찾아 $R 항목을 되살림. 고정 드라이브만
 │   ├── CaptureSettingsService.cs   — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더(없으면 사용자 폴더), 설정 창 입력 검증 `Validate`)
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
@@ -91,7 +93,7 @@ Folderss/
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `git diff --no-index`), 코드로 구성
-├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, ComparePairHeader + DirectoryCompareView, 비교/▾ 옵션/중지/차이만 보기, 복사·탐색기). 같은 파일에 `DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
+├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
@@ -409,8 +411,12 @@ Folderss/
   또는 폴더 두 개 우클릭 `선택한 두 폴더 비교`(`FolderBrowser.GetSelectedFolderPair`). `MainWindow.OpenDirectoryCompare`가 `DirectoryCompareWindow`를 연다.
   판정은 `DirectoryCompareService.CompareAsync`(백그라운드, 진행은 읽은 폴더 수). 폴더 쌍 상태는 자식 집계라 개수에서 빼고, 한쪽에만 있는 폴더·링크 폴더는 들어가지 않는다.
   옵션은 `compare-settings.xml`(기본값 = 권장값)이고 비교 버튼은 그 값으로 바로 실행, ▾(`OptionArrowButton`, 공용 스타일 `Themes/Controls.xaml`)에서만 바꾼다.
-  양쪽에 있는 파일은 더블클릭·Enter로 `FileCompareWindow`를 연다. 복사는 파일 덮어쓰기와 한쪽에만 있는 폴더 통째 복사만 하고(양쪽에 있는 폴더 병합은 동기화라 범위 밖),
-  덮어쓰기가 있으면 경고 후 확인을 받는다. 상태 색은 행 배경이 아니라 비교 칸 배지에만 칠해 선택·hover 표시를 가리지 않는다(테마 키 불필요).
+  창은 좌우 `FolderBrowser`를 `SafeMode`로 쓴다: 끌어다 놓기·잘라내기·셸 우클릭 메뉴를 막고 붙여넣기(`PasteRequested`)·우클릭(`ContextMenuRequested`)을 창에 넘긴다.
+  비교 표시는 `FolderBrowser.SetCompareOverlay`에 행 표시 함수를 걸어 입힌다 — `CompareOverlay.EntriesFor`(그 쪽 현재 폴더의 직속 항목) + `Describe`(색 키·문구).
+  색 키(`CompareDifferentBrush`·`CompareThisOnlyBrush`·`CompareTypeMismatchBrush`·`CompareNewerBrush`·`CompareOlderBrush`)는 모든 테마에 있고, 행 스타일에서 선택·hover 트리거를 뒤에 둬 비교 색이 선택을 가리지 않는다.
+  동기 이동은 한쪽 `PathChanged` → 기준 상대 경로 → 반대쪽 `NavigateTo`(재진입 플래그). 파일 작업(▶◀ 이동, Ctrl+V 복사, Delete)은 모두 앱 전체에 하나인
+  `FileOperationJournal`을 백그라운드에서 한 번에 하나씩 거치고, 끝나면 두 패널 새로 고침·다시 비교·이력 새로 고침(`JournalChanged`로 다른 비교 창도).
+  패널 잠금은 소유자 `MainWindow.IsPathPinLocked`/`IsDestinationPinLocked`로 검사한다. 파일 더블클릭·Enter는 Windows 기본 프로그램(`Process.Start`, ShellExecute)으로 연다(`FileOperationService.IsExecutable`이면 확인 후, 기본 아니요) — 메인 창 뷰어 탭은 비교 창에 가려지므로 쓰지 않는다. 우클릭 `반대쪽 같은 이름 파일과 비교`는 `CompareOverlay.CounterpartPath`(기준의 같은 상대 경로)로 짝을 찾아 `FileCompareWindow`를 연다.
 - 외부 도구 실행 공용: `DiffToolLauncher.RunAsync`가 미지정·실행 파일 없음·git 설정 difftool 없음 안내와 실행을 맡는다. 결과 표시는 호출 측
   (Git 창은 출력 창, 두 파일 비교 창은 메시지 상자). 성공 판정은 `GitDiffCommands.IsSuccess(result, request.NoIndex)` + stderr 없음.
 - HTML 보고서: `GitDiffView.TextLoader`(호스트가 설정 — 요청과 범위를 받아 diff 텍스트를 돌려주고 실패는 예외)가 있으면 `HTML 보고서…` 버튼이 보인다.

@@ -12,6 +12,11 @@ namespace Folderss.Models
         public DateTime ModifiedAt { get; set; }
         public bool IsCut { get; set; }
 
+        /// <summary>폴더 비교 창에서만 채운다. 행 색 키(Same·Different·ThisOnly·TypeMismatch·Unknown·Newer·Older), 비교 열 문구, 그 툴팁. 비교 밖이면 null.</summary>
+        public string CompareMark { get; set; }
+        public string CompareText { get; set; }
+        public string CompareTip { get; set; }
+
         /// <summary>심볼릭 링크·junction처럼 대상 경로를 알 수 있는 reparse point. OneDrive 자리표시자 같은 다른 reparse point는 링크로 보지 않는다.</summary>
         public bool IsLink { get; set; }
         public string LinkTarget { get; set; }
