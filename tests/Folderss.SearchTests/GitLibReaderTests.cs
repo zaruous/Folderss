@@ -14,25 +14,57 @@ namespace Folderss.SearchTests
     /// GitLibReader(LibGit2Sharp)가 git CLI 출력 + GitOutputParser와 같은 결과를 내는지 실제 git으로 만든 저장소에서 비교한다.
     /// Git 창은 둘 중 하나로 읽으므로 결과가 다르면 화면이 콘솔 git과 어긋난다.
     /// </summary>
-    public sealed class GitLibReaderTests : IDisposable
+    public sealed class GitLibReaderTests : IDisposable, IClassFixture<GitLibReaderTests.RichRepoFixture>
     {
         private readonly string _root;
+        private readonly RichRepoFixture _rich;
 
-        public GitLibReaderTests()
+        public GitLibReaderTests(RichRepoFixture rich)
         {
+            _rich = rich;
             _root = Path.Combine(Path.GetTempPath(), "folderss-lg2-" + Guid.NewGuid().ToString("N"));
             Directory.CreateDirectory(_root);
         }
 
-        public void Dispose()
+        public void Dispose() => DeleteTree(_root);
+
+        private static void DeleteTree(string root)
         {
             try
             {
-                foreach (var file in Directory.EnumerateFiles(_root, "*", SearchOption.AllDirectories))
+                // git 객체 파일은 읽기 전용이라 먼저 속성을 푼다(Windows).
+                foreach (var file in Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories))
                     File.SetAttributes(file, FileAttributes.Normal);
-                Directory.Delete(_root, true);
+                Directory.Delete(root, true);
             }
             catch { }
+        }
+
+        /// <summary>
+        /// 여러 테스트가 쓰는 복잡한 저장소(<see cref="BuildRichRepoAsync"/>)를 클래스에서 한 번만 만든다.
+        /// git 명령이 약 60번 드는데, 프로세스 실행이 1초 넘게 걸리는 PC에서는 테스트마다 만들면 이 클래스만 15분이 넘었다.
+        /// 테스트는 <see cref="RichRepoAsync"/>로 파일 복사본을 받아 브랜치 전환·워킹트리 추가 등을 서로 영향 없이 한다.
+        /// </summary>
+        public sealed class RichRepoFixture : IAsyncLifetime
+        {
+            public string Root { get; } = Path.Combine(Path.GetTempPath(), "folderss-lg2-rich-" + Guid.NewGuid().ToString("N"));
+
+            /// <summary>만든 작업 저장소. git이 없으면 null(테스트는 Skip).</summary>
+            public string Work { get; private set; }
+
+            public async Task InitializeAsync()
+            {
+                if (GitCommandRunner.FindGit() == null)
+                    return;
+                Directory.CreateDirectory(Root);
+                Work = await BuildRichRepoAsync(Root);
+            }
+
+            public Task DisposeAsync()
+            {
+                DeleteTree(Root);
+                return Task.CompletedTask;
+            }
         }
 
         private static async Task<string> Git(string repo, params string[] args)
@@ -42,9 +74,11 @@ namespace Folderss.SearchTests
             return result.StdOut;
         }
 
-        private async Task<string> InitAsync(string name, bool bare = false)
+        private Task<string> InitAsync(string name, bool bare = false) => InitAsync(_root, name, bare);
+
+        private static async Task<string> InitAsync(string root, string name, bool bare = false)
         {
-            var repo = Path.Combine(_root, name);
+            var repo = Path.Combine(root, name);
             Directory.CreateDirectory(repo);
             if (bare)
                 await Git(repo, "init", "-q", "--bare", "-b", "main");
@@ -108,20 +142,41 @@ namespace Folderss.SearchTests
             list.Select(w => $"{w.Path}|{w.Head}|{w.Branch}|{w.IsDetached}|{w.IsBare}|{w.IsLocked}|{w.IsPrunable}|{w.IsMain}").ToList();
 
         /// <summary>
+        /// <see cref="RichRepoFixture"/>가 만든 저장소를 이 테스트의 폴더로 복사해 돌려준다(git 프로세스 없이 파일 복사만).
+        /// 원격(origin)은 복사하지 않고 픽스처 것을 그대로 가리킨다 — 테스트는 원격을 바꾸지 않는다.
+        /// </summary>
+        private Task<string> RichRepoAsync()
+        {
+            Skip.If(_rich.Work == null, "git이 설치되어 있지 않음");
+            var work = Path.Combine(_root, "work");
+            CopyTree(_rich.Work, work);
+            return Task.FromResult(work);
+        }
+
+        private static void CopyTree(string source, string target)
+        {
+            Directory.CreateDirectory(target);
+            foreach (var dir in Directory.EnumerateDirectories(source, "*", SearchOption.AllDirectories))
+                Directory.CreateDirectory(Path.Combine(target, Path.GetRelativePath(source, dir)));
+            foreach (var file in Directory.EnumerateFiles(source, "*", SearchOption.AllDirectories))
+                File.Copy(file, Path.Combine(target, Path.GetRelativePath(source, file)));
+        }
+
+        /// <summary>
         /// 원격·클론, 양쪽 갈라진 커밋, merge, 가벼운·주석 태그, 원격 HEAD, 사라진 upstream, notes·사용자 참조,
         /// 여러 줄 메시지·한글, 일반·새 파일 포함 stash. 커밋은 빠르게 만들어 같은 초 시각이 많다(정렬 동점).
         /// </summary>
-        private async Task<string> RichRepoAsync()
+        private static async Task<string> BuildRichRepoAsync(string root)
         {
-            var origin = await InitAsync("origin", bare: true);
-            var seed = await InitAsync("seed");
+            var origin = await InitAsync(root, "origin", bare: true);
+            var seed = await InitAsync(root, "seed");
             await CommitAsync(seed, "a.txt", "첫 커밋");
             await Git(seed, "remote", "add", "origin", origin);
             await Git(seed, "push", "-q", "origin", "main");
             await Git(seed, "push", "-q", "origin", "main:gone");
 
-            var work = Path.Combine(_root, "work");
-            await Git(_root, "clone", "-q", origin, work);
+            var work = Path.Combine(root, "work");
+            await Git(root, "clone", "-q", origin, work);
             await Configure(work);
 
             // 원격 쪽에만 있는 커밋(받을 커밋)
