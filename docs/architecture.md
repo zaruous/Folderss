@@ -34,6 +34,7 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
+│   ├── GitLibReader.cs             — 조회(브랜치·로그·upstream 비교·stash·워킹트리)를 LibGit2Sharp로, 결과는 CLI+파서와 동일
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제(로컬·원격)·브랜치 업데이트(base ← compare) 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
@@ -96,7 +97,7 @@ Folderss/
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
-├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔)
+├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 플러그인)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── CaptureOverlayWindow.cs         — 화면 캡쳐: 가상 화면 전체를 GDI로 찍고(`CaptureVirtualScreen`) 모든 모니터를 덮는 창에 깔아 드래그로 영역 선택, 코드로 구성
 ├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 메뉴(다른 이름으로 저장, 기본 저장 폴더 탐색기로 열기), 저장 후 탐색기 열기 확인 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
@@ -324,7 +325,11 @@ Folderss/
   드라이브 루트면 한 번 확인. 창은 비모달(`Show`)이고 여러 개 열 수 있다.
 - 탐색: `GitRepositoryScanner.Scan`이 `.git` 폴더/파일을 저장소로 보고, 찾아도 안으로 계속 내려간다(중첩 저장소).
   reparse point·제외 폴더·`.git`은 들어가지 않는다. 상위 저장소(`IsAncestor`)는 맨 앞. 찾는 즉시 행을 추가하고 status를 읽는다.
-- 실행: 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
+- 조회 경로: 저장소 선택 시 브랜치·로그·upstream 비교·stash·워킹트리는 `GitLibReader`(LibGit2Sharp)로 프로세스 없이 읽는다(`GitWindow.ReadLibAsync`).
+  저장소는 호출마다 열고 닫는다(팩 파일 잠금·스레드 안전 문제 회피). 링크된 워킹트리·upstream 없음 등은 `NotSupportedException`으로
+  조용히, 그 밖의 예외는 출력창에 알린 뒤 아래 CLI 경로로 다시 읽는다. 결과가 CLI+`GitOutputParser`와 같은지는 `GitLibReaderTests`가 비교한다
+  (로그 순서는 git `--topo-order` 알고리즘을 그대로 옮김, `%D` 참조 표시도 git 2.53 규칙). status·쓰기·네트워크·diff는 CLI.
+- 실행: 그 밖의 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
   표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
 - 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.
 - 계측: `GitResult`에 대기·실행 시간(ms), 명령마다 정적 이벤트 `GitCommandRunner.Completed`. 환경 변수 `FOLDERSS_GIT_TIMING=1`이면 Git 창이
@@ -477,6 +482,95 @@ WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍�
 `Controls.xaml`의 `<Style TargetType="ContextMenu">` ControlTemplate으로 해결됨.
 
 ---
+
+## 흐름 다이어그램
+
+구성 요소 전체 개요는 [README의 아키텍처 다이어그램](../README.md#아키텍처-다이어그램)을 참고한다. 아래는 주요 기능별 흐름이다.
+
+### 파일 열기 (MainWindow → ViewerHost)
+
+```mermaid
+sequenceDiagram
+    actor U as 사용자
+    participant FB as FolderBrowser
+    participant MW as MainWindow
+    participant VH as ViewerHost
+    participant VC as ViewerConfigService
+    participant V as IFileViewer<br/>(Markdown/Monaco/Text)
+    participant OS as Windows 셸
+
+    U->>FB: 더블클릭 / Enter
+    FB->>MW: 파일 열기 요청
+    MW->>MW: TryActivateExistingViewerDocument
+    alt 같은 파일 탭이 이미 열림
+        MW-->>U: 기존 탭 활성화
+    else 새로 열기
+        MW->>VH: new ViewerHost(viewerConfig)
+        VH->>VC: Resolve(확장자)
+        alt 매핑된 내장 뷰어 있음
+            MW->>MW: LayoutDocument 생성<br/>ApplyPanelLockState · "+ 새 패널" 앞에 삽입
+            MW->>VH: OpenFile(path)
+            VH->>V: 로드 (WebView2)
+            V-->>VH: TitleChanged / ModifiedChanged
+            VH-->>MW: 탭 제목 갱신 (" *" 미저장 표시)
+        else 매핑 없음
+            MW->>OS: Process.Start(UseShellExecute)
+        end
+    end
+```
+
+### Git 창 조회 (LibGit2Sharp 우선, 실패 시 git CLI)
+
+```mermaid
+flowchart LR
+    Open["GitWindow 열기<br/>(⋯ 메뉴 > Git 저장소…)"] --> Ver["GitCommandRunner<br/>git --version 확인"]
+    Ver --> Scan["GitRepositoryScanner.Scan<br/>기준 폴더 아래·위 저장소 탐색"]
+    Scan --> Rows["저장소 목록"]
+    Rows --> Status["git status --porcelain=v2<br/>(CLI) → GitOutputParser"]
+    Rows --> Lib{"GitLibReader<br/>(LibGit2Sharp)"}
+    Lib -- "성공" --> View["브랜치·로그·upstream·<br/>stash·워킹트리 표시"]
+    Lib -- "NotSupported / 예외" --> CLI["GitCommandRunner<br/>git CLI + GitOutputParser"]
+    CLI --> View
+    Status --> Tree["GitChangeTree<br/>변경 파일 트리"]
+    View --> Graph["GitGraphLayout<br/>→ GitGraphCell"]
+    Act["쓰기 작업<br/>stage·commit·pull·push·reset…"] --> Args["Git*Commands<br/>(인수 생성, 순수 로직)"]
+    Args --> CLI2["GitCommandRunner.RunAsync<br/>타임아웃·취소·동시 4개"]
+    CLI2 --> Rows
+```
+
+조회만 LibGit2Sharp로 읽고(`GitWindow.ReadLibAsync`), 쓰기 작업은 항상 git CLI를 쓴다. `FOLDERSS_GIT_TIMING=1`이면 각 조회 소요 시간을 출력창에 남긴다.
+
+### 플러그인 설치·로드
+
+```mermaid
+flowchart TB
+    Src["로컬 zip 또는<br/>GitHub 최신 릴리스"] -->|PluginGitHubSource<br/>100MB 제한·SHA-256 확인| Pkg
+    Pkg["PluginPackage<br/>plugin.json·계약 버전 검증"] -->|"plugins\{id}.zip 등록<br/>PluginSourceStore 출처 기록"| List["⋯ 메뉴 / 트레이 > 플러그인"]
+    List -->|실행| Load["PluginManager.TryLoad"]
+    Load --> Ext["PluginPackage.Extract<br/>해시별 폴더 · Zip Slip 차단"]
+    Ext --> ALC["PluginLoadContext<br/>(플러그인별 AssemblyLoadContext,<br/>계약 DLL은 본체 것 공유)"]
+    ALC --> Init["IFolderssPlugin.Initialize(PluginHost)"]
+    Init --> Host["PluginHost : IPluginManager<br/>팝업 창·IFolderPanel·설정·본체 설정 읽기"]
+    Host --> Store["PluginSettingsStore<br/>plugin-data\{id}\settings.json"]
+    Load -. "로드 기록" .-> Sess["PluginSessionLog<br/>plugin-sessions\{pid}.json"]
+    Sess -. "다음 시작 때 남아 있으면<br/>비정상 종료 알림" .-> Log["plugin-log.txt"]
+```
+
+### 폴더 비교
+
+```mermaid
+flowchart LR
+    Start["⋯ 메뉴 > 폴더 비교… /<br/>두 폴더 선택 우클릭"] --> DCW["DirectoryCompareWindow<br/>좌·우 FolderBrowser (안전 모드)"]
+    Opt["CompareSettingsService<br/>compare-settings.xml"] --> DCW
+    DCW -->|CompareAsync| DCS["DirectoryCompareService<br/>상대 경로 짝짓기 · 크기/시각 또는 SHA-256<br/>IgnoreRuleSet · 취소 시 부분 결과"]
+    DCS --> Res["비교 결과<br/>(DirectoryCompareModels)"]
+    Res --> Ov["CompareOverlay<br/>현재 폴더 항목에 상태·방향 색 입힘"]
+    Ov --> DCW
+    DCW -->|"▶◀ 이동 · 복사 · 삭제"| J["FileOperationJournal<br/>compare-history\*.jsonl (7일)"]
+    J --> RB["WindowsRecycleBin<br/>(IRecycleBin)"]
+    J -->|"최근부터 되돌리기"| DCW
+    DCW -->|"반대쪽 같은 이름 파일과 비교"| FCW["FileCompareWindow<br/>git diff --no-index → GitDiffView"]
+```
 
 ## 데이터 흐름
 
