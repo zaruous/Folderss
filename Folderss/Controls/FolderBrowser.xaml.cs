@@ -71,6 +71,7 @@ namespace Folderss.Controls
         public string CurrentPath { get; private set; }
         public bool IsActive { get; private set; }
         public bool IsTreeViewVisible { get { return _treeViewVisible; } }
+        public string TreeRootPath { get { return _treeRootPath; } }
         public bool IsFolderPinned { get { return !string.IsNullOrWhiteSpace(_pinnedPath); } }
         public string PinnedPath { get { return _pinnedPath; } }
         public HashSet<string> CutPaths { get; set; }
@@ -641,6 +642,22 @@ namespace Folderss.Controls
                 TreeRootPathText.Text = string.Empty;
             }
 
+            UpdatePathBoxText();
+        }
+
+        /// <summary>
+        /// 저장된 트리뷰 상태로 다시 연다(세션 복원). 루트 폴더가 없어졌으면 현재 폴더를 루트로 연다.
+        /// </summary>
+        public void RestoreTreeView(string rootPath, bool pinned)
+        {
+            SetTreeViewVisible(true);
+            if (!string.IsNullOrWhiteSpace(rootPath) && Directory.Exists(rootPath)
+                && !string.Equals(NormalizeDirectoryPath(rootPath), NormalizeDirectoryPath(_treeRootPath), StringComparison.OrdinalIgnoreCase))
+            {
+                _treeRootPath = rootPath;
+                RebuildFolderTree();
+            }
+            SetFolderPinned(pinned);
             UpdatePathBoxText();
         }
 
