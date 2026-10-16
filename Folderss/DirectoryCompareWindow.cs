@@ -54,6 +54,15 @@ namespace Folderss
             Margin = new Thickness(12, 0, 0, 0),
             ToolTip = "같은 항목을 숨깁니다(양쪽 패널)"
         };
+        private readonly Button _fileCompareButton = new Button { Content = "⇆ 파일 비교", Margin = new Thickness(12, 0, 0, 0), IsEnabled = false };
+        private readonly CheckBox _followSameName = new CheckBox
+        {
+            Content = "같은 이름 따라 선택",
+            IsChecked = true,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0),
+            ToolTip = "한쪽에서 고르면 반대쪽에서 같은 이름을 고릅니다. 끄면 양쪽을 따로 골라 이름이 다른 두 파일도 비교할 수 있습니다"
+        };
         private readonly ToggleButton _historyToggle = new ToggleButton { Content = "☰ 작업 이력", IsChecked = true, Margin = new Thickness(6, 0, 0, 0), Padding = new Thickness(8, 2, 8, 2) };
         private readonly TextBlock _status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock _summary = new TextBlock { Margin = new Thickness(2, 6, 2, 0), TextTrimming = TextTrimming.CharacterEllipsis };
@@ -170,12 +179,16 @@ namespace Folderss
             previous.Click += (s, e) => SelectDifference(false);
             var next = new Button { Content = "▼ 다음 차이", Margin = new Thickness(6, 0, 0, 0), ToolTip = "선택한 패널에서 다음 차이 항목" };
             next.Click += (s, e) => SelectDifference(true);
+            _fileCompareButton.Click += (s, e) => CompareSelectedFiles();
+            ToolTipService.SetShowOnDisabled(_fileCompareButton, true);
+            _followSameName.SetResourceReference(ForegroundProperty, "PrimaryText");
+            UpdateFileCompareButton();
             var swap = new Button { Content = "⇄ 좌우 바꾸기", Margin = new Thickness(12, 0, 0, 0), ToolTip = "두 패널의 폴더를 맞바꿔 다시 비교합니다" };
             swap.Click += (s, e) => Swap();
             _historyToggle.SetResourceReference(StyleProperty, "CompactToggleButtonStyle");
             _historyToggle.Click += (s, e) => SetHistoryVisible(_historyToggle.IsChecked == true);
 
-            foreach (var element in new UIElement[] { _compareButton, options, _cancelButton, _hideSame, previous, next, swap, _historyToggle })
+            foreach (var element in new UIElement[] { _compareButton, options, _cancelButton, _hideSame, previous, next, _fileCompareButton, _followSameName, swap, _historyToggle })
                 buttons.Children.Add(element);
             DockPanel.SetDock(buttons, Dock.Left);
             row.Children.Add(buttons);
@@ -509,7 +522,8 @@ namespace Folderss
         private void Panel_SelectedItemsChanged(object sender, EventArgs e)
         {
             var panel = (FolderBrowser)sender;
-            if (_following || !panel.IsKeyboardFocusWithin)
+            UpdateFileCompareButton();
+            if (_following || !panel.IsKeyboardFocusWithin || _followSameName.IsChecked != true)
                 return;
             var selected = panel.SelectedItems;
             if (selected.Count != 1)
@@ -534,7 +548,7 @@ namespace Folderss
                 return;
             }
             var selected = panel.SelectedItem;
-            if (selected != null)
+            if (selected != null && _followSameName.IsChecked == true)
                 FollowSelection(panel, selected.Name);
             panel.FocusFileList();
         }
@@ -613,6 +627,36 @@ namespace Folderss
             {
                 MessageBox.Show(this, ex.Message, "파일을 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private string[] SelectedCrossPanelPair()
+        {
+            IReadOnlyList<(string, bool)> Of(FolderBrowser panel) =>
+                panel.SelectedItems.Select(item => (item.FullPath, item.IsDirectory)).ToList();
+            return CompareOverlay.CrossPanelFilePair(Of(_leftPanel), Of(_rightPanel));
+        }
+
+        private void UpdateFileCompareButton()
+        {
+            var pair = SelectedCrossPanelPair();
+            _fileCompareButton.IsEnabled = pair != null && _openFileCompare != null;
+            _fileCompareButton.ToolTip = pair != null
+                ? "두 파일을 비교합니다: " + Path.GetFileName(pair[0]) + " ↔ " + Path.GetFileName(pair[1])
+                : "왼쪽과 오른쪽 패널에서 파일을 하나씩 고르면 두 파일을 비교합니다";
+        }
+
+        /// <summary>왼쪽 패널에서 고른 파일(왼쪽)과 오른쪽 패널에서 고른 파일(오른쪽)로 두 파일 비교 창을 연다.</summary>
+        private void CompareSelectedFiles()
+        {
+            var pair = SelectedCrossPanelPair();
+            if (pair == null || _openFileCompare == null)
+                return;
+            if (!File.Exists(pair[0]) || !File.Exists(pair[1]))
+            {
+                _status.Text = "고른 파일이 없습니다. 다른 프로그램이 지웠거나 옮겼을 수 있습니다 — 다시 비교(F5)하세요.";
+                return;
+            }
+            _openFileCompare(pair[0], pair[1]);
         }
 
         /// <summary>반대쪽 같은 상대 경로의 파일과 두 파일 비교 창을 연다(왼쪽 패널 파일이 왼쪽).</summary>

@@ -74,6 +74,18 @@ namespace Folderss.Services
             return Path.Combine(side == CompareSide.Left ? result.RightRoot : result.LeftRoot, relative);
         }
 
+        /// <summary>
+        /// 왼쪽·오른쪽 패널에서 각각 파일 하나씩만 골랐으면 [왼쪽, 오른쪽] 경로, 아니면 null(폴더·여러 개·한쪽 없음).
+        /// 비교 기준과 무관하게 고른 그대로 짝짓는다 — 이름이 달라도 된다.
+        /// </summary>
+        public static string[] CrossPanelFilePair(IReadOnlyList<(string Path, bool IsDirectory)> left,
+            IReadOnlyList<(string Path, bool IsDirectory)> right)
+        {
+            if (left == null || right == null || left.Count != 1 || right.Count != 1 || left[0].IsDirectory || right[0].IsDirectory)
+                return null;
+            return new[] { left[0].Path, right[0].Path };
+        }
+
         public static OverlayStatus ToSideStatus(CompareStatus status, CompareSide side)
         {
             switch (status)
