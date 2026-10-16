@@ -995,6 +995,14 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
+        public void ChangeTree_FullPaths_TrimsFolderSlash_AndDeduplicates()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "repo");
+            Assert.Equal(new[] { Path.Combine(root, "src", "A.cs"), Path.Combine(root, "newdir") },
+                GitChangeTree.FullPaths(new[] { "src/A.cs", "newdir/", "src/A.cs" }, root));
+        }
+
+        [Fact]
         public void ChangeTree_Range_IsInclusive_InEitherDirection()
         {
             var nodes = Enumerable.Range(0, 5).Select(i => new GitChangeNode { Name = "n" + i }).ToList();

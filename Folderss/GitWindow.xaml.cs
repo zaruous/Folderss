@@ -1362,7 +1362,10 @@ namespace Folderss
                 OpenEntry(node.Entry);
         }
 
-        /// <summary>변경 사항 목록·트리: Ctrl+C는 고른 항목 이름, Ctrl+Shift+C는 전체 경로를 텍스트로 복사(여러 개면 한 줄에 하나).</summary>
+        /// <summary>
+        /// 변경 사항 목록·트리: Ctrl+C는 폴더 패널처럼 파일 복사(FileDrop) + 이름 텍스트, Ctrl+Shift+C는 전체 경로 텍스트만(여러 개면 한 줄에 하나).
+        /// 삭제된 파일처럼 디스크에 없는 항목은 FileDrop에서 빼고 이름 텍스트에만 넣는다.
+        /// </summary>
         private void ChangeCopy_PreviewKeyDown(object sender, KeyEventArgs e)
         {
             var modifiers = Keyboard.Modifiers;
@@ -1373,7 +1376,21 @@ namespace Folderss
             if (root == null || paths.Count == 0)
                 return;
             e.Handled = true;
-            ClipboardService.TrySetDataObject(GitChangeTree.ClipboardText(paths, root, fullPath: modifiers.HasFlag(ModifierKeys.Shift)));
+            if (modifiers.HasFlag(ModifierKeys.Shift))
+            {
+                ClipboardService.TrySetDataObject(GitChangeTree.ClipboardText(paths, root, fullPath: true));
+                return;
+            }
+
+            var data = new DataObject();
+            var files = new System.Collections.Specialized.StringCollection();
+            files.AddRange(GitChangeTree.FullPaths(paths, root).Where(path => File.Exists(path) || Directory.Exists(path)).ToArray());
+            if (files.Count > 0)
+                data.SetFileDropList(files);
+            data.SetText(GitChangeTree.ClipboardText(paths, root, fullPath: false), TextDataFormat.UnicodeText);
+            // 폴더 패널에서 같은 파일을 잘라 둔 상태가 남으면 붙여넣기가 이동이 되므로 지운다(폴더 패널 복사와 같음).
+            if (ClipboardService.TrySetDataObject(data))
+                (Application.Current.MainWindow as MainWindow)?.ClearCutStateFromClipboard();
         }
 
         /// <summary>복사할 저장소 기준 경로: 목록은 선택 항목, 변경됨·스테이지됨 트리는 고른 노드(폴더는 폴더 자신), 변경 없음 트리는 선택 노드.</summary>

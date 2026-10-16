@@ -56,18 +56,28 @@ namespace Folderss.Services
         }
 
         /// <summary>
-        /// 변경 사항 목록·트리 복사(Ctrl+C 이름 / Ctrl+Shift+C 전체 경로) 텍스트. 저장소 기준 경로(슬래시 구분)를 한 줄에 하나씩, 중복은 한 번만.
+        /// 변경 사항 목록·트리 복사(Ctrl+C 이름 / Ctrl+Shift+C 전체 경로)의 텍스트. 저장소 기준 경로(슬래시 구분)를 한 줄에 하나씩, 중복은 한 번만.
         /// 추적 안 되는 폴더("dir/")의 끝 슬래시는 뗀다.
         /// </summary>
         public static string ClipboardText(IEnumerable<string> relativePaths, string rootPath, bool fullPath)
         {
-            var lines = relativePaths
-                .Select(path => path.TrimEnd('/'))
-                .Distinct(StringComparer.Ordinal)
-                .Select(path => fullPath
-                    ? System.IO.Path.Combine(rootPath, path.Replace('/', System.IO.Path.DirectorySeparatorChar))
-                    : path.Substring(path.LastIndexOf('/') + 1));
+            var lines = fullPath
+                ? FullPaths(relativePaths, rootPath)
+                : Trimmed(relativePaths).Select(path => path.Substring(path.LastIndexOf('/') + 1));
             return string.Join(Environment.NewLine, lines);
+        }
+
+        /// <summary>저장소 기준 경로를 전체 경로로(중복 제거, 폴더 끝 슬래시 제거). Ctrl+C 파일 복사(FileDrop)와 Ctrl+Shift+C에 쓴다.</summary>
+        public static List<string> FullPaths(IEnumerable<string> relativePaths, string rootPath)
+        {
+            return Trimmed(relativePaths)
+                .Select(path => System.IO.Path.Combine(rootPath, path.Replace('/', System.IO.Path.DirectorySeparatorChar)))
+                .ToList();
+        }
+
+        private static IEnumerable<string> Trimmed(IEnumerable<string> relativePaths)
+        {
+            return relativePaths.Select(path => path.TrimEnd('/')).Distinct(StringComparer.Ordinal);
         }
 
         /// <summary>
