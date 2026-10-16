@@ -151,6 +151,7 @@ namespace Folderss
 
             EnsureAddPanelTab();
             ApplyPanelLockStates();
+            RestoreTreeViewStates(_sessionState.TreeViews);
             DockManager.LayoutChanged += DockManager_LayoutChanged;
 
             var previousActive = GetFolderBrowsers().FirstOrDefault(
@@ -252,6 +253,31 @@ namespace Folderss
             return !string.IsNullOrWhiteSpace(savedPath) && Directory.Exists(savedPath)
                 ? savedPath
                 : fallbackPath;
+        }
+
+        /// <summary>트리뷰를 연 채 종료한 패널에 트리뷰를 다시 연다. 레이아웃 복원에 실패해 패널 ID가 바뀌었으면 왼쪽·오른쪽만 맞는다.</summary>
+        private void RestoreTreeViewStates(IEnumerable<FolderTreeViewState> states)
+        {
+            var byKey = (states ?? Enumerable.Empty<FolderTreeViewState>())
+                .Where(state => !string.IsNullOrWhiteSpace(state.PanelKey))
+                .GroupBy(state => state.PanelKey)
+                .ToDictionary(group => group.Key, group => group.First());
+            foreach (var browser in GetFolderBrowsers())
+            {
+                var key = GetFolderPanelKey(browser);
+                if (key != null && byKey.TryGetValue(key, out var state))
+                    browser.RestoreTreeView(state.RootPath, state.Pinned);
+            }
+        }
+
+        /// <summary>폴더 패널이 들어 있는 도킹 탭의 키: left-folder, right-folder, folder-panel|&lt;ID&gt;. 폴더를 옮겨도 바뀌지 않는다.</summary>
+        private string GetFolderPanelKey(FolderBrowser browser)
+        {
+            var contentId = GetAllLayoutDocuments().FirstOrDefault(doc => ReferenceEquals(doc.Content, browser))?.ContentId;
+            if (contentId == "left-folder" || contentId == "right-folder")
+                return contentId;
+            var panelId = TryGetFolderPanelId(contentId);
+            return panelId == null ? null : "folder-panel|" + panelId;
         }
 
         private void RestoreAdditionalPanels(IEnumerable<string> paths)
@@ -1154,6 +1180,16 @@ namespace Folderss
                         .Select(browser => browser.CurrentPath)
                         .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
                         .Distinct(StringComparer.OrdinalIgnoreCase)
+                        .ToList(),
+                    TreeViews = browsers
+                        .Where(browser => browser.IsTreeViewVisible)
+                        .Select(browser => new FolderTreeViewState
+                        {
+                            PanelKey = GetFolderPanelKey(browser),
+                            RootPath = browser.TreeRootPath,
+                            Pinned = browser.IsFolderPinned
+                        })
+                        .Where(state => state.PanelKey != null)
                         .ToList()
                 });
             }

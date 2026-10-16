@@ -54,5 +54,21 @@ namespace Folderss.Services
         public string RightFolderPath { get; set; }
         public string ActiveFolderPath { get; set; }
         public List<string> OpenFolderPaths { get; set; } = new List<string>();
+
+        /// <summary>트리뷰를 연 채 종료한 폴더 패널들. 다음 시작 때 같은 패널(PanelKey)에 다시 연다.</summary>
+        public List<FolderTreeViewState> TreeViews { get; set; } = new List<FolderTreeViewState>();
+    }
+
+    [Serializable]
+    public sealed class FolderTreeViewState
+    {
+        /// <summary>도킹 패널 키(left-folder, right-folder, folder-panel|&lt;ID&gt;). 패널 잠금 키와 같다.</summary>
+        public string PanelKey { get; set; }
+
+        /// <summary>트리 루트 폴더(현재 폴더와 다를 수 있다).</summary>
+        public string RootPath { get; set; }
+
+        /// <summary>트리 루트 고정(📌) 여부.</summary>
+        public bool Pinned { get; set; }
     }
 }
