@@ -38,6 +38,61 @@ namespace Folderss.Services
             return root.Children;
         }
 
+        /// <summary>모든 노드(자신 포함, 위에서 아래 순서).</summary>
+        public static IEnumerable<GitChangeNode> AllNodes(IEnumerable<GitChangeNode> roots)
+        {
+            foreach (var node in roots)
+            {
+                yield return node;
+                foreach (var child in AllNodes(node.Children))
+                    yield return child;
+            }
+        }
+
+        /// <summary>표시된 노드가 고른 파일 전부(폴더면 그 아래 전체). 폴더와 그 안 파일을 함께 골라도 한 번만, 트리 순서.</summary>
+        public static List<GitStatusEntry> MarkedEntries(IEnumerable<GitChangeNode> roots)
+        {
+            return AllNodes(roots).Where(node => node.IsMarked).SelectMany(node => node.Entries).Distinct().ToList();
+        }
+
+        /// <summary>
+        /// 변경 사항 목록·트리 복사(Ctrl+C 이름 / Ctrl+Shift+C 전체 경로)의 텍스트. 저장소 기준 경로(슬래시 구분)를 한 줄에 하나씩, 중복은 한 번만.
+        /// 추적 안 되는 폴더("dir/")의 끝 슬래시는 뗀다.
+        /// </summary>
+        public static string ClipboardText(IEnumerable<string> relativePaths, string rootPath, bool fullPath)
+        {
+            var lines = fullPath
+                ? FullPaths(relativePaths, rootPath)
+                : Trimmed(relativePaths).Select(path => path.Substring(path.LastIndexOf('/') + 1));
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        /// <summary>저장소 기준 경로를 전체 경로로(중복 제거, 폴더 끝 슬래시 제거). Ctrl+C 파일 복사(FileDrop)와 Ctrl+Shift+C에 쓴다.</summary>
+        public static List<string> FullPaths(IEnumerable<string> relativePaths, string rootPath)
+        {
+            return Trimmed(relativePaths)
+                .Select(path => System.IO.Path.Combine(rootPath, path.Replace('/', System.IO.Path.DirectorySeparatorChar)))
+                .ToList();
+        }
+
+        private static IEnumerable<string> Trimmed(IEnumerable<string> relativePaths)
+        {
+            return relativePaths.Select(path => path.TrimEnd('/')).Distinct(StringComparer.Ordinal);
+        }
+
+        /// <summary>
+        /// Shift+클릭 범위: 화면에 보이는 순서 <paramref name="visible"/>에서 기준점부터 누른 노드까지(양끝 포함).
+        /// 기준점이 보이지 않으면 누른 노드 하나만.
+        /// </summary>
+        public static List<GitChangeNode> Range(IList<GitChangeNode> visible, GitChangeNode anchor, GitChangeNode target)
+        {
+            var from = visible.IndexOf(anchor);
+            var to = visible.IndexOf(target);
+            if (from < 0 || to < 0)
+                return new List<GitChangeNode> { target };
+            return visible.Skip(Math.Min(from, to)).Take(Math.Abs(to - from) + 1).ToList();
+        }
+
         /// <summary>파일 없이 폴더 하나만 가진 폴더를 자식과 합친다: a → b → c.cs 는 "a/b" → c.cs.</summary>
         private static void Compact(GitChangeNode node)
         {

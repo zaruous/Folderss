@@ -966,6 +966,54 @@ namespace Folderss.SearchTests
             Assert.Empty(GitChangeTree.Build(new GitStatusEntry[0]));
         }
 
+        [Fact]
+        public void ChangeTree_MarkedEntries_UnionsMarkedNodes_WithoutDuplicates()
+        {
+            var tree = GitChangeTree.Build(new[] { E("src/A.cs"), E("src/B.cs"), E("README.md"), E("Zeta.txt") });
+            var src = tree.Single(n => n.Name == "src");
+            src.IsMarked = true;
+            src.Children.Single(n => n.Name == "A.cs").IsMarked = true;   // 폴더와 그 안 파일을 함께 골라도 한 번만
+            tree.Single(n => n.Name == "Zeta.txt").IsMarked = true;
+
+            Assert.Equal(new[] { "src/A.cs", "src/B.cs", "Zeta.txt" }, GitChangeTree.MarkedEntries(tree).Select(e => e.Path));
+            Assert.Empty(GitChangeTree.MarkedEntries(GitChangeTree.Build(new[] { E("a.cs") })));
+        }
+
+        [Fact]
+        public void ChangeTree_ClipboardText_NamesOrFullPaths_OnePerLine()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "repo");
+            var paths = new[] { "src/app/A.cs", "README.md", "newdir/", "src/app", "src/app/A.cs" };
+
+            Assert.Equal(string.Join(Environment.NewLine, "A.cs", "README.md", "newdir", "app"),
+                GitChangeTree.ClipboardText(paths, root, fullPath: false));
+            Assert.Equal(string.Join(Environment.NewLine,
+                    Path.Combine(root, "src", "app", "A.cs"), Path.Combine(root, "README.md"),
+                    Path.Combine(root, "newdir"), Path.Combine(root, "src", "app")),
+                GitChangeTree.ClipboardText(paths, root, fullPath: true));
+            Assert.Equal(string.Empty, GitChangeTree.ClipboardText(new string[0], root, fullPath: false));
+        }
+
+        [Fact]
+        public void ChangeTree_FullPaths_TrimsFolderSlash_AndDeduplicates()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "repo");
+            Assert.Equal(new[] { Path.Combine(root, "src", "A.cs"), Path.Combine(root, "newdir") },
+                GitChangeTree.FullPaths(new[] { "src/A.cs", "newdir/", "src/A.cs" }, root));
+        }
+
+        [Fact]
+        public void ChangeTree_Range_IsInclusive_InEitherDirection()
+        {
+            var nodes = Enumerable.Range(0, 5).Select(i => new GitChangeNode { Name = "n" + i }).ToList();
+
+            Assert.Equal(new[] { "n1", "n2", "n3" }, GitChangeTree.Range(nodes, nodes[1], nodes[3]).Select(n => n.Name));
+            Assert.Equal(new[] { "n1", "n2", "n3" }, GitChangeTree.Range(nodes, nodes[3], nodes[1]).Select(n => n.Name));
+            Assert.Equal(new[] { "n2" }, GitChangeTree.Range(nodes, nodes[2], nodes[2]).Select(n => n.Name));
+            // 기준점이 화면에 없으면(접힌 폴더 안, 목록 갱신 후) 누른 것 하나만
+            Assert.Equal(new[] { "n4" }, GitChangeTree.Range(nodes, new GitChangeNode(), nodes[4]).Select(n => n.Name));
+        }
+
         // ── diff 보기 모드 (변경점만 / 문맥 10줄 / 전체 파일) ──────────────────
 
         [Fact]
