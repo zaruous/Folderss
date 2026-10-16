@@ -980,6 +980,21 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
+        public void ChangeTree_ClipboardText_NamesOrFullPaths_OnePerLine()
+        {
+            var root = Path.Combine(Path.GetTempPath(), "repo");
+            var paths = new[] { "src/app/A.cs", "README.md", "newdir/", "src/app", "src/app/A.cs" };
+
+            Assert.Equal(string.Join(Environment.NewLine, "A.cs", "README.md", "newdir", "app"),
+                GitChangeTree.ClipboardText(paths, root, fullPath: false));
+            Assert.Equal(string.Join(Environment.NewLine,
+                    Path.Combine(root, "src", "app", "A.cs"), Path.Combine(root, "README.md"),
+                    Path.Combine(root, "newdir"), Path.Combine(root, "src", "app")),
+                GitChangeTree.ClipboardText(paths, root, fullPath: true));
+            Assert.Equal(string.Empty, GitChangeTree.ClipboardText(new string[0], root, fullPath: false));
+        }
+
+        [Fact]
         public void ChangeTree_Range_IsInclusive_InEitherDirection()
         {
             var nodes = Enumerable.Range(0, 5).Select(i => new GitChangeNode { Name = "n" + i }).ToList();

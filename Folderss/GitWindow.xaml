@@ -356,6 +356,7 @@
                             <TextBlock x:Name="UnchangedHeader" DockPanel.Dock="Top" Margin="0,0,0,4" FontWeight="SemiBold" Text="변경 없음"/>
                             <Grid>
                                 <ListBox x:Name="UnchangedList"
+                                         PreviewKeyDown="ChangeCopy_PreviewKeyDown"
                                          FontFamily="Consolas"
                                          ItemTemplate="{StaticResource GitEntryTemplate}"
                                          VirtualizingPanel.IsVirtualizing="True"
@@ -364,6 +365,7 @@
                                          MouseDoubleClick="ChangeList_MouseDoubleClick"
                                          ToolTip="선택하면 파일 내용을 봅니다. 더블클릭하면 파일을 엽니다."/>
                                 <TreeView x:Name="UnchangedTree"
+                                          PreviewKeyDown="ChangeCopy_PreviewKeyDown"
                                           Visibility="Collapsed"
                                           Style="{StaticResource GitChangeTreeStyle}"
                                           VirtualizingPanel.IsVirtualizing="True"
@@ -385,6 +387,7 @@
                             </DockPanel>
                             <Grid x:Name="UnstagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" DragLeave="ChangeDrop_DragLeave" Drop="ChangeDrop_Drop">
                                 <ListBox x:Name="UnstagedList"
+                                         PreviewKeyDown="ChangeCopy_PreviewKeyDown"
                                          SelectionMode="Extended"
                                          PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
                                          PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"
@@ -396,6 +399,7 @@
                                          KeyDown="UnstagedChanges_KeyDown"
                                          ToolTip="선택하면 오른쪽에 작업 트리 ↔ 인덱스 차이를 보입니다. 더블클릭하면 파일을 엽니다. 스테이지됨으로 끌어 놓으면 스테이지합니다. Delete 키로 고른 파일을 휴지통으로 보냅니다."/>
                                 <TreeView x:Name="UnstagedTree"
+                                          PreviewKeyDown="ChangeCopy_PreviewKeyDown"
                                           Visibility="Collapsed"
                                           PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
                                           PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"
@@ -426,6 +430,7 @@
                             </DockPanel>
                             <Grid x:Name="StagedDropArea" AllowDrop="True" DragOver="ChangeDrop_DragOver" DragLeave="ChangeDrop_DragLeave" Drop="ChangeDrop_Drop">
                                 <ListBox x:Name="StagedList"
+                                         PreviewKeyDown="ChangeCopy_PreviewKeyDown"
                                          SelectionMode="Extended"
                                          PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
                                          PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"
@@ -436,6 +441,7 @@
                                          MouseDoubleClick="ChangeList_MouseDoubleClick"
                                          ToolTip="선택하면 오른쪽에 인덱스 ↔ HEAD 차이(커밋될 내용)를 보입니다. 변경됨으로 끌어 놓으면 언스테이지합니다."/>
                                 <TreeView x:Name="StagedTree"
+                                          PreviewKeyDown="ChangeCopy_PreviewKeyDown"
                                           Visibility="Collapsed"
                                           PreviewMouseLeftButtonDown="ChangeDrag_PreviewMouseLeftButtonDown"
                                           PreviewMouseLeftButtonUp="ChangeDrag_PreviewMouseLeftButtonUp"

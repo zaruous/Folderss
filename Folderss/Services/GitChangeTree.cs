@@ -56,6 +56,21 @@ namespace Folderss.Services
         }
 
         /// <summary>
+        /// 변경 사항 목록·트리 복사(Ctrl+C 이름 / Ctrl+Shift+C 전체 경로) 텍스트. 저장소 기준 경로(슬래시 구분)를 한 줄에 하나씩, 중복은 한 번만.
+        /// 추적 안 되는 폴더("dir/")의 끝 슬래시는 뗀다.
+        /// </summary>
+        public static string ClipboardText(IEnumerable<string> relativePaths, string rootPath, bool fullPath)
+        {
+            var lines = relativePaths
+                .Select(path => path.TrimEnd('/'))
+                .Distinct(StringComparer.Ordinal)
+                .Select(path => fullPath
+                    ? System.IO.Path.Combine(rootPath, path.Replace('/', System.IO.Path.DirectorySeparatorChar))
+                    : path.Substring(path.LastIndexOf('/') + 1));
+            return string.Join(Environment.NewLine, lines);
+        }
+
+        /// <summary>
         /// Shift+클릭 범위: 화면에 보이는 순서 <paramref name="visible"/>에서 기준점부터 누른 노드까지(양끝 포함).
         /// 기준점이 보이지 않으면 누른 노드 하나만.
         /// </summary>

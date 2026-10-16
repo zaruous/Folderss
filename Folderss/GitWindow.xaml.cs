@@ -1362,6 +1362,31 @@ namespace Folderss
                 OpenEntry(node.Entry);
         }
 
+        /// <summary>변경 사항 목록·트리: Ctrl+C는 고른 항목 이름, Ctrl+Shift+C는 전체 경로를 텍스트로 복사(여러 개면 한 줄에 하나).</summary>
+        private void ChangeCopy_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            var modifiers = Keyboard.Modifiers;
+            if (e.Key != Key.C || (modifiers != ModifierKeys.Control && modifiers != (ModifierKeys.Control | ModifierKeys.Shift)))
+                return;
+            var root = SelectedRow?.RootPath;
+            var paths = SelectedCopyPaths(sender);
+            if (root == null || paths.Count == 0)
+                return;
+            e.Handled = true;
+            ClipboardService.TrySetDataObject(GitChangeTree.ClipboardText(paths, root, fullPath: modifiers.HasFlag(ModifierKeys.Shift)));
+        }
+
+        /// <summary>복사할 저장소 기준 경로: 목록은 선택 항목, 변경됨·스테이지됨 트리는 고른 노드(폴더는 폴더 자신), 변경 없음 트리는 선택 노드.</summary>
+        private List<string> SelectedCopyPaths(object sender)
+        {
+            if (sender is ListBox list)
+                return list.SelectedItems.OfType<GitStatusEntry>().Select(entry => entry.Path).ToList();
+            var tree = (TreeView)sender;
+            if (ReferenceEquals(tree, UnchangedTree))
+                return tree.SelectedItem is GitChangeNode node ? new List<string> { node.Path } : new List<string>();
+            return TreeNodes(tree).Where(node => node.IsMarked).Select(node => node.Path).ToList();
+        }
+
         /// <summary>스테이지/언스테이지 대상: 평면 보기는 선택한 항목들, 트리 보기는 고른 노드들(폴더면 그 아래 전체).</summary>
         private List<GitStatusEntry> SelectedChangeEntries(ListBox list, TreeView tree)
         {
