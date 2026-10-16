@@ -958,11 +958,15 @@ namespace Folderss
 
         private Point? _dragStart;
         private ListBoxItem _pendingSingleSelect;
+        private TreeViewItem _pendingTreeSingleSelect;
+        /// <summary>트리별 Shift+클릭 범위의 기준점(마지막으로 누른 노드).</summary>
+        private readonly Dictionary<TreeView, GitChangeNode> _treeAnchors = new Dictionary<TreeView, GitChangeNode>();
 
         private void ChangeDrag_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStart = null;
             _pendingSingleSelect = null;
+            _pendingTreeSingleSelect = null;
             var source = e.OriginalSource as DependencyObject;
 
             if (sender is ListBox list)
@@ -982,17 +986,93 @@ namespace Folderss
                 return;
             }
 
-            // 트리: 노드 위에서만(스크롤바 제외). 선택은 TreeView가 누를 때 바꾼다.
+            // 트리: 노드 위에서만(스크롤바·펼침 단추 제외). TreeView는 단일 선택뿐이라 Ctrl/Shift+클릭은 IsMarked로 직접 처리한다.
             for (var node = source; node != null && !(node is TreeView); node = System.Windows.Media.VisualTreeHelper.GetParent(node))
             {
-                if (node is System.Windows.Controls.Primitives.ScrollBar)
+                if (node is System.Windows.Controls.Primitives.ScrollBar || node is System.Windows.Controls.Primitives.ToggleButton)
                     return;
-                if (node is TreeViewItem)
+                if (node is TreeViewItem item)
                 {
-                    _dragStart = e.GetPosition(this);
+                    HandleTreeClick((TreeView)sender, item, e);
                     return;
                 }
             }
+        }
+
+        private void HandleTreeClick(TreeView tree, TreeViewItem item, MouseButtonEventArgs e)
+        {
+            var target = item.DataContext as GitChangeNode;
+            if (target == null || e.ClickCount != 1)
+            {
+                _dragStart = e.GetPosition(this);
+                return;
+            }
+
+            var modifiers = Keyboard.Modifiers;
+            if (modifiers == ModifierKeys.Control || modifiers == ModifierKeys.Shift)
+            {
+                if (modifiers == ModifierKeys.Control)
+                {
+                    target.IsMarked = !target.IsMarked;
+                    _treeAnchors[tree] = target;
+                }
+                else
+                {
+                    _treeAnchors.TryGetValue(tree, out var anchor);
+                    var range = new HashSet<GitChangeNode>(GitChangeTree.Range(VisibleTreeNodes(tree), anchor, target));
+                    foreach (var node in TreeNodes(tree))
+                        node.IsMarked = range.Contains(node);
+                }
+                // TreeView가 누른 노드를 단일 선택으로 바꾸지 않게 막는다(포커스만 트리로).
+                e.Handled = true;
+                if (!tree.IsKeyboardFocusWithin)
+                    tree.Focus();
+                ChangesDiff.Clear("파일 하나를 선택하면 차이를 보여 줍니다.");
+                return;
+            }
+
+            _dragStart = e.GetPosition(this);
+            if (modifiers != ModifierKeys.None)
+                return;
+            // 여러 개 고른 상태에서 고른 노드를 누르면 끌기로 함께 옮길 수 있게 "그 노드만 선택"을 놓을 때까지 미룬다.
+            if (target.IsMarked && TreeNodes(tree).Count(node => node.IsMarked) > 1)
+            {
+                _pendingTreeSingleSelect = item;
+                e.Handled = true;
+                if (!tree.IsKeyboardFocusWithin)
+                    tree.Focus();
+                return;
+            }
+            MarkOnly(tree, target);
+        }
+
+        /// <summary>트리의 모든 노드(접힌 폴더 안 포함).</summary>
+        private static IEnumerable<GitChangeNode> TreeNodes(TreeView tree)
+        {
+            return GitChangeTree.AllNodes((tree.ItemsSource as IEnumerable<GitChangeNode>) ?? Enumerable.Empty<GitChangeNode>());
+        }
+
+        /// <summary>Shift+클릭 범위용: 화면에 보이는(펼쳐진) 노드를 위에서 아래 순서로.</summary>
+        private static List<GitChangeNode> VisibleTreeNodes(ItemsControl parent)
+        {
+            var result = new List<GitChangeNode>();
+            foreach (var item in parent.Items)
+            {
+                if (!(item is GitChangeNode node))
+                    continue;
+                result.Add(node);
+                if (parent.ItemContainerGenerator.ContainerFromItem(item) is TreeViewItem container && container.IsExpanded)
+                    result.AddRange(VisibleTreeNodes(container));
+            }
+            return result;
+        }
+
+        /// <summary>일반 클릭·키보드 이동: 그 노드 하나만 고른다.</summary>
+        private void MarkOnly(TreeView tree, GitChangeNode target)
+        {
+            foreach (var node in TreeNodes(tree))
+                node.IsMarked = ReferenceEquals(node, target);
+            _treeAnchors[tree] = target;
         }
 
         private void ChangeDrag_PreviewMouseLeftButtonUp(object sender, MouseButtonEventArgs e)
@@ -1004,8 +1084,14 @@ namespace Folderss
                 list.UnselectAll();
                 item.IsSelected = true;
             }
+            if (_pendingTreeSingleSelect?.DataContext is GitChangeNode node && sender is TreeView tree)
+            {
+                MarkOnly(tree, node);
+                _pendingTreeSingleSelect.IsSelected = true;
+            }
             _dragStart = null;
             _pendingSingleSelect = null;
+            _pendingTreeSingleSelect = null;
         }
 
         private void ChangeDrag_PreviewMouseMove(object sender, MouseEventArgs e)
@@ -1019,6 +1105,7 @@ namespace Folderss
 
             _dragStart = null;
             _pendingSingleSelect = null;
+            _pendingTreeSingleSelect = null;
             var fromStaged = ReferenceEquals(sender, StagedList) || ReferenceEquals(sender, StagedTree);
             var entries = fromStaged ? SelectedChangeEntries(StagedList, StagedTree) : SelectedChangeEntries(UnstagedList, UnstagedTree);
             if (entries.Count == 0 || _busyCount > 0)
@@ -1244,6 +1331,7 @@ namespace Folderss
             var node = UnstagedTree.SelectedItem as GitChangeNode;
             if (node == null)
                 return;
+            MarkOnly(UnstagedTree, node);
             if (node.IsFolder)
             {
                 ChangesDiff.Clear(string.Format("폴더 {0} — 파일 {1}개. 스테이지하면 이 폴더 아래 전체가 대상입니다.", node.Path, node.Entries.Count()));
@@ -1257,6 +1345,7 @@ namespace Folderss
             var node = StagedTree.SelectedItem as GitChangeNode;
             if (node == null)
                 return;
+            MarkOnly(StagedTree, node);
             if (node.IsFolder)
             {
                 ChangesDiff.Clear(string.Format("폴더 {0} — 파일 {1}개. 언스테이지하면 이 폴더 아래 전체가 대상입니다.", node.Path, node.Entries.Count()));
@@ -1273,11 +1362,11 @@ namespace Folderss
                 OpenEntry(node.Entry);
         }
 
-        /// <summary>스테이지/언스테이지 대상: 평면 보기는 선택한 항목들, 트리 보기는 선택한 노드(폴더면 그 아래 전체).</summary>
+        /// <summary>스테이지/언스테이지 대상: 평면 보기는 선택한 항목들, 트리 보기는 고른 노드들(폴더면 그 아래 전체).</summary>
         private List<GitStatusEntry> SelectedChangeEntries(ListBox list, TreeView tree)
         {
             if (IsChangesTreeMode)
-                return (tree.SelectedItem as GitChangeNode)?.Entries.ToList() ?? new List<GitStatusEntry>();
+                return GitChangeTree.MarkedEntries((tree.ItemsSource as IEnumerable<GitChangeNode>) ?? Enumerable.Empty<GitChangeNode>());
             return list.SelectedItems.Cast<GitStatusEntry>().ToList();
         }
 

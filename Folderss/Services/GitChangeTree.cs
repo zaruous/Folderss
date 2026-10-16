@@ -38,6 +38,36 @@ namespace Folderss.Services
             return root.Children;
         }
 
+        /// <summary>모든 노드(자신 포함, 위에서 아래 순서).</summary>
+        public static IEnumerable<GitChangeNode> AllNodes(IEnumerable<GitChangeNode> roots)
+        {
+            foreach (var node in roots)
+            {
+                yield return node;
+                foreach (var child in AllNodes(node.Children))
+                    yield return child;
+            }
+        }
+
+        /// <summary>표시된 노드가 고른 파일 전부(폴더면 그 아래 전체). 폴더와 그 안 파일을 함께 골라도 한 번만, 트리 순서.</summary>
+        public static List<GitStatusEntry> MarkedEntries(IEnumerable<GitChangeNode> roots)
+        {
+            return AllNodes(roots).Where(node => node.IsMarked).SelectMany(node => node.Entries).Distinct().ToList();
+        }
+
+        /// <summary>
+        /// Shift+클릭 범위: 화면에 보이는 순서 <paramref name="visible"/>에서 기준점부터 누른 노드까지(양끝 포함).
+        /// 기준점이 보이지 않으면 누른 노드 하나만.
+        /// </summary>
+        public static List<GitChangeNode> Range(IList<GitChangeNode> visible, GitChangeNode anchor, GitChangeNode target)
+        {
+            var from = visible.IndexOf(anchor);
+            var to = visible.IndexOf(target);
+            if (from < 0 || to < 0)
+                return new List<GitChangeNode> { target };
+            return visible.Skip(Math.Min(from, to)).Take(Math.Abs(to - from) + 1).ToList();
+        }
+
         /// <summary>파일 없이 폴더 하나만 가진 폴더를 자식과 합친다: a → b → c.cs 는 "a/b" → c.cs.</summary>
         private static void Compact(GitChangeNode node)
         {

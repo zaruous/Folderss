@@ -141,9 +141,26 @@ namespace Folderss.Models
     /// 변경 사항 트리 보기의 노드. <see cref="Entry"/>가 있으면 파일, 없으면 폴더.
     /// 자식이 폴더 하나뿐인 폴더 체인은 한 노드로 합친다(<c>src/app/core</c>).
     /// </summary>
-    public sealed class GitChangeNode
+    public sealed class GitChangeNode : System.ComponentModel.INotifyPropertyChanged
     {
+        private bool _isMarked;
+
+        public event System.ComponentModel.PropertyChangedEventHandler PropertyChanged;
+
         public string Name { get; set; }
+
+        /// <summary>트리 다중 선택(Ctrl/Shift+클릭)에 들어 있는지. TreeView는 단일 선택만 지원해 따로 둔다.</summary>
+        public bool IsMarked
+        {
+            get => _isMarked;
+            set
+            {
+                if (_isMarked == value)
+                    return;
+                _isMarked = value;
+                PropertyChanged?.Invoke(this, new System.ComponentModel.PropertyChangedEventArgs(nameof(IsMarked)));
+            }
+        }
 
         /// <summary>저장소 기준 폴더 경로(슬래시 구분). 파일 노드는 파일 경로.</summary>
         public string Path { get; set; }
