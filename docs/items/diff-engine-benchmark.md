@@ -78,6 +78,7 @@
 ## 변경 파일
 
 - `tools/DiffBench/*` (신규), `tools/DiffBench/results-linux.md`(이번 측정 결과), `docs/items/diff-engine-benchmark.md`
+- `docs/reports/diff-engine-benchmark.html` — HTML 보고서. `tools/DiffBench/gen_report.py`가 결과 표(`results*.md`)와 `report_template.html`로 만든다: `python tools/DiffBench/gen_report.py <results.md> <out.html> tools/DiffBench/report_template.html`
 
 ## 검증
 
@@ -88,3 +89,4 @@
 ## 변경 이력
 
 - 2026-10-16: 요청 접수, 벤치마크 작성·Linux 측정(Ready for Verification). 앱 코드는 바꾸지 않음.
+- 2026-10-16: 사용자 요청으로 HTML 보고서 추가(결론·요약 차트·경우별 히트맵·품질·메모리·방식별 판단).
