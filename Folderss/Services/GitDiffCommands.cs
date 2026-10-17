@@ -207,7 +207,7 @@ namespace Folderss.Services
         /// <summary><c>&lt;from&gt;..&lt;to&gt;</c> 범위 커밋 목록(<see cref="GitOutputParser.ParseLog"/>와 짝).</summary>
         public static List<string> LogRange(string from, string to, int limit)
         {
-            return new List<string> { "log", "--topo-order", "-z", "-n", limit.ToString(), GitOutputParser.LogFormat, from + ".." + to, "--" };
+            return new List<string> { "log", "-z", "-n", limit.ToString(), GitOutputParser.LogFormat, from + ".." + to, "--" };
         }
 
         /// <summary>"전체 파일" 보기의 문맥 줄 수. 이보다 긴 파일은 표시 한도(<c>GitDiffView.MaxLines</c>)에서 먼저 잘린다.</summary>

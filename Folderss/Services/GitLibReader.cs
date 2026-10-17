@@ -288,19 +288,41 @@ namespace Folderss.Services
             }
         }
 
-        /// <summary><see cref="GitDiffCommands.LogRange"/>(<c>--topo-order</c>)와 같은 순서. 시각 정렬은 같은 초 커밋의 순서가 CLI와 달라 쓰지 않는다.</summary>
         private static List<GitCommitInfo> Range(Repository repo, Commit exclude, Commit include, int limit)
         {
-            var filter = new CommitFilter
+            var inRange = repo.Commits.QueryBy(new CommitFilter
+                {
+                    IncludeReachableFrom = include,
+                    ExcludeReachableFrom = exclude,
+                    SortBy = CommitSortStrategies.None
+                })
+                .ToDictionary(c => c.Sha, StringComparer.Ordinal);
+            return ToInfos(repo, DateOrder(include, inRange).Take(limit));
+        }
+
+        /// <summary>
+        /// git <c>log a..b</c> 기본 순서(커밋 날짜 우선순위 큐, 같은 날짜는 먼저 넣은 것 먼저)를 그대로 옮긴 것.
+        /// libgit2의 <see cref="CommitSortStrategies.Time"/>은 같은 초에 만든 커밋끼리 순서가 달라(부모가 자식보다 먼저 나오기도 함) 콘솔 git과 어긋난다.
+        /// </summary>
+        private static IEnumerable<Commit> DateOrder(Commit start, Dictionary<string, Commit> inRange)
+        {
+            if (!inRange.ContainsKey(start.Sha))
+                yield break;
+            var queued = new HashSet<string>(StringComparer.Ordinal) { start.Sha };
+            var queue = new SortedSet<(long Time, long Order, Commit Commit)>(
+                Comparer<(long Time, long Order, Commit Commit)>.Create((a, b) =>
+                    a.Time != b.Time ? b.Time.CompareTo(a.Time) : a.Order.CompareTo(b.Order)));
+            long order = 0;
+            queue.Add((start.Committer.When.ToUnixTimeSeconds(), order++, start));
+            while (queue.Count > 0)
             {
-                IncludeReachableFrom = include,
-                ExcludeReachableFrom = exclude,
-                SortBy = CommitSortStrategies.None
-            };
-            var reachable = repo.Commits.QueryBy(filter).ToDictionary(c => c.Sha, StringComparer.Ordinal);
-            if (!reachable.ContainsKey(include.Sha))
-                return new List<GitCommitInfo>();
-            return ToInfos(repo, TopoOrder(new List<Commit> { include }, reachable).Take(limit));
+                var next = queue.Min;
+                queue.Remove(next);
+                foreach (var parent in next.Commit.Parents)
+                    if (inRange.TryGetValue(parent.Sha, out var commit) && queued.Add(parent.Sha))
+                        queue.Add((commit.Committer.When.ToUnixTimeSeconds(), order++, commit));
+                yield return next.Commit;
+            }
         }
 
         /// <summary><c>git stash list</c> + <see cref="GitStashCommands.List"/> 형식과 같은 목록(최신이 stash@{0}).</summary>

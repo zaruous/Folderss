@@ -75,6 +75,8 @@ namespace Folderss
 
         private readonly DiffSettings _workingDiff;
         private readonly CaptureSettings _workingCapture = CaptureSettingsService.Load();
+        private readonly NetworkSettings _workingNetwork = NetworkSettingsService.Current.Clone();
+        private readonly ObservableCollection<CertificateSummary> _networkCertificates = new ObservableCollection<CertificateSummary>();
 
         private const int GitTabIndex = 5;
         private const int DiffTabIndex = 6;
@@ -180,6 +182,7 @@ namespace Folderss
             InitializeGitPanel();
             InitializeDiffPanel();
             InitializeCapturePanel();
+            InitializeNetworkPanel();
             InitializePluginPages();
 
             TabNav.SelectedIndex = 0;
@@ -384,6 +387,86 @@ namespace Folderss
             return true;
         }
 
+        // ── 네트워크 ────────────────────────────────────────────────────────
+
+        private void InitializeNetworkPanel()
+        {
+            NetworkShowRemoteImagesCheck.IsChecked = _workingNetwork.ShowRemoteImages;
+            NetworkAllowHttpImagesCheck.IsChecked = _workingNetwork.AllowHttpImages;
+            NetworkAllowInvalidCertificatesCheck.IsChecked = _workingNetwork.AllowInvalidCertificates;
+            foreach (var pem in _workingNetwork.TrustedCertificates)
+            {
+                var summary = NetworkSettingsService.Describe(pem);
+                if (summary != null)
+                    _networkCertificates.Add(summary);
+            }
+            NetworkCertificateList.ItemsSource = _networkCertificates;
+            UpdateNetworkHttpOption();
+        }
+
+        // http 이미지는 원격 이미지 표시가 켜져 있을 때만 의미가 있다.
+        private void UpdateNetworkHttpOption()
+        {
+            NetworkAllowHttpImagesCheck.IsEnabled = NetworkShowRemoteImagesCheck.IsChecked == true;
+        }
+
+        private void NetworkShowRemoteImages_Changed(object sender, RoutedEventArgs e)
+        {
+            if (NetworkAllowHttpImagesCheck != null)
+                UpdateNetworkHttpOption();
+        }
+
+        private void NetworkCertificateAdd_Click(object sender, RoutedEventArgs e)
+        {
+            var dlg = new OpenFileDialog
+            {
+                Title = "신뢰할 내부 인증서 선택",
+                Filter = "인증서 (*.cer;*.crt;*.pem)|*.cer;*.crt;*.pem|모든 파일 (*.*)|*.*",
+                CheckFileExists = true
+            };
+            if (dlg.ShowDialog(this) != true)
+                return;
+
+            string pem;
+            try
+            {
+                pem = NetworkSettingsService.ReadCertificateFileAsPem(dlg.FileName);
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show(this, ex.Message, "인증서 추가", MessageBoxButton.OK, MessageBoxImage.Warning);
+                return;
+            }
+
+            if (NetworkSettingsService.ContainsCertificate(_networkCertificates.Select(c => c.Pem), pem))
+            {
+                MessageBox.Show(this, "이미 추가한 인증서입니다.", "인증서 추가", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+
+            var summary = NetworkSettingsService.Describe(pem);
+            if (summary != null)
+            {
+                _networkCertificates.Add(summary);
+                NetworkCertificateList.SelectedItem = summary;
+            }
+        }
+
+        private void NetworkCertificateRemove_Click(object sender, RoutedEventArgs e)
+        {
+            var selected = NetworkCertificateList.SelectedItem as CertificateSummary;
+            if (selected != null)
+                _networkCertificates.Remove(selected);
+        }
+
+        private void CollectNetworkSettings()
+        {
+            _workingNetwork.ShowRemoteImages = NetworkShowRemoteImagesCheck.IsChecked == true;
+            _workingNetwork.AllowHttpImages = NetworkAllowHttpImagesCheck.IsChecked == true;
+            _workingNetwork.AllowInvalidCertificates = NetworkAllowInvalidCertificatesCheck.IsChecked == true;
+            _workingNetwork.TrustedCertificates = _networkCertificates.Select(c => c.Pem).ToList();
+        }
+
         private void TabNav_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             if (ShortcutsPanel == null) return;
@@ -399,6 +482,7 @@ namespace Folderss
             GitPanel.Visibility       = tag == "Git"       ? Visibility.Visible : Visibility.Collapsed;
             DiffPanel.Visibility      = tag == "Diff"      ? Visibility.Visible : Visibility.Collapsed;
             CapturePanel.Visibility   = tag == "Capture"   ? Visibility.Visible : Visibility.Collapsed;
+            NetworkPanel.Visibility   = tag == "Network"   ? Visibility.Visible : Visibility.Collapsed;
             PluginsPanel.Visibility   = tag == "Plugins"   ? Visibility.Visible : Visibility.Collapsed;
             foreach (var page in _pluginPages)
                 page.Panel.Visibility = ReferenceEquals(item, page.NavItem) ? Visibility.Visible : Visibility.Collapsed;
@@ -540,6 +624,7 @@ namespace Folderss
             if (!TryCollectGitSettings() || !TryCollectDiffSettings() || !TryCollectCaptureSettings())
                 return;
 
+            CollectNetworkSettings();
             _workingConsoleSettings.FontSize = fontSize;
             _workingConsoleSettings.PreferredProfileKey = preferredProfileKey;
             _workingConsoleSettings.CustomProfiles = _workingConsoleProfiles
@@ -559,6 +644,7 @@ namespace Folderss
             TrySave(failures, "Git", "git-settings.xml", () => GitSettingsService.Save(_workingGit));
             TrySave(failures, "비교", "diff-settings.xml", () => DiffSettingsService.Save(_workingDiff));
             TrySave(failures, "캡쳐", "capture-settings.xml", () => CaptureSettingsService.Save(_workingCapture));
+            TrySave(failures, "네트워크", "network-settings.xml", () => NetworkSettingsService.Save(_workingNetwork));
             foreach (var page in _pluginPages.Where(p => p.Page != null && p.ViewCreated))
                 TrySave(failures, "플러그인: " + page.Title, page.PluginId, page.Page.Save);
             SavedGitSettings = _workingGit.Clone();

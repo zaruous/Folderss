@@ -194,9 +194,12 @@ function renderMath(root) {
 
 function resolveImageSrc(href) {
   if (!href) return href;
-  // data:, http(s):, file: 등 실제 웹/스킴 링크는 그대로 둔다.
+  // data:, https:, file: 등 실제 웹/스킴 링크는 그대로 둔다.
   // (Windows 절대 경로 "C:\..."도 콜론을 포함하지만 스킴이 아니므로 별도로 걸러낸다.)
-  if (/^(https?|data|file|ftp|mailto):/i.test(href))
+  // http 이미지는 이 페이지(https)에서 혼합 콘텐츠로 막히므로 C#이 대신 받아 전달한다(허용 여부는 C#의 네트워크 설정이 판정).
+  if (/^http:/i.test(href))
+    return 'https://folderss-doc-asset/remote?u=' + encodeURIComponent(href);
+  if (/^(https|data|file|ftp|mailto):/i.test(href))
     return href;
   return 'https://folderss-doc-asset/resolve?p=' + encodeURIComponent(href);
 }

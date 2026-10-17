@@ -90,6 +90,9 @@
                     <ListBoxItem Tag="Capture">
                         <TextBlock Text="캡쳐"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="Network">
+                        <TextBlock Text="네트워크"/>
+                    </ListBoxItem>
                     <ListBoxItem Tag="Plugins">
                         <TextBlock Text="플러그인"/>
                     </ListBoxItem>
@@ -877,6 +880,62 @@
                             <TextBox x:Name="CaptureSaveFolderBox" Padding="6,4" VerticalContentAlignment="Center"/>
                         </DockPanel>
                         <TextBlock x:Name="CaptureSaveFolderHint" FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"/>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- Network panel: 뷰어의 원격 이미지·인증서 (network-settings.xml) -->
+                <ScrollViewer x:Name="NetworkPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,16">
+                        <StackPanel.Resources>
+                            <Style x:Key="NetHint" TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="11"/>
+                                <Setter Property="Margin" Value="0,3,0,0"/>
+                                <Setter Property="TextWrapping" Value="Wrap"/>
+                                <Setter Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                            </Style>
+                            <Style x:Key="NetSection" TargetType="TextBlock">
+                                <Setter Property="FontSize" Value="13"/>
+                                <Setter Property="FontWeight" Value="SemiBold"/>
+                                <Setter Property="Margin" Value="0,18,0,0"/>
+                            </Style>
+                        </StackPanel.Resources>
+                        <TextBlock Text="네트워크" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock Style="{StaticResource NetHint}"
+                                   Text="마크다운 뷰어가 문서 속 원격 이미지를 불러오는 방식입니다. 저장하면 다음에 여는(또는 다시 읽는) 문서부터 적용됩니다."/>
+
+                        <TextBlock Style="{StaticResource NetSection}" Text="원격 이미지"/>
+                        <CheckBox x:Name="NetworkShowRemoteImagesCheck" Content="원격 이미지 표시 (https)" Margin="0,8,0,0"
+                                  Checked="NetworkShowRemoteImages_Changed" Unchecked="NetworkShowRemoteImages_Changed"/>
+                        <TextBlock Style="{StaticResource NetHint}"
+                                   Text="문서를 열면 이미지 서버로 요청이 나갑니다. 이미지 주소에 따라 서버가 문서를 연 시각·IP를 알 수 있습니다(웹 브라우저로 볼 때와 같음)."/>
+                        <CheckBox x:Name="NetworkAllowHttpImagesCheck" Content="http 이미지도 표시 (보안 연결이 아닌 주소)" Margin="20,10,0,0"/>
+                        <TextBlock Style="{StaticResource NetHint}" Margin="20,3,0,0"
+                                   Text="뷰어 화면이 보안 연결(https)이라 http 이미지는 브라우저가 막습니다. 켜면 Folderss가 대신 받아 보여 줍니다(이미지만, 20MB까지)."/>
+
+                        <TextBlock Style="{StaticResource NetSection}" Text="인증서"/>
+                        <CheckBox x:Name="NetworkAllowInvalidCertificatesCheck" Content="인증서 오류가 있는 사이트 허용 (권장하지 않음)" Margin="0,8,0,0"/>
+                        <TextBlock Style="{StaticResource NetHint}"
+                                   Text="만료·자체 서명·이름 불일치 인증서를 쓰는 서버의 이미지도 불러옵니다."/>
+                        <TextBlock Style="{StaticResource NetHint}" Margin="0,8,0,0"
+                                   Text="인증서는 Windows 인증서 저장소(회사에서 배포한 인증서 포함)로 검증합니다. localhost·127.0.0.1 같은 이 PC 안의 주소는 위 설정과 관계없이 http와 자체 서명 인증서를 허용합니다."/>
+
+                        <TextBlock Style="{StaticResource NetSection}" Text="추가로 신뢰할 내부 인증서"/>
+                        <TextBlock Style="{StaticResource NetHint}"
+                                   Text="Windows에 설치되지 않은 사내 루트 인증서(.cer, .crt, .pem)를 추가하면 그 인증서가 발급한 서버를 신뢰합니다. Windows에는 설치하지 않고 Folderss에서만 사용합니다."/>
+                        <ListView x:Name="NetworkCertificateList" Height="120" Margin="0,8,0,0" SelectionMode="Single"
+                                  BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="이름" Width="220" DisplayMemberBinding="{Binding Subject}"/>
+                                    <GridViewColumn Header="만료일" Width="90" DisplayMemberBinding="{Binding Expires}"/>
+                                    <GridViewColumn Header="지문" Width="150" DisplayMemberBinding="{Binding ShortThumbprint}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                        <StackPanel Orientation="Horizontal" Margin="0,6,0,0">
+                            <Button Content="추가…" Click="NetworkCertificateAdd_Click" Padding="10,4" Margin="0,0,6,0"/>
+                            <Button Content="삭제" Click="NetworkCertificateRemove_Click" Padding="10,4"/>
+                        </StackPanel>
                     </StackPanel>
                 </ScrollViewer>
 

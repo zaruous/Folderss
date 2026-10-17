@@ -167,6 +167,14 @@ Folderss/
   - `Viewers/WebViewIdleSaver`가 뷰어가 화면에서 가려지면 메모리 목표를 `Low`로, 30초 넘게 가려지면 `TrySuspendAsync`로 일시 중지하고, 다시 보이면 재개한다.
     가려진 탭에 오는 테마 변경·제목 이동은 미뤘다가 다시 보일 때(`OnBecameVisible`) 적용한다.
   - 세 뷰어 모두 `IDisposable`로 탭을 닫을 때 `WebView.Dispose()`한다.
+
+### MarkdownViewer 원격 이미지와 네트워크 설정 (network-settings.xml)
+- 판정은 `Services/RemoteContentPolicy`(순수 로직, 단위 테스트), 설정은 `Services/NetworkSettingsService`(`Current`, 저장 시 `Changed`). 설정 창 "네트워크" 탭.
+- `OnWebResourceRequested`: 이미지 요청이고 `RouteImage == Direct`(https: 표시 설정 켜짐 또는 localhost)면 WebView2가 직접 받는다. 그 밖의 외부 요청은 403.
+- http 이미지: `markdown-app.js resolveImageSrc`가 `https://folderss-doc-asset/remote?u=<원래 주소>`로 바꾸고, `ProxyRemoteImage`가 `RouteImage == Proxy`
+  (localhost 또는 표시+http 허용)일 때만 `HttpClient`로 받아 전달한다(`image/*`, 20MB, 15초). 뷰어 페이지가 https라 http 이미지는 혼합 콘텐츠로 막히기 때문.
+- 인증서: Windows 저장소로 먼저 검증하고, 실패하면 `ServerCertificateErrorDetected`(WebView2)·`ServerCertificateCustomValidationCallback`(HttpClient)에서
+  `ShouldAllowCertificateError`(localhost·오류 허용·추가한 내부 인증서로 체인+호스트 이름 확인)로 다시 판정한다. 설정 저장 시 `ClearServerCertificateErrorActionsAsync`.
 - 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
   그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
 
@@ -375,7 +383,7 @@ Folderss/
   창을 닫으면 `_lifetime` 토큰이 진행 중 프로세스를 모두 끝낸다.
 - diff: 인수는 모두 `GitDiffCommands`(공통 `--no-color --no-ext-diff -M` — 사용자 외부 diff 도구 설정 무시).
   작업 트리 `diff -- <p>`, 스테이지 `diff --cached -- [<원래 경로>] <p>`, 추적 안 됨 `diff --no-index -- /dev/null <p>`(종료 코드 1 = 차이 있음),
-  커밋 `diff <첫 부모> <hash>`(최초 커밋은 `show --format=`), 원격 비교 `log --topo-order @{u}..HEAD`/`HEAD..@{u}`(LibGit2Sharp 경로도 같은 위상 순서 `TopoOrder`), `diff @{u}...HEAD`/`HEAD...@{u}`/`diff @{u}`.
+  커밋 `diff <첫 부모> <hash>`(최초 커밋은 `show --format=`), 원격 비교 `log @{u}..HEAD`/`HEAD..@{u}`, `diff @{u}...HEAD`/`HEAD...@{u}`/`diff @{u}`.
   `GitOutputParser.ParseDiff`는 hunk 밖의 `---`/`+++`만 헤더로 보고(hunk 안 `--`로 시작하는 줄 삭제 오판 방지), 충돌 파일 combined diff(`@@@`)는
   앞 두 글자로 분류하고 줄 번호를 매기지 않는다. `GitDiffView`는 `BeginLoad`가 준 번호로만 `Complete`해 빠른 연속 선택의 늦은 결과를 버린다.
   원격 비교는 원격 추적 브랜치 기준이라 fetch 전에는 오래된 상태다(요약 문구로 알림).

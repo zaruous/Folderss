@@ -3,6 +3,11 @@ using Microsoft.Web.WebView2.Core;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Linq;
+using System.Net;
+using System.Net.Http;
+using System.Net.Security;
+using System.Security.Cryptography.X509Certificates;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -114,6 +119,8 @@ namespace Folderss.Viewers
             WebView.CoreWebView2.NavigationCompleted  += OnNavigationCompleted;
             WebView.CoreWebView2.WebMessageReceived   += OnWebMessageReceived;
             WebView.CoreWebView2.ContextMenuRequested += OnContextMenuRequested;
+            WebView.CoreWebView2.ServerCertificateErrorDetected += OnServerCertificateErrorDetected;
+            NetworkSettingsService.Changed += OnNetworkSettingsChanged;
             InitializeContentContextMenuItems();
 
             _webViewReady = true;
@@ -127,12 +134,150 @@ namespace Folderss.Viewers
 
             if (string.Equals(uri.Host, DocAssetHost, StringComparison.OrdinalIgnoreCase))
             {
-                e.Response = BuildDocAssetResponse(uri);
+                if (string.Equals(uri.AbsolutePath, "/remote", StringComparison.OrdinalIgnoreCase))
+                    ProxyRemoteImage(e, uri);
+                else
+                    e.Response = BuildDocAssetResponse(uri);
                 return;
             }
 
-            if (!string.Equals(uri.Host, "folderss-viewer", StringComparison.OrdinalIgnoreCase))
-                e.Response = WebView.CoreWebView2.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+            if (string.Equals(uri.Host, "folderss-viewer", StringComparison.OrdinalIgnoreCase))
+                return;
+
+            // 원격 https 이미지는 네트워크 설정이 허용하면 WebView2가 직접 받는다(인증서는 Windows 저장소로 검증).
+            // 그 밖의 외부 요청(스크립트·스타일·연결 등)은 계속 막는다.
+            if (e.ResourceContext == CoreWebView2WebResourceContext.Image &&
+                RemoteContentPolicy.RouteImage(uri, NetworkSettingsService.Current) == RemoteImageRoute.Direct)
+                return;
+
+            e.Response = WebView.CoreWebView2.Environment.CreateWebResourceResponse(null, 403, "Blocked", "");
+        }
+
+        private const long MaxRemoteImageBytes = 20L * 1024 * 1024;
+
+        private static readonly Lazy<HttpClient> RemoteImageClient = new Lazy<HttpClient>(() =>
+        {
+            var handler = new HttpClientHandler
+            {
+                // Windows 프록시 설정을 따르고, 인증 프록시에는 현재 사용자 자격 증명을 쓴다.
+                DefaultProxyCredentials = CredentialCache.DefaultCredentials,
+                // http에서 https로 넘어가는 경우: Windows 저장소 검증에 실패하면 네트워크 설정(localhost·오류 허용·내부 인증서)으로 다시 판정한다.
+                ServerCertificateCustomValidationCallback = (request, certificate, chain, errors) =>
+                    errors == SslPolicyErrors.None ||
+                    RemoteContentPolicy.ShouldAllowCertificateError(request.RequestUri, certificate,
+                        chain == null ? Enumerable.Empty<X509Certificate2>() : chain.ChainElements.Cast<X509ChainElement>().Select(el => el.Certificate),
+                        NetworkSettingsService.Current)
+            };
+            return new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(15) };
+        });
+
+        /// <summary>
+        /// http 이미지는 뷰어 페이지(https)에서 혼합 콘텐츠로 막히므로, 네트워크 설정이 허용하면 Folderss가 대신 받아
+        /// 같은 출처 주소(<c>folderss-doc-asset/remote</c>)로 전달한다. 이미지(image/*)만, 20MB까지.
+        /// </summary>
+        private async void ProxyRemoteImage(CoreWebView2WebResourceRequestedEventArgs e, Uri requestUri)
+        {
+            var env = WebView.CoreWebView2.Environment;
+            var target = ExtractQueryValue(requestUri.Query, "u");
+            Uri remote;
+            if (target == null ||
+                !Uri.TryCreate(Uri.UnescapeDataString(target), UriKind.Absolute, out remote) ||
+                RemoteContentPolicy.RouteImage(remote, NetworkSettingsService.Current) != RemoteImageRoute.Proxy)
+            {
+                e.Response = env.CreateWebResourceResponse(null, 403, "Blocked", "");
+                return;
+            }
+
+            var deferral = e.GetDeferral();
+            CoreWebView2WebResourceResponse result;
+            try
+            {
+                using (var response = await RemoteImageClient.Value.GetAsync(remote, HttpCompletionOption.ResponseHeadersRead))
+                {
+                    var mediaType = response.Content.Headers.ContentType?.MediaType ?? string.Empty;
+                    if (!response.IsSuccessStatusCode ||
+                        !mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
+                        response.Content.Headers.ContentLength > MaxRemoteImageBytes)
+                    {
+                        result = env.CreateWebResourceResponse(null, 404, "Not Found", "");
+                    }
+                    else
+                    {
+                        var buffer = new MemoryStream();
+                        using (var body = await response.Content.ReadAsStreamAsync())
+                            await CopyWithLimitAsync(body, buffer, MaxRemoteImageBytes);
+                        buffer.Position = 0;
+                        result = env.CreateWebResourceResponse(buffer, 200, "OK",
+                            "Content-Type: " + mediaType + "\r\nCache-Control: no-cache");
+                    }
+                }
+            }
+            catch (Exception)
+            {
+                result = _disposed ? null : env.CreateWebResourceResponse(null, 404, "Not Found", "");
+            }
+
+            try
+            {
+                if (!_disposed)
+                    e.Response = result;
+                deferral.Complete();
+            }
+            catch (Exception)
+            {
+                // 받는 사이 탭이 닫혀 WebView2가 해제됐으면 응답할 곳이 없다.
+            }
+        }
+
+        private static async System.Threading.Tasks.Task CopyWithLimitAsync(Stream source, Stream destination, long limit)
+        {
+            var buffer = new byte[81920];
+            long total = 0;
+            int read;
+            while ((read = await source.ReadAsync(buffer, 0, buffer.Length)) > 0)
+            {
+                total += read;
+                if (total > limit)
+                    throw new InvalidDataException("image too large");
+                await destination.WriteAsync(buffer, 0, read);
+            }
+        }
+
+        /// <summary>
+        /// Windows 인증서 저장소로 검증에 실패한 원격 이미지 서버를 네트워크 설정(localhost·인증서 오류 허용·내부 인증서)으로 다시 판정한다.
+        /// </summary>
+        private void OnServerCertificateErrorDetected(object sender, CoreWebView2ServerCertificateErrorDetectedEventArgs e)
+        {
+            var allow = false;
+            try
+            {
+                var uri = new Uri(e.RequestUri);
+                var chain = e.ServerCertificate.PemEncodedIssuerCertificateChain
+                    .Select(pem => X509Certificate2.CreateFromPem(pem)).ToList();
+                try
+                {
+                    using (var server = X509Certificate2.CreateFromPem(e.ServerCertificate.ToPemEncoding()))
+                        allow = RemoteContentPolicy.ShouldAllowCertificateError(uri, server, chain, NetworkSettingsService.Current);
+                }
+                finally
+                {
+                    foreach (var cert in chain)
+                        cert.Dispose();
+                }
+            }
+            catch (Exception)
+            {
+                allow = false;
+            }
+            e.Action = allow ? CoreWebView2ServerCertificateErrorAction.AlwaysAllow : CoreWebView2ServerCertificateErrorAction.Cancel;
+        }
+
+        // 인증서 허용은 WebView2가 실행 중 기억하므로(AlwaysAllow), 네트워크 설정이 바뀌면 지운다.
+        private void OnNetworkSettingsChanged(object sender, EventArgs e)
+        {
+            if (_disposed || !_webViewReady)
+                return;
+            _ = WebView.CoreWebView2.ClearServerCertificateErrorActionsAsync();
         }
 
         /// <summary>
@@ -471,8 +616,15 @@ namespace Folderss.Viewers
         /// 미리보기의 로컬 이미지는 이 뷰어만 응답하는 <c>folderss-doc-asset</c> 주소를 쓰므로, 내보낸 HTML을 앱 밖에서 열면 깨진다.
         /// 내보낼 때 해당 이미지를 data URI로 넣어 파일 하나로 열리게 한다. 찾을 수 없는 이미지는 주소를 그대로 둔다.
         /// </summary>
+        private static readonly Regex RemoteProxyUrlRegex = new Regex(
+            @"https://" + DocAssetHost + @"/remote\?u=([^""'\s)&<>]*)",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
         private string InlineDocAssets(string html)
         {
+            // 대신 받아 전달하던 http 이미지(folderss-doc-asset/remote)는 앱 밖에서 동작하지 않으므로 원래 주소로 되돌린다.
+            html = RemoteProxyUrlRegex.Replace(html, match =>
+                WebUtility.HtmlEncode(Uri.UnescapeDataString(match.Groups[1].Value)));
             return DocAssetUrlRegex.Replace(html, match =>
             {
                 try
@@ -856,6 +1008,7 @@ namespace Folderss.Viewers
                 WebView.CoreWebView2.NavigationCompleted -= OnNavigationCompleted;
                 WebView.CoreWebView2.WebMessageReceived -= OnWebMessageReceived;
                 WebView.CoreWebView2.ContextMenuRequested -= OnContextMenuRequested;
+                WebView.CoreWebView2.ServerCertificateErrorDetected -= OnServerCertificateErrorDetected;
             }
 
             // WPF WebView2는 화면에서 빠져도 스스로 정리되지 않아, 탭을 닫을 때마다 브라우저 프로세스와 메모리가 남는다.
@@ -863,6 +1016,7 @@ namespace Folderss.Viewers
             _webViewReady = false;
             _pageReady = false;
             _idleSaver?.Dispose();
+            NetworkSettingsService.Changed -= OnNetworkSettingsChanged;
             WebView.Dispose();
         }
 
