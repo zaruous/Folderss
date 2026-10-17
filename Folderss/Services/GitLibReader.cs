@@ -14,7 +14,7 @@ namespace Folderss.Services
     /// - 저장소는 호출마다 열고 닫는다. 열어 두면 팩 파일이 잠겨 콘솔의 git gc/repack과 부딪히고, Repository는 스레드 안전하지 않다.
     /// - 같게 만들 수 없는 경우(링크된 워킹트리, upstream 없음 등)는 <see cref="NotSupportedException"/>을 던진다. 호출자는 CLI로 다시 읽는다
     ///   (그 밖의 예외도 마찬가지로 CLI로 다시 읽되, 예상 밖이므로 출력창에 알린다).
-    /// status·쓰기·네트워크·diff는 여기서 다루지 않는다(계속 git CLI).
+    /// 쓰기·네트워크는 여기서 다루지 않는다(계속 git CLI). diff는 <see cref="GitLibDiff"/>가 같은 방식으로 만든다.
     /// </summary>
     public static class GitLibReader
     {
@@ -107,7 +107,7 @@ namespace Folderss.Services
             }
         }
 
-        private static void EnsureStatusSupported(Repository repo)
+        internal static void EnsureStatusSupported(Repository repo)
         {
             var gitDir = repo.Info.Path;
             var indexPath = Path.Combine(gitDir, "index");

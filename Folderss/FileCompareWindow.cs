@@ -12,7 +12,8 @@ namespace Folderss
 {
     /// <summary>
     /// 폴더 패널에서 고른 두 파일을 Git 창과 같은 diff 뷰(<see cref="GitDiffView"/>)로 비교하는 비모달 창.
-    /// <c>git diff --no-index</c>를 쓰므로 저장소(형상 관리) 밖 파일도 비교된다(git 실행 파일은 필요).
+    /// <c>git diff --no-index</c>와 같은 비교라 저장소(형상 관리) 밖 파일도 비교된다. 내장 비교는 libgit2(<see cref="GitLibDiff"/>)로 하고,
+    /// git 실행 파일은 외부 도구·대체 경로에 쓴다.
     /// 공백 무시·대체 인코딩·보기 모드·외부 도구는 설정 창의 비교 탭(<see cref="DiffSettings"/>)을 따른다.
     /// </summary>
     public sealed class FileCompareWindow : Window
@@ -115,19 +116,32 @@ namespace Folderss
             }
         }
 
-        /// <summary>화면과 HTML 보고서가 같이 쓰는 로더. 실패는 예외(첫 줄 오류 문구).</summary>
+        /// <summary>
+        /// 화면과 HTML 보고서가 같이 쓰는 로더. 실패는 예외(첫 줄 오류 문구).
+        /// git 프로세스 없이 libgit2로 만들고(<see cref="GitLibDiff"/>), 못 만들면(네이티브 DLL 없음 등) git CLI로 돌린다.
+        /// </summary>
         private async Task<string> LoadTextAsync(GitDiffRequest diff, GitDiffViewMode mode, CancellationToken token)
         {
             var fallback = ResolveFallbackEncoding();
-            var result = await GitCommandRunner.RunAsync(null, GitDiffCommands.WithViewMode(diff.Arguments, mode),
-                GitCommandRunner.QueryTimeout, token, readOnly: true, fallbackEncoding: fallback);
-            if (!GitDiffCommands.IsSuccess(result, diff.NoIndex))
+            string output;
+            try
             {
-                var message = result.StdErr?.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0);
-                throw new InvalidOperationException(message ?? "차이를 읽지 못했습니다.");
+                output = await Task.Run(() => GitLibDiff.Read(null, diff, mode, fallback), token);
+            }
+            catch (Exception ex) when (!(ex is OperationCanceledException))
+            {
+                // 파일을 못 읽는 경우도 git CLI가 같은 원인을 오류 문구로 알려 준다.
+                var result = await GitCommandRunner.RunAsync(null, GitDiffCommands.WithViewMode(diff.Arguments, mode),
+                    GitCommandRunner.QueryTimeout, token, readOnly: true, fallbackEncoding: fallback);
+                if (!GitDiffCommands.IsSuccess(result, diff.NoIndex))
+                {
+                    var message = result.StdErr?.Split('\n').Select(line => line.Trim()).FirstOrDefault(line => line.Length > 0);
+                    throw new InvalidOperationException(message ?? "차이를 읽지 못했습니다.");
+                }
+                output = result.StdOut;
             }
             // UTF-16/32(BOM) 파일은 git이 바이너리로 보이므로 BOM으로 읽어 텍스트로 다시 비교해 끼운다.
-            return await GitEncodingDiff.ExpandFilesAsync(_oldFile, _newFile, result.StdOut, _settings.IgnoreWhitespace, fallback, token, mode);
+            return await GitEncodingDiff.ExpandFilesAsync(_oldFile, _newFile, output, _settings.IgnoreWhitespace, fallback, token, mode);
         }
 
         private async void ExternalTool_Requested(object sender, EventArgs e)

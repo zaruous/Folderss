@@ -805,7 +805,7 @@ namespace Folderss
             var request = view.BeginLoad(diff);
             try
             {
-                var (result, text) = await RunDiffAsync(row.RootPath, diff, view.ViewMode, _lifetime.Token);
+                var (result, text) = await RunDiffAsync(row, diff, view.ViewMode, _lifetime.Token);
                 if (text != null)
                 {
                     view.Complete(request, text, diff.EmptyMessage);
@@ -825,17 +825,28 @@ namespace Folderss
             }
         }
 
-        /// <summary>diff 실행 + UTF-16/32(BOM) 재비교. 실패하면 Text가 null이고 Result에 원인이 있다.</summary>
-        private async Task<(GitResult Result, string Text)> RunDiffAsync(string root, GitDiffRequest diff, GitDiffViewMode mode,
+        /// <summary>
+        /// diff 실행 + UTF-16/32(BOM) 재비교. 실패하면 Text가 null이고 Result에 원인이 있다.
+        /// 파일·커밋을 고를 때마다 도는 조회라 git 프로세스 없이 libgit2로 만들고(<see cref="GitLibDiff"/>), 같게 못 만드는 경우만 git CLI로 돌린다.
+        /// </summary>
+        private async Task<(GitResult Result, string Text)> RunDiffAsync(RepositoryRow row, GitDiffRequest diff, GitDiffViewMode mode,
             CancellationToken token)
         {
             var fallback = ResolveFallbackEncoding();
-            var result = await GitCommandRunner.RunAsync(root, GitDiffCommands.WithViewMode(diff.Arguments, mode),
-                GitCommandRunner.QueryTimeout, token, readOnly: true, fallbackEncoding: fallback);
-            if (!GitDiffCommands.IsSuccess(result, diff.NoIndex))
-                return (result, null);
+            var lib = await ReadLibAsync(row, "diff", () => GitLibDiff.Read(row.RootPath, diff, mode, fallback));
+            GitResult result = null;
+            var output = lib.Value;
+            if (!lib.Ok)
+            {
+                result = await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.WithViewMode(diff.Arguments, mode),
+                    GitCommandRunner.QueryTimeout, token, readOnly: true, fallbackEncoding: fallback);
+                if (!GitDiffCommands.IsSuccess(result, diff.NoIndex))
+                    return (result, null);
+                output = result.StdOut;
+            }
+            token.ThrowIfCancellationRequested();
             // UTF-16/32(BOM) 파일은 git이 바이너리로 보이므로 BOM으로 읽어 텍스트로 다시 비교해 끼운다.
-            var text = await GitEncodingDiff.ExpandAsync(root, diff, result.StdOut, _diff.IgnoreWhitespace, fallback, token, mode);
+            var text = await GitEncodingDiff.ExpandAsync(row.RootPath, diff, output, _diff.IgnoreWhitespace, fallback, token, mode);
             return (result, text);
         }
 
@@ -843,7 +854,7 @@ namespace Folderss
         private async Task<string> LoadReportTextAsync(GitDiffRequest diff, GitDiffViewMode mode, CancellationToken token)
         {
             var row = SelectedRow ?? throw new InvalidOperationException("저장소를 선택하세요.");
-            var (result, text) = await RunDiffAsync(row.RootPath, diff, mode, token);
+            var (result, text) = await RunDiffAsync(row, diff, mode, token);
             return text ?? throw new InvalidOperationException(FirstLine(result.StdErr) ?? "차이를 읽지 못했습니다.");
         }
 

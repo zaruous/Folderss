@@ -94,8 +94,9 @@ namespace Folderss.Services
             },
             new GitDiffToolPreset
             {
+                // BCompare.exe는 이미 떠 있는 창에 비교를 넘기고 바로 끝날 수 있다. BComp.exe는 비교를 닫을 때까지 기다린다(버전 관리 연동용).
                 Name = "Beyond Compare",
-                Candidates = new[] { @"%ProgramFiles%\Beyond Compare 5\BCompare.exe", @"%ProgramFiles%\Beyond Compare 4\BCompare.exe", @"%ProgramFiles(x86)%\Beyond Compare 4\BCompare.exe" },
+                Candidates = new[] { @"%ProgramFiles%\Beyond Compare 5\BComp.exe", @"%ProgramFiles%\Beyond Compare 4\BComp.exe", @"%ProgramFiles(x86)%\Beyond Compare 4\BComp.exe" },
                 Arguments = "\"{left}\" \"{right}\""
             },
             new GitDiffToolPreset
@@ -122,6 +123,40 @@ namespace Folderss.Services
         public static readonly string DefaultConfigPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
             "Folderss", "diff-settings.xml");
+
+        /// <summary>
+        /// 실제로 실행할 외부 도구 경로. Beyond Compare의 BCompare.exe는 같은 폴더의 BComp.exe로 바꾼다 —
+        /// BCompare.exe는 이미 떠 있는 창에 비교를 넘기고 바로 끝날 수 있어, git이 Git 창 비교용 임시 파일을 곧바로 지워 빈 비교가 된다.
+        /// 예전 프리셋으로 저장된 설정도 그대로 고쳐진다. BComp.exe가 없으면 원래 경로.
+        /// </summary>
+        public static string ResolveToolPath(string toolPath)
+        {
+            if (string.IsNullOrWhiteSpace(toolPath))
+                return toolPath;
+            var path = toolPath.Trim().Trim('"');
+            if (!string.Equals(Path.GetFileName(path), "BCompare.exe", StringComparison.OrdinalIgnoreCase))
+                return toolPath;
+            var waiting = Path.Combine(Path.GetDirectoryName(path) ?? string.Empty, "BComp.exe");
+            return File.Exists(waiting) ? waiting : toolPath;
+        }
+
+        /// <summary>
+        /// 저장된 실행 파일에 맞는 프리셋 위치(설정 창을 열 때 프리셋 목록에서 고른 상태로 보인다). 실행 파일 이름으로 맞추고
+        /// (예전 프리셋의 BCompare.exe도 Beyond Compare), 맞는 것이 없으면 -1.
+        /// </summary>
+        public static int FindPresetIndex(string toolPath)
+        {
+            if (string.IsNullOrWhiteSpace(toolPath))
+                return -1;
+            var name = FileNameOf(toolPath.Trim().Trim('"'));
+            if (string.Equals(name, "BCompare.exe", StringComparison.OrdinalIgnoreCase))
+                name = "BComp.exe";
+            return Array.FindIndex(DiffToolPresets,
+                preset => preset.Candidates.Any(candidate => string.Equals(FileNameOf(candidate), name, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        /// <summary>Windows 경로의 마지막 이름. 프리셋 후보는 \ 구분이라 Path.GetFileName(리눅스에서는 /만 구분)을 쓰지 않는다.</summary>
+        private static string FileNameOf(string path) => path.Substring(path.LastIndexOfAny(new[] { '\\', '/' }) + 1);
 
         public static DiffSettings Load() => Load(DefaultConfigPath, GitSettingsService.DefaultConfigPath);
 

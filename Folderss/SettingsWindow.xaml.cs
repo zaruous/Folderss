@@ -63,15 +63,19 @@ namespace Folderss
         private string _editingOpenWithId;
         private string _editingConsoleProfileKey;
         private bool _initializingTheme;
-        private readonly AppTheme _originalTheme;
+        /// <summary>취소하면 되돌릴 테마. 창을 열 때의 테마이고, 적용을 누르면 그때의 테마로 바뀐다.</summary>
+        private AppTheme _originalTheme;
         private readonly GitSettings _workingGit;
         public IReadOnlyList<ViewerOption> ViewerOptions { get; }
 
-        /// <summary>저장을 누른 뒤의 Git 설정(파일 저장이 실패해도 이번 실행에는 적용할 값). 저장 전이면 null.</summary>
+        /// <summary>저장·적용을 누른 뒤의 Git 설정(파일 저장이 실패해도 이번 실행에는 적용할 값). 저장 전이면 null.</summary>
         public GitSettings SavedGitSettings { get; private set; }
 
-        /// <summary>저장을 누른 뒤의 비교(diff) 설정. 저장 전이면 null.</summary>
+        /// <summary>저장·적용을 누른 뒤의 비교(diff) 설정. 저장 전이면 null.</summary>
         public DiffSettings SavedDiffSettings { get; private set; }
+
+        /// <summary>적용을 눌러 저장했다(창은 열려 있음). 소유자가 열린 Git 창·비교 창 등에 반영한다 — 저장 후 창이 닫힐 때와 같은 처리.</summary>
+        public event EventHandler Applied;
 
         private readonly DiffSettings _workingDiff;
         private readonly CaptureSettings _workingCapture = CaptureSettingsService.Load();
@@ -223,6 +227,8 @@ namespace Folderss
             DiffIgnoreWhitespaceCheck.IsChecked = _workingDiff.IgnoreWhitespace;
             FillCombo(DiffFallbackEncodingCombo, DiffEncodingChoices.Select(c => c.Text), Array.FindIndex(DiffEncodingChoices, c => c.Value == _workingDiff.FallbackEncoding));
             FillCombo(DiffToolPresetCombo, DiffSettingsService.DiffToolPresets.Select(p => p.Name), 0);
+            // 저장된 도구에 맞는 프리셋을 고른 상태로 연다. 맞는 것이 없으면(직접 고른 다른 도구) 비워 둔다.
+            DiffToolPresetCombo.SelectedIndex = DiffSettingsService.FindPresetIndex(_workingDiff.DiffToolPath);
             DiffToolPathBox.Text = _workingDiff.DiffToolPath;
             DiffToolArgsBox.Text = _workingDiff.DiffToolArguments;
             FillCombo(DiffToolModeCombo, DiffToolChoices.Select(c => c.Text), Array.FindIndex(DiffToolChoices, c => c.Value == _workingDiff.DiffToolMode));
@@ -569,6 +575,22 @@ namespace Folderss
 
         private void Save_Click(object sender, RoutedEventArgs e)
         {
+            if (SaveAll())
+                DialogResult = true;
+        }
+
+        /// <summary>저장과 같지만 창을 닫지 않는다. 이후 취소는 적용한 뒤의 변경만 버린다.</summary>
+        private void Apply_Click(object sender, RoutedEventArgs e)
+        {
+            if (!SaveAll())
+                return;
+            _originalTheme = ThemeManager.CurrentTheme;
+            Applied?.Invoke(this, EventArgs.Empty);
+        }
+
+        /// <summary>입력을 검사하고 모든 설정을 저장한다. 검사에서 막히면 false(아무것도 저장하지 않음).</summary>
+        private bool SaveAll()
+        {
             var duplicates = _workingBindings
                 .Where(b => b.Key != Key.None)
                 .GroupBy(b => new { b.Key, b.Modifiers })
@@ -585,7 +607,7 @@ namespace Folderss
                     "단축키 충돌",
                     MessageBoxButton.OK,
                     MessageBoxImage.Warning);
-                return;
+                return false;
             }
 
             int fontSize;
@@ -605,7 +627,7 @@ namespace Folderss
                 TabNav.SelectedIndex = 4;
                 ConsoleFontSizeBox.Focus();
                 ConsoleFontSizeBox.SelectAll();
-                return;
+                return false;
             }
 
             var preferredProfileKey = ConsoleDefaultProfileCombo.SelectedValue as string;
@@ -618,11 +640,11 @@ namespace Folderss
                     MessageBoxImage.Warning);
                 TabNav.SelectedIndex = 4;
                 ConsoleDefaultProfileCombo.Focus();
-                return;
+                return false;
             }
 
             if (!TryCollectGitSettings() || !TryCollectDiffSettings() || !TryCollectCaptureSettings())
-                return;
+                return false;
 
             CollectNetworkSettings();
             _workingConsoleSettings.FontSize = fontSize;
@@ -662,7 +684,7 @@ namespace Folderss
                     MessageBoxImage.Warning);
             }
 
-            DialogResult = true;
+            return true;
         }
 
         private static string SettingsDirectory

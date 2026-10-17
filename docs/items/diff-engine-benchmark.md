@@ -1,6 +1,6 @@
 # diff 방식 비교 — git CLI(현재)와 후보 5가지
 
-- 상태: Ready for Verification — Linux 측정 완료, Windows 측정 대기
+- 상태: Done — Linux·Windows 측정 완료. 결정: libgit2 xdiff를 프로세스 없이 쓰는 방식으로 앱 diff를 바꿈(docs/items/git-diff-libgit2.md)
 
 ## 요구사항
 
@@ -61,7 +61,27 @@
 - ms 단위가 작은 값(<1ms)은 측정 잡음이 크다. 순위보다 자릿수 차이로 읽어야 한다.
 - 메모리 표는 관리 힙만 잰 값이다. git(별도 프로세스)과 libgit2(네이티브)의 메모리는 잡히지 않는다.
 
-### 선택지에 대한 판단 (결정 전 참고)
+## 결과 (Windows 11, Ryzen 5 5600X 논리 12, .NET 8, git 2.53, AhnLab V3 켜짐) — 전체 표: `tools/DiffBench/results-windows.md`
+
+Windows에서 `libgit2 버퍼`(LibGit2Sharp가 감싸지 않은 `git_patch_from_buffers`·`git_patch_to_buf`를 P/Invoke로 직접 호출, 저장소·blob 쓰기 없음)를 7번째 방식으로 추가했다.
+
+| 방식 | 20건 합계 (ms) | git CLI 대비 기하평균 | 1만 줄 전부 다름 | 줄 끝만 다름 |
+|---|---:|---:|---:|---:|
+| git CLI (현재) | 21,353 | 1.0배 | 990 | 1,217 (변경 0줄) |
+| LibGit2Sharp (blob 쓰기) | 9,093 | 5.6배 | — | — |
+| **libgit2 버퍼** | **155** | **234배** | **7.0** | **3.5** |
+| DiffPlex | 715 | 127배 | — | — |
+| diff-match-patch | 713 | 146배 | — | — |
+| 직접 Myers | 798 | 133배 | — | — |
+| 직접 Histogram | 600 | 175배 | 356 | 90 |
+
+- **이 PC는 프로세스를 띄우는 비용 자체가 크다**: `cmd /c exit` 108ms, `whoami.exe` 516ms, `cmd\git.exe --version` 1,114ms, `mingw64\bin\git.exe --version` 702ms(7회 중앙값). git CLI는 diff 한 번에 약 1초가 든다. 보안 프로그램이 없는 PC에서는 훨씬 작을 것이다.
+- **libgit2 버퍼가 모든 면에서 낫다**: git과 같은 xdiff라 최악 경우(전부 다름·줄 끝)도 수 ms이고, 변경 줄 수는 19/20건 git CLI와 같다. Histogram 보강(한쪽에만 있는 줄 거르기·비용 상한)이 필요 없다.
+- **줄 끝**: Git for Windows 기본 `core.autocrlf=true`에서 `git diff --no-index`는 LF와 CRLF만 다른 파일을 차이 없음(종료 코드 0)으로 본다. libgit2 버퍼는 그대로 10,000줄 차이로 보인다. 앱의 두 파일 비교도 그동안 줄 끝 차이를 숨겼다.
+- **git 실행기**: PATH에서 먼저 찾는 `cmd\git.exe`는 실제 git(`mingw64\bin\git.exe`)을 한 번 더 띄워 diff 1회가 1.3초 → 0.65초로 갈린다(CLI로 남는 명령의 개선 후보).
+- **도구 버그**: Windows에서는 git 객체 파일이 읽기 전용이라 LibGit2Sharp 엔진이 임시 저장소(`%TEMP%\diffbench-repo-*`)를 지우지 못하고 남긴다.
+
+### 선택지에 대한 판단 (결정 전 참고 — Linux 측정 기준, Windows 결과로 libgit2 버퍼를 택함)
 
 - **git CLI 유지**: 최악 경우에 강하고 결과 품질도 검증돼 있다. 대신 git 설치가 필요하고, 매번 프로세스를 띄우는 고정 비용이 든다.
 - **관리 코드로 교체**:
@@ -84,9 +104,10 @@
 
 - `--selftest`: 무작위 2만 건, 직접 구현 2개 재구성 정확, Myers 최소 2만/2만.
 - 전체 측정: 20 × 6 = 120개 조합. 관리 코드 방식 결과는 모두 재구성 검증 통과. diff-match-patch 2건은 지원 안 함(10만 줄).
-- 미완: Windows에서 같은 측정.
+- Windows 측정(2026-10-17): 7가지 방식 × 20건, 관리 코드 방식 결과 모두 재구성 검증 통과.
 
 ## 변경 이력
 
 - 2026-10-16: 요청 접수, 벤치마크 작성·Linux 측정(Ready for Verification). 앱 코드는 바꾸지 않음.
 - 2026-10-16: 사용자 요청으로 HTML 보고서 추가(결론·요약 차트·경우별 히트맵·품질·메모리·방식별 판단).
+- 2026-10-17: Windows 측정, `libgit2 버퍼` 방식 추가. 앱 diff를 libgit2로 바꾸기로 결정(Done). HTML 보고서(`docs/reports/diff-engine-benchmark.html`)는 Linux 결과 그대로.

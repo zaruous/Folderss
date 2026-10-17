@@ -539,6 +539,52 @@ namespace Folderss.SearchTests
             Assert.Equal(new[] { "difftool", "--no-prompt", "--no-index", "--", @"C:\a b\x.txt", @"D:\y.txt" }, files);
         }
 
+        [Fact]
+        public void IsToolRunSuccess_IgnoresGitWarnings_ButNotErrors()
+        {
+            // core.autocrlf=true에서 LF 파일이면 git difftool이 도구를 띄운 뒤에도 이런 경고를 낸다(실제 출력).
+            var warnings = "warning: in the working copy of 'C:\\a.txt', LF will be replaced by CRLF the next time Git touches it\n"
+                           + "warning: in the working copy of 'C:\\b.txt', LF will be replaced by CRLF the next time Git touches it\n";
+            Assert.True(GitDiffCommands.IsToolRunSuccess(new GitResult { ExitCode = 1, StdErr = warnings }, noIndex: true));
+            Assert.True(GitDiffCommands.IsToolRunSuccess(new GitResult { ExitCode = 0, StdErr = "" }, noIndex: false));
+            Assert.False(GitDiffCommands.IsToolRunSuccess(new GitResult { ExitCode = 1, StdErr = warnings }, noIndex: false));
+            Assert.False(GitDiffCommands.IsToolRunSuccess(new GitResult { ExitCode = 0, StdErr = warnings + "fatal: cannot run tool\n" }, noIndex: false));
+            Assert.False(GitDiffCommands.IsToolRunSuccess(new GitResult { ExitCode = 0, TimedOut = true }, noIndex: false));
+        }
+
+        [Fact]
+        public void ResolveToolPath_UsesWaitingBeyondCompare()
+        {
+            var bc = Path.Combine(_root, "Beyond Compare 4");
+            Directory.CreateDirectory(bc);
+            var bcompare = Path.Combine(bc, "BCompare.exe");
+            File.WriteAllText(bcompare, "");
+            // BComp.exe가 없으면 그대로.
+            Assert.Equal(bcompare, DiffSettingsService.ResolveToolPath(bcompare));
+            File.WriteAllText(Path.Combine(bc, "BComp.exe"), "");
+            Assert.Equal(Path.Combine(bc, "BComp.exe"), DiffSettingsService.ResolveToolPath(bcompare));
+            Assert.Equal(Path.Combine(bc, "BComp.exe"), DiffSettingsService.ResolveToolPath("\"" + bcompare + "\""));
+            // 다른 도구·빈 값은 그대로.
+            Assert.Equal(@"C:\WinMerge\WinMergeU.exe", DiffSettingsService.ResolveToolPath(@"C:\WinMerge\WinMergeU.exe"));
+            Assert.Equal("", DiffSettingsService.ResolveToolPath(""));
+            // 프리셋도 기다리는 실행 파일을 쓴다.
+            Assert.All(DiffSettingsService.DiffToolPresets.Single(p => p.Name == "Beyond Compare").Candidates,
+                path => Assert.EndsWith(@"\BComp.exe", path));
+        }
+
+        [Fact]
+        public void FindPresetIndex_MatchesSavedExecutable()
+        {
+            int IndexOf(string name) => Array.FindIndex(DiffSettingsService.DiffToolPresets, p => p.Name == name);
+            Assert.Equal(IndexOf("Beyond Compare"), DiffSettingsService.FindPresetIndex(@"C:\Program Files\Beyond Compare 4\BComp.exe"));
+            // 예전 프리셋으로 저장된 BCompare.exe, 따옴표, 대소문자도 맞춘다.
+            Assert.Equal(IndexOf("Beyond Compare"), DiffSettingsService.FindPresetIndex(@"""D:\Tools\BC\bcompare.exe"""));
+            Assert.Equal(IndexOf("WinMerge"), DiffSettingsService.FindPresetIndex(@"C:\Program Files\WinMerge\WinMergeU.exe"));
+            Assert.Equal(IndexOf("Visual Studio Code"), DiffSettingsService.FindPresetIndex(@"C:\Users\me\AppData\Local\Programs\Microsoft VS Code\Code.exe"));
+            Assert.Equal(-1, DiffSettingsService.FindPresetIndex(@"C:\Tools\other.exe"));
+            Assert.Equal(-1, DiffSettingsService.FindPresetIndex(""));
+        }
+
         [SkippableFact]
         public async Task RealGit_CustomDifftool_ComparesTwoFilesOutsideRepository()
         {
