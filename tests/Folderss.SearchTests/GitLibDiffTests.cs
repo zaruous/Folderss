@@ -278,7 +278,7 @@ namespace Folderss.SearchTests
         [Fact]
         public void NativeLibraryName_MatchesLibGit2Sharp()
         {
-            Assert.Equal("git2-" + GlobalSettings.Version.LibGit2CommitSha, GitLibDiff.NativeLibraryName);
+            Assert.Equal(GitLibDiff.NativeLibraryName, "git2-" + GlobalSettings.Version.LibGit2CommitSha);
         }
     }
 }
