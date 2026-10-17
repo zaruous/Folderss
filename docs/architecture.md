@@ -397,7 +397,7 @@ Folderss/
   diff 보기·공백 무시·대체 인코딩·외부 도구는 `DiffSettings`로 분리돼 Git 창·두 파일 비교 창·HTML 보고서가 함께 쓴다.
   `DiffSettingsService.Load`는 diff-settings.xml이 없으면 옛 git-settings.xml의 같은 값(루트 속성 `ignoreWhitespace`·`fallbackEncoding`·`diffView`,
   `diffTool` 요소)을 읽어 이관한다 — 한 번 저장하면 새 파일만 읽는다(`GitSettingsService.Save`는 더 이상 그 값을 쓰지 않음).
-  Git 창의 `설정…`은 `MainWindow.OpenSettings(gitWindow, "Git")`, 외부 도구 미지정 안내는 `"Diff"` 탭을 연다. 저장하면 `SavedGitSettings`·`SavedDiffSettings`
+  Git 창의 `설정…`은 `MainWindow.OpenSettings(gitWindow, "Git")`, 외부 도구 미지정 안내는 `"Diff"` 탭을 연다. 저장(또는 창을 닫지 않는 `적용` — `SettingsWindow.Applied` → `MainWindow.ApplySavedSettings`)하면 `SavedGitSettings`·`SavedDiffSettings`
   (파일 저장 실패여도 이번 실행 값)를 `MainWindow._gitSettings`·`_diffSettings`에 두고 열린 모든 `GitWindow.ApplySettings(git, diff)`와
   `FileCompareWindow.ApplySettings(diff)`에 알린다 — git 경로가 바뀌면 재확인+재탐색, 탐색 옵션이면 재탐색,
   표시 옵션이면 상세만 다시 읽음. `GitCommandRunner.ConfiguredGitPath`는 정적이라 마지막으로 반영한 설정이 모든 창에 적용된다.
@@ -457,7 +457,7 @@ Folderss/
   `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,
   동시 실행 제한 밖(`throttle: false`), 창 수명 토큰 미사용(Git 창을 닫아도 도구는 유지). 2초 안에 끝나면 "바로 종료" 안내.
 - 두 파일 비교: 폴더 패널에서 파일 두 개(폴더 제외)를 고르고 우클릭하면 셸 메뉴 맨 위에 `선택한 두 파일 비교`가 붙고, ⋯ 메뉴 `두 파일 비교…`도 같다
-  (`FolderBrowser.GetSelectedFilePair` — 목록에 보이는 순서로 왼쪽/오른쪽, 파일 두 개가 아니면 null). `MainWindow.OpenFileCompare`가 `FileCompareWindow`를 연다 —
+  (`FolderBrowser.GetSelectedFilePair` — 목록에 보이는 순서로 왼쪽/오른쪽, 파일 두 개가 아니면 null). `MainWindow.OpenFileCompare`(⋯ 메뉴·우클릭·폴더 비교 창 공통)는 설정 > 비교에 외부 비교 도구가 있으면 `DiffToolLauncher`(`git difftool --no-index`, 원래 두 파일)로 바로 열고(도구를 못 띄우면 알린 뒤 내장 창), 없으면 `FileCompareWindow`를 연다 —
   Git diff 경로를 그대로 재사용한다: `GitDiffCommands.Files`(`diff --no-index -- <왼쪽> <오른쪽>`, 저장소·형상 관리 불필요) → `GitLibDiff`(git 없이도 됨, 실패 시 CLI) → `GitDiffView`.
   창 위쪽에 양쪽 파일 이름(굵게)과 위치(폴더)를 보이고 `⇄ 좌우 바꾸기`로 두 경로를 바꿔 다시 읽는다. `--no-index` 출력의 경로는 git이 앞의 `/`를 떼는 등
   원래 경로로 되돌릴 수 없어, UTF-16 BOM 재비교는 `GitEncodingDiff.ExpandAsync`(저장소 상대 경로) 대신 받은 두 경로를 직접 읽는
@@ -474,7 +474,9 @@ Folderss/
   `FileOperationJournal`을 백그라운드에서 한 번에 하나씩 거치고, 끝나면 두 패널 새로 고침·다시 비교·이력 새로 고침(`JournalChanged`로 다른 비교 창도).
   패널 잠금은 소유자 `MainWindow.IsPathPinLocked`/`IsDestinationPinLocked`로 검사한다. 파일 더블클릭·Enter는 Windows 기본 프로그램(`Process.Start`, ShellExecute)으로 연다(`FileOperationService.IsExecutable`이면 확인 후, 기본 아니요) — 메인 창 뷰어 탭은 비교 창에 가려지므로 쓰지 않는다. 우클릭 `반대쪽 같은 이름 파일과 비교`는 `CompareOverlay.CounterpartPath`(기준의 같은 상대 경로)로 짝을 찾아 `FileCompareWindow`를 연다. 툴바 `⇆ 파일 비교`는 두 패널에서 하나씩 고른 파일을 그대로 짝짓고(`CompareOverlay.CrossPanelFilePair`, 이름 무관), `같은 이름 따라 선택` 체크(창을 닫으면 처음 값 켬)를 끄면 반대쪽 선택을 바꾸지 않는다.
 - 외부 도구 실행 공용: `DiffToolLauncher.RunAsync`가 미지정·실행 파일 없음·git 설정 difftool 없음 안내와 실행을 맡는다. 결과 표시는 호출 측
-  (Git 창은 출력 창, 두 파일 비교 창은 메시지 상자). 성공 판정은 `GitDiffCommands.IsSuccess(result, request.NoIndex)` + stderr 없음.
+  (Git 창은 출력 창, 두 파일 비교 창·메인 창은 메시지 상자). 성공 판정은 `GitDiffCommands.IsToolRunSuccess` — 종료 코드 성공 + stderr에 `warning:` 말고 없음
+  (core.autocrlf의 "LF will be replaced by CRLF" 경고를 실패로 보지 않는다). 실행 경로는 `DiffSettingsService.ResolveToolPath`로 Beyond Compare의
+  `BCompare.exe`를 같은 폴더의 `BComp.exe`로 바꾼다(비교를 닫을 때까지 기다려야 git이 임시 파일을 지우지 않는다).
 - HTML 보고서: `GitDiffView.TextLoader`(호스트가 설정 — 요청과 범위를 받아 diff 텍스트를 돌려주고 실패는 예외)가 있으면 `HTML 보고서…` 버튼이 보인다.
   `DiffReportExporter`: `DiffReportDialog`(배치 양옆/한 줄 × 범위 변경점만/앞뒤 10줄/전체 파일, 처음 범위 = 지금 보기 모드) → 그 범위로 다시 읽기
   → 저장 위치 → UTF-8 저장 → (선택) 기본 브라우저. 보고서 범위가 화면과 다를 수 있어 화면 줄을 재사용하지 않고 호스트가 다시 실행한다.

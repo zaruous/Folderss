@@ -259,6 +259,17 @@ namespace Folderss.Services
         }
 
         /// <summary>
+        /// 외부 도구(<c>git difftool</c>) 실행 성공 여부. 종료 코드가 성공이고 stderr에 경고(<c>warning:</c>) 말고는 없어야 한다.
+        /// core.autocrlf=true(Git for Windows 기본)면 LF 파일마다 "LF will be replaced by CRLF" 경고가 나와 도구가 떠도 실패로 보이던 문제용.
+        /// </summary>
+        public static bool IsToolRunSuccess(GitResult result, bool noIndex)
+        {
+            return IsSuccess(result, noIndex)
+                   && (result.StdErr ?? string.Empty).Split('\n').Select(line => line.Trim())
+                       .All(line => line.Length == 0 || line.StartsWith("warning:", System.StringComparison.Ordinal));
+        }
+
+        /// <summary>
         /// 외부 도구 실행 인수. <paramref name="mode"/>가 <see cref="GitDiffToolMode.Custom"/>이면 <c>-c difftool.folderss.cmd=…</c>로
         /// 이번 실행에만 도구를 등록한다(사용자 .gitconfig는 건드리지 않음). <see cref="GitDiffToolMode.GitConfig"/>면 사용자 설정 도구를 그대로 쓴다.
         /// </summary>

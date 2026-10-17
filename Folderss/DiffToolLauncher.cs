@@ -17,7 +17,7 @@ namespace Folderss
     {
         public const string QuickExitHint =
             "비교 도구가 바로 종료됐습니다. 도구 창이 비어 있거나 파일을 못 찾으면, 창을 닫을 때까지 기다리도록 인수를 설정하세요 " +
-            "(git은 도구가 끝나면 임시 파일을 지웁니다. VS Code: --wait, WinMerge: 단일 인스턴스 옵션 끄기).";
+            "(git은 도구가 끝나면 임시 파일을 지웁니다. VS Code: --wait, WinMerge: 단일 인스턴스 옵션 끄기, Beyond Compare: BComp.exe).";
 
         public sealed class Run
         {
@@ -60,15 +60,15 @@ namespace Folderss
                 return null;
             }
 
-            var args = GitDiffCommands.ExternalTool(request, mode, settings.DiffToolPath, settings.DiffToolArguments);
+            var args = GitDiffCommands.ExternalTool(request, mode, DiffSettingsService.ResolveToolPath(settings.DiffToolPath), settings.DiffToolArguments);
             log?.Invoke("외부 비교 도구 실행: " + GitCommandRunner.FormatCommandLine(args));
 
             var watch = System.Diagnostics.Stopwatch.StartNew();
             var result = await GitCommandRunner.RunAsync(workingDirectory, args, Timeout.InfiniteTimeSpan, CancellationToken.None, throttle: false);
             watch.Stop();
 
-            // --no-index(두 파일 비교)는 차이가 있으면 difftool도 종료 코드 1이다.
-            var succeeded = GitDiffCommands.IsSuccess(result, request.NoIndex) && string.IsNullOrWhiteSpace(result.StdErr);
+            // --no-index(두 파일 비교)는 차이가 있으면 difftool도 종료 코드 1이다. core.autocrlf 경고(warning:)는 실패가 아니다.
+            var succeeded = GitDiffCommands.IsToolRunSuccess(result, request.NoIndex);
             return new Run
             {
                 Result = result,

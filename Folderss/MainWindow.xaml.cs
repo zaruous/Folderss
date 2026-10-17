@@ -777,8 +777,47 @@ namespace Folderss
             OpenFileCompare(files);
         }
 
-        /// <summary>[왼쪽(변경 전), 오른쪽(변경 후)] 두 파일 비교 창을 연다.</summary>
+        /// <summary>
+        /// [왼쪽(변경 전), 오른쪽(변경 후)] 두 파일을 비교한다(⋯ 메뉴·우클릭·폴더 비교 창 공통).
+        /// 설정 > 비교에서 외부 비교 도구를 골랐으면 그 도구로 바로 열고, 아니면 내장 비교 창을 연다.
+        /// </summary>
         private void OpenFileCompare(string[] files)
+        {
+            if (CurrentDiffSettings.DiffToolMode != GitDiffToolMode.None)
+                OpenExternalFileCompare(files);
+            else
+                OpenBuiltInFileCompare(files);
+        }
+
+        /// <summary>외부 비교 도구(<c>git difftool --no-index</c>, 원래 두 파일을 그대로 넘김)로 연다. 도구를 못 띄우면 알린 뒤 내장 비교 창을 연다.</summary>
+        private async void OpenExternalFileCompare(string[] files)
+        {
+            var settings = CurrentDiffSettings.Clone();
+            GitCommandRunner.ConfiguredGitPath = CurrentGitSettings.GitExecutablePath;
+            try
+            {
+                // 도구 창을 닫을 때까지 돌아오지 않는다(BComp.exe·--wait 등). 사전 검사에서 막히면 안내 후 null.
+                var run = await DiffToolLauncher.RunAsync(this, GitDiffCommands.Files(files[0], files[1], settings.IgnoreWhitespace), settings, null,
+                    () => OpenSettings(this, "Diff"), null, System.Threading.CancellationToken.None);
+                if (run != null && run.Succeeded)
+                    return;
+                if (run != null)
+                {
+                    var detail = string.IsNullOrWhiteSpace(run.Result.StdErr) ? "종료 코드 " + run.Result.ExitCode : run.Result.StdErr.Trim();
+                    MessageBox.Show(this, "외부 비교 도구가 실패해 내장 비교 창으로 엽니다.\n$ " + run.Result.CommandLine + "\n\n" + detail, "두 파일 비교",
+                        MessageBoxButton.OK, MessageBoxImage.Warning);
+                }
+            }
+            catch (Exception ex)
+            {
+                // git이 없음(FileNotFoundException) 등. async void라 여기서 막는다.
+                MessageBox.Show(this, "외부 비교 도구를 실행하지 못해 내장 비교 창으로 엽니다: " + ex.Message, "두 파일 비교",
+                    MessageBoxButton.OK, MessageBoxImage.Warning);
+            }
+            OpenBuiltInFileCompare(files);
+        }
+
+        private void OpenBuiltInFileCompare(string[] files)
         {
             FileCompareWindow window = null;
             window = new FileCompareWindow(files[0], files[1], CurrentDiffSettings, CurrentGitSettings.GitExecutablePath,
@@ -2044,21 +2083,27 @@ namespace Folderss
             var win = new SettingsWindow(_keyBindingService, _viewerConfigService, CurrentGitSettings, CurrentDiffSettings) { Owner = owner ?? this };
             if (tab != null)
                 win.SelectTab(tab);
+            // 적용: 창을 닫지 않고 저장했을 때도 저장 후 닫을 때와 같이 반영한다.
+            win.Applied += (s, e) => ApplySavedSettings(win);
             if (win.ShowDialog() == true)
-            {
-                // 콘솔 패널은 설정을 자체 캐시하므로 저장 직후 다시 읽혀 열린 탭의 폰트 크기를 바로 바꾼다.
-                _consolePanel?.ApplySettings();
+                ApplySavedSettings(win);
+        }
 
-                // 열려 있는 Git 창·두 파일 비교 창에도 바로 반영한다.
-                if (win.SavedGitSettings != null && win.SavedDiffSettings != null)
-                {
-                    _gitSettings = win.SavedGitSettings;
-                    _diffSettings = win.SavedDiffSettings;
-                    foreach (var gitWindow in Application.Current.Windows.OfType<GitWindow>())
-                        gitWindow.ApplySettings(_gitSettings, _diffSettings);
-                    foreach (var compareWindow in Application.Current.Windows.OfType<FileCompareWindow>())
-                        compareWindow.ApplySettings(_diffSettings);
-                }
+        /// <summary>설정 창에서 저장(또는 적용)한 값을 열린 화면에 반영한다.</summary>
+        private void ApplySavedSettings(SettingsWindow win)
+        {
+            // 콘솔 패널은 설정을 자체 캐시하므로 저장 직후 다시 읽혀 열린 탭의 폰트 크기를 바로 바꾼다.
+            _consolePanel?.ApplySettings();
+
+            // 열려 있는 Git 창·두 파일 비교 창에도 바로 반영한다.
+            if (win.SavedGitSettings != null && win.SavedDiffSettings != null)
+            {
+                _gitSettings = win.SavedGitSettings;
+                _diffSettings = win.SavedDiffSettings;
+                foreach (var gitWindow in Application.Current.Windows.OfType<GitWindow>())
+                    gitWindow.ApplySettings(_gitSettings, _diffSettings);
+                foreach (var compareWindow in Application.Current.Windows.OfType<FileCompareWindow>())
+                    compareWindow.ApplySettings(_diffSettings);
             }
         }
 
