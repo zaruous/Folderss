@@ -10,6 +10,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
+using System.Windows.Data;
 using System.Windows.Input;
 using System.Windows.Threading;
 using Folderss.Controls;
@@ -1402,6 +1403,36 @@ namespace Folderss
             if (ReferenceEquals(tree, UnchangedTree))
                 return tree.SelectedItem is GitChangeNode node ? new List<string> { node.Path } : new List<string>();
             return TreeNodes(tree).Where(node => node.IsMarked).Select(node => node.Path).ToList();
+        }
+
+        /// <summary>
+        /// 저장소·브랜치·보낼/받을 커밋·stash·워킹트리·로그 목록: Ctrl+C는 보이는 행 텍스트를 복사한다(여러 개면 한 줄에 하나).
+        /// ListBox·ListView는 DataGrid와 달리 기본 복사가 없다. 고른 것이 없으면 키를 가로채지 않는다.
+        /// </summary>
+        private void RowCopy_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.Key != Key.C || Keyboard.Modifiers != ModifierKeys.Control)
+                return;
+            var list = (ListBox)sender;
+            var lines = list.SelectedItems.Cast<object>().Select(item => RowCopyText(list, item)).ToList();
+            if (lines.Count == 0)
+                return;
+            e.Handled = true;
+            ClipboardService.TrySetDataObject(string.Join(Environment.NewLine, lines));
+        }
+
+        /// <summary>
+        /// 보이는 행 그대로: 저장소는 이름·요약 두 줄을 탭으로, 로그는 글자 열(그래프 제외)을 탭으로(표계산 붙여넣기),
+        /// 나머지는 <see cref="ItemsControl.DisplayMemberPath"/> 값. 정렬용 앞뒤 공백(현재 브랜치가 아닌 줄의 들여쓰기)은 뺀다.
+        /// </summary>
+        private static string RowCopyText(ListBox list, object item)
+        {
+            if (item is RepositoryRow row)
+                return row.Title + "\t" + row.Summary;
+            var paths = list is ListView { View: GridView grid }
+                ? grid.Columns.Select(column => (column.DisplayMemberBinding as Binding)?.Path.Path).Where(path => path != null)
+                : new[] { list.DisplayMemberPath };
+            return string.Join("\t", paths.Select(path => Convert.ToString(item.GetType().GetProperty(path)?.GetValue(item)))).Trim(' ');
         }
 
         /// <summary>스테이지/언스테이지 대상: 평면 보기는 선택한 항목들, 트리 보기는 고른 노드들(폴더면 그 아래 전체).</summary>

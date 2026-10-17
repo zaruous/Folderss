@@ -236,6 +236,7 @@
                            TextTrimming="CharacterEllipsis"
                            Foreground="{DynamicResource SecondaryText}"/>
                 <ListBox x:Name="RepoList"
+                         PreviewKeyDown="RowCopy_PreviewKeyDown"
                          BorderThickness="0,1,0,0"
                          SelectionChanged="RepoList_SelectionChanged"
                          PreviewMouseRightButtonDown="RepoList_PreviewMouseRightButtonDown"
@@ -510,6 +511,7 @@
                     <ListBox x:Name="BranchList"
                              FontFamily="Consolas"
                              DisplayMemberPath="DisplayText"
+                             PreviewKeyDown="RowCopy_PreviewKeyDown"
                              MouseDoubleClick="BranchList_MouseDoubleClick"/>
                 </DockPanel>
 
@@ -550,9 +552,11 @@
                         </Grid.RowDefinitions>
                         <TextBlock x:Name="OutgoingHeader" Grid.Row="0" FontWeight="SemiBold" Text="보낼 커밋 (push)" Margin="2,0,2,4"/>
                         <ListBox x:Name="OutgoingList" Grid.Row="1" DisplayMemberPath="ListText"
+                                 PreviewKeyDown="RowCopy_PreviewKeyDown"
                                  SelectionChanged="RemoteCommitList_SelectionChanged"/>
                         <TextBlock x:Name="IncomingHeader" Grid.Row="2" FontWeight="SemiBold" Text="받을 커밋 (pull)" Margin="2,8,2,4"/>
                         <ListBox x:Name="IncomingList" Grid.Row="3" DisplayMemberPath="ListText"
+                                 PreviewKeyDown="RowCopy_PreviewKeyDown"
                                  SelectionChanged="RemoteCommitList_SelectionChanged"/>
                     </Grid>
 
@@ -588,6 +592,7 @@
                              FontFamily="Consolas"
                              DisplayMemberPath="DisplayText"
                              SelectionChanged="StashList_SelectionChanged"
+                             PreviewKeyDown="RowCopy_PreviewKeyDown"
                              MouseDoubleClick="StashApply_Click"/>
                     <GridSplitter Grid.Row="2" Height="5" HorizontalAlignment="Stretch" Background="Transparent"/>
                     <controls:GitDiffView x:Name="StashDiff" Grid.Row="3" Margin="0,4,0,0"/>
@@ -613,6 +618,7 @@
                     <ListBox x:Name="WorktreeList"
                              FontFamily="Consolas"
                              DisplayMemberPath="DisplayText"
+                             PreviewKeyDown="RowCopy_PreviewKeyDown"
                              MouseDoubleClick="WorktreeList_MouseDoubleClick"/>
                 </DockPanel>
 
@@ -636,6 +642,7 @@
                     <ListView x:Name="LogList" Grid.Row="1"
                               SelectionMode="Single"
                               SelectionChanged="LogList_SelectionChanged"
+                              PreviewKeyDown="RowCopy_PreviewKeyDown"
                               ContextMenuOpening="LogList_ContextMenuOpening"
                               VirtualizingPanel.IsVirtualizing="True"
                               VirtualizingPanel.VirtualizationMode="Recycling">
