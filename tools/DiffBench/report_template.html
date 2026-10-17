@@ -1,0 +1,347 @@
+<title>diff 엔진 벤치마크</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<style>
+/* 레이아웃: 한 단 보고서. 결론 → 요약 차트 → 경우별 히트맵(표) → 품질·메모리 → 주의점 → 방법. 숫자는 고정폭. */
+:root {
+  --bg: #f7f8f9;
+  --surface: #ffffff;
+  --ink: #15191e;
+  --ink-2: #4b535c;
+  --ink-3: #737b85;
+  --rule: #dfe3e8;
+  --accent: #2a78d6;
+  --cool: #2a78d6;
+  --warm: #e34948;
+  --neutral: #f0efec;
+  --base-bar: #9aa1a9;
+  --code-bg: #eef1f4;
+  --pill-warn-bg: #fff4dc;
+  --pill-warn-ink: #7a5200;
+  --font-body: "IBM Plex Sans KR", "Apple SD Gothic Neo", "Malgun Gothic", system-ui, sans-serif;
+  --font-mono: "IBM Plex Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #121416; --surface: #1a1d20; --ink: #eceef0; --ink-2: #b4bbc3; --ink-3: #8a929b; --rule: #2c3136;
+    --accent: #3987e5; --cool: #3987e5; --warm: #e66767; --neutral: #383835; --base-bar: #6b737c; --code-bg: #22262a;
+    --pill-warn-bg: #3a2f14; --pill-warn-ink: #f2c66b; color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #121416; --surface: #1a1d20; --ink: #eceef0; --ink-2: #b4bbc3; --ink-3: #8a929b; --rule: #2c3136;
+  --accent: #3987e5; --cool: #3987e5; --warm: #e66767; --neutral: #383835; --base-bar: #6b737c; --code-bg: #22262a;
+  --pill-warn-bg: #3a2f14; --pill-warn-ink: #f2c66b; color-scheme: dark;
+}
+body { background: var(--bg); color: var(--ink); font-family: var(--font-body); font-size: 15px; line-height: 1.65; }
+.page { max-width: 1060px; margin: 0 auto; padding-block: 40px 72px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); display: grid; gap: 44px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; line-height: 1.3; }
+h1 { font-size: 30px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 20px; font-weight: 600; }
+h3 { font-size: 15px; font-weight: 600; }
+p { margin: 0; max-width: 68ch; }
+.num, td, .mono { font-variant-numeric: tabular-nums; }
+.mono, code { font-family: var(--font-mono); font-size: 0.92em; }
+code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+section { display: grid; gap: 16px; min-width: 0; }
+.eyebrow { font-size: 12px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+header { display: grid; gap: 12px; }
+.meta { display: flex; flex-wrap: wrap; gap: 8px 16px; color: var(--ink-2); font-size: 13px; }
+.pill { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; font-weight: 600; padding: 2px 10px; border-radius: 999px; background: var(--pill-warn-bg); color: var(--pill-warn-ink); }
+.lede { font-size: 17px; color: var(--ink-2); max-width: 70ch; }
+.findings { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 12px; }
+.findings li { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 14px 16px; display: grid; gap: 4px; align-content: start; }
+.findings .big { font-family: var(--font-mono); font-size: 22px; font-weight: 500; color: var(--ink); }
+.findings .what { font-weight: 600; }
+.findings .why { font-size: 13px; color: var(--ink-2); }
+.panel { background: var(--surface); border: 1px solid var(--rule); border-radius: 8px; padding: 18px; min-width: 0; }
+.scroll { overflow-x: auto; }
+svg text { font-family: var(--font-body); }
+.note { font-size: 13px; color: var(--ink-2); }
+table { border-collapse: collapse; width: 100%; font-size: 13px; }
+th, td { padding: 6px 8px; text-align: right; border-bottom: 1px solid var(--rule); white-space: nowrap; }
+th { font-weight: 600; color: var(--ink-2); font-size: 12px; }
+th:first-child, td:first-child, th.l, td.l { text-align: left; }
+.heat td.cell { font-family: var(--font-mono); padding: 5px 8px; min-width: 76px; cursor: default; }
+.heat td.cell:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.heat td.cell .r { display: block; font-size: 11px; color: var(--ink-2); font-family: var(--font-body); }
+.heat td.na { color: var(--ink-3); font-family: var(--font-body); font-size: 12px; }
+.heat tr.group th { text-align: left; color: var(--ink); font-size: 13px; padding-top: 16px; background: transparent; }
+.heat td.case { white-space: normal; min-width: 180px; }
+.heat td.case .d { display: block; color: var(--ink-2); font-size: 12px; }
+.legend { display: flex; flex-wrap: wrap; gap: 4px; align-items: center; font-size: 12px; color: var(--ink-2); }
+.legend span.sw { display: inline-block; padding: 2px 8px; border-radius: 4px; color: var(--ink); }
+.cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 16px; }
+.cols > * { min-width: 0; }
+ul.plain { margin: 0; padding-left: 20px; display: grid; gap: 6px; max-width: 75ch; }
+.verdict { display: grid; gap: 10px; }
+.verdict .row { display: grid; grid-template-columns: 150px 1fr; gap: 12px; padding: 10px 0; border-bottom: 1px solid var(--rule); }
+.verdict .row:last-child { border-bottom: 0; }
+.verdict .tag { font-weight: 600; }
+.tag.keep::before, .tag.no::before, .tag.maybe::before { content: ""; display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 8px; vertical-align: middle; }
+.tag.keep::before { background: var(--cool); }
+.tag.maybe::before { background: var(--base-bar); }
+.tag.no::before { background: var(--warm); }
+pre { background: var(--code-bg); border-radius: 6px; padding: 12px 14px; overflow-x: auto; margin: 0; font-family: var(--font-mono); font-size: 13px; }
+details summary { cursor: pointer; font-weight: 600; }
+#tip { position: fixed; z-index: 20; pointer-events: none; background: var(--surface); color: var(--ink); border: 1px solid var(--rule); border-radius: 6px; padding: 8px 10px; font-size: 12px; line-height: 1.5; box-shadow: 0 4px 16px rgba(0,0,0,.12); max-width: 260px; }
+#tip b { font-weight: 600; }
+#tip .k { color: var(--ink-2); }
+@media (max-width: 560px) {
+  h1 { font-size: 24px; }
+  .verdict .row { grid-template-columns: 1fr; gap: 4px; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+
+<div class="page">
+  <header>
+    <div class="eyebrow">Folderss · 두 파일 비교 엔진 검토</div>
+    <h1>diff 엔진 벤치마크</h1>
+    <div class="meta">
+      <span class="pill">⚠ Linux 측정 · Windows 재측정 전</span>
+      <span id="env"></span>
+    </div>
+    <p class="lede">앱의 두 파일 비교는 지금 매번 <code>git diff --no-index</code> 프로세스를 띄웁니다. 같은 일을 프로세스 안에서 하는 후보 5가지를 20가지 경우로 측정해 비교했습니다. 앱 코드는 바꾸지 않았습니다.</p>
+  </header>
+
+  <section>
+    <h2>결론</h2>
+    <ul class="findings">
+      <li><span class="what">보통 수정은 프로세스 안 방식이 빠름</span><span class="big" id="f-typical"></span><span class="why">1줄 수정·블록 추가·곳곳 1% 수정 등 12건, 관리 코드 4방식의 중앙값입니다. git 시간의 대부분은 프로세스를 띄우는 고정 비용입니다.</span></li>
+      <li><span class="what">최악 경우는 git이 압도적</span><span class="big" id="f-worst"></span><span class="why">전부 다름·50% 수정·줄 끝 변경 4건, 관리 코드 4방식의 중앙값입니다(최대 약 40×). git(xdiff)은 한쪽에만 있는 줄을 미리 걸러 내는 것으로 보입니다(추정).</span></li>
+      <li><span class="what">결과 품질은 사실상 같음</span><span class="big">19 / 20</span><span class="why">변경 줄 수가 모든 방식에서 같았습니다. 순서를 뒤섞은 경우만 다릅니다.</span></li>
+      <li><span class="what">LibGit2Sharp는 오히려 느림</span><span class="big" id="f-libgit"></span><span class="why">엔진은 git과 같지만, 비교마다 두 파일을 압축해 저장소에 써야 합니다.</span></li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>방식별 요약</h2>
+    <p class="note">20건 시간의 git CLI 대비 기하평균입니다. 1.0보다 크면 git보다 빠릅니다. 막대에 마우스를 올리면 합계·최고 기록 횟수를 볼 수 있습니다.</p>
+    <div class="panel scroll"><svg id="summary-chart" role="img" aria-label="방식별 git CLI 대비 속도 막대 차트"></svg></div>
+    <div class="panel scroll">
+      <table id="summary-table">
+        <thead><tr><th>방식</th><th class="l">종류</th><th>20건 합계 (ms)</th><th>git 대비</th><th>가장 빠름</th><th>지원 안 함</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <section>
+    <h2>경우별 시간</h2>
+    <p class="note">칸의 숫자는 중앙값(ms)이고, 아래 줄은 git CLI 대비 배수입니다. 파랑은 git보다 빠름, 빨강은 git보다 느림이며 진할수록 차이가 큽니다. 칸에 마우스를 올리거나 Tab으로 이동하면 변경 줄 수·메모리를 볼 수 있습니다.</p>
+    <div class="legend" id="legend"></div>
+    <div class="panel scroll"><table class="heat" id="heat"></table></div>
+  </section>
+
+  <section class="cols">
+    <div class="panel" style="display:grid;gap:10px;align-content:start">
+      <h3>결과 품질 (변경 줄 수 = 삭제 + 추가)</h3>
+      <p class="note">관리 코드 4가지는 결과로 옛 파일을 새 파일로 정확히 재구성되는지 매 경우 확인했습니다. 19건은 여섯 방식이 모두 같은 줄 수를 냈고, 다른 1건은 아래와 같습니다.</p>
+      <div class="scroll"><table id="quality"></table></div>
+      <p class="note">Myers 계열이 최소(3,826줄)입니다. git은 비용 상한 휴리스틱 때문에 26줄 더 많고, Histogram은 드문 줄을 기준점으로 삼는 방식이라 150줄 더 많습니다.</p>
+    </div>
+    <div class="panel" style="display:grid;gap:10px;align-content:start">
+      <h3>메모리 (관리 힙, 1회)</h3>
+      <p class="note">git CLI는 별도 프로세스이고 LibGit2Sharp는 네이티브 메모리를 써서 거의 잡히지 않습니다. 관리 코드 방식은 파일 크기의 약 10배를 할당합니다.</p>
+      <div class="scroll"><table id="memory"></table></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>방식별 판단</h2>
+    <div class="panel verdict" id="verdict">
+      <div class="row"><span class="tag keep">git CLI (현재)</span><span>최악 경우에 강하고 결과도 검증돼 있습니다. 약점은 git 설치가 필수라는 점과, 매번 프로세스를 띄우는 고정 비용입니다(Windows에서 더 큼).</span></div>
+      <div class="row"><span class="tag maybe">직접 Histogram</span><span>기하평균 1위(1.4배)입니다. 그대로는 최악 경우가 수백 ms라 교체하기 어렵습니다. xdiff처럼 한쪽에만 있는 줄을 미리 거르고 비용 상한을 두는 처리, 바이트 동일 선검사, 공백 무시, unified 출력이 함께 필요합니다.</span></div>
+      <div class="row"><span class="tag maybe">DiffPlex</span><span>안정적인 라이브러리입니다(Apache-2.0). 3-way 병합(<code>ThreeWayDiffer</code>)이 들어 있어 병합 기능을 다시 검토할 때 의미가 있습니다. 속도는 직접 Myers와 비슷하고, 최악 경우 문제도 같습니다.</span></div>
+      <div class="row"><span class="tag maybe">직접 Myers</span><span>2만 건 무작위 검사에서 늘 최소 결과를 냈습니다. 속도와 한계는 DiffPlex와 같아 따로 둘 이유는 적습니다.</span></div>
+      <div class="row"><span class="tag no">diff-match-patch</span><span>비추천입니다. NuGet 판마다 대상이 최신 .NET 하나뿐이라 .NET 8 앱은 3.0에 묶입니다. 줄 단위 API가 없고, 고유 줄이 약 6만 3천 개를 넘으면 쓸 수 없습니다(10만 줄 2건 실패).</span></div>
+      <div class="row"><span class="tag no">LibGit2Sharp</span><span>비추천입니다. 두 버퍼를 바로 비교하는 API가 없어 비교마다 blob을 저장소에 써야 하고, 그 비용이 가장 큽니다.</span></div>
+    </div>
+  </section>
+
+  <section>
+    <h2>이 결과를 읽을 때 주의할 점</h2>
+    <ul class="plain">
+      <li><b>Linux 측정입니다.</b> 여기서 git 프로세스를 띄우는 비용은 약 3.5ms입니다. Windows는 보통 이보다 비싸고 백신 실시간 검사가 끼면 더 늘어납니다. 그래서 Windows에서는 보통 수정의 차이가 더 벌어지고, 최악 경우의 격차는 줄어들 가능성이 큽니다.</li>
+      <li>1ms 아래 값은 측정 잡음이 큽니다. 순위보다 자릿수 차이로 읽어야 합니다.</li>
+      <li>같은 10만 줄 파일에서 관리 코드 방식이 80~124ms 걸린 것은 diff 알고리즘이 아니라 파일 전체를 읽고 줄로 나누는 비용 때문입니다. 바이트가 같은지 먼저 확인하면 피할 수 있습니다.</li>
+      <li>줄 끝(LF↔CRLF) 경우는 모든 방식이 1만 줄 전부를 다르다고 봅니다. 앱의 "공백 무시"를 대체하려면 프로세스 안 방식도 같은 정규화를 직접 넣어야 합니다.</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>측정 방법과 재현</h2>
+    <ul class="plain">
+      <li>경우마다 두 파일을 디스크에 써 두고, 파일 읽기부터 결과까지를 잽니다. 앱의 두 파일 비교와 같은 조건입니다.</li>
+      <li>방식마다 첫 실행(JIT·결과 검증)을 뺀 뒤 최대 5회(3초를 넘으면 중단)의 중앙값을 씁니다.</li>
+      <li>git CLI는 앱과 같은 인수(<code>--no-index --no-color --no-ext-diff -M</code>, 문맥 3줄)를 씁니다.</li>
+      <li>테스트 20가지는 고정 씨앗으로 만들어 매번 같습니다. 직접 구현은 무작위 2만 건으로 재구성 정확성과 Myers 최소성을 따로 검사했습니다.</li>
+    </ul>
+    <pre>cd tools\DiffBench
+dotnet run -c Release                        # 측정 → results.md
+dotnet run -c Release -- --write-cases cases # 테스트 파일 40개 내보내기
+dotnet run -c Release -- --selftest          # 직접 구현 검사</pre>
+    <p class="note">소스: <code>tools/DiffBench</code> · 원본 표: <code>tools/DiffBench/results-linux.md</code> · 항목 문서: <code>docs/items/diff-engine-benchmark.md</code></p>
+  </section>
+</div>
+<div id="tip" hidden></div>
+
+<script>
+const DATA = /*__DATA__*/null;
+const engines = DATA.engines;
+const GIT = 0;
+const fmt = (ms) => ms == null ? "—" : (ms < 10 ? ms.toFixed(2) : Math.round(ms).toLocaleString("ko-KR"));
+const ratioText = (r) => {
+  if (r == null) return "";
+  if (Math.abs(Math.log2(r)) < 0.15) return "≈ 같음";
+  return r < 1 ? (1 / r).toFixed(1) + "× 빠름" : r.toFixed(1) + "× 느림";
+};
+const median = (xs) => { const s = [...xs].sort((a, b) => a - b); return s[Math.floor(s.length / 2)]; };
+
+document.getElementById("env").textContent = DATA.env + " · " + DATA.when;
+
+// 결론 숫자: 묶음별 git 대비 배수(중앙값)
+function groupRatio(group, engineIndexes) {
+  const rs = [];
+  for (const c of DATA.cases.filter(c => c.group === group))
+    for (const i of engineIndexes) {
+      const ms = c.cells[i].ms, g = c.cells[GIT].ms;
+      if (ms != null) rs.push(ms / g);
+    }
+  return median(rs);
+}
+const managed = [2, 3, 4, 5];
+const typical = groupRatio("typical", managed);
+const worst = groupRatio("worst", managed);
+document.getElementById("f-typical").textContent = (1 / typical).toFixed(1) + "× 빠름";
+document.getElementById("f-worst").textContent = worst.toFixed(0) + "× 느림";
+const libSum = DATA.summary[1];
+document.getElementById("f-libgit").textContent = "git의 " + libSum.geo.toFixed(1) + "배 속도";
+
+// 툴팁
+const tip = document.getElementById("tip");
+function showTip(el, html) {
+  tip.innerHTML = html;
+  tip.hidden = false;
+  const r = el.getBoundingClientRect();
+  const w = tip.offsetWidth, h = tip.offsetHeight;
+  let x = r.left + r.width / 2 - w / 2, y = r.top - h - 8;
+  if (y < 8) y = r.bottom + 8;
+  x = Math.max(8, Math.min(x, window.innerWidth - w - 8));
+  tip.style.left = x + "px";
+  tip.style.top = y + "px";
+}
+function hideTip() { tip.hidden = true; }
+function bindTip(el, html) {
+  el.addEventListener("mouseenter", () => showTip(el, html));
+  el.addEventListener("mouseleave", hideTip);
+  el.addEventListener("focus", () => showTip(el, html));
+  el.addEventListener("blur", hideTip);
+}
+window.addEventListener("scroll", hideTip, { passive: true });
+
+// 요약 막대 차트(가로, 한 축, git = 1.0 기준선)
+(function summaryChart() {
+  const svg = document.getElementById("summary-chart");
+  const rowH = 34, left = 150, right = 70, top = 18, bottom = 30, width = 720;
+  const max = 1.6;
+  const h = top + bottom + rowH * DATA.summary.length;
+  svg.setAttribute("viewBox", `0 0 ${width} ${h}`);
+  svg.setAttribute("width", "100%");
+  svg.style.minWidth = "520px";
+  const x = (v) => left + (v / max) * (width - left - right);
+  const ns = "http://www.w3.org/2000/svg";
+  const el = (tag, attrs, text) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); if (text != null) e.textContent = text; svg.appendChild(e); return e; };
+  for (const t of [0, 0.5, 1.0, 1.5]) {
+    el("line", { x1: x(t), x2: x(t), y1: top - 6, y2: h - bottom, stroke: "var(--rule)", "stroke-width": 1 });
+    el("text", { x: x(t), y: h - bottom + 18, "text-anchor": "middle", "font-size": 12, fill: "var(--ink-3)" }, t.toFixed(1) + "×");
+  }
+  el("line", { x1: x(1), x2: x(1), y1: top - 10, y2: h - bottom, stroke: "var(--ink-2)", "stroke-width": 1.5, "stroke-dasharray": "4 3" });
+  el("text", { x: x(1) + 6, y: top - 4, "font-size": 11, fill: "var(--ink-2)" }, "git CLI = 1.0×");
+  DATA.summary.forEach((s, i) => {
+    const y = top + i * rowH + rowH / 2;
+    el("text", { x: left - 12, y: y + 4, "text-anchor": "end", "font-size": 13, fill: "var(--ink)" }, s.name);
+    const w = Math.max(2, x(s.geo) - x(0)), bh = 14;
+    const r = Math.min(4, w / 2);
+    const x0 = x(0), y0 = y - bh / 2;
+    const d = `M${x0},${y0} H${x0 + w - r} Q${x0 + w},${y0} ${x0 + w},${y0 + r} V${y0 + bh - r} Q${x0 + w},${y0 + bh} ${x0 + w - r},${y0 + bh} H${x0} Z`;
+    el("path", { d, fill: i === GIT ? "var(--base-bar)" : "var(--accent)" });
+    el("text", { x: x0 + w + 8, y: y + 4, "font-size": 12, fill: "var(--ink)", "font-family": "var(--font-mono)" }, s.geo.toFixed(1) + "×");
+    const hit = el("rect", { x: 0, y: y - rowH / 2, width, height: rowH, fill: "transparent", tabindex: 0 });
+    bindTip(hit, `<b>${s.name}</b><br><span class="k">종류</span> ${s.kind}<br><span class="k">20건 합계</span> ${s.total} ms<br><span class="k">가장 빠름</span> ${s.wins}건 · <span class="k">지원 안 함</span> ${s.unsupported}건`);
+  });
+})();
+
+// 요약 표
+(function summaryTable() {
+  const tb = document.querySelector("#summary-table tbody");
+  for (const s of DATA.summary) {
+    const tr = document.createElement("tr");
+    tr.innerHTML = `<td>${s.name}</td><td class="l">${s.kind}</td><td>${s.total}</td><td>${s.geo.toFixed(1)}×</td><td>${s.wins}</td><td>${s.unsupported}</td>`;
+    tb.appendChild(tr);
+  }
+})();
+
+// 히트맵: git 대비 log2 배수로 파랑(빠름)·빨강(느림) 섞기, 같으면 중립
+function cellBg(r) {
+  if (r == null) return "transparent";
+  const l = Math.log2(r);
+  if (Math.abs(l) < 0.32) return "var(--neutral)";
+  const pct = Math.min(58, Math.round(Math.abs(l) * 14 + 8));
+  return `color-mix(in oklab, ${l < 0 ? "var(--cool)" : "var(--warm)"} ${pct}%, var(--neutral))`;
+}
+(function legend() {
+  const box = document.getElementById("legend");
+  const steps = [[1 / 16, "16× 빠름"], [1 / 4, "4×"], [1 / 2, "2×"], [1, "비슷 (±25%)"], [2, "2×"], [4, "4×"], [16, "16× 느림"]];
+  box.innerHTML = '<span>git 대비:</span>' + steps.map(([r, t]) => `<span class="sw" style="background:${cellBg(r)}">${t}</span>`).join("");
+})();
+(function heat() {
+  const t = document.getElementById("heat");
+  let html = "<thead><tr><th>#</th><th>경우</th>" + engines.map(e => `<th>${e}</th>`).join("") + "</tr></thead><tbody>";
+  const groups = [["typical", "보통 수정 — 앱에서 가장 흔한 경우"], ["worst", "최악 경우 — 대부분이 다름"], ["other", "그 밖 — 같은 파일·10% 수정·뒤섞기"]];
+  for (const [g, label] of groups) {
+    html += `<tr class="group"><th colspan="${engines.length + 2}">${label}</th></tr>`;
+    for (const c of DATA.cases.filter(c => c.group === g)) {
+      html += `<tr><td>${c.no}</td><td class="case">${c.name}<span class="d">${c.desc}</span></td>`;
+      c.cells.forEach((cell, i) => {
+        const g0 = c.cells[GIT].ms;
+        if (cell.ms == null) { html += `<td class="na" tabindex="0" data-c="${c.no}" data-e="${i}">지원 안 함</td>`; return; }
+        const r = i === GIT ? null : cell.ms / g0;
+        html += `<td class="cell" tabindex="0" data-c="${c.no}" data-e="${i}" style="background:${i === GIT ? "transparent" : cellBg(r)}">${fmt(cell.ms)}<span class="r">${i === GIT ? "기준" : ratioText(r)}</span></td>`;
+      });
+      html += "</tr>";
+    }
+  }
+  t.innerHTML = html + "</tbody>";
+  t.querySelectorAll("td[data-c]").forEach(td => {
+    const c = DATA.cases.find(x => x.no === +td.dataset.c), i = +td.dataset.e, cell = c.cells[i];
+    const g0 = c.cells[GIT].ms;
+    const body = cell.ms == null
+      ? "고유 줄이 6만 3천 개를 넘어 이 방식으로는 비교할 수 없음"
+      : `<span class="k">중앙값</span> ${fmt(cell.ms)} ms${i === GIT ? "" : " · " + ratioText(cell.ms / g0)}<br>` +
+        `<span class="k">변경 줄</span> ${cell.changed}${cell.verified ? " (재구성 확인 ✓)" : ""}<br>` +
+        `<span class="k">관리 힙</span> ${cell.mb == null ? "측정 안 됨" : cell.mb.toFixed(1) + " MB"}`;
+    bindTip(td, `<b>${c.no}. ${c.desc}</b><br>${engines[i]}<br>${body}`);
+  });
+})();
+
+// 품질(다른 1건)·메모리(대표 경우)
+(function quality() {
+  const c = DATA.cases.find(x => x.name === "shuffled-2k");
+  document.getElementById("quality").innerHTML =
+    "<thead><tr><th>방식</th><th>뒤섞기 2천 줄</th></tr></thead><tbody>" +
+    engines.map((e, i) => `<tr><td>${e}</td><td>${c.cells[i].changed}</td></tr>`).join("") + "</tbody>";
+})();
+(function memory() {
+  const picks = ["one-line-1k", "scattered-10pct-10k", "long-lines-1k", "identical-100k"];
+  const rows = picks.map(n => DATA.cases.find(x => x.name === n));
+  const idx = [1, 2, 3, 4, 5];
+  document.getElementById("memory").innerHTML =
+    "<thead><tr><th>경우</th>" + idx.map(i => `<th>${engines[i]}</th>`).join("") + "</tr></thead><tbody>" +
+    rows.map(c => `<tr><td>${c.desc}</td>` + idx.map(i => `<td>${c.cells[i].mb == null ? "—" : c.cells[i].mb.toFixed(1)}</td>`).join("") + "</tr>").join("") +
+    "</tbody>";
+})();
+</script>

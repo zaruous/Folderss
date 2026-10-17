@@ -258,6 +258,18 @@ namespace Folderss.SearchTests
         }
 
         [SkippableFact]
+        public async Task UpstreamRanges_EmptyWhenUpToDate()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await RichRepoAsync();
+            await Git(repo, "reset", "-q", "--hard", GitDiffCommands.Upstream);
+            var (outgoing, incoming) = GitLibReader.ReadUpstreamRanges(repo, 500);
+            Assert.Empty(outgoing);
+            Assert.Empty(incoming);
+            Assert.Empty(await CliRange(repo, GitDiffCommands.Upstream, "HEAD"));
+        }
+
+        [SkippableFact]
         public async Task UpstreamRanges_Throw_WhenUpstreamGoneOrMissing()
         {
             Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");

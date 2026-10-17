@@ -282,12 +282,56 @@ namespace Folderss.Services
                 var gap = (l.LastWriteTimeUtc - r.LastWriteTimeUtc).Duration();
                 if (gap > Options.TimestampTolerance)
                 {
+                    if (Options.VerifyContentWhenTimeDiffers)
+                    {
+                        try
+                        {
+                            if (SameBytes(l.FullName, r.FullName))
+                            {
+                                entry.Status = CompareStatus.Same;
+                                entry.Reason = "내용 같음(수정 시각만 다름)";
+                                return;
+                            }
+                        }
+                        catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                        {
+                            entry.Status = CompareStatus.Unknown;
+                            entry.Reason = ex.Message;
+                            return;
+                        }
+                    }
                     entry.Status = CompareStatus.Different;
                     entry.Reason = "수정 시각 다름 (" + (l.LastWriteTimeUtc > r.LastWriteTimeUtc ? "왼쪽이 최신" : "오른쪽이 최신") + ")";
                     return;
                 }
                 entry.Status = CompareStatus.Same;
             }
+
+            /// <summary>크기가 같은 두 파일을 블록 단위로 비교해 첫 차이에서 멈춘다.</summary>
+            private bool SameBytes(string leftPath, string rightPath)
+            {
+                const int BlockSize = 1 << 16;
+                using (var left = Open(leftPath))
+                using (var right = Open(rightPath))
+                {
+                    var a = new byte[BlockSize];
+                    var b = new byte[BlockSize];
+                    while (true)
+                    {
+                        _token.ThrowIfCancellationRequested();
+                        var read = left.ReadAtLeast(a, BlockSize, throwOnEndOfStream: false);
+                        if (right.ReadAtLeast(b, BlockSize, throwOnEndOfStream: false) != read)
+                            return false;
+                        if (read == 0)
+                            return true;
+                        if (!a.AsSpan(0, read).SequenceEqual(b.AsSpan(0, read)))
+                            return false;
+                    }
+                }
+            }
+
+            private static FileStream Open(string path)
+                => new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete, 1 << 16);
 
             private byte[] Hash(string path)
             {

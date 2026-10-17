@@ -22,6 +22,7 @@
 
 - `Folderss/Services/GitLibReader.cs`
 - `docs/items/git-upstream-range-commit-order.md`
+- `tests/Folderss.SearchTests/GitLibReaderTests.cs` — `UpstreamRanges_EmptyWhenUpToDate`(PR #58에서 가져옴)
 
 ## 검증
 
@@ -33,3 +34,5 @@
 ## 변경 이력
 
 - 2026-10-16: PR #60 CI 실패에서 발견. 수정·테스트 완료.
+- 2026-10-17: PR #58이 같은 문제를 위상 순서(`--topo-order`/`TopoOrder`)로 따로 고쳐 충돌. 콘솔 `git log a..b`와 같은 이 방식으로 통일하고,
+  PR #58의 CLI `--topo-order`·문서 항목(`git-upstream-range-order.md`)은 빼고 빈 범위 테스트만 남김.

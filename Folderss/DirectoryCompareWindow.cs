@@ -54,6 +54,15 @@ namespace Folderss
             Margin = new Thickness(12, 0, 0, 0),
             ToolTip = "같은 항목을 숨깁니다(양쪽 패널)"
         };
+        private readonly Button _fileCompareButton = new Button { Content = "⇆ 파일 비교", Margin = new Thickness(12, 0, 0, 0), IsEnabled = false };
+        private readonly CheckBox _followSameName = new CheckBox
+        {
+            Content = "같은 이름 따라 선택",
+            IsChecked = true,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 0, 0),
+            ToolTip = "한쪽에서 고르면 반대쪽에서 같은 이름을 고릅니다. 끄면 양쪽을 따로 골라 이름이 다른 두 파일도 비교할 수 있습니다"
+        };
         private readonly ToggleButton _historyToggle = new ToggleButton { Content = "☰ 작업 이력", IsChecked = true, Margin = new Thickness(6, 0, 0, 0), Padding = new Thickness(8, 2, 8, 2) };
         private readonly TextBlock _status = new TextBlock { VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(12, 0, 0, 0), TextTrimming = TextTrimming.CharacterEllipsis };
         private readonly TextBlock _summary = new TextBlock { Margin = new Thickness(2, 6, 2, 0), TextTrimming = TextTrimming.CharacterEllipsis };
@@ -170,12 +179,16 @@ namespace Folderss
             previous.Click += (s, e) => SelectDifference(false);
             var next = new Button { Content = "▼ 다음 차이", Margin = new Thickness(6, 0, 0, 0), ToolTip = "선택한 패널에서 다음 차이 항목" };
             next.Click += (s, e) => SelectDifference(true);
+            _fileCompareButton.Click += (s, e) => CompareSelectedFiles();
+            ToolTipService.SetShowOnDisabled(_fileCompareButton, true);
+            _followSameName.SetResourceReference(ForegroundProperty, "PrimaryText");
+            UpdateFileCompareButton();
             var swap = new Button { Content = "⇄ 좌우 바꾸기", Margin = new Thickness(12, 0, 0, 0), ToolTip = "두 패널의 폴더를 맞바꿔 다시 비교합니다" };
             swap.Click += (s, e) => Swap();
             _historyToggle.SetResourceReference(StyleProperty, "CompactToggleButtonStyle");
             _historyToggle.Click += (s, e) => SetHistoryVisible(_historyToggle.IsChecked == true);
 
-            foreach (var element in new UIElement[] { _compareButton, options, _cancelButton, _hideSame, previous, next, swap, _historyToggle })
+            foreach (var element in new UIElement[] { _compareButton, options, _cancelButton, _hideSame, previous, next, _fileCompareButton, _followSameName, swap, _historyToggle })
                 buttons.Children.Add(element);
             DockPanel.SetDock(buttons, Dock.Left);
             row.Children.Add(buttons);
@@ -406,7 +419,8 @@ namespace Folderss
             {
                 options.UseContentHash
                     ? "기준: 내용 해시"
-                    : "기준: 크기·수정 시각(±" + options.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture) + "초)",
+                    : "기준: 크기·수정 시각(±" + options.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture) + "초)"
+                      + (options.VerifyContentWhenTimeDiffers ? ", 시각만 다르면 내용 확인" : ""),
                 options.ApplyIgnoreRules ? "ignore 규칙 적용" : "ignore 규칙 무시",
                 !options.Recursive ? "하위 폴더 안 봄" : options.MaxDepth > 0 ? "하위 폴더 " + options.MaxDepth + "단계까지" : "하위 폴더 전체",
                 options.IncludeHidden ? "숨김 파일 포함" : "숨김 파일 제외"
@@ -508,7 +522,8 @@ namespace Folderss
         private void Panel_SelectedItemsChanged(object sender, EventArgs e)
         {
             var panel = (FolderBrowser)sender;
-            if (_following || !panel.IsKeyboardFocusWithin)
+            UpdateFileCompareButton();
+            if (_following || !panel.IsKeyboardFocusWithin || _followSameName.IsChecked != true)
                 return;
             var selected = panel.SelectedItems;
             if (selected.Count != 1)
@@ -533,7 +548,7 @@ namespace Folderss
                 return;
             }
             var selected = panel.SelectedItem;
-            if (selected != null)
+            if (selected != null && _followSameName.IsChecked == true)
                 FollowSelection(panel, selected.Name);
             panel.FocusFileList();
         }
@@ -572,7 +587,8 @@ namespace Folderss
 
         private static bool CriteriaChanged(DirectoryCompareOptions a, DirectoryCompareOptions b)
         {
-            return a.UseContentHash != b.UseContentHash || a.TimestampTolerance != b.TimestampTolerance ||
+            return a.UseContentHash != b.UseContentHash || a.VerifyContentWhenTimeDiffers != b.VerifyContentWhenTimeDiffers ||
+                   a.TimestampTolerance != b.TimestampTolerance ||
                    a.ApplyIgnoreRules != b.ApplyIgnoreRules || a.Recursive != b.Recursive ||
                    a.MaxDepth != b.MaxDepth || a.IncludeHidden != b.IncludeHidden;
         }
@@ -611,6 +627,36 @@ namespace Folderss
             {
                 MessageBox.Show(this, ex.Message, "파일을 열 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Error);
             }
+        }
+
+        private string[] SelectedCrossPanelPair()
+        {
+            IReadOnlyList<(string, bool)> Of(FolderBrowser panel) =>
+                panel.SelectedItems.Select(item => (item.FullPath, item.IsDirectory)).ToList();
+            return CompareOverlay.CrossPanelFilePair(Of(_leftPanel), Of(_rightPanel));
+        }
+
+        private void UpdateFileCompareButton()
+        {
+            var pair = SelectedCrossPanelPair();
+            _fileCompareButton.IsEnabled = pair != null && _openFileCompare != null;
+            _fileCompareButton.ToolTip = pair != null
+                ? "두 파일을 비교합니다: " + Path.GetFileName(pair[0]) + " ↔ " + Path.GetFileName(pair[1])
+                : "왼쪽과 오른쪽 패널에서 파일을 하나씩 고르면 두 파일을 비교합니다";
+        }
+
+        /// <summary>왼쪽 패널에서 고른 파일(왼쪽)과 오른쪽 패널에서 고른 파일(오른쪽)로 두 파일 비교 창을 연다.</summary>
+        private void CompareSelectedFiles()
+        {
+            var pair = SelectedCrossPanelPair();
+            if (pair == null || _openFileCompare == null)
+                return;
+            if (!File.Exists(pair[0]) || !File.Exists(pair[1]))
+            {
+                _status.Text = "고른 파일이 없습니다. 다른 프로그램이 지웠거나 옮겼을 수 있습니다 — 다시 비교(F5)하세요.";
+                return;
+            }
+            _openFileCompare(pair[0], pair[1]);
         }
 
         /// <summary>반대쪽 같은 상대 경로의 파일과 두 파일 비교 창을 연다(왼쪽 패널 파일이 왼쪽).</summary>
@@ -1053,6 +1099,7 @@ namespace Folderss
     public sealed class DirectoryCompareOptionsDialog : GitDialogBase
     {
         private readonly RadioButton _byTime;
+        private readonly RadioButton _byTimeVerify;
         private readonly RadioButton _byHash;
         private readonly TextBox _tolerance;
         private readonly CheckBox _ignore;
@@ -1073,7 +1120,11 @@ namespace Folderss
             current = current ?? new DirectoryCompareOptions();
 
             AddLabel("판정 기준");
-            _byTime = AddRadio("criteria", "크기와 수정 시각 (권장)", "빠릅니다. 크기가 같고 수정 시각 차이가 허용 오차 안이면 같음.", !current.UseContentHash);
+            _byTime = AddRadio("criteria", "크기와 수정 시각 (권장)", "빠릅니다. 크기가 같고 수정 시각 차이가 허용 오차 안이면 같음.",
+                !current.UseContentHash && !current.VerifyContentWhenTimeDiffers);
+            _byTimeVerify = AddRadio("criteria", "크기와 수정 시각, 시각만 다르면 내용 확인",
+                "크기가 같고 수정 시각만 다른 파일을 끝까지 읽어 비교합니다. git checkout·압축 해제로 시각만 바뀐 파일이 같음이 됩니다. 그런 파일이 많으면 느립니다.",
+                !current.UseContentHash && current.VerifyContentWhenTimeDiffers);
             _byHash = AddRadio("criteria", "내용 해시 (SHA-256)", "크기가 같은 파일의 내용을 모두 읽어 비교합니다. 정확하지만 느립니다. 수정 시각은 보지 않습니다.", current.UseContentHash);
             _tolerance = AddNumber("수정 시각 허용 오차(초)", current.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture),
                 "FAT·네트워크 드라이브는 시각을 2초 단위로 저장해 기본 2초입니다.");
@@ -1099,6 +1150,7 @@ namespace Folderss
 
             _byHash.Checked += (s, e) => _tolerance.IsEnabled = false;
             _byTime.Checked += (s, e) => _tolerance.IsEnabled = true;
+            _byTimeVerify.Checked += (s, e) => _tolerance.IsEnabled = true;
             _tolerance.IsEnabled = !current.UseContentHash;
             _recursive.Click += (s, e) => _maxDepth.IsEnabled = _recursive.IsChecked == true;
             _maxDepth.IsEnabled = current.Recursive;
@@ -1115,7 +1167,8 @@ namespace Folderss
 
         private void Apply(DirectoryCompareOptions options)
         {
-            _byTime.IsChecked = !options.UseContentHash;
+            _byTime.IsChecked = !options.UseContentHash && !options.VerifyContentWhenTimeDiffers;
+            _byTimeVerify.IsChecked = !options.UseContentHash && options.VerifyContentWhenTimeDiffers;
             _byHash.IsChecked = options.UseContentHash;
             _tolerance.Text = options.TimestampTolerance.TotalSeconds.ToString("0.##", CultureInfo.InvariantCulture);
             _ignore.IsChecked = options.ApplyIgnoreRules;
@@ -1155,6 +1208,7 @@ namespace Folderss
             Result = new DirectoryCompareOptions
             {
                 UseContentHash = _byHash.IsChecked == true,
+                VerifyContentWhenTimeDiffers = _byTimeVerify.IsChecked == true,
                 TimestampTolerance = TimeSpan.FromSeconds(seconds),
                 ApplyIgnoreRules = _ignore.IsChecked == true,
                 Recursive = _recursive.IsChecked == true,

@@ -24,6 +24,13 @@ namespace Folderss.Models
         /// <summary>크기가 같은 파일 쌍을 SHA-256으로 판정한다(수정 시각 무시). 느리다.</summary>
         public bool UseContentHash { get; set; }
 
+        /// <summary>
+        /// 크기가 같고 수정 시각만 허용 오차를 넘게 다른 파일 쌍을 바이트 비교로 다시 판정한다.
+        /// checkout·압축 해제로 시각만 바뀐 파일을 같음으로 본다. 그 파일들을 읽어야 해 기본 끔(가벼운 비교).
+        /// <see cref="UseContentHash"/>가 켜져 있으면 의미가 없다.
+        /// </summary>
+        public bool VerifyContentWhenTimeDiffers { get; set; }
+
         /// <summary>수정 시각 허용 오차. FAT·네트워크 드라이브의 2초 해상도 때문에 기본 2초.</summary>
         public TimeSpan TimestampTolerance { get; set; } = TimeSpan.FromSeconds(2);
 

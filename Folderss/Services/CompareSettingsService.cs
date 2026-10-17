@@ -29,6 +29,7 @@ namespace Folderss.Services
                 if (root == null)
                     return options;
                 options.UseContentHash = ReadBool(root, "contentHash", options.UseContentHash);
+                options.VerifyContentWhenTimeDiffers = ReadBool(root, "verifyContentWhenTimeDiffers", options.VerifyContentWhenTimeDiffers);
                 options.ApplyIgnoreRules = ReadBool(root, "applyIgnoreRules", options.ApplyIgnoreRules);
                 options.Recursive = ReadBool(root, "recursive", options.Recursive);
                 options.IncludeHidden = ReadBool(root, "includeHidden", options.IncludeHidden);
@@ -62,6 +63,7 @@ namespace Folderss.Services
             var doc = new XmlDocument();
             var root = doc.CreateElement("compare");
             root.SetAttribute("contentHash", options.UseContentHash ? "true" : "false");
+            root.SetAttribute("verifyContentWhenTimeDiffers", options.VerifyContentWhenTimeDiffers ? "true" : "false");
             root.SetAttribute("timestampToleranceSeconds", options.TimestampTolerance.TotalSeconds.ToString(CultureInfo.InvariantCulture));
             root.SetAttribute("applyIgnoreRules", options.ApplyIgnoreRules ? "true" : "false");
             root.SetAttribute("recursive", options.Recursive ? "true" : "false");

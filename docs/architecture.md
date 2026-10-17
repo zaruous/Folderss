@@ -46,7 +46,7 @@ Folderss/
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
 │   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
-│   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
+│   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각(시각만 다르면 바이트 비교 선택) 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
 │   ├── CompareSettingsService.cs   — 폴더 비교 옵션 저장 (compare-settings.xml)
 │   ├── CompareOverlay.cs           — 비교 결과를 폴더 패널 한쪽의 현재 폴더 항목에 입히는 규칙(이쪽만/저쪽만, 방향) (순수 계산)
 │   ├── FileOperationJournal.cs     — 폴더 비교 창의 이동·복사·삭제 실행+기록(%LOCALAPPDATA%\Folderss\compare-history\*.jsonl, 7일 보관)과 최근부터 되돌리기. 휴지통은 IRecycleBin 주입
@@ -466,7 +466,7 @@ Folderss/
   색 키(`CompareDifferentBrush`·`CompareThisOnlyBrush`·`CompareTypeMismatchBrush`·`CompareNewerBrush`·`CompareOlderBrush`)는 모든 테마에 있고, 행 스타일에서 선택·hover 트리거를 뒤에 둬 비교 색이 선택을 가리지 않는다.
   동기 이동은 한쪽 `PathChanged` → 기준 상대 경로 → 반대쪽 `NavigateTo`(재진입 플래그). 파일 작업(▶◀ 이동, Ctrl+V 복사, Delete)은 모두 앱 전체에 하나인
   `FileOperationJournal`을 백그라운드에서 한 번에 하나씩 거치고, 끝나면 두 패널 새로 고침·다시 비교·이력 새로 고침(`JournalChanged`로 다른 비교 창도).
-  패널 잠금은 소유자 `MainWindow.IsPathPinLocked`/`IsDestinationPinLocked`로 검사한다. 파일 더블클릭·Enter는 Windows 기본 프로그램(`Process.Start`, ShellExecute)으로 연다(`FileOperationService.IsExecutable`이면 확인 후, 기본 아니요) — 메인 창 뷰어 탭은 비교 창에 가려지므로 쓰지 않는다. 우클릭 `반대쪽 같은 이름 파일과 비교`는 `CompareOverlay.CounterpartPath`(기준의 같은 상대 경로)로 짝을 찾아 `FileCompareWindow`를 연다.
+  패널 잠금은 소유자 `MainWindow.IsPathPinLocked`/`IsDestinationPinLocked`로 검사한다. 파일 더블클릭·Enter는 Windows 기본 프로그램(`Process.Start`, ShellExecute)으로 연다(`FileOperationService.IsExecutable`이면 확인 후, 기본 아니요) — 메인 창 뷰어 탭은 비교 창에 가려지므로 쓰지 않는다. 우클릭 `반대쪽 같은 이름 파일과 비교`는 `CompareOverlay.CounterpartPath`(기준의 같은 상대 경로)로 짝을 찾아 `FileCompareWindow`를 연다. 툴바 `⇆ 파일 비교`는 두 패널에서 하나씩 고른 파일을 그대로 짝짓고(`CompareOverlay.CrossPanelFilePair`, 이름 무관), `같은 이름 따라 선택` 체크(창을 닫으면 처음 값 켬)를 끄면 반대쪽 선택을 바꾸지 않는다.
 - 외부 도구 실행 공용: `DiffToolLauncher.RunAsync`가 미지정·실행 파일 없음·git 설정 difftool 없음 안내와 실행을 맡는다. 결과 표시는 호출 측
   (Git 창은 출력 창, 두 파일 비교 창은 메시지 상자). 성공 판정은 `GitDiffCommands.IsSuccess(result, request.NoIndex)` + stderr 없음.
 - HTML 보고서: `GitDiffView.TextLoader`(호스트가 설정 — 요청과 범위를 받아 diff 텍스트를 돌려주고 실패는 예외)가 있으면 `HTML 보고서…` 버튼이 보인다.

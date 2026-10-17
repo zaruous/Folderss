@@ -110,6 +110,50 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
+        public void TimeOnlyDifference_IsDifferentByDefault_AndSameWhenContentVerified()
+        {
+            Write(_left, "same.txt", "abc", BaseTime);
+            Write(_right, "same.txt", "abc", BaseTime.AddHours(5));
+
+            Assert.Equal(CompareStatus.Different, Find(Run(), "same.txt").Status);
+
+            var verified = Find(Run(new DirectoryCompareOptions { VerifyContentWhenTimeDiffers = true }), "same.txt");
+            Assert.Equal(CompareStatus.Same, verified.Status);
+            Assert.Contains("수정 시각만 다름", verified.Reason);
+        }
+
+        [Fact]
+        public void VerifyContent_SameSizeDifferentLastByte_IsDifferent()
+        {
+            var text = new string('x', 200_000);
+            Write(_left, "big.txt", text + "a", BaseTime);
+            Write(_right, "big.txt", text + "b", BaseTime.AddHours(5));
+
+            var entry = Find(Run(new DirectoryCompareOptions { VerifyContentWhenTimeDiffers = true }), "big.txt");
+
+            Assert.Equal(CompareStatus.Different, entry.Status);
+            Assert.Contains("수정 시각 다름", entry.Reason);
+        }
+
+        [SkippableFact]
+        public void VerifyContent_ReadsOnlyWhenTimeDiffers_AndUnreadableIsUnknown()
+        {
+            Skip.IfNot(OperatingSystem.IsWindows(), "파일 공유 잠금은 Windows에서만 강제됨");
+            Write(_left, "near.txt", "abc", BaseTime);
+            Write(_right, "near.txt", "abc", BaseTime.AddSeconds(1));
+            Write(_left, "far.txt", "abc", BaseTime);
+            Write(_right, "far.txt", "abc", BaseTime.AddHours(5));
+
+            using (new FileStream(Path.Combine(_right, "near.txt"), FileMode.Open, FileAccess.Read, FileShare.None))
+            using (new FileStream(Path.Combine(_right, "far.txt"), FileMode.Open, FileAccess.Read, FileShare.None))
+            {
+                var result = Run(new DirectoryCompareOptions { VerifyContentWhenTimeDiffers = true });
+                Assert.Equal(CompareStatus.Same, Find(result, "near.txt").Status);      // 허용 오차 안 → 읽지 않음
+                Assert.Equal(CompareStatus.Unknown, Find(result, "far.txt").Status);    // 읽어야 하는데 잠김
+            }
+        }
+
+        [Fact]
         public void Folder_IsDifferentWhenAnyChildDiffers_AndNotCountedItself()
         {
             Write(_left, @"src\a.txt", "abc");
@@ -129,8 +173,8 @@ namespace Folderss.SearchTests
             // 화면 순서: 폴더가 자식보다 앞, 폴더 먼저·이름순
             var order = result.Entries.Select(e => e.RelativePath).ToList();
             string P(string r) => N(r);
-            Assert.True(order.IndexOf("src") < order.IndexOf(@"src\a.txt"));
-            Assert.True(order.IndexOf(@"src\deep") < order.IndexOf(@"src\a.txt"));
+            Assert.True(order.IndexOf(P("src")) < order.IndexOf(P(@"src\a.txt")));
+            Assert.True(order.IndexOf(P(@"src\deep")) < order.IndexOf(P(@"src\a.txt")));
         }
 
         [Fact]
@@ -166,7 +210,8 @@ namespace Folderss.SearchTests
             Write(_left, "app.log", "x");
             Write(_right, "app.log", "x");
 
-            var result = Run();
+            // Linux의 .NET은 점 파일을 숨김으로 보므로 숨김을 포함해야 규칙 파일 자체가 비교에 남는다.
+            var result = Run(new DirectoryCompareOptions { IncludeHidden = true });
 
             Assert.DoesNotContain(result.Entries, e => e.RelativePath == "bin");
             Assert.Contains("왼쪽에서만", Find(result, "app.log").Reason);
@@ -225,10 +270,12 @@ namespace Folderss.SearchTests
         {
             var path = Path.Combine(_root, "compare-settings.xml");
             Assert.True(CompareSettingsService.Load(path).ApplyIgnoreRules);   // 파일 없음 → 기본값
+            Assert.False(CompareSettingsService.Load(path).VerifyContentWhenTimeDiffers);   // 기본은 가벼운 비교
 
             CompareSettingsService.Save(new DirectoryCompareOptions
             {
                 UseContentHash = true,
+                VerifyContentWhenTimeDiffers = true,
                 TimestampTolerance = TimeSpan.FromSeconds(5),
                 ApplyIgnoreRules = false,
                 Recursive = false,
@@ -238,6 +285,7 @@ namespace Folderss.SearchTests
             var loaded = CompareSettingsService.Load(path);
 
             Assert.True(loaded.UseContentHash);
+            Assert.True(loaded.VerifyContentWhenTimeDiffers);
             Assert.Equal(TimeSpan.FromSeconds(5), loaded.TimestampTolerance);
             Assert.False(loaded.ApplyIgnoreRules);
             Assert.False(loaded.Recursive);

@@ -175,5 +175,23 @@ namespace Folderss.SearchTests
             Array.Sort(array, StringComparer.OrdinalIgnoreCase);
             return array;
         }
+
+        [Fact]
+        public void CrossPanelFilePair_OneFileEachSide_LeftThenRight()
+        {
+            var left = new[] { (@"L\a.txt", false) };
+            var right = new[] { (@"R\b.txt", false) };
+            Assert.Equal(new[] { @"L\a.txt", @"R\b.txt" }, CompareOverlay.CrossPanelFilePair(left, right));
+        }
+
+        [Fact]
+        public void CrossPanelFilePair_NullUnlessExactlyOneFileEachSide()
+        {
+            var file = new[] { (@"L\a.txt", false) };
+            Assert.Null(CompareOverlay.CrossPanelFilePair(file, new (string, bool)[0]));                               // 한쪽 선택 없음
+            Assert.Null(CompareOverlay.CrossPanelFilePair(file, new[] { (@"R\a.txt", false), (@"R\b.txt", false) })); // 두 개
+            Assert.Null(CompareOverlay.CrossPanelFilePair(file, new[] { (@"R\src", true) }));                         // 폴더
+            Assert.Null(CompareOverlay.CrossPanelFilePair(null, file));
+        }
     }
 }
