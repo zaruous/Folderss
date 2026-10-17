@@ -34,6 +34,7 @@ var engines = new IDiffEngine[]
 {
     new GitCliEngine(),
     libgit2,
+    new LibGit2BufferEngine(),
     new DiffPlexEngine(),
     new DiffMatchPatchEngine(),
     new OwnEngine("직접 Myers", MyersDiff.Diff),

@@ -35,6 +35,7 @@ Folderss/
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
 │   ├── GitLibReader.cs             — 조회(status·브랜치·로그·upstream 비교·stash·워킹트리)를 LibGit2Sharp로, 결과는 CLI+파서와 동일
+│   ├── GitLibDiff.cs               — diff(작업 트리·스테이지·커밋·원격 비교·두 파일)를 libgit2 xdiff로 프로세스 없이, 출력 텍스트는 CLI와 동일
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제(로컬·원격)·브랜치 업데이트(base ← compare) 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
@@ -93,7 +94,7 @@ Folderss/
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
-├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `git diff --no-index`), 코드로 구성
+├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `GitLibDiff`, 안 되면 `git diff --no-index`), 코드로 구성
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
@@ -371,7 +372,7 @@ Folderss/
   저장소는 호출마다 열고 닫는다(팩 파일 잠금·스레드 안전 문제 회피). 링크된 워킹트리·upstream 없음 등은 `NotSupportedException`으로
   조용히, 그 밖의 예외는 출력창에 알린 뒤 아래 CLI 경로로 다시 읽는다. 결과가 CLI+`GitOutputParser`와 같은지는 `GitLibReaderTests`가 비교한다
   (로그 순서는 git `--topo-order` 알고리즘을 그대로 옮김, `%D` 참조 표시도 git 2.53 규칙). status도 `ReadStatus`로 읽되
-  서브모듈·인덱스 v3 이상·sparse checkout·`filter=` 속성·복사 감지 저장소는 CLI. 쓰기·네트워크·diff는 CLI.
+  서브모듈·인덱스 v3 이상·sparse checkout·`filter=` 속성·복사 감지 저장소는 CLI. 쓰기·네트워크는 CLI. diff는 아래 diff 항목(`GitLibDiff`).
 - 실행: 그 밖의 모든 git 호출은 `GitCommandRunner.RunAsync` 한 곳. 인수는 `ArgumentList`로만, 경로 목록은 `--pathspec-from-file=- --pathspec-file-nul`
   표준 입력으로, 커밋 메시지는 UTF-8 임시 파일(`-F`)로 넘긴다. `GIT_TERMINAL_PROMPT=0`, `GIT_MERGE_AUTOEDIT=no`, 조회는 `GIT_OPTIONAL_LOCKS=0`.
 - 파싱은 기계용 형식만(`--porcelain=v2 -z`, 필드 구분 0x1F). 사람용 문구·`--graph` ASCII는 파싱하지 않는다.
@@ -381,7 +382,12 @@ Folderss/
   fetch·pull·push(`RunOnAllAsync` — 저장소마다 `Task.WhenAll`로 동시에, 성공·실패·건너뜀 요약). 일괄 pull/push는 `GitSyncCommands.BatchSkipReason`으로
   detached HEAD·upstream 없는 저장소를 건너뛰고 `-u`를 붙이지 않는다(원격 선택은 단일 push에서만).
   창을 닫으면 `_lifetime` 토큰이 진행 중 프로세스를 모두 끝낸다.
-- diff: 인수는 모두 `GitDiffCommands`(공통 `--no-color --no-ext-diff -M` — 사용자 외부 diff 도구 설정 무시).
+- diff 실행: `GitWindow.RunDiffAsync`·`FileCompareWindow.LoadTextAsync`가 먼저 `GitLibDiff.Read`로 같은 요청을 libgit2(xdiff, git.exe와 같은 엔진)로 만들고,
+  같게 못 만드는 경우(충돌 중·`diff=`/`filter=` 속성·서브모듈·`diff.algorithm=histogram` 등 `NotSupportedException`)만 아래 CLI 인수로 돌린다.
+  네이티브 함수(`git2-*.dll`)를 P/Invoke로 직접 불러 바이트로 받아 CLI와 같은 `GitTextDecoder`로 푼다(LibGit2Sharp diff API는 UTF-8 전용).
+  indent heuristic·`diff.context`·헤더 경로 표기(quotepath=false)를 git과 맞추고, 출력이 같은지 `GitLibDiffTests`가 비교한다(docs/items/git-diff-libgit2.md).
+  두 파일 비교는 git과 달리 core.autocrlf를 적용하지 않아 줄 끝 차이도 보인다.
+- diff 인수: 모두 `GitDiffCommands`(공통 `--no-color --no-ext-diff -M` — 사용자 외부 diff 도구 설정 무시). CLI 대체 경로·외부 도구·테스트 기준값에 쓴다.
   작업 트리 `diff -- <p>`, 스테이지 `diff --cached -- [<원래 경로>] <p>`, 추적 안 됨 `diff --no-index -- /dev/null <p>`(종료 코드 1 = 차이 있음),
   커밋 `diff <첫 부모> <hash>`(최초 커밋은 `show --format=`), 원격 비교 `log @{u}..HEAD`/`HEAD..@{u}`, `diff @{u}...HEAD`/`HEAD...@{u}`/`diff @{u}`.
   `GitOutputParser.ParseDiff`는 hunk 밖의 `---`/`+++`만 헤더로 보고(hunk 안 `--`로 시작하는 줄 삭제 오판 방지), 충돌 파일 combined diff(`@@@`)는
@@ -452,7 +458,7 @@ Folderss/
   동시 실행 제한 밖(`throttle: false`), 창 수명 토큰 미사용(Git 창을 닫아도 도구는 유지). 2초 안에 끝나면 "바로 종료" 안내.
 - 두 파일 비교: 폴더 패널에서 파일 두 개(폴더 제외)를 고르고 우클릭하면 셸 메뉴 맨 위에 `선택한 두 파일 비교`가 붙고, ⋯ 메뉴 `두 파일 비교…`도 같다
   (`FolderBrowser.GetSelectedFilePair` — 목록에 보이는 순서로 왼쪽/오른쪽, 파일 두 개가 아니면 null). `MainWindow.OpenFileCompare`가 `FileCompareWindow`를 연다 —
-  Git diff 경로를 그대로 재사용한다: `GitDiffCommands.Files`(`diff --no-index -- <왼쪽> <오른쪽>`, 저장소·형상 관리 불필요) → `GitDiffView`.
+  Git diff 경로를 그대로 재사용한다: `GitDiffCommands.Files`(`diff --no-index -- <왼쪽> <오른쪽>`, 저장소·형상 관리 불필요) → `GitLibDiff`(git 없이도 됨, 실패 시 CLI) → `GitDiffView`.
   창 위쪽에 양쪽 파일 이름(굵게)과 위치(폴더)를 보이고 `⇄ 좌우 바꾸기`로 두 경로를 바꿔 다시 읽는다. `--no-index` 출력의 경로는 git이 앞의 `/`를 떼는 등
   원래 경로로 되돌릴 수 없어, UTF-16 BOM 재비교는 `GitEncodingDiff.ExpandAsync`(저장소 상대 경로) 대신 받은 두 경로를 직접 읽는
   `ExpandFilesAsync`로 한다. `GitDiffView`의 보기 모드 상자는 `NoIndex && OldSide == null`(추적 안 됨 = 전체 추가)일 때만 숨긴다.
@@ -542,7 +548,7 @@ WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍�
 
 > 원본: [`diagrams/flow-git-query.html`](diagrams/flow-git-query.html)
 
-조회만 LibGit2Sharp로 읽고(`GitWindow.ReadLibAsync`), 쓰기 작업은 항상 git CLI를 쓴다. `FOLDERSS_GIT_TIMING=1`이면 각 조회 소요 시간을 출력창에 남긴다.
+조회와 diff는 LibGit2Sharp·libgit2로 읽고(`GitWindow.ReadLibAsync`, diff는 `GitLibDiff`), 쓰기·네트워크 작업은 항상 git CLI를 쓴다. `FOLDERSS_GIT_TIMING=1`이면 각 조회 소요 시간을 출력창에 남긴다.
 
 ### 플러그인 설치·로드
 

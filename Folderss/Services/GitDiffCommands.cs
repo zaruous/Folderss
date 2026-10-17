@@ -33,6 +33,14 @@ namespace Folderss.Services
 
         /// <summary><c>A...B</c> 비교처럼 변경 전 쪽이 두 리비전의 merge-base일 때 그 두 리비전. 아니면 null.</summary>
         public string[] OldSideMergeBaseOf { get; set; }
+
+        /// <summary>
+        /// 같은 diff를 libgit2로 만들 때(<see cref="GitLibDiff"/>)의 대상 경로: 저장소 상대 경로, 두 파일 비교는 받은 경로 그대로. null이면 저장소 전체.
+        /// </summary>
+        public List<string> Paths { get; set; }
+
+        /// <summary>공백 무시(<c>-w</c>). <see cref="Arguments"/>에도 들어 있고, libgit2로 만들 때 쓴다.</summary>
+        public bool IgnoreWhitespace { get; set; }
     }
 
     /// <summary>
@@ -82,7 +90,9 @@ namespace Folderss.Services
                 Arguments = Diff(ignoreWhitespace, new string[0], selector),
                 ExternalSelector = selector,
                 OldSide = IndexSide,
-                NewSide = WorkTreeSide
+                NewSide = WorkTreeSide,
+                Paths = new List<string> { path },
+                IgnoreWhitespace = ignoreWhitespace
             };
         }
 
@@ -97,7 +107,9 @@ namespace Folderss.Services
                 Arguments = Diff(ignoreWhitespace, new[] { "--cached" }, selector),
                 ExternalSelector = external,
                 OldSide = "HEAD",
-                NewSide = IndexSide
+                NewSide = IndexSide,
+                Paths = new[] { originalPath, path }.Where(p => !string.IsNullOrEmpty(p)).ToList(),
+                IgnoreWhitespace = ignoreWhitespace
             };
         }
 
@@ -111,7 +123,9 @@ namespace Folderss.Services
             {
                 Arguments = Diff(ignoreWhitespace, new[] { "--no-index" }, PathSelector("/dev/null", path)),
                 NoIndex = true,
-                NewSide = WorkTreeSide
+                NewSide = WorkTreeSide,
+                Paths = new List<string> { path },
+                IgnoreWhitespace = ignoreWhitespace
             };
         }
 
@@ -133,7 +147,9 @@ namespace Folderss.Services
                 ExternalSelector = external,
                 NoIndex = true,
                 OldSide = WorkTreeSide,
-                NewSide = WorkTreeSide
+                NewSide = WorkTreeSide,
+                Paths = new List<string> { oldFile, newFile },
+                IgnoreWhitespace = ignoreWhitespace
             };
         }
 
@@ -145,7 +161,8 @@ namespace Folderss.Services
             {
                 Arguments = Diff(ignoreWhitespace, new string[0], selector),
                 ExternalSelector = selector,
-                ExternalDirDiff = true
+                ExternalDirDiff = true,
+                IgnoreWhitespace = ignoreWhitespace
             };
             var threeDot = range.IndexOf("...", System.StringComparison.Ordinal);
             if (threeDot >= 0)
@@ -175,7 +192,8 @@ namespace Folderss.Services
                 ExternalSelector = selector,
                 ExternalDirDiff = true,
                 OldSide = revision,
-                NewSide = WorkTreeSide
+                NewSide = WorkTreeSide,
+                IgnoreWhitespace = ignoreWhitespace
             };
         }
 
@@ -190,7 +208,7 @@ namespace Folderss.Services
                     args.Add("-w");
                 args.Add(hash);
                 args.Add("--");
-                return new GitDiffRequest { Arguments = args, NewSide = hash };
+                return new GitDiffRequest { Arguments = args, NewSide = hash, IgnoreWhitespace = ignoreWhitespace };
             }
 
             var selector = new List<string> { parents[0], hash, "--" };
@@ -200,7 +218,8 @@ namespace Folderss.Services
                 ExternalSelector = selector,
                 ExternalDirDiff = true,
                 OldSide = parents[0],
-                NewSide = hash
+                NewSide = hash,
+                IgnoreWhitespace = ignoreWhitespace
             };
         }
 

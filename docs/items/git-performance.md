@@ -151,6 +151,12 @@
 - 헤드리스 실측: Gargoyle 창 열기 → 첫 상세 2,078 → 817 ms, 저장소 8개 폴더 창 열기 → 탐색 완료 1,937 → 487 ms(첫 상세 3,501 → 2,544 ms, 첫 저장소가 링크된 워킹트리라 워킹트리 목록만 git).
 - 링크된 워킹트리가 있는 저장소는 워킹트리 목록만 git으로 읽어 선택 시 1.6초가 더 든다(예: file_agent).
 
+## 3단계: diff도 libgit2로 (2026-10-17)
+
+- 파일·커밋을 고를 때마다 도는 diff를 git 프로세스 없이 libgit2의 xdiff(git과 같은 엔진)로 만든다. 출력 텍스트가 CLI와 같은지 비교 테스트로 확인한다.
+- DiffBench Windows 측정(20가지 경우 합계): git CLI 21,353ms → libgit2 버퍼 155ms. 상세: docs/items/git-diff-libgit2.md
+- 쓰기·네트워크(커밋·fetch·pull·push 등)는 인증(GCM)·hook·LFS 때문에 계속 git CLI.
+
 ## 변경 파일
 
 - `Services/GitCommandRunner.cs` — `GitResult.WaitMilliseconds`/`ElapsedMilliseconds`, `Completed` 이벤트

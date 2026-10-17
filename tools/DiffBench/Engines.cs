@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text;
 using LibGit2Sharp;
 
@@ -93,6 +94,76 @@ public sealed class LibGit2Engine : IDiffEngine, IDisposable
     {
         _repo.Dispose();
         try { Directory.Delete(_root, true); } catch { /* 임시 폴더 — 남아도 무해 */ }
+    }
+}
+
+/// <summary>
+/// libgit2 버퍼 비교: LibGit2Sharp가 감싸지 않은 <c>git_patch_from_buffers</c>·<c>git_patch_to_buf</c>를 P/Invoke로 직접 부른다.
+/// git.exe와 같은 xdiff 엔진을 프로세스 없이, 저장소·blob 쓰기 없이 메모리에서 돌리고 unified 텍스트를 받는다(앱 화면이 받는 형식).
+/// 저장소 설정(core.autocrlf 등) 변환은 하지 않는다.
+/// </summary>
+public sealed class LibGit2BufferEngine : IDiffEngine
+{
+    // LibGit2Sharp 0.32(LibGit2Sharp.NativeBinaries 2.0.324)가 배포하는 네이티브 DLL 이름. 판이 바뀌면 이름도 바뀐다.
+    private const string Lib = "git2-5853918";
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct GitBuf
+    {
+        public IntPtr Ptr;
+        public UIntPtr Reserved;
+        public UIntPtr Size;
+    }
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int git_libgit2_init();
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    private static extern unsafe int git_patch_from_buffers(out IntPtr patch,
+        byte* oldBuffer, UIntPtr oldLen, [MarshalAs(UnmanagedType.LPUTF8Str)] string oldAsPath,
+        byte* newBuffer, UIntPtr newLen, [MarshalAs(UnmanagedType.LPUTF8Str)] string newAsPath,
+        IntPtr options);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int git_patch_to_buf(ref GitBuf buf, IntPtr patch);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    private static extern void git_patch_free(IntPtr patch);
+
+    [DllImport(Lib, CallingConvention = CallingConvention.Cdecl)]
+    private static extern void git_buf_dispose(ref GitBuf buf);
+
+    // 참조 횟수 방식이라 LibGit2Sharp가 이미 초기화했어도 한 번 더 불러도 된다(전역 할당자 준비).
+    static LibGit2BufferEngine() => git_libgit2_init();
+
+    public string Name => "libgit2 버퍼";
+    public string Kind => "라이브러리(네이티브 xdiff, 기존 의존성 직접 호출)";
+    public bool InProcess => true;
+
+    public unsafe EngineResult Run(string oldPath, string newPath)
+    {
+        var oldBytes = File.ReadAllBytes(oldPath);
+        var newBytes = File.ReadAllBytes(newPath);
+        IntPtr patch;
+        fixed (byte* a = oldBytes)
+        fixed (byte* b = newBytes)
+        {
+            if (git_patch_from_buffers(out patch, a, (UIntPtr)oldBytes.Length, "a", b, (UIntPtr)newBytes.Length, "b", IntPtr.Zero) != 0)
+                throw new InvalidOperationException("git_patch_from_buffers 실패");
+        }
+        var buf = new GitBuf();
+        try
+        {
+            if (git_patch_to_buf(ref buf, patch) != 0)
+                throw new InvalidOperationException("git_patch_to_buf 실패");
+            var text = buf.Ptr == IntPtr.Zero ? string.Empty : Encoding.UTF8.GetString((byte*)buf.Ptr, checked((int)buf.Size));
+            return new EngineResult(GitCliEngine.CountUnified(text), false);
+        }
+        finally
+        {
+            git_buf_dispose(ref buf);
+            git_patch_free(patch);
+        }
     }
 }
 
