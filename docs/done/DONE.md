@@ -9,6 +9,14 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## v1.8.8
+
+### Git 창에서 기준 폴더 변경 (2026-10-18)
+
+- `GitWindow.xaml` — 저장소 목록 위 `기준: …` 줄을 DockPanel로 감싸고 오른쪽에 `변경…` 버튼(`ChangeBasePathButton`). 작업 중(`_busyCount > 0`)에는 `다시 찾기`와 같이 비활성.
+- `GitWindow.ChangeBasePath_Click` — `FolderBrowserDialog`(현재 기준 폴더에서 시작)로 고른 폴더를 `_basePath`에 넣고(`readonly` 해제) 제목·`기준:` 표시를 `ShowBasePath()`로 갱신한 뒤 `ScanAsync()`. 같은 폴더를 고르면 아무것도 하지 않음(다시 읽기는 `다시 찾기`). 드라이브 루트는 메인 창의 Git 열기와 같은 확인 창을 거친다. 출력창에 `기준 폴더 변경: …` 한 줄 남김.
+- 기존 `_basePath` 사용처(`EnsureRepositoryRow`의 상대 경로 표시, `ConfirmNoUnsavedDocumentsUnderAll`)는 바뀐 값을 그대로 따른다. 목록·상세는 `ScanAsync`가 비우므로 이전 저장소 선택은 남지 않는다.
+
 ## v1.8.1 (2026-10-05)
 
 ### 설정 > 플러그인 탭에 `업데이트` 버튼 (2026-10-08)

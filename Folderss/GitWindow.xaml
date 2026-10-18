@@ -230,11 +230,16 @@
 
             <!-- 저장소 목록 -->
             <DockPanel Grid.Column="0">
-                <TextBlock x:Name="BasePathText"
-                           DockPanel.Dock="Top"
-                           Margin="8,6"
-                           TextTrimming="CharacterEllipsis"
-                           Foreground="{DynamicResource SecondaryText}"/>
+                <!-- 기준 폴더: 팝업을 닫지 않고 다른 폴더로 바꿔 다시 찾을 수 있다 -->
+                <DockPanel DockPanel.Dock="Top" LastChildFill="True" Margin="8,4,4,4">
+                    <Button x:Name="ChangeBasePathButton" DockPanel.Dock="Right" Content="변경…" Click="ChangeBasePath_Click"
+                            Margin="6,0,0,0" Padding="6,1" VerticalAlignment="Center"
+                            ToolTip="다른 폴더를 기준으로 저장소를 다시 찾습니다"/>
+                    <TextBlock x:Name="BasePathText"
+                               VerticalAlignment="Center"
+                               TextTrimming="CharacterEllipsis"
+                               Foreground="{DynamicResource SecondaryText}"/>
+                </DockPanel>
                 <ListBox x:Name="RepoList"
                          PreviewKeyDown="RowCopy_PreviewKeyDown"
                          BorderThickness="0,1,0,0"

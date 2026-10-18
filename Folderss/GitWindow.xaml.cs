@@ -81,7 +81,8 @@ namespace Folderss
             }
         }
 
-        private readonly string _basePath;
+        /// <summary>탐색 기준 폴더. 창 안의 "변경…" 버튼으로 바꿀 수 있다(<see cref="ChangeBasePath_Click"/>).</summary>
+        private string _basePath;
         private readonly Func<string, int> _countModifiedDocumentsUnder;
         private readonly Action<string> _openFile;
         private readonly Action<string> _openSettings;
@@ -125,9 +126,7 @@ namespace Folderss
                 view.TextLoader = LoadReportTextAsync;
             }
 
-            Title = "Git — " + basePath;
-            BasePathText.Text = "기준: " + basePath;
-            BasePathText.ToolTip = basePath;
+            ShowBasePath();
             RepoList.ItemsSource = _rows;
             SectionNav.SelectedIndex = 0;
             UpdateButtons();
@@ -305,7 +304,7 @@ namespace Folderss
             var hasRepo = row != null && snapshot != null;
 
             var hasRows = idle && _rows.Count > 0;
-            RescanButton.IsEnabled = idle;
+            RescanButton.IsEnabled = ChangeBasePathButton.IsEnabled = idle;
             FetchAllButton.IsEnabled = FetchAllOptionsButton.IsEnabled = hasRows;
             PullAllButton.IsEnabled = PullAllOptionsButton.IsEnabled = hasRows;
             PushAllButton.IsEnabled = hasRows;
@@ -423,6 +422,59 @@ namespace Folderss
 
         private async void Rescan_Click(object sender, RoutedEventArgs e)
         {
+            await ScanAsync();
+        }
+
+        /// <summary>창 제목과 목록 위 "기준: …" 줄을 현재 기준 폴더로 맞춘다.</summary>
+        private void ShowBasePath()
+        {
+            Title = "Git — " + _basePath;
+            BasePathText.Text = "기준: " + _basePath;
+            BasePathText.ToolTip = _basePath;
+        }
+
+        /// <summary>
+        /// 기준 폴더를 폴더 선택 대화상자로 바꾸고 그 아래 저장소를 다시 찾는다.
+        /// 같은 폴더를 고르면 아무것도 하지 않는다(다시 읽으려면 "다시 찾기"). 드라이브 루트는 메인 창처럼 한 번 확인한다.
+        /// </summary>
+        private async void ChangeBasePath_Click(object sender, RoutedEventArgs e)
+        {
+            if (_busyCount > 0)
+                return;
+
+            string picked;
+            using (var dialog = new System.Windows.Forms.FolderBrowserDialog
+            {
+                Description = "Git 저장소를 찾을 기준 폴더",
+                UseDescriptionForTitle = true,
+                ShowNewFolderButton = false,
+                SelectedPath = Directory.Exists(_basePath) ? _basePath : Environment.GetFolderPath(Environment.SpecialFolder.UserProfile)
+            })
+            {
+                if (dialog.ShowDialog() != System.Windows.Forms.DialogResult.OK)
+                    return;
+                picked = dialog.SelectedPath;
+            }
+
+            if (string.IsNullOrWhiteSpace(picked) || !Directory.Exists(picked))
+            {
+                MessageBox.Show(this, "폴더를 찾을 수 없습니다.", "Git", MessageBoxButton.OK, MessageBoxImage.Error);
+                return;
+            }
+
+            var fullPath = Path.GetFullPath(picked);
+            if (string.Equals(NormalizePath(fullPath), NormalizePath(_basePath), StringComparison.OrdinalIgnoreCase))
+                return;
+
+            // 드라이브 루트 전체 탐색은 수 분 걸릴 수 있어 한 번 묻는다(메인 창의 Git 열기와 같은 규칙).
+            if (string.Equals(fullPath.TrimEnd('\\'), (Path.GetPathRoot(fullPath) ?? string.Empty).TrimEnd('\\'), StringComparison.OrdinalIgnoreCase)
+                && MessageBox.Show(this, string.Format("드라이브 루트({0}) 전체에서 저장소를 찾습니다. 오래 걸릴 수 있습니다. 계속할까요?", fullPath),
+                    "Git", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                return;
+
+            _basePath = fullPath;
+            ShowBasePath();
+            AppendOutput("기준 폴더 변경: " + fullPath);
             await ScanAsync();
         }
 
