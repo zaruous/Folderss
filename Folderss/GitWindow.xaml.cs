@@ -1537,19 +1537,23 @@ namespace Folderss
             LogFilesHeader.Text = "파일 (불러오는 중…)";
             try
             {
-                var result = await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.CommitFiles(commit.Hash, commit.Parents),
-                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                // 커밋을 고를 때마다 도는 조회라 git 프로세스 없이 libgit2로 읽고, 못 읽으면 git CLI로.
+                var lib = await ReadLibAsync(row, "커밋 파일 목록", () => GitLibReader.ReadCommitFiles(row.RootPath, commit.Hash, commit.Parents));
+                var result = lib.Ok
+                    ? null
+                    : await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.CommitFiles(commit.Hash, commit.Parents),
+                        GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
                 // 기다리는 사이 다른 커밋·저장소를 골랐으면 버린다.
                 if (!ReferenceEquals(commit, LogList.SelectedItem) || !ReferenceEquals(row, SelectedRow))
                     return;
-                if (!result.Success)
+                if (!lib.Ok && !result.Success)
                 {
                     LogFilesHeader.Text = "파일 (읽지 못함)";
                     AppendResult(row.Info, result);
                     return;
                 }
 
-                var entries = GitOutputParser.ParseNameStatus(result.StdOut);
+                var entries = lib.Ok ? lib.Value : GitOutputParser.ParseNameStatus(result.StdOut);
                 _logFilesCommit = commit;
                 LogFileList.ItemsSource = entries;
                 LogFileTree.ItemsSource = GitChangeTree.Build(entries);

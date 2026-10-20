@@ -325,6 +325,60 @@ namespace Folderss.Services
             }
         }
 
+        /// <summary>
+        /// <c>git diff-tree -r --name-status -M</c>(<see cref="GitDiffCommands.CommitFiles"/>) + <see cref="GitOutputParser.ParseNameStatus"/>와 같은 목록.
+        /// 병합 커밋은 첫 부모, 최초 커밋은 빈 트리 기준. 이름 변경 감지 한도는 git처럼 <c>diff.renameLimit</c>(없으면 1000).
+        /// </summary>
+        public static List<GitStatusEntry> ReadCommitFiles(string root, string hash, string[] parents)
+        {
+            using (var repo = new Repository(root))
+            {
+                var commit = repo.Lookup<Commit>(hash) ?? throw new NotSupportedException("커밋 없음");
+                var oldTree = parents == null || parents.Length == 0
+                    ? null
+                    : (repo.Lookup<Commit>(parents[0]) ?? throw new NotSupportedException("부모 커밋 없음")).Tree;
+                var options = new CompareOptions
+                {
+                    Similarity = new SimilarityOptions
+                    {
+                        RenameDetectionMode = RenameDetectionMode.Renames,
+                        RenameLimit = repo.Config.Get<int>("diff.renameLimit")?.Value ?? 1000
+                    }
+                };
+                var list = new List<GitStatusEntry>();
+                foreach (var change in repo.Diff.Compare<TreeChanges>(oldTree, commit.Tree, options))
+                {
+                    var code = StatusCode(change.Status);
+                    if (code == '\0')
+                        continue;
+                    var renamed = code == 'R' || code == 'C';
+                    list.Add(new GitStatusEntry
+                    {
+                        Path = change.Path,
+                        OriginalPath = renamed ? change.OldPath : null,
+                        IndexState = code,
+                        Side = GitChangeSide.Index
+                    });
+                }
+                return list;
+            }
+        }
+
+        private static char StatusCode(ChangeKind kind)
+        {
+            switch (kind)
+            {
+                case ChangeKind.Added: return 'A';
+                case ChangeKind.Deleted: return 'D';
+                case ChangeKind.Modified: return 'M';
+                case ChangeKind.Renamed: return 'R';
+                case ChangeKind.Copied: return 'C';
+                case ChangeKind.TypeChanged: return 'T';
+                case ChangeKind.Unmodified: return '\0';
+                default: throw new NotSupportedException("변경 종류 " + kind);
+            }
+        }
+
         /// <summary><c>git stash list</c> + <see cref="GitStashCommands.List"/> 형식과 같은 목록(최신이 stash@{0}).</summary>
         public static List<GitStashInfo> ReadStashes(string root)
         {

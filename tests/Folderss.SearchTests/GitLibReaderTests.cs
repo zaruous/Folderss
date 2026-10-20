@@ -215,6 +215,75 @@ namespace Folderss.SearchTests
             return work;
         }
 
+        /// <summary>
+        /// 로그 탭 파일 목록: <c>git diff-tree --name-status -M</c>(<see cref="GitDiffCommands.CommitFiles"/>)과 같은 목록·순서·상태.
+        /// 정확한 이름 변경, 내용이 조금 바뀐 이름 변경(유사도 50% 이상), 기준 아래(삭제+추가), 실행 권한만 바뀜, 하위 폴더·한글 경로,
+        /// 바이너리, 병합 커밋(첫 부모 기준), 최초 커밋.
+        /// </summary>
+        [SkippableFact]
+        public async Task CommitFiles_MatchCli()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitAsync("commit-files");
+            string Lines10(string tag) => string.Concat(Enumerable.Range(1, 10).Select(i => tag + " line " + i + "\n"));
+            void Write(string path, string text)
+            {
+                var full = Path.Combine(repo, path);
+                Directory.CreateDirectory(Path.GetDirectoryName(full));
+                File.WriteAllText(full, text);
+            }
+            Write("keep.txt", "keep\n");
+            Write("exact.txt", Lines10("exact"));
+            Write("similar.txt", Lines10("similar"));
+            Write("below.txt", Lines10("below"));
+            Write("gone.txt", "gone\n");
+            Write("run.sh", "echo hi\n");
+            File.WriteAllBytes(Path.Combine(repo, "bin.dat"), new byte[] { 0, 1, 2, 3, 0, 5 });
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "root");
+
+            Write("keep.txt", "keep 2\n");
+            Directory.CreateDirectory(Path.Combine(repo, "moved"));
+            File.Move(Path.Combine(repo, "exact.txt"), Path.Combine(repo, "moved", "exact.txt"));
+            File.Delete(Path.Combine(repo, "similar.txt"));
+            Write("renamed-similar.txt", Lines10("similar").Replace("similar line 3", "changed 3").Replace("similar line 7", "changed 7"));
+            File.Delete(Path.Combine(repo, "below.txt"));
+            Write("renamed-below.txt", Lines10("below").Replace("below line", "other") + "x\n");
+            File.Delete(Path.Combine(repo, "gone.txt"));
+            Write("새 폴더/한글.txt", "한글\n");
+            File.WriteAllBytes(Path.Combine(repo, "bin.dat"), new byte[] { 0, 9, 9, 9, 0, 5 });
+            await Git(repo, "add", "-A");
+            await Git(repo, "update-index", "--chmod=+x", "run.sh");
+            await Git(repo, "commit", "-q", "-m", "second");
+
+            await Git(repo, "switch", "-q", "-c", "feature");
+            Write("feature.txt", "feature\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "feature");
+            await Git(repo, "switch", "-q", "main");
+            Write("keep.txt", "keep 3\n");
+            await Git(repo, "commit", "-q", "-am", "main");
+            await Git(repo, "merge", "-q", "--no-ff", "-m", "merge", "feature");
+
+            static string Line(GitStatusEntry e) => $"{e.IndexState}|{e.OriginalPath}|{e.Path}";
+            var commits = await CliLog(repo, 100, false);
+            Assert.Equal(5, commits.Count);
+            foreach (var commit in commits)
+            {
+                var cli = GitOutputParser.ParseNameStatus(await Git(repo, GitDiffCommands.CommitFiles(commit.Hash, commit.Parents).ToArray()));
+                var lib = GitLibReader.ReadCommitFiles(repo, commit.Hash, commit.Parents);
+                Assert.Equal(cli.Select(Line).ToList(), lib.Select(Line).ToList());
+            }
+
+            // 위 비교가 의미 있도록 실제로 여러 상태가 나왔는지 확인한다.
+            var second = commits.Single(c => c.Subject == "second");
+            var kinds = GitLibReader.ReadCommitFiles(repo, second.Hash, second.Parents).Select(e => e.Kind).ToList();
+            Assert.Contains(GitChangeKind.Renamed, kinds);
+            Assert.Contains(GitChangeKind.Added, kinds);
+            Assert.Contains(GitChangeKind.Deleted, kinds);
+            Assert.Contains(GitChangeKind.Modified, kinds);
+        }
+
         [SkippableFact]
         public async Task Branches_MatchCli()
         {
