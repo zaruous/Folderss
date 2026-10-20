@@ -452,6 +452,64 @@ namespace Folderss.SearchTests
             Assert.Contains("+from local", (await Run(local, GitDiffCommands.Commit(head.Hash, head.Parents))).StdOut);
         }
 
+        [Fact]
+        public void ParseNameStatus_ReadsStatusPathAndRename()
+        {
+            var entries = GitOutputParser.ParseNameStatus("M\0a.txt\0R087\0old/b.txt\0new/b.txt\0A\0새 파일.txt\0D\0gone.txt\0");
+            Assert.Equal(new[] { "a.txt", "new/b.txt", "새 파일.txt", "gone.txt" }, entries.Select(e => e.Path));
+            Assert.Equal(new[] { GitChangeKind.Modified, GitChangeKind.Renamed, GitChangeKind.Added, GitChangeKind.Deleted }, entries.Select(e => e.Kind));
+            Assert.Equal("old/b.txt", entries[1].OriginalPath);
+            Assert.Empty(GitOutputParser.ParseNameStatus(""));
+        }
+
+        [SkippableFact]
+        public async Task RealGit_CommitFiles_ListAndPerFileDiff()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("commit-files");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "a\n");
+            File.WriteAllText(Path.Combine(repo, "old.txt"), "same\nsame\nsame\nsame\n");
+            File.WriteAllText(Path.Combine(repo, "gone.txt"), "gone\n");
+            await CommitAllAsync(repo, "root");
+            File.WriteAllText(Path.Combine(repo, "a.txt"), "a2\n");
+            File.Move(Path.Combine(repo, "old.txt"), Path.Combine(repo, "new.txt"));
+            File.Delete(Path.Combine(repo, "gone.txt"));
+            Directory.CreateDirectory(Path.Combine(repo, "sub"));
+            File.WriteAllText(Path.Combine(repo, "sub", "added.txt"), "added\n");
+            await CommitAllAsync(repo, "second");
+
+            var log = GitOutputParser.ParseLog((await Git(repo, "log", "-z", GitOutputParser.LogFormat)).StdOut);
+            var head = log[0];
+            var root = log[1];
+
+            var files = GitOutputParser.ParseNameStatus((await Run(repo, GitDiffCommands.CommitFiles(head.Hash, head.Parents))).StdOut);
+            Assert.Equal(GitChangeKind.Modified, files.Single(f => f.Path == "a.txt").Kind);
+            Assert.Equal(GitChangeKind.Deleted, files.Single(f => f.Path == "gone.txt").Kind);
+            Assert.Equal(GitChangeKind.Added, files.Single(f => f.Path == "sub/added.txt").Kind);
+            var renamed = files.Single(f => f.Path == "new.txt");
+            Assert.Equal(GitChangeKind.Renamed, renamed.Kind);
+            Assert.Equal("old.txt", renamed.OriginalPath);
+            Assert.Equal(4, files.Count);
+
+            // 파일 하나만: 다른 파일의 변경은 들어가지 않는다.
+            var aDiff = (await Run(repo, GitDiffCommands.CommitFile(head.Hash, head.Parents, "a.txt", null))).StdOut;
+            Assert.Contains("+a2", aDiff);
+            Assert.DoesNotContain("added", aDiff);
+            Assert.DoesNotContain("gone", aDiff);
+            // 이름 변경은 원래 경로를 함께 넘겨야 이름 변경으로 보인다.
+            var renameDiff = (await Run(repo, GitDiffCommands.CommitFile(head.Hash, head.Parents, renamed.Path, renamed.OriginalPath))).StdOut;
+            Assert.Contains("rename from old.txt", renameDiff);
+            Assert.DoesNotContain("a2", renameDiff);
+
+            // 최초 커밋: 빈 트리 기준.
+            var rootFiles = GitOutputParser.ParseNameStatus((await Run(repo, GitDiffCommands.CommitFiles(root.Hash, root.Parents))).StdOut);
+            Assert.Equal(new[] { "a.txt", "gone.txt", "old.txt" }, rootFiles.Select(f => f.Path).OrderBy(p => p));
+            Assert.All(rootFiles, f => Assert.Equal(GitChangeKind.Added, f.Kind));
+            var rootDiff = (await Run(repo, GitDiffCommands.CommitFile(root.Hash, root.Parents, "gone.txt", null))).StdOut;
+            Assert.Contains("+gone", rootDiff);
+            Assert.DoesNotContain("+a", rootDiff);
+        }
+
         // ── 인코딩 대체 해석 ────────────────────────────────────────────────────
 
         [Fact]

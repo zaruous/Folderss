@@ -223,6 +223,50 @@ namespace Folderss.Services
             };
         }
 
+        /// <summary>
+        /// 커밋 하나에서 바뀐 파일 목록(<see cref="GitOutputParser.ParseNameStatus"/>와 짝). <see cref="Commit"/>과 같은 기준:
+        /// 병합 커밋은 첫 부모, 최초 커밋은 빈 트리.
+        /// </summary>
+        public static List<string> CommitFiles(string hash, string[] parents)
+        {
+            var args = new List<string> { "diff-tree", "-r", "-z", "--no-commit-id", "--name-status", "-M" };
+            if (parents == null || parents.Length == 0)
+                args.Add("--root");
+            else
+                args.Add(parents[0]);
+            args.Add(hash);
+            args.Add("--");
+            return args;
+        }
+
+        /// <summary>커밋 하나의 파일 하나 변경(<see cref="Commit"/>의 파일 한정판). 이름 변경은 원래 경로도 넣어야 짝이 맞는다.</summary>
+        public static GitDiffRequest CommitFile(string hash, string[] parents, string path, string originalPath, bool ignoreWhitespace = false)
+        {
+            var paths = new[] { originalPath, path }.Where(p => !string.IsNullOrEmpty(p)).ToList();
+            if (parents == null || parents.Length == 0)
+            {
+                var args = new List<string> { "show", "--format=" };
+                args.AddRange(Common);
+                if (ignoreWhitespace)
+                    args.Add("-w");
+                args.Add(hash);
+                args.AddRange(PathSelector(paths.ToArray()));
+                return new GitDiffRequest { Arguments = args, NewSide = hash, Paths = paths, IgnoreWhitespace = ignoreWhitespace };
+            }
+
+            var selector = new List<string> { parents[0], hash };
+            selector.AddRange(PathSelector(paths.ToArray()));
+            return new GitDiffRequest
+            {
+                Arguments = Diff(ignoreWhitespace, new string[0], selector),
+                ExternalSelector = selector,
+                OldSide = parents[0],
+                NewSide = hash,
+                Paths = paths,
+                IgnoreWhitespace = ignoreWhitespace
+            };
+        }
+
         /// <summary><c>&lt;from&gt;..&lt;to&gt;</c> 범위 커밋 목록(<see cref="GitOutputParser.ParseLog"/>와 짝).</summary>
         public static List<string> LogRange(string from, string to, int limit)
         {

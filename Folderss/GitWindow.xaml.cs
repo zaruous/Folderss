@@ -695,7 +695,7 @@ namespace Folderss
             RemoteSummaryText.Text = string.Empty;
             ChangesDiff.Clear();
             RemoteDiff.Clear();
-            LogDiff.Clear();
+            ClearLogFiles("커밋을 선택하면 바뀐 파일을 보여 줍니다.");
         }
 
         private void ShowChanges(RepositoryRow row)
@@ -1509,7 +1509,119 @@ namespace Folderss
         private async void LogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             LogResetButton.IsEnabled = LogBranchButton.IsEnabled = LogCheckoutButton.IsEnabled = LogList.SelectedItem != null;
-            await ShowCommitDiffAsync(LogDiff, LogList.SelectedItem as GitCommitInfo);
+            await LoadCommitFilesAsync(LogList.SelectedItem as GitCommitInfo);
+        }
+
+        // ── 로그: 선택 커밋의 파일 목록 → 고른 파일 하나의 diff ─────────────────
+
+        /// <summary>파일 목록이 보이고 있는 커밋. 파일을 고르면 이 커밋 기준으로 diff를 만든다.</summary>
+        private GitCommitInfo _logFilesCommit;
+
+        private void ClearLogFiles(string diffMessage)
+        {
+            _logFilesCommit = null;
+            LogFileList.ItemsSource = null;
+            LogFileTree.ItemsSource = null;
+            LogFilesHeader.Text = "파일";
+            LogFilesHeader.ToolTip = null;
+            LogDiff.Clear(diffMessage);
+        }
+
+        private async Task LoadCommitFilesAsync(GitCommitInfo commit)
+        {
+            var row = SelectedRow;
+            ClearLogFiles("커밋을 선택하면 바뀐 파일을 보여 줍니다.");
+            if (commit == null || row == null)
+                return;
+
+            LogFilesHeader.Text = "파일 (불러오는 중…)";
+            try
+            {
+                // 커밋을 고를 때마다 도는 조회라 git 프로세스 없이 libgit2로 읽고, 못 읽으면 git CLI로.
+                var lib = await ReadLibAsync(row, "커밋 파일 목록", () => GitLibReader.ReadCommitFiles(row.RootPath, commit.Hash, commit.Parents));
+                var result = lib.Ok
+                    ? null
+                    : await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.CommitFiles(commit.Hash, commit.Parents),
+                        GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                // 기다리는 사이 다른 커밋·저장소를 골랐으면 버린다.
+                if (!ReferenceEquals(commit, LogList.SelectedItem) || !ReferenceEquals(row, SelectedRow))
+                    return;
+                if (!lib.Ok && !result.Success)
+                {
+                    LogFilesHeader.Text = "파일 (읽지 못함)";
+                    AppendResult(row.Info, result);
+                    return;
+                }
+
+                var entries = lib.Ok ? lib.Value : GitOutputParser.ParseNameStatus(result.StdOut);
+                _logFilesCommit = commit;
+                LogFileList.ItemsSource = entries;
+                LogFileTree.ItemsSource = GitChangeTree.Build(entries);
+                var basis = commit.Parents.Length == 0 ? "최초 커밋" : commit.Parents.Length > 1 ? "병합 커밋 — 첫 부모 기준" : null;
+                LogFilesHeader.Text = string.Format("파일 {0}{1}", entries.Count, basis == null ? string.Empty : " (" + basis + ")");
+                LogFilesHeader.ToolTip = GitStatusEntry.Summarize(entries);
+                LogDiff.Clear(entries.Count == 0 ? "바뀐 파일이 없습니다." : "파일을 선택하면 차이를 보여 줍니다.");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private void LogFilesTreeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var tree = LogFilesTreeToggle.IsChecked == true;
+            LogFileList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            LogFileTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            // 두 보기의 선택은 따로라, 전환하면 diff가 어느 선택의 것인지 헷갈리지 않게 비운다.
+            LogFileList.UnselectAll();
+            if (_logFilesCommit != null)
+                LogDiff.Clear("파일을 선택하면 차이를 보여 줍니다.");
+        }
+
+        private async void LogFileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LogFileList.SelectedItem is GitStatusEntry entry)
+                await ShowCommitFileDiffAsync(entry);
+        }
+
+        private async void LogFileTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = LogFileTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+            {
+                LogDiff.Clear(string.Format("폴더 {0} — 파일 {1}개", node.Path, node.Entries.Count()));
+                return;
+            }
+            await ShowCommitFileDiffAsync(node.Entry);
+        }
+
+        /// <summary>
+        /// 로그 파일 목록·트리: Ctrl+C는 이름, Ctrl+Shift+C는 전체 경로를 텍스트로만 복사한다(트리 폴더는 폴더 자신).
+        /// 변경 사항 탭과 달리 파일 복사(FileDrop)는 하지 않는다 — 작업 트리 파일은 그 커밋의 내용이 아니기 때문.
+        /// </summary>
+        private void LogFileCopy_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            var modifiers = Keyboard.Modifiers;
+            if (e.Key != Key.C || (modifiers != ModifierKeys.Control && modifiers != (ModifierKeys.Control | ModifierKeys.Shift)))
+                return;
+            var root = SelectedRow?.RootPath;
+            var path = ReferenceEquals(sender, LogFileTree) ? (LogFileTree.SelectedItem as GitChangeNode)?.Path : (LogFileList.SelectedItem as GitStatusEntry)?.Path;
+            if (root == null || string.IsNullOrEmpty(path))
+                return;
+            e.Handled = true;
+            ClipboardService.TrySetDataObject(GitChangeTree.ClipboardText(new[] { path }, root, fullPath: modifiers.HasFlag(ModifierKeys.Shift)));
+        }
+
+        private Task ShowCommitFileDiffAsync(GitStatusEntry entry)
+        {
+            var commit = _logFilesCommit;
+            if (commit == null)
+                return Task.CompletedTask;
+            var title = string.Format("{0}  {1}: {2}", commit.ShortHash, entry.StatusLabel, entry.PathText);
+            return LoadDiffAsync(LogDiff, WithTitle(GitDiffCommands.CommitFile(commit.Hash, commit.Parents, entry.Path, entry.OriginalPath,
+                _diff.IgnoreWhitespace), title));
         }
 
         private async void RemoteCommitList_SelectionChanged(object sender, SelectionChangedEventArgs e)
