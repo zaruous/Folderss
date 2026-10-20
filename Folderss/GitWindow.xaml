@@ -512,12 +512,60 @@
                                 ToolTip="현재 브랜치를 선택한 브랜치까지 fast-forward합니다 (현재 ← 선택). 갈라졌으면 아무것도 바꾸지 않습니다"/>
                         <Button Style="{StaticResource OptionArrowButton}" Click="UpdateBranchOptions_Click"
                                 ToolTip="업데이트 옵션… (두 브랜치 선택, 병합·squash·rebase·덮어쓰기)"/>
+                        <Border Width="1" Margin="6,4" Background="{DynamicResource BorderBrush}"/>
+                        <CheckBox x:Name="BranchRemoteToggle" VerticalAlignment="Center"
+                                  Content="원격 포함"
+                                  Foreground="{DynamicResource PrimaryText}"
+                                  Click="BranchRemoteToggle_Click"
+                                  ToolTip="원격 브랜치도 목록과 그래프에 보입니다. 원격 브랜치는 마지막 fetch 때의 상태입니다"/>
                     </StackPanel>
-                    <ListBox x:Name="BranchList"
-                             FontFamily="Consolas"
-                             DisplayMemberPath="DisplayText"
-                             PreviewKeyDown="RowCopy_PreviewKeyDown"
-                             MouseDoubleClick="BranchList_MouseDoubleClick"/>
+                    <!-- 왼쪽 브랜치 목록(버튼 대상), 오른쪽 요약 그래프(브랜치 끝·갈라진 지점만, 보기 전용) -->
+                    <Grid Margin="0,4,0,0">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="300" MinWidth="120"/>
+                            <ColumnDefinition Width="5"/>
+                            <ColumnDefinition Width="*" MinWidth="200"/>
+                        </Grid.ColumnDefinitions>
+                        <ListBox x:Name="BranchList"
+                                 FontFamily="Consolas"
+                                 DisplayMemberPath="DisplayText"
+                                 SelectionChanged="BranchList_SelectionChanged"
+                                 PreviewKeyDown="RowCopy_PreviewKeyDown"
+                                 MouseDoubleClick="BranchList_MouseDoubleClick"
+                                 ToolTip="↑ 이 브랜치에만 있는 커밋 수, ↓ 현재 브랜치에만 있는 커밋 수"/>
+                        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>
+                        <ListView x:Name="BranchGraphList" Grid.Column="2"
+                                  SelectionMode="Single"
+                                  PreviewKeyDown="RowCopy_PreviewKeyDown"
+                                  VirtualizingPanel.IsVirtualizing="True"
+                                  VirtualizingPanel.VirtualizationMode="Recycling">
+                            <!-- 로그 목록과 같이 행 높이를 고정해 그래프 선이 이어지게 한다. -->
+                            <ListView.ItemContainerStyle>
+                                <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                                    <Setter Property="Height" Value="22"/>
+                                    <Setter Property="MinHeight" Value="0"/>
+                                    <Setter Property="Padding" Value="0"/>
+                                    <Setter Property="Margin" Value="0"/>
+                                    <Setter Property="BorderThickness" Value="0"/>
+                                    <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn x:Name="BranchGraphColumn" Header="그래프" Width="40">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <controls:GitGraphCell Row="{Binding Graph}" Margin="-6,0,-6,0" VerticalAlignment="Stretch"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="브랜치" Width="200" DisplayMemberBinding="{Binding Refs}"/>
+                                    <GridViewColumn Header="제목" Width="320" DisplayMemberBinding="{Binding Subject}"/>
+                                    <GridViewColumn Header="날짜" Width="130" DisplayMemberBinding="{Binding TimeText}"/>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                    </Grid>
                 </DockPanel>
 
                 <!-- 원격 비교: 현재 브랜치 ↔ upstream (마지막 fetch 기준) -->

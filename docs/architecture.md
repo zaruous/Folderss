@@ -41,9 +41,10 @@ Folderss/
 │   ├── GitRefCommands.cs           — reset(soft/mixed/hard)·브랜치 생성·detached 체크아웃·worktree add/list/remove/prune 인수
 │   ├── GitConfigCommands.cs        — 저장소 설정(git config --global/--local) list -z 파서·set/unset 인수·편집 diff, 인증·작성자 키 목록 (순수 로직)
 │   ├── GitRestoreCommands.cs       — 파일 되돌리기(restore --worktree / --source=HEAD --staged --worktree) 인수와 모드별 제외 규칙, Delete 키 삭제 대상(`DeletableFiles`)
-│   ├── GitWindowStateService.cs    — Git 창 보기 상태(트리 보기·목록 너비·변경됨/스테이지됨 비율) git-window.xml 저장
+│   ├── GitWindowStateService.cs    — Git 창 보기 상태(트리 보기·목록 너비·변경됨/스테이지됨 비율·브랜치 탭 원격 포함) git-window.xml 저장
 │   ├── GitChangeTree.cs            — 변경 파일(평면)을 폴더 트리로 묶기, 한 자식 폴더 체인 합침 (순수 로직)
 │   ├── GitGraphLayout.cs           — 부모 해시로 브랜치 그래프 레인·선분 계산 (순수 로직)
+│   ├── GitBranchGraph.cs           — 브랜치 탭 요약 그래프: 브랜치 끝·HEAD·merge-base만 남기고 부모 다시 잇기, HEAD 대비 앞섬/뒤처짐 (순수 로직)
 │   ├── GitEncodingDiff.cs          — UTF-16/32(BOM) "Binary files" 구간을 BOM 디코딩 + diff --no-index로 텍스트 diff로 교체
 │   ├── GitDiffCommands.cs          — diff·upstream 비교·두 파일 비교(`Files`, `--no-index`) 명령 인수 (UI·테스트 공용)
 │   ├── GitSettingsService.cs       — Git 설정 저장 (git-settings.xml: git 경로·pull·탐색·로그)
@@ -453,6 +454,12 @@ Folderss/
 - 브랜치 그래프: `GitGraphLayout.Compute`(topo 순서 커밋 + 부모) → 행마다 점 레인과 선분(Y: 0 위/1 가운데/2 아래). 레인은 "기다리는 해시" 배열이며
   점에 모이는 레인은 끝나고, 첫 부모는 같은 레인, 나머지 부모는 기존 레인 또는 빈 레인. `GitGraphCell`이 그리며 로그 ListView는 행 높이 22·Padding 0으로
   행 사이 선이 끊기지 않게 한다. 로그 개수 제한으로 목록 밖 부모를 기다리는 레인은 아래로 이어진 채 끝난다.
+- 브랜치 탭 요약 그래프: 보이는 브랜치(기본 로컬, `원격 포함` 체크 시 원격도)의 끝과 HEAD에서 닿는 커밋 전체를 개수 제한 없이 topo 순서로 읽어
+  `GitBranchGraph.Build`에 넘긴다 — 브랜치 끝·HEAD·각 끝이 HEAD와 갈라진 지점(topo 순서에서 처음 만나는 공통 조상)만 남기고 부모를 가장 가까운
+  남긴 조상으로 다시 이은 뒤 `GitGraphLayout`·`GitGraphCell`로 그린다. 같은 계산으로 끝마다 HEAD 대비 앞섬/뒤처짐을 내 목록에 `↑n ↓m`으로 표시.
+  LibGit2Sharp(`GitLibReader.ReadBranchGraph`, 해시·부모만 만들고 남은 행만 제목 등을 채움) 우선, 실패 시 `GitBranchGraph.CliArguments`
+  (`log --topo-order --branches [--remotes] [HEAD]`) + `ParseLog` — 두 경로 모두 같은 `Build`를 거친다. 전체 히스토리를 걸으므로 브랜치 탭을 볼 때만 읽는다
+  (`_branchGraphRow`). 버튼(전환·삭제·업데이트)은 계속 왼쪽 목록 선택을 대상으로 하고, 그래프는 보기 전용(목록 선택 시 그 끝 행 선택).
 - 외부 비교 도구: `GitDiffRequest.ExternalSelector`가 있는 비교만 `git difftool --no-prompt [--dir-diff]`로 연다(커밋·범위는 폴더 비교).
   직접 지정은 `-c difftool.folderss.cmd=<BuildToolCommand>` + `--tool=folderss`로 이번 실행에만 등록 — `{left}`/`{right}`는 항상
   `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,

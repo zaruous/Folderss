@@ -37,6 +37,7 @@
     <Compile Include="..\..\Folderss\Services\GitSettingsService.cs" Link="Linked\GitSettingsService.cs" />
     <Compile Include="..\..\Folderss\Services\DiffSettingsService.cs" Link="Linked\DiffSettingsService.cs" />
     <Compile Include="..\..\Folderss\Services\GitGraphLayout.cs" Link="Linked\GitGraphLayout.cs" />
+    <Compile Include="..\..\Folderss\Services\GitBranchGraph.cs" Link="Linked\GitBranchGraph.cs" />
     <Compile Include="..\..\Folderss\Services\GitLibReader.cs" Link="Linked\GitLibReader.cs" />
     <Compile Include="..\..\Folderss\Services\GitLibDiff.cs" Link="Linked\GitLibDiff.cs" />
     <Compile Include="..\..\Folderss\Services\GitChangeTree.cs" Link="Linked\GitChangeTree.cs" />

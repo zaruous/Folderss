@@ -18,7 +18,7 @@ namespace Folderss.Services
         public const string LogFormat = "--format=%H%x1f%P%x1f%an%x1f%at%x1f%D%x1f%s";
 
         /// <summary><c>git for-each-ref</c>에 넘길 형식. <see cref="ParseBranches"/>와 짝이다.</summary>
-        public const string BranchFormat = "--format=%(HEAD)%1f%(refname)%1f%(upstream:short)%1f%(contents:subject)";
+        public const string BranchFormat = "--format=%(HEAD)%1f%(refname)%1f%(upstream:short)%1f%(contents:subject)%1f%(objectname)";
 
         /// <summary>
         /// 상태 조회 인수. 추적 안 되는 폴더를 "dir/" 한 줄로 접지 않고 안의 파일을 하나씩 내도록 <c>--untracked-files=all</c>
@@ -418,6 +418,7 @@ namespace Folderss.Services
                 branch.IsCurrent = fields[0] == "*";
                 branch.Upstream = fields[2];
                 branch.Subject = fields[3];
+                branch.TipHash = fields.Length > 4 ? fields[4] : null;
                 branches.Add(branch);
             }
             return branches;

@@ -195,6 +195,7 @@ namespace Folderss.Services
                     }
                     info.IsCurrent = branch.IsCurrentRepositoryHead;
                     info.Subject = branch.Tip?.MessageShort ?? string.Empty;
+                    info.TipHash = branch.Tip?.Sha;
                     list.Add(info);
                 }
                 return list;
@@ -225,6 +226,44 @@ namespace Folderss.Services
                 var reachable = repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = starts, SortBy = CommitSortStrategies.None })
                     .ToDictionary(c => c.Sha, StringComparer.Ordinal);
                 return ToInfos(repo, TopoOrder(starts, reachable).Take(limit));
+            }
+        }
+
+        /// <summary>
+        /// 브랜치 탭 요약 그래프: <paramref name="tips"/>와 HEAD에서 닿는 모든 커밋을 topo 순서로 읽어 <see cref="GitBranchGraph.Build"/>에 넘긴다.
+        /// 개수 제한이 없으므로(오래된 브랜치 끝이 빠지면 안 됨) 커밋마다 해시·부모만 만들고, 제목·작성자·시각은 남은 행에만 채운다.
+        /// </summary>
+        public static GitBranchGraph.Result ReadBranchGraph(string root, IList<string> tips)
+        {
+            using (var repo = new Repository(root))
+            {
+                var starts = new List<Commit>();
+                foreach (var sha in tips)
+                {
+                    var commit = repo.Lookup<Commit>(sha);
+                    if (commit != null)
+                        starts.Add(commit);
+                }
+                var head = repo.Head.Tip;
+                if (head != null)
+                    starts.Add(head);
+                if (starts.Count == 0)
+                    return GitBranchGraph.Build(new List<GitCommitInfo>(), tips, null);
+
+                var reachable = repo.Commits.QueryBy(new CommitFilter { IncludeReachableFrom = starts, SortBy = CommitSortStrategies.None })
+                    .ToDictionary(c => c.Sha, StringComparer.Ordinal);
+                var commits = TopoOrder(starts, reachable)
+                    .Select(c => new GitCommitInfo { Hash = c.Sha, Parents = c.Parents.Select(p => p.Sha).ToArray() })
+                    .ToList();
+                var graph = GitBranchGraph.Build(commits, tips, head?.Sha);
+                foreach (var row in graph.Rows)
+                {
+                    var commit = reachable[row.Hash];
+                    row.Author = commit.Author.Name;
+                    row.Time = AuthorTime(commit);
+                    row.Subject = commit.MessageShort;
+                }
+                return graph;
             }
         }
 
