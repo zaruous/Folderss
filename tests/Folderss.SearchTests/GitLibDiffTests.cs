@@ -202,6 +202,9 @@ namespace Folderss.SearchTests
             await AssertSameAsCli(repo, GitDiffCommands.Commit(second, await Parents(repo, second)));
             await AssertSameAsCli(repo, GitDiffCommands.Commit(second, await Parents(repo, second)), GitDiffViewMode.FullFile);
             await AssertSameAsCli(repo, GitDiffCommands.Commit(merge, await Parents(repo, merge)));
+            await AssertSameAsCli(repo, GitDiffCommands.CommitFile(root, new string[0], "b.txt", null));
+            await AssertSameAsCli(repo, GitDiffCommands.CommitFile(second, await Parents(repo, second), "a.txt", null));
+            await AssertSameAsCli(repo, GitDiffCommands.CommitFile(merge, await Parents(repo, merge), "c.txt", null));
             await AssertSameAsCli(repo, GitDiffCommands.Range(GitDiffCommands.Upstream + "...HEAD"));
             await AssertSameAsCli(repo, GitDiffCommands.Range("HEAD..." + GitDiffCommands.Upstream));
             await AssertSameAsCli(repo, GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream));

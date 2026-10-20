@@ -695,7 +695,7 @@ namespace Folderss
             RemoteSummaryText.Text = string.Empty;
             ChangesDiff.Clear();
             RemoteDiff.Clear();
-            LogDiff.Clear();
+            ClearLogFiles("커밋을 선택하면 바뀐 파일을 보여 줍니다.");
         }
 
         private void ShowChanges(RepositoryRow row)
@@ -1509,7 +1509,98 @@ namespace Folderss
         private async void LogList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             LogResetButton.IsEnabled = LogBranchButton.IsEnabled = LogCheckoutButton.IsEnabled = LogList.SelectedItem != null;
-            await ShowCommitDiffAsync(LogDiff, LogList.SelectedItem as GitCommitInfo);
+            await LoadCommitFilesAsync(LogList.SelectedItem as GitCommitInfo);
+        }
+
+        // ── 로그: 선택 커밋의 파일 목록 → 고른 파일 하나의 diff ─────────────────
+
+        /// <summary>파일 목록이 보이고 있는 커밋. 파일을 고르면 이 커밋 기준으로 diff를 만든다.</summary>
+        private GitCommitInfo _logFilesCommit;
+
+        private void ClearLogFiles(string diffMessage)
+        {
+            _logFilesCommit = null;
+            LogFileList.ItemsSource = null;
+            LogFileTree.ItemsSource = null;
+            LogFilesHeader.Text = "파일";
+            LogFilesHeader.ToolTip = null;
+            LogDiff.Clear(diffMessage);
+        }
+
+        private async Task LoadCommitFilesAsync(GitCommitInfo commit)
+        {
+            var row = SelectedRow;
+            ClearLogFiles("커밋을 선택하면 바뀐 파일을 보여 줍니다.");
+            if (commit == null || row == null)
+                return;
+
+            LogFilesHeader.Text = "파일 (불러오는 중…)";
+            try
+            {
+                var result = await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.CommitFiles(commit.Hash, commit.Parents),
+                    GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                // 기다리는 사이 다른 커밋·저장소를 골랐으면 버린다.
+                if (!ReferenceEquals(commit, LogList.SelectedItem) || !ReferenceEquals(row, SelectedRow))
+                    return;
+                if (!result.Success)
+                {
+                    LogFilesHeader.Text = "파일 (읽지 못함)";
+                    AppendResult(row.Info, result);
+                    return;
+                }
+
+                var entries = GitOutputParser.ParseNameStatus(result.StdOut);
+                _logFilesCommit = commit;
+                LogFileList.ItemsSource = entries;
+                LogFileTree.ItemsSource = GitChangeTree.Build(entries);
+                var basis = commit.Parents.Length == 0 ? "최초 커밋" : commit.Parents.Length > 1 ? "병합 커밋 — 첫 부모 기준" : null;
+                LogFilesHeader.Text = string.Format("파일 {0}{1}", entries.Count, basis == null ? string.Empty : " (" + basis + ")");
+                LogFilesHeader.ToolTip = GitStatusEntry.Summarize(entries);
+                LogDiff.Clear(entries.Count == 0 ? "바뀐 파일이 없습니다." : "파일을 선택하면 차이를 보여 줍니다.");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private void LogFilesTreeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var tree = LogFilesTreeToggle.IsChecked == true;
+            LogFileList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            LogFileTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            // 두 보기의 선택은 따로라, 전환하면 diff가 어느 선택의 것인지 헷갈리지 않게 비운다.
+            LogFileList.UnselectAll();
+            if (_logFilesCommit != null)
+                LogDiff.Clear("파일을 선택하면 차이를 보여 줍니다.");
+        }
+
+        private async void LogFileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (LogFileList.SelectedItem is GitStatusEntry entry)
+                await ShowCommitFileDiffAsync(entry);
+        }
+
+        private async void LogFileTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = LogFileTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+            {
+                LogDiff.Clear(string.Format("폴더 {0} — 파일 {1}개", node.Path, node.Entries.Count()));
+                return;
+            }
+            await ShowCommitFileDiffAsync(node.Entry);
+        }
+
+        private Task ShowCommitFileDiffAsync(GitStatusEntry entry)
+        {
+            var commit = _logFilesCommit;
+            if (commit == null)
+                return Task.CompletedTask;
+            var title = string.Format("{0}  {1}: {2}", commit.ShortHash, entry.StatusLabel, entry.PathText);
+            return LoadDiffAsync(LogDiff, WithTitle(GitDiffCommands.CommitFile(commit.Hash, commit.Parents, entry.Path, entry.OriginalPath,
+                _diff.IgnoreWhitespace), title));
         }
 
         private async void RemoteCommitList_SelectionChanged(object sender, SelectionChangedEventArgs e)

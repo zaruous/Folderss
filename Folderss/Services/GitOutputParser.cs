@@ -209,6 +209,34 @@ namespace Folderss.Services
             return commits;
         }
 
+        /// <summary>
+        /// <c>git diff-tree -z --name-status</c>(<see cref="GitDiffCommands.CommitFiles"/>) 출력: 상태 NUL 경로 NUL, 이름 변경·복사는 상태 NUL 원래 경로 NUL 새 경로 NUL.
+        /// 상태 글자는 <see cref="GitStatusEntry.IndexState"/>에 넣고 <see cref="GitChangeSide.Index"/>로 둔다(커밋된 변경이라 배지를 X 코드로 본다).
+        /// </summary>
+        public static List<GitStatusEntry> ParseNameStatus(string output)
+        {
+            var entries = new List<GitStatusEntry>();
+            var tokens = (output ?? string.Empty).Split('\0');
+            for (var i = 0; i < tokens.Length; i++)
+            {
+                var status = tokens[i].Trim('\n', '\r');
+                if (status.Length == 0)
+                    continue;
+                var code = status[0];
+                if ((code == 'R' || code == 'C') && i + 2 < tokens.Length)
+                {
+                    entries.Add(new GitStatusEntry { OriginalPath = tokens[i + 1], Path = tokens[i + 2], IndexState = code, Side = GitChangeSide.Index });
+                    i += 2;
+                }
+                else if (i + 1 < tokens.Length)
+                {
+                    entries.Add(new GitStatusEntry { Path = tokens[i + 1], IndexState = code, Side = GitChangeSide.Index });
+                    i += 1;
+                }
+            }
+            return entries;
+        }
+
         private static readonly Regex HunkHeader = new Regex(@"^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@", RegexOptions.Compiled);
 
         /// <summary>
