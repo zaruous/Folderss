@@ -1593,6 +1593,23 @@ namespace Folderss
             await ShowCommitFileDiffAsync(node.Entry);
         }
 
+        /// <summary>
+        /// 로그 파일 목록·트리: Ctrl+C는 이름, Ctrl+Shift+C는 전체 경로를 텍스트로만 복사한다(트리 폴더는 폴더 자신).
+        /// 변경 사항 탭과 달리 파일 복사(FileDrop)는 하지 않는다 — 작업 트리 파일은 그 커밋의 내용이 아니기 때문.
+        /// </summary>
+        private void LogFileCopy_PreviewKeyDown(object sender, KeyEventArgs e)
+        {
+            var modifiers = Keyboard.Modifiers;
+            if (e.Key != Key.C || (modifiers != ModifierKeys.Control && modifiers != (ModifierKeys.Control | ModifierKeys.Shift)))
+                return;
+            var root = SelectedRow?.RootPath;
+            var path = ReferenceEquals(sender, LogFileTree) ? (LogFileTree.SelectedItem as GitChangeNode)?.Path : (LogFileList.SelectedItem as GitStatusEntry)?.Path;
+            if (root == null || string.IsNullOrEmpty(path))
+                return;
+            e.Handled = true;
+            ClipboardService.TrySetDataObject(GitChangeTree.ClipboardText(new[] { path }, root, fullPath: modifiers.HasFlag(ModifierKeys.Shift)));
+        }
+
         private Task ShowCommitFileDiffAsync(GitStatusEntry entry)
         {
             var commit = _logFilesCommit;

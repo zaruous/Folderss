@@ -20,6 +20,7 @@
 - `GitDiffCommands.CommitFiles`, `GitDiffCommands.CommitFile` 추가.
 - `GitOutputParser.ParseNameStatus` 추가(`-z` name-status, 이름 변경·복사는 경로 두 개).
 - `GitWindow.xaml` — 로그 아래 영역을 파일 목록(+`트리로 보기`) | 분할선 | `LogDiff`로.
+- 파일 목록·트리 `Ctrl+C` 이름 / `Ctrl+Shift+C` 전체 경로 텍스트 복사(`LogFileCopy_PreviewKeyDown`, `GitChangeTree.ClipboardText` 재사용). 변경 사항 탭과 달리 파일 복사(FileDrop)는 하지 않는다 — 작업 트리 파일은 그 커밋의 내용이 아니다.
 - `GitWindow.xaml.cs` — `LoadCommitFilesAsync`(기다리는 사이 다른 커밋·저장소를 고르면 결과 버림), `ShowCommitFileDiffAsync`, 목록·트리 선택 처리, 저장소 바뀔 때 `ClearLogFiles`.
 
 ## 범위 밖 / 주의
@@ -50,8 +51,10 @@
   1. 로그에서 커밋 클릭 → 왼쪽에 파일 목록과 `파일 N` 제목, 오른쪽 "파일을 선택하면…". 파일 클릭 → 그 파일 diff만.
   2. `트리로 보기` 켜고 끄기, 폴더 클릭 시 안내 문구, 파일 클릭 시 diff.
   3. 이름 변경 파일은 `rename from/to`와 내용 차이, 삭제 파일은 전체 삭제로 보임. 최초 커밋·병합 커밋도 확인.
+  5. 파일·폴더를 고르고 `Ctrl+C` → 이름, `Ctrl+Shift+C` → 전체 경로가 붙여넣어짐(목록·트리 모두).
   4. 다른 저장소를 고르면 파일 목록·diff가 비워짐. 보기 모드·공백 무시 변경 시 보고 있는 파일 diff가 다시 불러와짐.
 
 ## 변경 이력
 
 - 2026-10-20: 요청 접수(로그 클릭 시 전체 diff 대신 파일 목록 + 선택 파일 diff, 트리 보기). 구현·단위 테스트 완료, Windows 빌드·수동 확인 대기.
+- 2026-10-20: 파일 목록 클립보드 복사 추가 요청 → 텍스트(이름/전체 경로)만 복사로 구현.

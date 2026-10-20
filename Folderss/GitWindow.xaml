@@ -711,11 +711,14 @@
                                 <ListBox x:Name="LogFileList"
                                          FontFamily="Consolas"
                                          ItemTemplate="{StaticResource GitEntryTemplate}"
-                                         SelectionChanged="LogFileList_SelectionChanged"/>
+                                         SelectionChanged="LogFileList_SelectionChanged"
+                                         PreviewKeyDown="LogFileCopy_PreviewKeyDown"
+                                         ToolTip="Ctrl+C: 파일 이름 복사, Ctrl+Shift+C: 전체 경로 복사"/>
                                 <TreeView x:Name="LogFileTree"
                                           Visibility="Collapsed"
                                           Style="{StaticResource GitChangeTreeStyle}"
-                                          SelectedItemChanged="LogFileTree_SelectedItemChanged"/>
+                                          SelectedItemChanged="LogFileTree_SelectedItemChanged"
+                                          PreviewKeyDown="LogFileCopy_PreviewKeyDown"/>
                             </Grid>
                         </DockPanel>
                         <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>

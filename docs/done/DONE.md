@@ -15,6 +15,7 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 - 로그에서 커밋을 고르면 전체 diff 대신 아래 왼쪽에 바뀐 파일 목록(`트리로 보기` 전환), 고른 파일 하나의 diff만 오른쪽에 보인다.
 - 파일 목록은 `GitDiffCommands.CommitFiles`(`diff-tree --name-status -M`, git CLI) + `GitOutputParser.ParseNameStatus`, 파일 diff는 `GitDiffCommands.CommitFile`(이름 변경은 원래 경로 포함, libgit2 우선).
+- 파일 목록 `Ctrl+C` 이름 / `Ctrl+Shift+C` 전체 경로 텍스트 복사(파일 자체 복사는 안 함).
 - 로그 탭에서 커밋 전체 diff·전체 외부 도구 폴더 비교는 빠짐(원격 비교 탭은 그대로). 자세한 것은 `docs/items/git-log-commit-file-list.md`.
 
 ### Git 창에서 기준 폴더 변경 (2026-10-18)
