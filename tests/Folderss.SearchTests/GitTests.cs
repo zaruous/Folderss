@@ -853,6 +853,74 @@ namespace Folderss.SearchTests
             Assert.All(rows.Skip(2), r => Assert.Contains(r.Segments, s => s.FromLane == 1 && s.ToLane == 1 && s.ToY == GitGraphLayout.Bottom));
         }
 
+        // ── 브랜치 탭 요약 그래프 ─────────────────────────────────────────────
+
+        /// <summary>
+        /// develop(HEAD)에서 feature/login이 갈라졌고, feature/search는 develop에 병합됐고, hotfix는 main에만 병합된 저장소.
+        /// (topo 순서, 자식이 먼저)
+        /// </summary>
+        private static GitCommitInfo[] BranchSample() => new[]
+        {
+            C("login", "l1"),            // feature/login
+            C("dev", "merge"),           // develop (HEAD)
+            C("merge", "d1", "search"),  // feature/search를 develop에 병합
+            C("l1", "fork"),
+            C("d1", "fork"),
+            C("search", "s1"),           // feature/search
+            C("fork", "base"),           // login이 develop에서 갈라진 지점
+            C("s1", "base"),
+            C("main", "rel", "hotfix"),  // main: hotfix 병합
+            C("hotfix", "rel"),          // hotfix
+            C("base", "rel"),
+            C("rel", "root"),            // develop·main이 갈라진 지점
+            C("root")
+        };
+
+        private static string Rows(GitBranchGraph.Result graph) =>
+            string.Join(" ", graph.Rows.Select(r => r.Hash + "<" + string.Join(",", r.Parents)));
+
+        [Fact]
+        public void BranchGraph_KeepsTipsAndForkPoints_AndRelinksParents()
+        {
+            var graph = GitBranchGraph.Build(BranchSample(), new[] { "dev", "login", "search", "hotfix", "main" }, "dev");
+
+            // 중간 커밋(병합 merge 포함)은 접고, 갈라진 지점(fork, rel)은 남긴다.
+            Assert.Equal("login<fork dev<fork,search search<rel fork<rel main<rel,hotfix hotfix<rel rel<", Rows(graph));
+            Assert.Equal(new[] { "fork", "rel" }, graph.ForkPoints.OrderBy(h => h, StringComparer.Ordinal));
+        }
+
+        [Fact]
+        public void BranchGraph_CountsAheadBehindAgainstHead()
+        {
+            var graph = GitBranchGraph.Build(BranchSample(), new[] { "dev", "login", "search", "hotfix", "main" }, "dev");
+
+            Assert.Equal((0, 0), graph.Divergence["dev"]);
+            Assert.Equal((2, 5), graph.Divergence["login"]);    // login,l1 / dev,merge,d1,search,s1
+            Assert.Equal((0, 4), graph.Divergence["search"]);   // 이미 병합됨 → 앞섬 0 / dev,merge,d1,fork
+            Assert.Equal((2, 7), graph.Divergence["main"]);     // main,hotfix / dev,merge,d1,search,fork,s1,base
+            Assert.Equal((1, 7), graph.Divergence["hotfix"]);
+        }
+
+        [Fact]
+        public void BranchGraph_WithoutHead_KeepsOnlyTips()
+        {
+            var graph = GitBranchGraph.Build(BranchSample(), new[] { "login", "main" }, null);
+
+            Assert.Equal("login< main<", Rows(graph));         // 갈라진 지점을 모르면 남는 조상이 없다
+            Assert.Empty(graph.Divergence);
+            Assert.Empty(graph.ForkPoints);
+        }
+
+        [Fact]
+        public void BranchGraph_ParentOutsideList_IsDropped()
+        {
+            // shallow clone: 경계 커밋의 부모가 목록에 없다.
+            var graph = GitBranchGraph.Build(new[] { C("b", "a"), C("a", "missing") }, new[] { "b" }, "b");
+
+            Assert.Equal("b<", Rows(graph));
+            Assert.Equal((0, 0), graph.Divergence["b"]);
+        }
+
         [SkippableFact]
         public async Task Graph_RealGitLog_EveryParentLineReachesItsCommit()
         {
@@ -1327,10 +1395,12 @@ namespace Folderss.SearchTests
         {
             var path = P("git-window.xml");
             Assert.True(GitWindowStateService.Load(path).ChangesTreeMode);    // 파일 없음 → 기본값(트리 보기)
+            Assert.False(GitWindowStateService.Load(path).BranchesShowRemote); // 파일 없음 → 로컬 브랜치만
 
-            GitWindowStateService.Save(new GitWindowState { ChangesTreeMode = false, ChangesListWidth = 412.5, UnstagedWeight = 0.75, StagedWeight = 1.25 }, path);
+            GitWindowStateService.Save(new GitWindowState { ChangesTreeMode = false, ChangesListWidth = 412.5, UnstagedWeight = 0.75, StagedWeight = 1.25, BranchesShowRemote = true }, path);
             var loaded = GitWindowStateService.Load(path);
             Assert.False(loaded.ChangesTreeMode);                              // 사용자가 끈 값은 유지
+            Assert.True(loaded.BranchesShowRemote);
             Assert.Equal(412.5, loaded.ChangesListWidth);
             Assert.Equal(0.75, loaded.UnstagedWeight);
             Assert.Equal(1.25, loaded.StagedWeight);

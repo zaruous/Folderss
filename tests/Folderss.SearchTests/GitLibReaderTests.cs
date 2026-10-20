@@ -130,7 +130,7 @@ namespace Folderss.SearchTests
 
         private static List<string> Lines(IEnumerable<GitBranchInfo> list) =>
             list.OrderBy(b => b.IsRemote).ThenBy(b => b.Name, StringComparer.Ordinal)
-                .Select(b => $"{b.Name}|{b.IsRemote}|{b.IsCurrent}|{b.Upstream}|{b.Subject}").ToList();
+                .Select(b => $"{b.Name}|{b.IsRemote}|{b.IsCurrent}|{b.Upstream}|{b.Subject}|{b.TipHash}").ToList();
 
         private static List<string> Lines(IEnumerable<GitCommitInfo> list) =>
             list.Select(c => $"{c.Hash}|{string.Join(" ", c.Parents)}|{c.Author}|{c.Time.ToUnixTimeSeconds()}|{c.Refs}|{c.Subject}").ToList();
@@ -301,6 +301,37 @@ namespace Folderss.SearchTests
             Assert.Equal(Lines(await CliLog(repo, 300, true)), Lines(GitLibReader.ReadLog(repo, 300, true)));
             // 한도에서 자르는 위치도 같아야 한다.
             Assert.Equal(Lines(await CliLog(repo, 3, true)), Lines(GitLibReader.ReadLog(repo, 3, true)));
+        }
+
+        /// <summary>요약 그래프의 행·다시 이은 부모·갈라진 지점·앞섬/뒤처짐. 같은 시각 커밋의 topo 동점 순서는 레인 배치만 바꾸므로 순서 없이 비교한다.</summary>
+        private static List<string> Lines(GitBranchGraph.Result graph) =>
+            Lines(graph.Rows).OrderBy(x => x, StringComparer.Ordinal)
+                .Concat(graph.ForkPoints.OrderBy(x => x, StringComparer.Ordinal).Select(h => "fork " + h))
+                .Concat(graph.Divergence.OrderBy(d => d.Key, StringComparer.Ordinal).Select(d => $"div {d.Key} {d.Value.Ahead} {d.Value.Behind}"))
+                .ToList();
+
+        private static async Task<GitBranchGraph.Result> CliBranchGraph(string repo, bool remotes)
+        {
+            var branches = await CliBranches(repo);
+            var tips = branches.Where(b => remotes || !b.IsRemote).Select(b => b.TipHash).Distinct().ToList();
+            var head = (await Git(repo, "rev-parse", "HEAD")).Trim();
+            var commits = GitOutputParser.ParseLog(await Git(repo, GitBranchGraph.CliArguments(remotes, true).ToArray()));
+            commits.ForEach(c => c.Refs = null);   // LibGit2Sharp 쪽은 참조 문자열을 채우지 않는다(창이 브랜치 이름으로 채움)
+            return GitBranchGraph.Build(commits, tips, head);
+        }
+
+        [SkippableFact]
+        public async Task BranchGraph_MatchesCli_LocalAndRemote()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await RichRepoAsync();
+            foreach (var remotes in new[] { false, true })
+            {
+                var tips = GitLibReader.ReadBranches(repo).Where(b => remotes || !b.IsRemote).Select(b => b.TipHash).Distinct().ToList();
+                var lib = GitLibReader.ReadBranchGraph(repo, tips);
+                Assert.Equal(Lines(await CliBranchGraph(repo, remotes)), Lines(lib));
+                Assert.NotEmpty(lib.Divergence);
+            }
         }
 
         [SkippableFact]

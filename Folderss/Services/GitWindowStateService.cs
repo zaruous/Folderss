@@ -5,7 +5,7 @@ using System.Xml;
 
 namespace Folderss.Services
 {
-    /// <summary>Git 창 변경 사항 탭의 보기 상태. 설정 창이 아니라 창에서 바꾸는 즉시 저장한다.</summary>
+    /// <summary>Git 창의 보기 상태(변경 사항 탭·브랜치 탭). 설정 창이 아니라 창에서 바꾸는 즉시 저장한다.</summary>
     public sealed class GitWindowState
     {
         public const double DefaultListWidth = 340;
@@ -23,6 +23,9 @@ namespace Folderss.Services
         /// <summary>변경됨 ↔ 스테이지됨 목록 높이 비율(* 값).</summary>
         public double UnstagedWeight { get; set; } = 1;
         public double StagedWeight { get; set; } = 1;
+
+        /// <summary>브랜치 탭에 원격 브랜치도 보일지. 기본은 로컬만.</summary>
+        public bool BranchesShowRemote { get; set; }
     }
 
     /// <summary><c>%LOCALAPPDATA%\Folderss\git-window.xml</c> 읽기·쓰기. 읽기 실패는 기본값, 쓰기 실패는 예외.</summary>
@@ -50,6 +53,8 @@ namespace Folderss.Services
 
                 if (bool.TryParse(root.GetAttribute("changesTree"), out var tree))
                     state.ChangesTreeMode = tree;
+                if (bool.TryParse(root.GetAttribute("branchRemotes"), out var remotes))
+                    state.BranchesShowRemote = remotes;
                 if (TryParse(root.GetAttribute("listWidth"), out var width))
                     state.ChangesListWidth = Math.Clamp(width, GitWindowState.MinListWidth, GitWindowState.MaxListWidth);
                 // 비율은 둘 다 읽혀야 쓴다(한쪽만 바뀌면 의도와 다른 비율이 된다).
@@ -80,6 +85,7 @@ namespace Folderss.Services
             root.SetAttribute("listWidth", state.ChangesListWidth.ToString("R", CultureInfo.InvariantCulture));
             root.SetAttribute("unstagedWeight", state.UnstagedWeight.ToString("R", CultureInfo.InvariantCulture));
             root.SetAttribute("stagedWeight", state.StagedWeight.ToString("R", CultureInfo.InvariantCulture));
+            root.SetAttribute("branchRemotes", state.BranchesShowRemote.ToString());
             doc.AppendChild(root);
             SettingsFile.Write(path, doc.Save);
         }

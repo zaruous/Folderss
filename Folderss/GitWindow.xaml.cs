@@ -94,6 +94,9 @@ namespace Folderss
         private int _busyCount;
         private List<GitBranchInfo> _branches = new List<GitBranchInfo>();
 
+        /// <summary>브랜치 그래프를 읽은(읽는 중인) 저장소. 전체 히스토리를 걸으므로 브랜치 탭을 볼 때만 읽는다.</summary>
+        private RepositoryRow _branchGraphRow;
+
         /// <summary>환경 변수 <c>FOLDERSS_GIT_TIMING=1</c>이면 git 명령·화면 갱신 시간을 출력창에 ⏱ 줄로 남긴다(실측용).</summary>
         private static readonly bool TimingEnabled = Environment.GetEnvironmentVariable("FOLDERSS_GIT_TIMING") == "1";
 
@@ -669,6 +672,8 @@ namespace Folderss
             LogSection.Visibility = tag == "Log" ? Visibility.Visible : Visibility.Collapsed;
             WorktreesSection.Visibility = tag == "Worktrees" ? Visibility.Visible : Visibility.Collapsed;
             StashSection.Visibility = tag == "Stash" ? Visibility.Visible : Visibility.Collapsed;
+            if (tag == "Branches" && IsLoaded)
+                EnsureBranchGraph();
         }
 
         private void ClearDetail()
@@ -681,6 +686,8 @@ namespace Folderss
             UnchangedTree.ItemsSource = null;
             UnchangedHeader.Text = "변경 없음";
             BranchList.ItemsSource = null;
+            BranchGraphList.ItemsSource = null;
+            _branchGraphRow = null;
             WorktreeList.ItemsSource = null;
             _worktrees = new List<GitWorktreeInfo>();
             StashList.ItemsSource = null;
@@ -804,7 +811,7 @@ namespace Folderss
             {
                 _branches = (libBranches.Ok ? libBranches.Value : GitOutputParser.ParseBranches(branchResult.StdOut))
                     .OrderBy(b => b.IsRemote).ThenBy(b => b.Name, StringComparer.OrdinalIgnoreCase).ToList();
-                BranchList.ItemsSource = _branches;
+                ShowBranchList();
             }
             else
             {
@@ -840,6 +847,8 @@ namespace Folderss
                     AppendResult(row.Info, logResult);
             }
 
+            if (BranchesSection.Visibility == Visibility.Visible && BranchList.ItemsSource != null && !ReferenceEquals(row, _branchGraphRow))
+                await LoadBranchGraphAsync(row, token);
             await LoadRemoteAsync(row, token);
             await LoadWorktreesAsync(row, token);
             await LoadStashesAsync(row, token);
@@ -1241,6 +1250,7 @@ namespace Folderss
             ChangesListColumn.Width = new GridLength(state.ChangesListWidth);
             UnstagedListRow.Height = new GridLength(state.UnstagedWeight, GridUnitType.Star);
             StagedListRow.Height = new GridLength(state.StagedWeight, GridUnitType.Star);
+            BranchRemoteToggle.IsChecked = state.BranchesShowRemote;
         }
 
         private void ChangesSplitter_DragCompleted(object sender, System.Windows.Controls.Primitives.DragCompletedEventArgs e)
@@ -1258,7 +1268,8 @@ namespace Folderss
                 ChangesListWidth = Math.Clamp(ChangesListColumn.ActualWidth > 0 ? ChangesListColumn.ActualWidth : ChangesListColumn.Width.Value,
                     GitWindowState.MinListWidth, GitWindowState.MaxListWidth),
                 UnstagedWeight = Math.Clamp(Weight(UnstagedListRow), GitWindowState.MinWeight, GitWindowState.MaxWeight),
-                StagedWeight = Math.Clamp(Weight(StagedListRow), GitWindowState.MinWeight, GitWindowState.MaxWeight)
+                StagedWeight = Math.Clamp(Weight(StagedListRow), GitWindowState.MinWeight, GitWindowState.MaxWeight),
+                BranchesShowRemote = BranchRemoteToggle.IsChecked == true
             };
             try
             {
@@ -2081,6 +2092,139 @@ namespace Folderss
         private void BranchList_MouseDoubleClick(object sender, MouseButtonEventArgs e)
         {
             SwitchBranch_Click(sender, e);
+        }
+
+        // ── 브랜치 그래프 ───────────────────────────────────────────────────
+
+        /// <summary>목록에는 로컬 브랜치만, "원격 포함"을 켜면 원격 브랜치도. 대화상자(업데이트·시작점)는 계속 <see cref="_branches"/> 전체를 쓴다.</summary>
+        private void ShowBranchList()
+        {
+            var showRemote = BranchRemoteToggle.IsChecked == true;
+            BranchList.ItemsSource = _branches.Where(b => showRemote || !b.IsRemote).ToList();
+        }
+
+        private void BranchRemoteToggle_Click(object sender, RoutedEventArgs e)
+        {
+            SaveWindowState();
+            if (BranchList.ItemsSource == null)
+                return;
+            ShowBranchList();
+            _branchGraphRow = null;
+            EnsureBranchGraph();
+        }
+
+        /// <summary>브랜치 탭을 열었을 때 아직 이 저장소의 그래프를 읽지 않았으면 읽는다. 브랜치 목록을 읽기 전이면 목록을 읽은 뒤 읽는다.</summary>
+        private async void EnsureBranchGraph()
+        {
+            var row = SelectedRow;
+            if (row == null || ReferenceEquals(row, _branchGraphRow) || BranchList.ItemsSource == null)
+                return;
+            try
+            {
+                await LoadBranchGraphAsync(row, _lifetime.Token);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // async void라 여기서 막지 않으면 앱이 종료된다.
+                AppendOutput("오류: " + ex.Message);
+            }
+        }
+
+        /// <summary>
+        /// 보이는 브랜치의 끝·HEAD·갈라진 지점만 남긴 요약 그래프(<see cref="GitBranchGraph"/>)를 그리고, 목록의 ↑↓(HEAD 대비)를 채운다.
+        /// 로그와 달리 개수 제한이 없다 — 오래된 브랜치 끝이 빠지면 안 된다.
+        /// </summary>
+        private async Task LoadBranchGraphAsync(RepositoryRow row, CancellationToken token)
+        {
+            _branchGraphRow = row;
+            var showRemote = BranchRemoteToggle.IsChecked == true;
+            var shown = _branches.Where(b => showRemote || !b.IsRemote).ToList();
+            var tips = shown.Select(b => b.TipHash).Where(h => !string.IsNullOrEmpty(h)).Distinct(StringComparer.Ordinal).ToList();
+            var headOid = row.Snapshot?.HeadOid;
+            if (tips.Count == 0 && headOid == null)
+            {
+                BranchGraphList.ItemsSource = null;
+                return;
+            }
+
+            GitBranchGraph.Result graph;
+            var lib = await ReadLibAsync(row, "브랜치 그래프", () => GitLibReader.ReadBranchGraph(row.RootPath, tips));
+            if (lib.Ok)
+            {
+                graph = lib.Value;
+            }
+            else
+            {
+                var result = await GitCommandRunner.RunAsync(row.RootPath, GitBranchGraph.CliArguments(showRemote, headOid != null),
+                    GitCommandRunner.QueryTimeout, token, readOnly: true);
+                if (!result.Success)
+                {
+                    if (ReferenceEquals(row, SelectedRow))
+                        AppendResult(row.Info, result);
+                    return;
+                }
+                graph = GitBranchGraph.Build(GitOutputParser.ParseLog(result.StdOut), tips, headOid);
+            }
+
+            // 기다리는 사이 저장소·탭 상태·원격 표시가 바뀌었으면 버린다(바뀐 쪽이 다시 읽는다).
+            if (!ReferenceEquals(row, SelectedRow) || !ReferenceEquals(row, _branchGraphRow) || showRemote != (BranchRemoteToggle.IsChecked == true))
+                return;
+
+            // 브랜치 열: 그 커밋을 가리키는 보이는 브랜치들. 브랜치가 아닌 행은 갈라진 지점이거나 detached HEAD다.
+            var names = shown.Where(b => !string.IsNullOrEmpty(b.TipHash))
+                .GroupBy(b => b.TipHash, StringComparer.Ordinal)
+                .ToDictionary(g => g.Key, g => string.Join(", ", g.Select(b => b.IsCurrent ? "● " + b.Name : b.Name)), StringComparer.Ordinal);
+            foreach (var commit in graph.Rows)
+            {
+                commit.Refs = names.TryGetValue(commit.Hash, out var label) ? label
+                    : graph.ForkPoints.Contains(commit.Hash) ? "(갈라진 지점)"
+                    : commit.Hash == headOid ? "● HEAD (detached)"
+                    : string.Empty;
+            }
+
+            var layout = GitGraphLayout.Compute(graph.Rows);
+            var maxLanes = 1;
+            for (var i = 0; i < graph.Rows.Count; i++)
+            {
+                graph.Rows[i].Graph = layout[i];
+                maxLanes = Math.Max(maxLanes, layout[i].LaneCount);
+            }
+            BranchGraphColumn.Width = GitGraphCell.WidthFor(maxLanes);
+            BranchGraphList.ItemsSource = graph.Rows;
+
+            foreach (var branch in _branches)
+            {
+                if (!branch.IsCurrent && branch.TipHash != null && graph.Divergence.TryGetValue(branch.TipHash, out var d))
+                {
+                    branch.Ahead = d.Ahead;
+                    branch.Behind = d.Behind;
+                }
+                else
+                {
+                    branch.Ahead = branch.Behind = null;
+                }
+            }
+            BranchList.Items.Refresh();
+            SelectBranchInGraph();
+        }
+
+        private void BranchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            SelectBranchInGraph();
+        }
+
+        /// <summary>목록에서 고른 브랜치의 끝 커밋을 그래프에서 선택해 보이게 한다.</summary>
+        private void SelectBranchInGraph()
+        {
+            if (!(BranchList.SelectedItem is GitBranchInfo branch) || !(BranchGraphList.ItemsSource is List<GitCommitInfo> rows))
+                return;
+            var target = rows.FirstOrDefault(c => c.Hash == branch.TipHash);
+            BranchGraphList.SelectedItem = target;
+            if (target != null)
+                BranchGraphList.ScrollIntoView(target);
         }
 
         private async void NewBranch_Click(object sender, RoutedEventArgs e)

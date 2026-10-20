@@ -371,6 +371,15 @@ namespace Folderss.Models
         public string Upstream { get; set; }
         public string Subject { get; set; }
 
-        public string DisplayText => (IsCurrent ? "● " : "   ") + Name + (string.IsNullOrEmpty(Upstream) ? string.Empty : "  → " + Upstream);
+        /// <summary>브랜치가 가리키는 커밋.</summary>
+        public string TipHash { get; set; }
+
+        /// <summary>현재 HEAD 대비 이 브랜치에만 있는 / HEAD에만 있는 커밋 수. 브랜치 그래프를 읽은 뒤 채운다(그 전·현재 브랜치는 null).</summary>
+        public int? Ahead { get; set; }
+        public int? Behind { get; set; }
+
+        public string DisplayText => (IsCurrent ? "● " : "   ") + Name
+            + (Ahead == null ? string.Empty : string.Format("  ↑{0} ↓{1}", Ahead, Behind))
+            + (string.IsNullOrEmpty(Upstream) ? string.Empty : "  → " + Upstream);
     }
 }
