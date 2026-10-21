@@ -60,16 +60,11 @@ dotnet build .\Folderss.sln -c Debug
 ## 기능별 수정 체크리스트
 
 ### 테마 추가 시
-- [ ] `Themes/<이름>.xaml` — 색상 팔레트 파일 생성
-- [ ] `Folderss.csproj` — `<Page Include="Themes\<이름>.xaml">` 항목 추가 (누락 시 런타임 크래시)
-- [ ] `Services/ThemeManager.cs` — `AppTheme` enum에 값 추가
-- [ ] `MainWindow.xaml` — 테마 ContextMenu에 MenuItem 추가
-- [ ] `MainWindow.xaml.cs` — 클릭 핸들러 + `UpdateThemeMenuChecks()` 업데이트
-- [ ] `SettingsWindow.xaml` — 테마 탭 RadioButton 추가 (색상 스워치 포함)
-- [ ] `SettingsWindow.xaml.cs` — 생성자 초기화 블록에 `IsChecked` 추가
-- [ ] `Viewers/MarkdownViewer.xaml.cs`·`TextViewer.xaml.cs`·`MonacoViewer.xaml.cs` — `PageBackground()`·`ThemeName()`에 케이스 추가, `Viewers/Resources/markdown-app.html`·`text-app.html`에 `body.<이름>` 색 토큰 추가. 밝은 테마면 `markdown-app.js` `mermaidTheme()`·`text-app.html` `LIGHT_THEMES`에, 어두운 테마면 `DARK_THEMES`에 등록 (누락 시 뷰어가 기본 dark 색으로 보임)
-- [ ] `docs/plugin-development.md` — `GetAppSettings()` `theme` 값 목록 업데이트
-- [ ] `README.md` — 테마 섹션 업데이트
+테마 목록(메뉴·설정 창)과 뷰어 색은 `Themes/` 폴더에서 자동으로 만들어진다(`ThemeManager.Themes`, `Viewers/ViewerTheme`). 코드 수정은 필요 없다.
+- [ ] `Themes/<이름>.xaml` — 기존 테마(예: `Black.xaml`)를 복사해 색만 바꾼다. 같은 키를 모두 정의해야 함
+- [ ] 같은 파일 맨 위 `ThemeName`(저장·플러그인에 쓰는 이름, 파일 이름과 같게), `ThemeDisplayName`(메뉴 표시 이름), `ThemeOrder`(목록 순서) 지정 — 생략하면 파일 이름(소문자)·맨 뒤
+- [ ] `dotnet test tests/Folderss.SearchTests --filter ThemeFileTests` — 빠진 키·중복 이름 검사
+- [ ] `README.md` — 테마 섹션, `docs/plugin-development.md` — `GetAppSettings()` `theme` 기본 제공 값 목록 업데이트
 
 ### 단축키 추가 시
 - [ ] `Services/KeybindingManager.cs` — 기본 매핑 등록
@@ -120,6 +115,7 @@ PrimaryText, SecondaryText, DisabledTextBrush
 AccentBrush, AccentHoverBrush, SelectionBrush, RowHoverBrush
 ```
 SystemColors 오버라이드 4쌍도 반드시 포함.
+밝은/어두운 테마 구분(뷰어 코드 하이라이트·Mermaid·Monaco)은 `PanelBackgroundColor` 밝기로 자동 판단한다.
 
 ### AvalonDock 스타일 주의사항
 - `Controls.xaml`에서 `{StaticResource}` 참조 시 선언 순서가 중요함.

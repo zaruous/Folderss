@@ -85,7 +85,7 @@ namespace Folderss.Controls
                 activationAware.SetActive(isActive);
         }
 
-        public void ApplyTheme(AppTheme theme)
+        public void ApplyTheme(ThemeInfo theme)
         {
             _currentViewer?.ApplyTheme(theme);
         }

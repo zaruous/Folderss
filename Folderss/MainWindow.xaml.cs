@@ -108,6 +108,7 @@ namespace Folderss
                 _sessionState.RightFolderPath,
                 Directory.Exists(documents) ? documents : home));
             ActivatePane(LeftPane);
+            BuildThemeMenu();
             UpdateThemeMenuChecks();
 
             var restored = DockLayoutService.Restore(DockManager, ResolveDockContent);
@@ -1380,72 +1381,18 @@ namespace Folderss
                 MessageBoxImage.Information);
         }
 
-        private void BlackTheme_Click(object sender, RoutedEventArgs e)
+        private void BuildThemeMenu()
         {
-            ApplyTheme(AppTheme.Black);
+            ThemeMenu.Items.Clear();
+            foreach (var theme in ThemeManager.Themes)
+            {
+                var item = new System.Windows.Controls.MenuItem { Header = theme.DisplayName, IsCheckable = true, Tag = theme };
+                item.Click += (sender, e) => ApplyTheme((ThemeInfo)((System.Windows.Controls.MenuItem)sender).Tag);
+                ThemeMenu.Items.Add(item);
+            }
         }
 
-        private void LightTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Light);
-        }
-
-        private void NordTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Nord);
-        }
-
-        private void CatppuccinTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Catppuccin);
-        }
-
-        private void SolarizedTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Solarized);
-        }
-
-        private void DraculaTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Dracula);
-        }
-
-        private void GitHubTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.GitHub);
-        }
-
-        private void SakuraTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Sakura);
-        }
-
-        private void SunsetTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Sunset);
-        }
-
-        private void TokyoNightTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.TokyoNight);
-        }
-
-        private void OneDarkTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.OneDark);
-        }
-
-        private void MonokaiTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Monokai);
-        }
-
-        private void GruvboxTheme_Click(object sender, RoutedEventArgs e)
-        {
-            ApplyTheme(AppTheme.Gruvbox);
-        }
-
-        private void ApplyTheme(AppTheme theme)
+        private void ApplyTheme(ThemeInfo theme)
         {
             ThemeManager.ApplyTheme(theme);
             foreach (var pane in GetFolderBrowsers())
@@ -1455,19 +1402,8 @@ namespace Folderss
 
         private void UpdateThemeMenuChecks()
         {
-            BlackThemeMenuItem.IsChecked       = ThemeManager.CurrentTheme == AppTheme.Black;
-            LightThemeMenuItem.IsChecked       = ThemeManager.CurrentTheme == AppTheme.Light;
-            NordThemeMenuItem.IsChecked        = ThemeManager.CurrentTheme == AppTheme.Nord;
-            CatppuccinThemeMenuItem.IsChecked  = ThemeManager.CurrentTheme == AppTheme.Catppuccin;
-            SolarizedThemeMenuItem.IsChecked   = ThemeManager.CurrentTheme == AppTheme.Solarized;
-            DraculaThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Dracula;
-            GitHubThemeMenuItem.IsChecked      = ThemeManager.CurrentTheme == AppTheme.GitHub;
-            SakuraThemeMenuItem.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Sakura;
-            SunsetThemeMenuItem.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Sunset;
-            TokyoNightThemeMenuItem.IsChecked  = ThemeManager.CurrentTheme == AppTheme.TokyoNight;
-            OneDarkThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.OneDark;
-            MonokaiThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Monokai;
-            GruvboxThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Gruvbox;
+            foreach (var item in ThemeMenu.Items.OfType<System.Windows.Controls.MenuItem>())
+                item.IsChecked = item.Tag == ThemeManager.CurrentTheme;
         }
 
         private void ActivatePane(FolderBrowser pane)

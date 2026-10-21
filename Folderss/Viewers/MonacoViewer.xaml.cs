@@ -49,7 +49,7 @@ namespace Folderss.Viewers
                 { ".txt",   "plaintext"  },
             };
 
-        private AppTheme _currentTheme = AppTheme.Black;
+        private ThemeInfo _currentTheme = ThemeManager.CurrentTheme;
         private bool _webViewReady;
         private string _filePath;
         private Encoding _encoding;
@@ -264,7 +264,7 @@ namespace Folderss.Viewers
             }
         }
 
-        public void ApplyTheme(AppTheme theme)
+        public void ApplyTheme(ThemeInfo theme)
         {
             _currentTheme = theme;
             if (_disposed) return;
@@ -466,22 +466,17 @@ namespace Folderss.Viewers
         }
 
         // monaco-app.html의 편집기 테마 배경(folderss-dark #0e1013, folderss-light #ffffff)과 같은 색
-        private static System.Drawing.Color PageBackground(AppTheme theme)
+        private static System.Drawing.Color PageBackground(ThemeInfo theme)
         {
-            return theme == AppTheme.Light || theme == AppTheme.GitHub || theme == AppTheme.Sakura
+            return theme.IsLight
                 ? System.Drawing.ColorTranslator.FromHtml("#ffffff")
                 : System.Drawing.ColorTranslator.FromHtml("#0e1013");
         }
 
-        private static string ThemeName(AppTheme theme)
+        // monaco-app.html은 밝은/어두운 편집기 테마 두 가지만 있다.
+        private static string ThemeName(ThemeInfo theme)
         {
-            switch (theme)
-            {
-                case AppTheme.Light: return "light";
-                case AppTheme.GitHub: return "github";
-                case AppTheme.Sakura: return "light";
-                default: return "dark";
-            }
+            return theme.IsLight ? "light" : "dark";
         }
 
         private static string JsonString(string value)

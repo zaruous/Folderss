@@ -59,48 +59,9 @@
   ::-webkit-scrollbar { width: 8px; height: 8px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: var(--scroll, #444); border-radius: 4px; }
-
-  /* theme overrides */
-  body.light {
-    --bg: #ffffff; --fg: #24292f; --line-num: #aaa; --scroll: #ccc;
-  }
-  body.dark  {
-    --bg: #0d1117; --fg: #e6edf3; --line-num: #484f58; --scroll: #30363d;
-  }
-  body.nord  {
-    --bg: #2e3440; --fg: #d8dee9; --line-num: #4c566a; --scroll: #434c5e;
-  }
-  body.catppuccin {
-    --bg: #1e1e2e; --fg: #cdd6f4; --line-num: #45475a; --scroll: #313244;
-  }
-  body.solarized {
-    --bg: #002b36; --fg: #839496; --line-num: #586e75; --scroll: #073642;
-  }
-  body.dracula {
-    --bg: #282a36; --fg: #f8f8f2; --line-num: #6272a4; --scroll: #44475a;
-  }
-  body.github {
-    --bg: #ffffff; --fg: #24292f; --line-num: #aaa; --scroll: #ccc;
-  }
-  body.sakura {
-    --bg: #fff8fa; --fg: #3a1e2a; --line-num: #b996a5; --scroll: #ebc4d2;
-  }
-  body.sunset {
-    --bg: #221a16; --fg: #f5e6dc; --line-num: #7e685b; --scroll: #4a372e;
-  }
-  body.tokyonight {
-    --bg: #1a1b26; --fg: #c0caf5; --line-num: #565f89; --scroll: #2f3549;
-  }
-  body.onedark {
-    --bg: #282c34; --fg: #abb2bf; --line-num: #5c6370; --scroll: #3e4451;
-  }
-  body.monokai {
-    --bg: #272822; --fg: #f8f8f2; --line-num: #75715e; --scroll: #49483e;
-  }
-  body.gruvbox {
-    --bg: #282828; --fg: #ebdbb2; --line-num: #7c6f64; --scroll: #504945;
-  }
 </style>
+<!-- 테마 색: app.open/setTheme이 C#(ViewerTheme)이 보낸 색으로 채운다. -->
+<style id="folderss-theme"></style>
 </head>
 <body class="theme-pending">
 <div id="container">
@@ -117,15 +78,16 @@ var _content = '';
 var _language = 'plaintext';
 var _readonly = true;
 
-var DARK_THEMES  = ['dark','black','nord','catppuccin','solarized','dracula','sunset','tokyonight','onedark','monokai','gruvbox'];
-var LIGHT_THEMES = ['light','github','sakura'];
-
 var HLJS_THEME_DARK  = 'themes/hljs-dark.css';
 var HLJS_THEME_LIGHT = 'themes/hljs-light.css';
 
-function setHljsTheme(theme) {
-  var link = document.getElementById('hljs-theme');
-  link.href = DARK_THEMES.indexOf(theme) >= 0 ? HLJS_THEME_DARK : HLJS_THEME_LIGHT;
+// C#(ViewerTheme)이 보낸 { light, colors }를 body.themed의 CSS 변수(--bg 등)로 넣고 코드 하이라이트 밝기를 고른다.
+function applyTheme(theme) {
+  var colors = (theme && theme.colors) || {};
+  document.getElementById('folderss-theme').textContent = 'body.themed{'
+    + Object.keys(colors).map(function(k) { return '--' + k + ':' + colors[k]; }).join(';') + '}';
+  document.body.className = 'themed';
+  document.getElementById('hljs-theme').href = theme && theme.light ? HLJS_THEME_LIGHT : HLJS_THEME_DARK;
 }
 
 function renderContent() {
@@ -152,14 +114,12 @@ var app = {
     _content  = content;
     _language = language || 'plaintext';
     _readonly = readonly !== false;
-    document.body.className = theme || 'dark';
-    setHljsTheme(theme || 'dark');
+    applyTheme(theme);
     renderContent();
   },
 
   setTheme: function(theme) {
-    document.body.className = theme || 'dark';
-    setHljsTheme(theme || 'dark');
+    applyTheme(theme);
   }
 };
 </script>

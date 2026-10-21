@@ -158,7 +158,7 @@ public sealed class MyPlugin : IFolderssPlugin      // public, 인수 없는 pub
 
 | 키 | 예 |
 |---|---|
-| `theme` | `Black`, `Light`, `Nord`, `Catppuccin`, `Solarized`, `Dracula`, `GitHub`, `Sakura`, `Sunset`, `TokyoNight`, `OneDark`, `Monokai`, `Gruvbox` |
+| `theme` | 테마 이름(테마 XAML의 `ThemeName`). 기본 제공: `Black`, `Light`, `Nord`, `Catppuccin`, `Solarized`, `Dracula`, `GitHub`, `Sakura`, `Sunset`, `TokyoNight`, `OneDark`, `Monokai`, `Gruvbox` — 테마가 늘 수 있으니 목록에 없는 값도 처리할 것 |
 | `git.executablePath` | `C:\Program Files\Git\cmd\git.exe` (비어 있으면 자동 탐색) |
 | `git.baseFolderMode`, `git.pullMode` | 선택 값의 이름. 예: `FastForwardOnly` |
 | `git.scanDepth`, `git.logLimit` | 숫자 문자열 |

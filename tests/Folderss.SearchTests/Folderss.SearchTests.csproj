@@ -65,6 +65,11 @@
     <Compile Include="..\..\Folderss\Services\WindowsRecycleBin.cs" Link="Linked\WindowsRecycleBin.cs" />
   </ItemGroup>
 
+  <!-- ThemeFileTests: 테마 XAML을 출력 폴더에 복사해 키 구성을 검사한다 -->
+  <ItemGroup>
+    <None Include="..\..\Folderss\Themes\*.xaml" Link="Themes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
   <ItemGroup>
     <PackageReference Include="System.IO.FileSystem.AccessControl" Version="5.0.0" />
     <PackageReference Include="LibGit2Sharp" Version="0.32.0" />

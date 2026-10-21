@@ -64,7 +64,7 @@ namespace Folderss
         private string _editingConsoleProfileKey;
         private bool _initializingTheme;
         /// <summary>취소하면 되돌릴 테마. 창을 열 때의 테마이고, 적용을 누르면 그때의 테마로 바뀐다.</summary>
-        private AppTheme _originalTheme;
+        private ThemeInfo _originalTheme;
         private readonly GitSettings _workingGit;
         public IReadOnlyList<ViewerOption> ViewerOptions { get; }
 
@@ -174,19 +174,7 @@ namespace Folderss
             ClearOpenWithForm();
 
             _initializingTheme = true;
-            BlackThemeRadio.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Black;
-            LightThemeRadio.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Light;
-            NordThemeRadio.IsChecked       = ThemeManager.CurrentTheme == AppTheme.Nord;
-            CatppuccinThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.Catppuccin;
-            SolarizedThemeRadio.IsChecked  = ThemeManager.CurrentTheme == AppTheme.Solarized;
-            DraculaThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.Dracula;
-            GitHubThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.GitHub;
-            SakuraThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Sakura;
-            SunsetThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Sunset;
-            TokyoNightThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.TokyoNight;
-            OneDarkThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.OneDark;
-            MonokaiThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.Monokai;
-            GruvboxThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.Gruvbox;
+            BuildThemeList();
             _initializingTheme = false;
 
             InitializeGitPanel();
@@ -537,9 +525,42 @@ namespace Folderss
             if (_initializingTheme) return;
             var rb = (System.Windows.Controls.RadioButton)sender;
             if (rb.Tag == null) return;
-            AppTheme theme;
-            if (System.Enum.TryParse<AppTheme>(rb.Tag.ToString(), out theme))
-                ThemeManager.ApplyTheme(theme);
+            ThemeManager.ApplyTheme((ThemeInfo)rb.Tag);
+        }
+
+        // 테마마다 색 견본(창 바탕색)과 이름이 있는 라디오 버튼을 만든다.
+        private void BuildThemeList()
+        {
+            ThemeList.Children.Clear();
+            foreach (var theme in ThemeManager.Themes)
+            {
+                var swatch = new Border
+                {
+                    Width = 28,
+                    Height = 28,
+                    CornerRadius = new CornerRadius(4),
+                    Background = new System.Windows.Media.SolidColorBrush(theme.GetColor("WindowBackgroundColor")),
+                    BorderThickness = new Thickness(1),
+                    VerticalAlignment = VerticalAlignment.Center,
+                    Margin = new Thickness(0, 0, 10, 0),
+                };
+                swatch.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+
+                var content = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(8, 0, 0, 0) };
+                content.Children.Add(swatch);
+                content.Children.Add(new TextBlock { Text = theme.DisplayName, VerticalAlignment = VerticalAlignment.Center });
+
+                var radio = new System.Windows.Controls.RadioButton
+                {
+                    GroupName = "AppTheme",
+                    Margin = new Thickness(0, 0, 0, 14),
+                    Tag = theme,
+                    Content = content,
+                    IsChecked = theme == ThemeManager.CurrentTheme,
+                };
+                radio.Checked += ThemeRadio_Checked;
+                ThemeList.Children.Add(radio);
+            }
         }
 
         private void OpenChangeBinding(KeyBindingEntry entry)

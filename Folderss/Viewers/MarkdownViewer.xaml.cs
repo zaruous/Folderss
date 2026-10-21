@@ -30,7 +30,7 @@ namespace Folderss.Viewers
 
         private string _filePath;
         private Encoding _encoding;
-        private AppTheme _currentTheme = AppTheme.Black;
+        private ThemeInfo _currentTheme = ThemeManager.CurrentTheme;
         private bool _webViewReady;
         private bool _pageReady;
         private bool _modified;
@@ -496,11 +496,11 @@ namespace Folderss.Viewers
             }
 
             _pendingContent = null;
-            _pageTheme = ThemeName(_currentTheme);
+            _pageTheme = ViewerTheme.ToJson(_currentTheme);
             var script = string.Format(
                 "app.open({0},{1},{2},{3},{4})",
                 JsonString(content),
-                JsonString(ThemeName(_currentTheme)),
+                ViewerTheme.ToJson(_currentTheme),
                 JsonString(_largeFileMode ? "edit" : "preview"),
                 _largeFileMode ? "true" : "false",
                 JsonString(_filePath));
@@ -542,12 +542,12 @@ namespace Folderss.Viewers
             }
         }
 
-        public void ApplyTheme(AppTheme theme)
+        public void ApplyTheme(ThemeInfo theme)
         {
             _currentTheme = theme;
             if (_disposed) return;
             // 페이지가 그려지기 전(테마를 받기 전)에 보이는 바탕을 테마 색으로 맞춰 흰색·검은색 깜빡임을 없앤다.
-            WebView.DefaultBackgroundColor = PageBackground(theme);
+            WebView.DefaultBackgroundColor = ViewerTheme.Background(theme);
             // 가려진 탭은 다시 보일 때(OnBecameVisible) 적용한다. 탭마다 미리보기를 다시 그리지 않고, 일시 중지된 WebView에 스크립트를 보내지 않는다.
             if (!_webViewReady || !_pageReady || !IsVisible) return;
             SendTheme();
@@ -555,9 +555,9 @@ namespace Folderss.Viewers
 
         private void SendTheme()
         {
-            _pageTheme = ThemeName(_currentTheme);
+            _pageTheme = ViewerTheme.ToJson(_currentTheme);
             var _ = WebView.CoreWebView2.ExecuteScriptAsync(
-                string.Format("app.setTheme({0})", JsonString(_pageTheme)));
+                string.Format("app.setTheme({0})", _pageTheme));
         }
 
         // 탭이 다시 보일 때: 가려진 동안 바뀐 테마와, 다른 문서 링크로 넘어온 제목 이동을 적용한다.
@@ -565,7 +565,7 @@ namespace Folderss.Viewers
         {
             if (!_webViewReady || !_pageReady)
                 return;
-            if (_pageTheme != null && _pageTheme != ThemeName(_currentTheme))
+            if (_pageTheme != null && _pageTheme != ViewerTheme.ToJson(_currentTheme))
                 SendTheme();
             _ = ConsumePendingAnchorAsync();
         }
@@ -1048,47 +1048,6 @@ namespace Folderss.Viewers
             catch (DecoderFallbackException)
             {
                 return GitTextDecoder.Resolve(GitFallbackEncoding.SystemAnsi) ?? new UTF8Encoding(false);
-            }
-        }
-
-        // markdown-app.html 테마 토큰 --bg와 같은 색
-        private static System.Drawing.Color PageBackground(AppTheme theme)
-        {
-            switch (theme)
-            {
-                case AppTheme.Light:      return System.Drawing.ColorTranslator.FromHtml("#ffffff");
-                case AppTheme.Nord:       return System.Drawing.ColorTranslator.FromHtml("#2e3440");
-                case AppTheme.Catppuccin: return System.Drawing.ColorTranslator.FromHtml("#1e1e2e");
-                case AppTheme.Solarized:  return System.Drawing.ColorTranslator.FromHtml("#002b36");
-                case AppTheme.Dracula:    return System.Drawing.ColorTranslator.FromHtml("#282a36");
-                case AppTheme.GitHub:     return System.Drawing.ColorTranslator.FromHtml("#ffffff");
-                case AppTheme.Sakura:     return System.Drawing.ColorTranslator.FromHtml("#fff8fa");
-                case AppTheme.Sunset:     return System.Drawing.ColorTranslator.FromHtml("#221a16");
-                case AppTheme.TokyoNight: return System.Drawing.ColorTranslator.FromHtml("#1a1b26");
-                case AppTheme.OneDark:    return System.Drawing.ColorTranslator.FromHtml("#282c34");
-                case AppTheme.Monokai:    return System.Drawing.ColorTranslator.FromHtml("#272822");
-                case AppTheme.Gruvbox:    return System.Drawing.ColorTranslator.FromHtml("#282828");
-                default:                  return System.Drawing.ColorTranslator.FromHtml("#1e1e1e");
-            }
-        }
-
-        private static string ThemeName(AppTheme theme)
-        {
-            switch (theme)
-            {
-                case AppTheme.Light:      return "light";
-                case AppTheme.Nord:       return "nord";
-                case AppTheme.Catppuccin: return "catppuccin";
-                case AppTheme.Solarized:  return "solarized";
-                case AppTheme.Dracula:    return "dracula";
-                case AppTheme.GitHub:     return "github";
-                case AppTheme.Sakura:     return "sakura";
-                case AppTheme.Sunset:     return "sunset";
-                case AppTheme.TokyoNight: return "tokyonight";
-                case AppTheme.OneDark:    return "onedark";
-                case AppTheme.Monokai:    return "monokai";
-                case AppTheme.Gruvbox:    return "gruvbox";
-                default:                  return "dark";
             }
         }
 

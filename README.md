@@ -108,7 +108,7 @@ Folderss/
 │   ├── NetworkSettingsService  — 네트워크 설정 저장 (network-settings.xml: 원격 이미지·http·인증서 오류 허용, 추가 신뢰 인증서)
 │   ├── RemoteContentPolicy     — 원격 이미지 허용 경로·localhost 판정·내부 인증서 체인 검증 (순수 로직)
 │   ├── CaptureAnnotation       — 캡쳐 편집 도형 값 (이동·핸들·선택 판정·자르기/크기 조절 변환)
-│   └── ThemeManager            — 테마 전환 및 저장
+│   └── ThemeManager            — Themes/ 테마 자동 인식, 전환 및 저장
 ├── Converters/
 │   └── FractionToStarConverter — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
 ├── Themes/
@@ -435,6 +435,10 @@ GitHub에서 설치한 플러그인은 목록에서 선택하고 `업데이트`�
 - One Dark
 - Monokai
 - Gruvbox Dark
+
+테마 목록은 `Folderss\Themes\` 폴더에서 자동으로 만들어집니다. 새 테마는 기존 테마 파일(예: `Black.xaml`)을 복사해
+색과 맨 위의 `ThemeName`(저장 이름)·`ThemeDisplayName`(메뉴 이름)·`ThemeOrder`(순서)를 바꾸고 다시 빌드하면 메뉴·설정 창·뷰어에 반영됩니다.
+모든 키를 정의했는지는 `dotnet test tests/Folderss.SearchTests --filter ThemeFileTests`로 확인합니다. 실행 폴더에 XAML을 넣는 방식은 지원하지 않습니다(빌드에 포함되어야 함).
 
 테마 색상과 공통 컨트롤 스타일은 다음 파일로 분리되어 있습니다.
 

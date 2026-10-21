@@ -421,7 +421,7 @@ namespace Folderss.Services
 
         public IReadOnlyDictionary<string, string> GetAppSettings()
         {
-            return PluginAppSettings.Build(ThemeManager.CurrentTheme.ToString(), GitSettingsService.Load(),
+            return PluginAppSettings.Build(ThemeManager.CurrentTheme.Name, GitSettingsService.Load(),
                 DiffSettingsService.Load(), ConsoleSettingsService.Load());
         }
 
