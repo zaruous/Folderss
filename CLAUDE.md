@@ -32,7 +32,8 @@ dotnet build .\Folderss.sln -c Debug
 ## 기능별 수정 체크리스트
 
 ### 테마 추가 시
-테마 목록(메뉴·설정 창)과 뷰어 색은 `Themes/` 폴더에서 자동으로 만들어진다(`ThemeManager.Themes`, `Viewers/ViewerTheme`). 코드 수정은 필요 없다.
+테마 목록(메뉴·설정 창)과 뷰어 색은 시작할 때 `Themes/`(빌드 포함)와 실행 폴더 `Themes\`(외부)에서 자동으로 만들어진다(`ThemeManager.Themes`, `Viewers/ViewerTheme`). 코드 수정은 필요 없다.
+외부 테마는 `ThemeFileValidator` 허용 요소(ResourceDictionary·Color·SolidColorBrush·FontFamily·sys:String·sys:Int32, `{StaticResource}`, `{x:Static SystemColors.…}`)만 쓸 수 있으므로, 기본 테마에도 다른 요소를 넣지 않는다(넣으면 `ThemeFileTests`가 실패).
 - [ ] `Themes/<이름>.xaml` — 기존 테마(예: `Black.xaml`)를 복사해 색만 바꾼다. 같은 키를 모두 정의해야 함
 - [ ] 같은 파일 맨 위 `ThemeName`(저장·플러그인에 쓰는 이름, 파일 이름과 같게), `ThemeDisplayName`(메뉴 표시 이름), `ThemeOrder`(목록 순서) 지정 — 생략하면 파일 이름(소문자)·맨 뒤
 - [ ] `dotnet test tests/Folderss.SearchTests --filter ThemeFileTests` — 빠진 키·중복 이름 검사

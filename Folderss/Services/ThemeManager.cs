@@ -6,12 +6,13 @@ using System.IO;
 using System.Linq;
 using System.Resources;
 using System.Windows;
+using System.Windows.Markup;
 using System.Windows.Media;
 
 namespace Folderss.Services
 {
     /// <summary>
-    /// <c>Themes/</c> 폴더의 테마 XAML 하나. 빌드에 포함된 파일을 실행 시 찾아 만든다(<see cref="ThemeManager.Themes"/>).
+    /// 테마 XAML 하나. 빌드에 포함된 <c>Themes/</c> 파일과 실행 폴더 <c>Themes\</c>의 파일을 시작할 때 읽어 만든다(<see cref="ThemeManager.Themes"/>).
     /// </summary>
     public sealed class ThemeInfo
     {
@@ -51,15 +52,11 @@ namespace Folderss.Services
         private const string ThemeResourcePrefix = "themes/";
         private const string ThemeResourceSuffix = ".baml";
 
-        // 테마가 정의해야 하는 색. 없으면 화면·뷰어 색을 만들 수 없어 목록에서 뺀다 (전체 키는 Black.xaml 기준, 테스트로 확인).
-        private static readonly string[] RequiredColorKeys =
-        {
-            "WindowBackgroundColor", "PanelBackgroundColor", "SurfaceBackgroundColor", "ControlBackgroundColor",
-            "ControlHoverColor", "ControlPressedColor", "BorderColor", "PrimaryTextColor", "SecondaryTextColor",
-            "DisabledTextColor", "AccentColor", "AccentHoverColor", "SelectionColor", "RowHoverColor",
-        };
+        // 테마 정보 키. 생략할 수 있어 키 비교(Black.xaml 기준)에서 뺀다.
+        private static readonly string[] OptionalKeys = { "ThemeName", "ThemeDisplayName", "ThemeOrder" };
 
         private static List<ThemeInfo> _themes;
+        private static readonly List<string> _loadErrors = new List<string>();
 
         public static ThemeInfo CurrentTheme { get; private set; }
 
@@ -72,6 +69,18 @@ namespace Folderss.Services
                     _themes = DiscoverThemes();
                 return _themes;
             }
+        }
+
+        /// <summary>실행 폴더 <c>Themes\</c>의 파일 중 읽지 못한 것과 이유. 시작 후 메인 창이 한 번 알린다.</summary>
+        public static IReadOnlyList<string> LoadErrors
+        {
+            get { return _loadErrors; }
+        }
+
+        /// <summary>빌드 없이 테마를 추가하는 폴더. 같은 이름(ThemeName)의 기본 테마를 대신한다. 바꾸면 다시 시작해야 반영된다.</summary>
+        public static string ExternalThemesDirectory
+        {
+            get { return Path.Combine(AppContext.BaseDirectory, "Themes"); }
         }
 
         private static string SettingsPath
@@ -87,7 +96,7 @@ namespace Folderss.Services
 
         public static ThemeInfo Find(string name)
         {
-            return Themes.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
+            return Find(Themes, name);
         }
 
         public static void ApplySavedTheme()
@@ -136,8 +145,8 @@ namespace Folderss.Services
         }
 
         /// <summary>
-        /// 어셈블리에 컴파일된 <c>themes/*.baml</c>(Controls 제외)을 읽어 테마 목록을 만든다.
-        /// 읽지 못하거나 필수 색이 빠진 파일은 건너뛴다 — 테마 하나 때문에 앱이 시작되지 않는 일을 막는다.
+        /// 어셈블리에 컴파일된 <c>themes/*.baml</c>(Controls 제외)과 실행 폴더 <c>Themes\*.xaml</c>을 읽어 테마 목록을 만든다.
+        /// 읽지 못하거나 Black.xaml에 있는 키가 빠진 파일은 건너뛴다 — 테마 하나 때문에 앱이 시작되지 않는 일을 막는다.
         /// </summary>
         private static List<ThemeInfo> DiscoverThemes()
         {
@@ -152,13 +161,28 @@ namespace Folderss.Services
                     if (fileName == null)
                         continue;
 
-                    var theme = TryLoadTheme(fileName);
-                    if (theme != null && themes.All(t => !string.Equals(t.Name, theme.Name, StringComparison.OrdinalIgnoreCase)))
+                    var theme = TryLoadBuiltInTheme(fileName);
+                    if (theme != null && Find(themes, theme.Name) == null)
                         themes.Add(theme);
                 }
             }
 
+            var black = Find(themes, DefaultThemeName);
+            var requiredKeys = black == null ? null : RequiredKeys(black.Resources);
+            themes.RemoveAll(t => requiredKeys != null && MissingKeys(t.Resources, requiredKeys) != null);
+
+            foreach (var theme in LoadExternalThemes(requiredKeys))
+            {
+                themes.RemoveAll(t => string.Equals(t.Name, theme.Name, StringComparison.OrdinalIgnoreCase));
+                themes.Add(theme);
+            }
+
             return themes.OrderBy(t => t.Order).ThenBy(t => t.DisplayName, StringComparer.CurrentCulture).ToList();
+        }
+
+        private static ThemeInfo Find(IEnumerable<ThemeInfo> themes, string name)
+        {
+            return themes.FirstOrDefault(t => string.Equals(t.Name, name, StringComparison.OrdinalIgnoreCase));
         }
 
         /// <summary>리소스 키(예: <c>themes/tokyonight.baml</c>)가 테마면 파일 이름(<c>tokyonight</c>), 아니면 null.</summary>
@@ -175,29 +199,101 @@ namespace Folderss.Services
             return name;
         }
 
-        private static ThemeInfo TryLoadTheme(string fileName)
+        private static ThemeInfo TryLoadBuiltInTheme(string fileName)
         {
-            ResourceDictionary resources;
             try
             {
-                resources = new ResourceDictionary
+                var resources = new ResourceDictionary
                 {
                     Source = new Uri("Themes/" + fileName + ".xaml", UriKind.Relative)
                 };
+                return CreateThemeInfo(fileName, resources);
             }
             catch (Exception ex)
             {
                 Debug.WriteLine("테마를 읽지 못해 건너뜀: " + fileName + " — " + ex.Message);
                 return null;
             }
+        }
 
-            var missing = RequiredColorKeys.Where(key => !(resources[key] is Color)).ToList();
-            if (missing.Count > 0)
+        private static List<ThemeInfo> LoadExternalThemes(HashSet<object> requiredKeys)
+        {
+            var themes = new List<ThemeInfo>();
+            string[] files;
+            try
             {
-                Debug.WriteLine("필수 색이 없어 테마를 건너뜀: " + fileName + " — " + string.Join(", ", missing));
-                return null;
+                if (!Directory.Exists(ExternalThemesDirectory))
+                    return themes;
+                files = Directory.GetFiles(ExternalThemesDirectory, "*.xaml");
+            }
+            catch (Exception ex)
+            {
+                _loadErrors.Add(ExternalThemesDirectory + ": " + ex.Message);
+                return themes;
             }
 
+            foreach (var path in files.OrderBy(f => f, StringComparer.OrdinalIgnoreCase))
+            {
+                var fileName = Path.GetFileName(path);
+                try
+                {
+                    var xaml = File.ReadAllText(path);
+                    var invalid = ThemeFileValidator.Validate(xaml);
+                    if (invalid != null)
+                    {
+                        _loadErrors.Add(fileName + ": " + invalid);
+                        continue;
+                    }
+
+                    var resources = XamlReader.Parse(xaml) as ResourceDictionary;
+                    if (resources == null)
+                    {
+                        _loadErrors.Add(fileName + ": ResourceDictionary가 아닙니다.");
+                        continue;
+                    }
+
+                    var missing = requiredKeys == null ? null : MissingKeys(resources, requiredKeys);
+                    if (missing != null)
+                    {
+                        _loadErrors.Add(fileName + ": 빠진 키 — " + missing);
+                        continue;
+                    }
+
+                    var theme = CreateThemeInfo(Path.GetFileNameWithoutExtension(path), resources);
+                    if (Find(themes, theme.Name) != null)
+                    {
+                        _loadErrors.Add(fileName + ": 같은 이름의 테마가 이미 있습니다 — " + theme.Name);
+                        continue;
+                    }
+                    themes.Add(theme);
+                }
+                catch (Exception ex)
+                {
+                    _loadErrors.Add(fileName + ": " + ex.Message);
+                }
+            }
+
+            return themes;
+        }
+
+        private static HashSet<object> RequiredKeys(ResourceDictionary reference)
+        {
+            return new HashSet<object>(reference.Keys.Cast<object>().Where(key => !OptionalKeys.Contains(key as string)));
+        }
+
+        /// <summary>빠진 키 목록(쉼표 구분), 모두 있으면 null.</summary>
+        private static string MissingKeys(ResourceDictionary resources, HashSet<object> requiredKeys)
+        {
+            var missing = requiredKeys.Where(key => !resources.Contains(key)).Select(key => key.ToString()).ToList();
+            if (missing.Count > 0)
+                return string.Join(", ", missing);
+            // 색 키 이름이 같아도 값이 색이 아니면 화면·뷰어 색을 만들 수 없다.
+            var notColor = requiredKeys.OfType<string>().Where(key => key.EndsWith("Color", StringComparison.Ordinal) && !(resources[key] is Color)).ToList();
+            return notColor.Count > 0 ? string.Join(", ", notColor) + " (Color가 아님)" : null;
+        }
+
+        private static ThemeInfo CreateThemeInfo(string fileName, ResourceDictionary resources)
+        {
             var name = resources["ThemeName"] as string;
             if (string.IsNullOrWhiteSpace(name))
                 name = fileName;
@@ -206,7 +302,7 @@ namespace Folderss.Services
                 displayName = name;
             var order = resources["ThemeOrder"] is int value ? value : int.MaxValue;
 
-            return new ThemeInfo(name, displayName, order, resources);
+            return new ThemeInfo(name.Trim(), displayName.Trim(), order, resources);
         }
 
         /// <summary>

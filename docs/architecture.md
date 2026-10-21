@@ -81,7 +81,8 @@ Folderss/
 │   ├── ClipboardService.cs         — 클립보드 읽기·쓰기. 다른 프로그램이 점유 중(CLIPBRD_E_CANT_OPEN)이면 경고 후 false (앱 종료 방지)
 │   ├── CaptureAnnotation.cs        — 캡쳐 편집 도형·캡쳐 이미지 자리 하나(불변 값): 이동·자르기/크기 조절 변환(굵기·글자는 기하 평균 배율), 정리, 선택 판정(상자형은 테두리 상자 안, 화살표는 선 거리), 핸들 목록·판정·끌기(이미지 모서리는 비율 유지), 맨 위 도형 찾기 (순수 로직)
 │   ├── ScreenCaptureService.cs     — 화면 캡쳐 순수 계산: 오버레이 좌표 → 이미지 픽셀 사각형(비율 변환), 빠른 저장 파일 이름, 확장자 → 저장 형식, 화살표 머리 좌표, 크기 조절 비율 유지 (순수 로직)
-│   └── ThemeManager.cs             — Themes/ 테마 자동 인식(ThemeInfo), 전환 및 저장
+│   ├── ThemeFileValidator.cs       — 실행 폴더 Themes\ XAML 검사(허용 요소·태그 확장만, 순수 로직)
+│   └── ThemeManager.cs             — 시작 시 테마 자동 인식(기본 + 실행 폴더 Themes\, ThemeInfo), 전환 및 저장
 ├── Converters/
 │   └── FractionToStarConverter.cs  — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
 ├── Themes/
@@ -126,17 +127,20 @@ Folderss/
 ## 서비스 역할 상세
 
 ### ThemeManager
-- 테마 목록은 코드에 없다. 빌드에 포함된 `themes/*.baml`(Controls 제외)을 어셈블리 리소스(`Folderss.g.resources`)에서 찾아
-  `ThemeInfo`(이름·표시 이름·순서·`ResourceDictionary`)로 만든다(`ThemeManager.Themes`, 처음 쓸 때 한 번).
+- 테마 목록은 코드에 없다. 시작할 때(`App.OnStartup` → `ApplySavedTheme`가 처음 `Themes`를 읽을 때) 한 번 만든다.
+  - 기본 테마: 빌드에 포함된 `themes/*.baml`(Controls 제외)을 어셈블리 리소스(`Folderss.g.resources`)에서 찾는다.
+  - 외부 테마: 실행 폴더 `Themes\*.xaml`(`ExternalThemesDirectory`)을 `ThemeFileValidator`로 검사(허용 요소만, DTD 금지)한 뒤
+    `XamlReader.Parse`로 읽는다. 같은 `ThemeName`이면 기본 테마를 대신한다. 실패한 파일은 `LoadErrors`에 모아 메인 창이 시작 후 한 번 알린다.
+  - 각 테마는 `ThemeInfo`(이름·표시 이름·순서·`ResourceDictionary`)가 된다.
   - 이름은 테마 XAML의 `ThemeName`, 없으면 파일 이름(BAML 리소스 이름이라 소문자). 표시 이름 `ThemeDisplayName`, 순서 `ThemeOrder`(없으면 맨 뒤).
-  - 읽지 못하거나 필수 색(`RequiredColorKeys`)이 빠진 파일은 건너뛰고 디버그 출력만 남긴다 — 테마 하나 때문에 앱이 시작되지 않는 일을 막음.
+  - 읽지 못하거나 `Black.xaml`에 있는 키(테마 정보 키 제외)가 빠진 파일은 건너뛴다 — 테마 하나 때문에 앱이 시작되지 않는 일을 막음.
   - 밝은 테마 여부(`IsLight`)는 `PanelBackgroundColor` 밝기로 판단한다.
 - 메인 메뉴 `테마`(`BuildThemeMenu`)와 설정 창 테마 탭(`BuildThemeList`)은 이 목록으로 코드에서 만든다.
 - 웹 뷰어 색은 `Viewers/ViewerTheme`가 테마 색에서 만들어 `app.open`/`app.setTheme`에 `{ light, colors }`로 넘기고, 페이지는 `body.themed`의 CSS 변수로 쓴다.
   Monaco는 편집기 테마가 light/dark 두 가지라 `IsLight`만 쓴다.
 - 선택한 테마의 `ResourceDictionary`를 `App.Resources.MergedDictionaries`에서 교체하는 방식으로 런타임 전환
 - `%LOCALAPPDATA%\Folderss\theme.txt`에 마지막 테마 이름 저장(읽을 때 대소문자 무시, 없는 이름이면 Black)
-- 테마 파일 키 검사: `tests/Folderss.SearchTests/ThemeFileTests`(모든 테마가 `Black.xaml`과 같은 키, 이름 중복 없음)
+- 테마 파일 키 검사: `tests/Folderss.SearchTests/ThemeFileTests`(모든 테마가 `Black.xaml`과 같은 키, 이름 중복 없음, 기본 테마가 외부 검사도 통과, 위험 요소 거부)
 
 ### MarkdownViewer 이미지 리소스 해석
 - 미리보기 HTML은 `https://folderss-viewer/markdown-app.html`(가상 호스트 → `Viewers/Resources`)에서 로드되므로,
@@ -523,7 +527,7 @@ Folderss/
 
 ### 테마 추가
 1. `Themes/<이름>.xaml` 생성 — `Black.xaml` 복사, 색상과 `ThemeName`·`ThemeDisplayName`·`ThemeOrder`만 교체
-2. 빌드하면 메뉴·설정 창·뷰어에 자동으로 나타난다 (코드 수정 없음)
+2. 소스 `Folderss/Themes/`에 넣고 빌드하면 기본 테마, 실행 폴더 `Themes\`에 넣고 다시 시작하면 외부 테마로 메뉴·설정 창·뷰어에 나타난다 (코드 수정 없음)
 3. 자세한 체크리스트는 `CLAUDE.md` 참조
 
 ### 새 패널/컨트롤 추가

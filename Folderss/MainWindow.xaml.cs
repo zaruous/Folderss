@@ -110,6 +110,8 @@ namespace Folderss
             ActivatePane(LeftPane);
             BuildThemeMenu();
             UpdateThemeMenuChecks();
+            if (ThemeManager.LoadErrors.Count > 0)
+                Dispatcher.BeginInvoke(new Action(ReportThemeLoadErrors), DispatcherPriority.ApplicationIdle);
 
             var restored = DockLayoutService.Restore(DockManager, ResolveDockContent);
             if (!restored)
@@ -1390,6 +1392,14 @@ namespace Folderss
                 item.Click += (sender, e) => ApplyTheme((ThemeInfo)((System.Windows.Controls.MenuItem)sender).Tag);
                 ThemeMenu.Items.Add(item);
             }
+        }
+
+        private void ReportThemeLoadErrors()
+        {
+            MessageBox.Show(this,
+                "다음 테마 파일을 읽지 못해 테마 목록에서 뺐습니다.\n폴더: " + ThemeManager.ExternalThemesDirectory + "\n\n"
+                + string.Join("\n", ThemeManager.LoadErrors),
+                "테마 불러오기", MessageBoxButton.OK, MessageBoxImage.Warning);
         }
 
         private void ApplyTheme(ThemeInfo theme)

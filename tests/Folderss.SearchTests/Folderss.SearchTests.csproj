@@ -63,6 +63,7 @@
     <Compile Include="..\..\Folderss\Services\FileOperationJournal.cs" Link="Linked\FileOperationJournal.cs" />
     <Compile Include="..\..\Folderss\Services\FileOperationService.cs" Link="Linked\FileOperationService.cs" />
     <Compile Include="..\..\Folderss\Services\WindowsRecycleBin.cs" Link="Linked\WindowsRecycleBin.cs" />
+    <Compile Include="..\..\Folderss\Services\ThemeFileValidator.cs" Link="Linked\ThemeFileValidator.cs" />
   </ItemGroup>
 
   <!-- ThemeFileTests: 테마 XAML을 출력 폴더에 복사해 키 구성을 검사한다 -->
