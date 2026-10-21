@@ -158,7 +158,7 @@ public sealed class MyPlugin : IFolderssPlugin      // public, 인수 없는 pub
 
 | 키 | 예 |
 |---|---|
-| `theme` | `Black`, `Light`, `Nord`, `Catppuccin`, `Solarized`, `Dracula`, `GitHub` |
+| `theme` | `Black`, `Light`, `Nord`, `Catppuccin`, `Solarized`, `Dracula`, `GitHub`, `Sakura`, `Sunset`, `TokyoNight`, `OneDark`, `Monokai`, `Gruvbox` |
 | `git.executablePath` | `C:\Program Files\Git\cmd\git.exe` (비어 있으면 자동 탐색) |
 | `git.baseFolderMode`, `git.pullMode` | 선택 값의 이름. 예: `FastForwardOnly` |
 | `git.scanDepth`, `git.logLimit` | 숫자 문자열 |

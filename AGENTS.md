@@ -67,6 +67,8 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `MainWindow.xaml.cs` — 클릭 핸들러 + `UpdateThemeMenuChecks()` 업데이트
 - [ ] `SettingsWindow.xaml` — 테마 탭 RadioButton 추가 (색상 스워치 포함)
 - [ ] `SettingsWindow.xaml.cs` — 생성자 초기화 블록에 `IsChecked` 추가
+- [ ] `Viewers/MarkdownViewer.xaml.cs`·`TextViewer.xaml.cs`·`MonacoViewer.xaml.cs` — `PageBackground()`·`ThemeName()`에 케이스 추가, `Viewers/Resources/markdown-app.html`·`text-app.html`에 `body.<이름>` 색 토큰 추가. 밝은 테마면 `markdown-app.js` `mermaidTheme()`·`text-app.html` `LIGHT_THEMES`에, 어두운 테마면 `DARK_THEMES`에 등록 (누락 시 뷰어가 기본 dark 색으로 보임)
+- [ ] `docs/plugin-development.md` — `GetAppSettings()` `theme` 값 목록 업데이트
 - [ ] `README.md` — 테마 섹션 업데이트
 
 ### 단축키 추가 시

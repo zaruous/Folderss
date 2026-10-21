@@ -152,7 +152,6 @@
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
 
@@ -173,7 +172,8 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <StackPanel Grid.Row="2" Orientation="Vertical">
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Orientation="Vertical">
                         <RadioButton x:Name="BlackThemeRadio"
                                      GroupName="AppTheme"
                                      Margin="0,0,0,14"
@@ -291,7 +291,110 @@
                                 <TextBlock Text="GitHub" VerticalAlignment="Center"/>
                             </StackPanel>
                         </RadioButton>
+
+                        <RadioButton x:Name="SakuraThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,14,0,0"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Sakura">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#FBEFF3"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Sakura (핑크)" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="SunsetThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,14,0,0"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Sunset">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#221A16"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Sunset (오렌지)" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="TokyoNightThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,14,0,0"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="TokyoNight">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#1A1B26"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Tokyo Night" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="OneDarkThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,14,0,0"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="OneDark">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#282C34"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="One Dark" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="MonokaiThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,14,0,0"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Monokai">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#272822"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Monokai" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
+
+                        <RadioButton x:Name="GruvboxThemeRadio"
+                                     GroupName="AppTheme"
+                                     Margin="0,14,0,0"
+                                     Checked="ThemeRadio_Checked"
+                                     Tag="Gruvbox">
+                            <StackPanel Orientation="Horizontal" Margin="8,0,0,0">
+                                <Border Width="28" Height="28"
+                                        CornerRadius="4"
+                                        Background="#282828"
+                                        BorderThickness="1"
+                                        BorderBrush="{DynamicResource BorderBrush}"
+                                        VerticalAlignment="Center"
+                                        Margin="0,0,10,0"/>
+                                <TextBlock Text="Gruvbox Dark" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </RadioButton>
                     </StackPanel>
+                    </ScrollViewer>
                 </Grid>
 
                 <!-- Viewers panel -->

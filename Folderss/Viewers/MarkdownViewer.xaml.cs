@@ -1062,6 +1062,12 @@ namespace Folderss.Viewers
                 case AppTheme.Solarized:  return System.Drawing.ColorTranslator.FromHtml("#002b36");
                 case AppTheme.Dracula:    return System.Drawing.ColorTranslator.FromHtml("#282a36");
                 case AppTheme.GitHub:     return System.Drawing.ColorTranslator.FromHtml("#ffffff");
+                case AppTheme.Sakura:     return System.Drawing.ColorTranslator.FromHtml("#fff8fa");
+                case AppTheme.Sunset:     return System.Drawing.ColorTranslator.FromHtml("#221a16");
+                case AppTheme.TokyoNight: return System.Drawing.ColorTranslator.FromHtml("#1a1b26");
+                case AppTheme.OneDark:    return System.Drawing.ColorTranslator.FromHtml("#282c34");
+                case AppTheme.Monokai:    return System.Drawing.ColorTranslator.FromHtml("#272822");
+                case AppTheme.Gruvbox:    return System.Drawing.ColorTranslator.FromHtml("#282828");
                 default:                  return System.Drawing.ColorTranslator.FromHtml("#1e1e1e");
             }
         }
@@ -1076,6 +1082,12 @@ namespace Folderss.Viewers
                 case AppTheme.Solarized:  return "solarized";
                 case AppTheme.Dracula:    return "dracula";
                 case AppTheme.GitHub:     return "github";
+                case AppTheme.Sakura:     return "sakura";
+                case AppTheme.Sunset:     return "sunset";
+                case AppTheme.TokyoNight: return "tokyonight";
+                case AppTheme.OneDark:    return "onedark";
+                case AppTheme.Monokai:    return "monokai";
+                case AppTheme.Gruvbox:    return "gruvbox";
                 default:                  return "dark";
             }
         }

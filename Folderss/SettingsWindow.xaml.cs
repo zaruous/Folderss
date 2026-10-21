@@ -181,6 +181,12 @@ namespace Folderss
             SolarizedThemeRadio.IsChecked  = ThemeManager.CurrentTheme == AppTheme.Solarized;
             DraculaThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.Dracula;
             GitHubThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.GitHub;
+            SakuraThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Sakura;
+            SunsetThemeRadio.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Sunset;
+            TokyoNightThemeRadio.IsChecked = ThemeManager.CurrentTheme == AppTheme.TokyoNight;
+            OneDarkThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.OneDark;
+            MonokaiThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.Monokai;
+            GruvboxThemeRadio.IsChecked    = ThemeManager.CurrentTheme == AppTheme.Gruvbox;
             _initializingTheme = false;
 
             InitializeGitPanel();

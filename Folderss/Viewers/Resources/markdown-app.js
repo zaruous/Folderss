@@ -18,7 +18,7 @@ var _mermaidCache = new Map();
 var _filePath = null;
 
 function mermaidTheme() {
-  return (_theme === 'light' || _theme === 'github') ? 'default' : 'dark';
+  return (_theme === 'light' || _theme === 'github' || _theme === 'sakura') ? 'default' : 'dark';
 }
 
 // ── Preferences ───────────────────────────

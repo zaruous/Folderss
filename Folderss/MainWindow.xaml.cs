@@ -1415,6 +1415,36 @@ namespace Folderss
             ApplyTheme(AppTheme.GitHub);
         }
 
+        private void SakuraTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Sakura);
+        }
+
+        private void SunsetTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Sunset);
+        }
+
+        private void TokyoNightTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.TokyoNight);
+        }
+
+        private void OneDarkTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.OneDark);
+        }
+
+        private void MonokaiTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Monokai);
+        }
+
+        private void GruvboxTheme_Click(object sender, RoutedEventArgs e)
+        {
+            ApplyTheme(AppTheme.Gruvbox);
+        }
+
         private void ApplyTheme(AppTheme theme)
         {
             ThemeManager.ApplyTheme(theme);
@@ -1432,6 +1462,12 @@ namespace Folderss
             SolarizedThemeMenuItem.IsChecked   = ThemeManager.CurrentTheme == AppTheme.Solarized;
             DraculaThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Dracula;
             GitHubThemeMenuItem.IsChecked      = ThemeManager.CurrentTheme == AppTheme.GitHub;
+            SakuraThemeMenuItem.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Sakura;
+            SunsetThemeMenuItem.IsChecked      = ThemeManager.CurrentTheme == AppTheme.Sunset;
+            TokyoNightThemeMenuItem.IsChecked  = ThemeManager.CurrentTheme == AppTheme.TokyoNight;
+            OneDarkThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.OneDark;
+            MonokaiThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Monokai;
+            GruvboxThemeMenuItem.IsChecked     = ThemeManager.CurrentTheme == AppTheme.Gruvbox;
         }
 
         private void ActivatePane(FolderBrowser pane)
