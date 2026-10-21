@@ -4,6 +4,7 @@
 var _content = '';
 var _mode    = 'preview';
 var _theme   = 'dark';
+var _themeLight = false;
 var _modified = false;
 var _renderTimer = null;
 var _tocVisible = true;
@@ -18,7 +19,16 @@ var _mermaidCache = new Map();
 var _filePath = null;
 
 function mermaidTheme() {
-  return (_theme === 'light' || _theme === 'github' || _theme === 'sakura') ? 'default' : 'dark';
+  return _themeLight ? 'default' : 'dark';
+}
+
+// C#(ViewerTheme)이 보낸 { light, colors }를 body.themed의 CSS 변수(--bg 등)로 넣는다.
+function applyTheme(theme) {
+  var colors = (theme && theme.colors) || {};
+  _themeLight = !!(theme && theme.light);
+  _theme = 'themed';
+  document.getElementById('folderss-theme').textContent = 'body.themed{'
+    + Object.keys(colors).map(function(k) { return '--' + k + ':' + colors[k]; }).join(';') + '}';
 }
 
 // ── Preferences ───────────────────────────
@@ -1024,7 +1034,7 @@ var app = {
   clearOperationSurface: clearOperationSurface,
   open: function(content, theme, mode, largeFileMode, filePath) {
     _content = content;
-    _theme   = theme || 'dark';
+    applyTheme(theme);
     _filePath = filePath || null;
     _largeFileMode = largeFileMode === true;
     // 대용량 파일은 C#이 정한 모드(Edit)를 따르고, 아니면 이 파일에서 마지막으로 쓴 모드를 복원한다.
@@ -1045,7 +1055,7 @@ var app = {
   },
 
   setTheme: function(theme) {
-    _theme = theme || 'dark';
+    applyTheme(theme);
     document.body.className = _theme + ' mode-' + _mode;
     configureMermaid();
     // Mermaid 색을 바꾸려면 다시 렌더링해야 하지만, 읽던 위치는 유지한다.

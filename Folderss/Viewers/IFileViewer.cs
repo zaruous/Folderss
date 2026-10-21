@@ -11,7 +11,7 @@ namespace Folderss.Viewers
         ViewerCapabilities Capabilities { get; }
 
         void Load(string filePath);
-        void ApplyTheme(AppTheme theme);
+        void ApplyTheme(ThemeInfo theme);
         void Export(ExportFormat format, string destPath);
 
         event EventHandler<string> TitleChanged;

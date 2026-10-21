@@ -1,5 +1,11 @@
 <ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
-                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!-- 테마 정보(생략 가능): 저장·플러그인에 쓰는 이름(파일 이름과 같게), 메뉴 표시 이름, 목록 순서 -->
+    <sys:String x:Key="ThemeName">Gruvbox</sys:String>
+    <sys:String x:Key="ThemeDisplayName">Gruvbox Dark</sys:String>
+    <sys:Int32 x:Key="ThemeOrder">130</sys:Int32>
+
     <FontFamily x:Key="AppFontFamily">Segoe UI</FontFamily>
 
     <Color x:Key="WindowBackgroundColor">#1D2021</Color>

@@ -108,7 +108,8 @@ Folderss/
 │   ├── NetworkSettingsService  — 네트워크 설정 저장 (network-settings.xml: 원격 이미지·http·인증서 오류 허용, 추가 신뢰 인증서)
 │   ├── RemoteContentPolicy     — 원격 이미지 허용 경로·localhost 판정·내부 인증서 체인 검증 (순수 로직)
 │   ├── CaptureAnnotation       — 캡쳐 편집 도형 값 (이동·핸들·선택 판정·자르기/크기 조절 변환)
-│   └── ThemeManager            — 테마 전환 및 저장
+│   ├── ThemeFileValidator      — 실행 폴더 Themes\ 테마 XAML 검사 (허용 요소만)
+│   └── ThemeManager            — 시작 시 테마 자동 인식(기본 + 실행 폴더 Themes\), 전환 및 저장
 ├── Converters/
 │   └── FractionToStarConverter — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
 ├── Themes/
@@ -435,6 +436,15 @@ GitHub에서 설치한 플러그인은 목록에서 선택하고 `업데이트`�
 - One Dark
 - Monokai
 - Gruvbox Dark
+
+테마 목록은 프로그램을 시작할 때 자동으로 만들어집니다.
+
+- **빌드 없이 추가**: `Folderss.exe`가 있는 폴더에 `Themes` 폴더를 만들고 `.xaml`을 넣은 뒤 다시 시작합니다.
+  기존 테마 파일(예: 소스의 `Folderss\Themes\Black.xaml`)을 복사해 색과 맨 위의 `ThemeName`(저장 이름)·`ThemeDisplayName`(메뉴 이름)·
+  `ThemeOrder`(순서)를 바꾸면 됩니다. `ThemeName`이 기본 테마와 같으면 그 테마를 대신합니다.
+  - 보안을 위해 색·브러시·글꼴·문자열·정수와 `{StaticResource}`, `{x:Static SystemColors.…}`만 허용합니다(그 밖의 요소는 프로그램 실행 등에 악용될 수 있음).
+  - `Black.xaml`에 있는 키가 하나라도 빠졌거나 형식이 틀린 파일은 목록에서 빼고, 시작 후 파일 이름과 이유를 알려 줍니다.
+- **기본 테마로 추가**: 소스의 `Folderss\Themes\`에 넣고 빌드합니다. 키 확인은 `dotnet test tests/Folderss.SearchTests --filter ThemeFileTests`.
 
 테마 색상과 공통 컨트롤 스타일은 다음 파일로 분리되어 있습니다.
 
