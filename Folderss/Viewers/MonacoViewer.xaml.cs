@@ -468,7 +468,7 @@ namespace Folderss.Viewers
         // monaco-app.html의 편집기 테마 배경(folderss-dark #0e1013, folderss-light #ffffff)과 같은 색
         private static System.Drawing.Color PageBackground(AppTheme theme)
         {
-            return theme == AppTheme.Light || theme == AppTheme.GitHub
+            return theme == AppTheme.Light || theme == AppTheme.GitHub || theme == AppTheme.Sakura
                 ? System.Drawing.ColorTranslator.FromHtml("#ffffff")
                 : System.Drawing.ColorTranslator.FromHtml("#0e1013");
         }
@@ -479,6 +479,7 @@ namespace Folderss.Viewers
             {
                 case AppTheme.Light: return "light";
                 case AppTheme.GitHub: return "github";
+                case AppTheme.Sakura: return "light";
                 default: return "dark";
             }
         }

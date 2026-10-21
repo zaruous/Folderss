@@ -13,7 +13,13 @@ namespace Folderss.Services
         Catppuccin,
         Solarized,
         Dracula,
-        GitHub
+        GitHub,
+        Sakura,
+        Sunset,
+        TokyoNight,
+        OneDark,
+        Monokai,
+        Gruvbox
     }
 
     public static class ThemeManager

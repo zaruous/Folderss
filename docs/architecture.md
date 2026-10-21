@@ -91,6 +91,12 @@ Folderss/
 │   ├── Solarized.xaml              — Solarized Dark 테마
 │   ├── Dracula.xaml                — Dracula 테마
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
+│   ├── Sakura.xaml                 — Sakura 테마 (핑크, 밝은 테마)
+│   ├── Sunset.xaml                 — Sunset 테마 (오렌지, 어두운 테마)
+│   ├── TokyoNight.xaml             — Tokyo Night 테마
+│   ├── OneDark.xaml                — One Dark 테마
+│   ├── Monokai.xaml                — Monokai 테마
+│   ├── Gruvbox.xaml                — Gruvbox Dark 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
