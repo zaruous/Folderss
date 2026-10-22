@@ -29,6 +29,8 @@ function applyTheme(theme) {
   _theme = 'themed';
   document.getElementById('folderss-theme').textContent = 'body.themed{'
     + Object.keys(colors).map(function(k) { return '--' + k + ':' + colors[k]; }).join(';') + '}';
+  // 코드 블록 구문 색 (text-app.html과 같은 highlight.js 테마)
+  document.getElementById('hljs-theme').href = _themeLight ? 'themes/hljs-light.css' : 'themes/hljs-dark.css';
 }
 
 // ── Preferences ───────────────────────────

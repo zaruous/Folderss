@@ -12,16 +12,16 @@
     <Color x:Key="PanelBackgroundColor">#282828</Color>
     <Color x:Key="SurfaceBackgroundColor">#32302F</Color>
     <Color x:Key="ControlBackgroundColor">#3C3836</Color>
-    <Color x:Key="ControlHoverColor">#504945</Color>
-    <Color x:Key="ControlPressedColor">#665C54</Color>
-    <Color x:Key="BorderColor">#504945</Color>
+    <Color x:Key="ControlHoverColor">#45403D</Color>
+    <Color x:Key="ControlPressedColor">#504945</Color>
+    <Color x:Key="BorderColor">#3C3836</Color>
     <Color x:Key="PrimaryTextColor">#EBDBB2</Color>
     <Color x:Key="SecondaryTextColor">#BDAE93</Color>
     <Color x:Key="DisabledTextColor">#7C6F64</Color>
-    <Color x:Key="AccentColor">#FABD2F</Color>
-    <Color x:Key="AccentHoverColor">#FCD15C</Color>
-    <Color x:Key="SelectionColor">#4F4327</Color>
-    <Color x:Key="RowHoverColor">#2E2C2B</Color>
+    <Color x:Key="AccentColor">#8EC07C</Color>
+    <Color x:Key="AccentHoverColor">#A3D18F</Color>
+    <Color x:Key="SelectionColor">#3E4A3B</Color>
+    <Color x:Key="RowHoverColor">#2F2D2C</Color>
 
     <SolidColorBrush x:Key="WindowBackground" Color="{StaticResource WindowBackgroundColor}"/>
     <SolidColorBrush x:Key="PanelBackground" Color="{StaticResource PanelBackgroundColor}"/>
