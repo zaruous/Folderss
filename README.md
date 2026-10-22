@@ -114,7 +114,7 @@ Folderss/
 │   └── FractionToStarConverter — 0~1 비율 → Star `GridLength` 변환 (디스크 사용량 가로바)
 ├── Themes/
 │   ├── Black / Light / Nord / Catppuccin / Solarized / Dracula / GitHub
-│   ├── Sakura / Sunset / TokyoNight / OneDark / Monokai / Gruvbox
+│   ├── Sakura / Sunset / Peach / TokyoNight / OneDark / Monokai / Gruvbox
 │   └── Controls.xaml           — 공통 컨트롤 스타일
 ├── MainWindow                  — 메인 창, AvalonDock 호스트, 전역 단축키, 문서 탭 컨텍스트 메뉴
 ├── SettingsWindow              — 테마·단축키·뷰어·열기 프로그램·콘솔·Git·비교·캡쳐 설정
@@ -219,7 +219,7 @@ tests/
   - 결과 창은 명령 줄(저장·▾·복사·되돌리기·닫기), 도구 줄, 흰 페이지, 상태 줄(상태 문구·페이지 크기)로 나뉨. 흰 페이지 위에 캡쳐 이미지가 오브젝트로 놓인 편집면. `↖ 선택`(캡쳐 이미지·도형을 눌러 선택, 끌어서 이동, 핸들로 크기 변경 — 이미지 모서리는 비율 유지, 화살표는 양 끝, 텍스트는 이동만, Delete로 도형 삭제)·사각형·타원·화살표·텍스트(Enter 확정, Shift+Enter 줄바꿈, Esc 취소)·자르기(드래그를 놓으면 바로 잘림), 색 7가지·굵기·글자 크기, `크기 조절…`(비율 유지 기본), `배경 크기…`(이미지·도형은 그대로 두고 흰 배경만 바꿈, 왼쪽 위 기준), `↶ 되돌리기`(Ctrl+Z). 흰 배경은 처음 열 때 결과 창이 뜨는 모니터의 해상도 크기(캡쳐보다 작지 않게)이고, 창은 그에 맞춰 화면의 85%까지 커짐. 자르기·크기 조절은 페이지 크기를 바꾸고 이미지·도형은 자리를 맞춰 옮기므로 그 뒤에도 다시 고칠 수 있음. 같은 도구를 다시 누르면 꺼짐(보기만)
   - 저장·복사는 페이지(흰 바탕 + 이미지 + 도형)를 한 장으로 합친 이미지. 열자마자 하는 자동 복사만 캡쳐 그대로. 편집 뒤 저장·복사 없이 닫으면 확인
 - `보기 > 디스크 사용량 보기`로 드라이브별 사용량을 가로바와 GB 단위(총량/사용량/여유 공간)로 표시, 즐겨찾기 위 미니 패널로 상시 확인 가능
-- Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub, Sakura, Sunset, Tokyo Night, One Dark, Monokai, Gruvbox 테마 실시간 전환 및 사용자 설정 저장
+- Black, Light, Nord, Catppuccin, Solarized, Dracula, GitHub, Sakura, Sunset, Peach, Tokyo Night, One Dark, Monokai, Gruvbox 테마 실시간 전환 및 사용자 설정 저장
 - 설정 창에서 단축키와 확장자별 뷰어 매핑 변경
 - 설정 창에서 사용자 지정 열기 프로그램 등록 및 확장자 마스크 관리
 - 설정 창에서 콘솔 디폴트 커맨드라인과 추가 실행 항목 관리
@@ -432,6 +432,7 @@ GitHub에서 설치한 플러그인은 목록에서 선택하고 `업데이트`�
 - GitHub Primer Light
 - Sakura (핑크, 밝은 테마)
 - Sunset (오렌지, 어두운 테마)
+- Peach (밝은 오렌지, 밝은 테마)
 - Tokyo Night
 - One Dark
 - Monokai
@@ -458,6 +459,7 @@ Folderss\Themes\Dracula.xaml
 Folderss\Themes\GitHub.xaml
 Folderss\Themes\Sakura.xaml
 Folderss\Themes\Sunset.xaml
+Folderss\Themes\Peach.xaml
 Folderss\Themes\TokyoNight.xaml
 Folderss\Themes\OneDark.xaml
 Folderss\Themes\Monokai.xaml

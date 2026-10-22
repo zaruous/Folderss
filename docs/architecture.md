@@ -95,6 +95,7 @@ Folderss/
 │   ├── GitHub.xaml                 — GitHub (Primer Light) 테마
 │   ├── Sakura.xaml                 — Sakura 테마 (핑크, 밝은 테마)
 │   ├── Sunset.xaml                 — Sunset 테마 (오렌지, 어두운 테마)
+│   ├── Peach.xaml                  — Peach 테마 (밝은 오렌지, 밝은 테마)
 │   ├── TokyoNight.xaml             — Tokyo Night 테마
 │   ├── OneDark.xaml                — One Dark 테마
 │   ├── Monokai.xaml                — Monokai 테마

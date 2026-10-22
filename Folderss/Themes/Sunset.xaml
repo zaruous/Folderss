@@ -8,20 +8,20 @@
 
     <FontFamily x:Key="AppFontFamily">Segoe UI</FontFamily>
 
-    <Color x:Key="WindowBackgroundColor">#161413</Color>
-    <Color x:Key="PanelBackgroundColor">#1E1B1A</Color>
-    <Color x:Key="SurfaceBackgroundColor">#262220</Color>
-    <Color x:Key="ControlBackgroundColor">#2E2926</Color>
-    <Color x:Key="ControlHoverColor">#3A332F</Color>
-    <Color x:Key="ControlPressedColor">#463D38</Color>
-    <Color x:Key="BorderColor">#3A3330</Color>
-    <Color x:Key="PrimaryTextColor">#F2E9E4</Color>
-    <Color x:Key="SecondaryTextColor">#B8ABA3</Color>
-    <Color x:Key="DisabledTextColor">#7A6E68</Color>
-    <Color x:Key="AccentColor">#FF8A3D</Color>
-    <Color x:Key="AccentHoverColor">#FFA366</Color>
-    <Color x:Key="SelectionColor">#4A3020</Color>
-    <Color x:Key="RowHoverColor">#262120</Color>
+    <Color x:Key="WindowBackgroundColor">#17100B</Color>
+    <Color x:Key="PanelBackgroundColor">#1E1510</Color>
+    <Color x:Key="SurfaceBackgroundColor">#2B1B10</Color>
+    <Color x:Key="ControlBackgroundColor">#352216</Color>
+    <Color x:Key="ControlHoverColor">#4E2D16</Color>
+    <Color x:Key="ControlPressedColor">#663819</Color>
+    <Color x:Key="BorderColor">#5A3820</Color>
+    <Color x:Key="PrimaryTextColor">#FFF1E6</Color>
+    <Color x:Key="SecondaryTextColor">#F0B48A</Color>
+    <Color x:Key="DisabledTextColor">#8F6B53</Color>
+    <Color x:Key="AccentColor">#FF7A1A</Color>
+    <Color x:Key="AccentHoverColor">#FF9A4D</Color>
+    <Color x:Key="SelectionColor">#8A3F10</Color>
+    <Color x:Key="RowHoverColor">#2E1C11</Color>
 
     <SolidColorBrush x:Key="WindowBackground" Color="{StaticResource WindowBackgroundColor}"/>
     <SolidColorBrush x:Key="PanelBackground" Color="{StaticResource PanelBackgroundColor}"/>
