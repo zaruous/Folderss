@@ -155,6 +155,46 @@
                 </DockPanel>
             </Border>
 
+            <!-- zip 안을 볼 때만 보이는 띠(FolderBrowser.Archive.cs): 읽기 전용 안내 + 압축 풀기(기본 동작)·▾(옵션)·나가기 -->
+            <Border x:Name="ArchiveBanner"
+                    Grid.Row="2"
+                    Margin="8,0,8,5"
+                    Padding="8,2"
+                    Background="{DynamicResource SurfaceBackground}"
+                    BorderBrush="{DynamicResource BorderBrush}"
+                    BorderThickness="1"
+                    CornerRadius="3"
+                    Visibility="Collapsed">
+                <DockPanel>
+                    <Button DockPanel.Dock="Right"
+                            Content="나가기"
+                            Padding="8,1"
+                            Margin="4,2,0,2"
+                            ToolTip="zip 밖(zip이 있는 폴더)으로 나갑니다 (Backspace)"
+                            AutomationProperties.Name="zip 밖으로"
+                            Click="ArchiveExit_Click"/>
+                    <Button DockPanel.Dock="Right"
+                            Style="{StaticResource OptionArrowButton}"
+                            Padding="5,1"
+                            Margin="0,2,0,2"
+                            ToolTip="압축 풀기 옵션 — 고른 항목만, 풀 위치(반대편 패널 등), 같은 이름 처리"
+                            AutomationProperties.Name="압축 풀기 옵션"
+                            Click="ArchiveExtractOptions_Click"/>
+                    <Button x:Name="ArchiveExtractButton"
+                            DockPanel.Dock="Right"
+                            Content="압축 풀기"
+                            Padding="8,1"
+                            Margin="0,2,0,2"
+                            Click="ArchiveExtract_Click"/>
+                    <TextBlock x:Name="ArchiveBannerText"
+                               VerticalAlignment="Center"
+                               Margin="0,0,8,0"
+                               TextTrimming="CharacterEllipsis"
+                               FontSize="12"
+                               ToolTip="zip 파일은 읽기 전용으로 엽니다. 안의 파일은 임시 폴더에 풀어 연 사본이라 고쳐도 zip에 반영되지 않습니다. 삭제·이름 변경·추가는 아직 지원하지 않습니다."/>
+                </DockPanel>
+            </Border>
+
             <Grid Grid.Row="3" Margin="8,0">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition x:Name="TreeColumn" Width="0"/>
@@ -275,6 +315,8 @@
                         <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
                             <!-- 링크(심볼릭 링크·junction) 행에만 대상 경로 툴팁이 붙는다. 값이 null이면 툴팁이 만들어지지 않는다. -->
                             <Setter Property="ToolTip" Value="{Binding LinkToolTip}"/>
+                            <!-- 화면 읽기 프로그램·UI 자동화가 행을 형식 이름 대신 파일 이름으로 읽게 한다. -->
+                            <Setter Property="AutomationProperties.Name" Value="{Binding Name}"/>
                             <Style.Triggers>
                                 <DataTrigger Binding="{Binding IsCut}" Value="True">
                                     <Setter Property="Opacity" Value="0.4"/>

@@ -45,6 +45,12 @@ namespace Folderss.Services
             }
 
             truncated = fileLength > buffer.Length;
+            return DecodeTextPreview(buffer, truncated);
+        }
+
+        /// <summary>파일 앞부분 바이트를 미리보기 문자열로(바이너리 판정·BOM 인코딩). zip 안 파일 미리보기도 같은 규칙을 쓴다.</summary>
+        public static string DecodeTextPreview(byte[] buffer, bool truncated)
+        {
             if (LooksBinary(buffer))
                 return "바이너리 파일은 텍스트 내용 미리보기를 지원하지 않습니다.";
 

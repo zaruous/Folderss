@@ -6,6 +6,7 @@
 Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
+│   ├── FolderBrowser.Archive.cs    — 같은 컨트롤의 zip 안 보기(읽기 전용): 가상 경로 이동·목록·zip 띠·미리보기·열기(임시 사본)·끌어 놓기·Ctrl+C·우클릭·압축 풀기/압축
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
 │   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
@@ -72,6 +73,9 @@ Folderss/
 │   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
 │   ├── PluginManager.cs            — 플러그인 로드(플러그인별 AssemblyLoadContext, 계약 DLL은 본체 것 공유)·팝업 창·IPluginManager 구현(PluginHost)·팝업용 폴더 패널·플러그인 예외 판별
 │   ├── PluginPackage.cs            — plugin.json 검증, 진입점 DLL의 계약 참조 버전 확인, plugins\<id>.zip 등록·목록, 해시별 폴더로 안전한 압축 해제 (순수 로직)
+│   ├── ZipArchiveService.cs        — zip 가상 경로(`ZipArchivePath`: `C:\a\b.zip\sub` 분해·결합), 목록 트리(`ZipListing`)·캐시(`ZipListingCache`), 풀기 계획·실행(Zip Slip 이중 검사·이름 정리·충돌 모드·취소), zip 만들기 (순수 로직)
+│   ├── ZipEntryNameEncoding.cs     — UTF-8 플래그 없는 zip 이름을 항목마다 ASCII→UTF-8→CP949→CP437 순으로 판정하는 읽기 전용 Encoding (순수 로직)
+│   ├── ZipTempStore.cs             — zip 안 파일 열기·클립보드 복사용 실행별 임시 폴더(%TEMP%\Folderss\zip\<pid>-<시각>), 종료 때 정리·하루 지난 폴더 수거 (순수 로직)
 │   ├── PluginGitHubSource.cs       — 공개 GitHub 저장소 최신 정식 릴리스 조회·zip 받기(100MB 제한, digest SHA-256 비교), 오류는 문장 예외 (순수 로직)
 │   ├── PluginSourceStore.cs        — plugins\sources.json: 플러그인 id별 설치 출처(local / github.com/<소유자>/<저장소>) (순수 로직)
 │   ├── PluginSettingsStore.cs      — 플러그인별 키/값 settings.json (SettingsFile 사용, 실패는 예외)
@@ -107,6 +111,8 @@ Folderss/
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `GitLibDiff`, 안 되면 `git diff --no-index`), 코드로 구성
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
+├── ArchiveDialogs.cs               — `ArchiveExtractDialog`·`ArchiveCompressDialog`(GitDialogBase 상속), `ArchiveProgressWindow`(0.4초 넘는 작업만, 취소), `ArchiveOperations`(백그라운드 실행·오류 알림·zip 이름 폴더 풀기)
+├── MainWindow.Archive.cs           — MainWindow의 zip 연결: 파일 작업 가드(`BlockedInArchive`), 이동·복사 처리, 반대편 패널, 결과 선택, ⋯ 메뉴 `압축 풀기…`·`zip으로 압축…`
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 플러그인)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
@@ -382,6 +388,25 @@ Folderss/
   메타정보 "링크 대상" 행(링크일 때만 표시)으로 드러난다. OneDrive 자리표시자처럼 `LinkTarget`이 없는 reparse point는 링크로 보지 않는다.
 - 링크 생성은 `FileOperationService.CreateLink` — 심볼릭 링크 우선, 권한 오류(1314/UnauthorizedAccess)면 폴더는 `mklink /J`
   junction으로 대체, 파일은 안내와 함께 실패. `MainWindow.CreateLink_Click`은 `ExecuteTransfer`와 같은 대상 패널·핀 잠금·오류 모음 규칙.
+
+### zip을 폴더처럼 열기 (FolderBrowser.Archive / ZipArchiveService)
+- 상세 설계·참고 제품 조사·결정 목록: `docs/items/zip-as-folder.md`. 읽기 전용(zip 안 수정 없음).
+- **가상 경로**: zip 안에서는 `FolderBrowser.CurrentPath`가 `C:\a\b.zip\sub` 같은 가상 경로다(제목·경로 입력란·뒤로/앞으로·session.xml·dock-layout ContentId에 그대로).
+  `NavigateTo`가 실제 폴더가 아니면 `TryNavigateIntoArchive` → `ZipArchivePath.TrySplit`(끝에서 위로 올라가 처음 만나는 "존재하는 파일"이 `.zip`이거나 zip 시그니처면 zip)로 들어간다.
+  실제 폴더로 이동하면 `ExitArchiveState`. 실제 폴더가 필요한 곳은 `FileSystemPath`(zip 안이면 zip이 있는 폴더 — 콘솔 작업 폴더, 검색 대상, 트리 루트), 상태는 `IsInArchive`·`ArchivePath`.
+  세션·레이아웃 복원은 `MainWindow.FolderOrArchiveExists`로 가상 경로도 받는다. 플러그인 팝업 패널(`ArchiveBrowsingEnabled = false`)과 폴더 비교 창(안전 모드)은 zip에 들어가지 않는다.
+- **목록**: `ZipListingCache`(최근 8개, zip 크기·수정 시각이 같으면 재사용, 같은 zip 동시 요청은 한 번만)가 백그라운드에서 `ZipArchiveService.ReadListing`. 디렉터리 항목이 없으면 경로에서 폴더를 만들고,
+  `..`·`:`이 든 이름은 숨김(`UnsafeEntryCount`, 상태 줄 툴팁에 목록), 같은 경로가 여러 번이면 뒤의 것. 이름은 `ZipEntryNameEncoding`(플래그 있으면 .NET이 UTF-8) 후 NFC.
+  `FileSystemItem.ArchiveEntry`(`ZipEntryInfo`)가 있으면 zip 항목이다. zip 파일 자체를 `FileSystemWatcher`(필터 = zip 이름)로 지켜 바뀌면 다시 읽고, 읽지 못하면 zip이 있던 폴더로 나간다.
+- **풀기**: `PlanExtraction`(고른 항목을 대상 폴더 바로 아래에, `UniqueTopLevel`이면 기존 복사처럼 `이름 (2)`) → `Extract`(항목마다 `.xxxx.folderss-part`에 쓰고 이름 바꿈, 오류는 모으고 계속, 100개면 멈춤, 취소는 그때까지 남김).
+  풀기 직전 zip 크기·시각과 항목 수·이름(인덱스로 대조)이 목록과 다르면 `ChangedMessage`. 암호 항목(`IsEncrypted`)은 실패로 모은다(.NET이 풀지 못함). 대상 밖 경로는 `EnsureInside`로 다시 거부.
+- **열기**: `ZipTempStore.ExtractForOpen`(같은 zip·같은 파일이면 재사용, 읽기 전용 특성) → `FileOpenRequested`(뷰어 탭·기본 프로그램). 실행 형식은 확인, 처음 한 번 읽기 전용 안내.
+- **꺼내기**: 끌어 놓기는 앱 안 전용 형식(`ArchiveDragPayload`, 놓을 때 풂 — 탐색기로는 안 됨), `Ctrl+C`는 임시 폴더에 풀어 FileDrop(붙여넣기 코드 수정 없음), 우클릭 `반대편 패널로 복사`, ⋯ 이동(F6)은 막고 `ExecuteTransfer`의 복사는 반대편으로 풂.
+  끝나면 `MainWindow.ShowArchiveOperationResult`가 패널을 새로 고치고 `SelectCreatedItem`(폴더 감시 새로 고침 뒤에도 3초간 선택 유지)으로 만든 항목을 고른다.
+- **막는 작업**: `MainWindow.BlockedInArchive`(삭제·이름 변경·새 폴더/파일·링크·비교·즐겨찾기·Git), `BlockedPasteIntoArchive`, `CutSelectedToClipboard`, 끌어 넣기. 다음으로 열기 메뉴는 숨김, 탐색기로 열기는 zip 파일 선택.
+  새 파일 작업 명령을 추가하면 zip 안(`ActivePane.IsInArchive`)에서 어떻게 할지(막기·꺼내기) 정해야 한다.
+- **압축**: `ZipArchiveService.CreateZip`(같은 폴더 임시 파일 후 이름 바꿈, UTF-8 이름, 빈 폴더 포함, 하위 링크 폴더는 안으로 안 들어감, 만드는 zip 자신 제외). 진행 창·오류 알림은 `ArchiveOperations`.
+- 회귀 테스트: `tests/Folderss.SearchTests/ZipArchiveTests.cs`(가상 경로, 목록 트리, CP949·UTF-8(플래그 유무)·NFD 이름, 위험한 이름, 손상·암호, 복사/합치기 충돌 모드, 이름 정리, zip 변경 감지, 취소, 만들기, 임시 사본·정리).
 
 ### Git 창 (GitWindow)
 - 진입: `MainWindow.ShowGit_Click` — 기준 폴더는 `GitSettings.BaseFolderMode`(기본: 폴더 하나 선택 시 그 폴더, 아니면 `CurrentPath`).
