@@ -145,6 +145,10 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
 WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍게 보임.
 `Controls.xaml`에 `ControlTemplate` 재정의가 있으므로 새 ContextMenu 추가 시 별도 스타일 불필요.
 
+### 폴더 패널 경로가 zip 안일 수 있음
+- zip 안을 보는 패널의 `FolderBrowser.CurrentPath`는 `C:\a\b.zip\sub` 같은 가상 경로이고 항목 `FullPath`도 실제 파일이 아니다(`IsInArchive`, `FileSystemItem.ArchiveEntry`).
+- 실제 폴더가 필요하면 `FileSystemPath`(zip이 있는 폴더)를 쓰고, 새 파일 작업 명령은 `MainWindow.BlockedInArchive`로 막거나 꺼내기로 처리한다(`docs/items/zip-as-folder.md`).
+
 ---
 
 ## 문서 구조

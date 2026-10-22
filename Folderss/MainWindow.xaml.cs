@@ -253,7 +253,7 @@ namespace Folderss
 
         private static string GetExistingPath(string savedPath, string fallbackPath)
         {
-            return !string.IsNullOrWhiteSpace(savedPath) && Directory.Exists(savedPath)
+            return FolderOrArchiveExists(savedPath)
                 ? savedPath
                 : fallbackPath;
         }
@@ -287,7 +287,7 @@ namespace Folderss
         {
             foreach (var path in paths ?? Enumerable.Empty<string>())
             {
-                if (!Directory.Exists(path) ||
+                if (!FolderOrArchiveExists(path) ||
                     string.Equals(path, LeftPane.CurrentPath, StringComparison.OrdinalIgnoreCase) ||
                     string.Equals(path, RightPane.CurrentPath, StringComparison.OrdinalIgnoreCase))
                 {
@@ -312,7 +312,9 @@ namespace Folderss
         {
             var selected = ActivePane?.SelectedItems?.ToList();
             List<string> paths;
-            if (selected != null && selected.Count > 0)
+            if (ActivePane != null && ActivePane.IsInArchive)
+                paths = new List<string>(); // zip 안 가상 경로는 외부 프로그램에 넘길 수 없다
+            else if (selected != null && selected.Count > 0)
                 paths = selected.Select(item => item.FullPath).ToList();
             else if (!string.IsNullOrEmpty(ActivePane?.CurrentPath))
                 paths = new List<string> { ActivePane.CurrentPath };
@@ -580,7 +582,7 @@ namespace Folderss
                 return null;
 
             var path = Uri.UnescapeDataString(contentId.Substring(separatorIndex + 1));
-            if (!Directory.Exists(path))
+            if (!FolderOrArchiveExists(path))
                 return null;
 
             return CreateFolderBrowser(path);
@@ -771,6 +773,8 @@ namespace Folderss
 
         private void CompareFiles_Click(object sender, RoutedEventArgs e)
         {
+            if (BlockedInArchive("파일을 비교할 수 없습니다(먼저 꺼낸 뒤 비교하세요)"))
+                return;
             var files = ActivePane?.GetSelectedFilePair();
             if (files == null)
             {
@@ -840,6 +844,8 @@ namespace Folderss
         /// </summary>
         private void CompareFolders_Click(object sender, RoutedEventArgs e)
         {
+            if (BlockedInArchive("폴더를 비교할 수 없습니다(먼저 꺼낸 뒤 비교하세요)", true))
+                return;
             var pair = ActivePane?.GetSelectedFolderPair();
             if (pair != null)
             {
@@ -1229,7 +1235,7 @@ namespace Folderss
                     ActiveFolderPath = ActivePane.CurrentPath,
                     OpenFolderPaths = browsers
                         .Select(browser => browser.CurrentPath)
-                        .Where(path => !string.IsNullOrWhiteSpace(path) && Directory.Exists(path))
+                        .Where(FolderOrArchiveExists)
                         .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToList(),
                     TreeViews = browsers
@@ -1266,6 +1272,8 @@ namespace Folderss
 
         private void FavoritesPanel_AddCurrentRequested(object sender, EventArgs e)
         {
+            if (BlockedInArchive("즐겨찾기에 추가할 수 없습니다(zip 파일이 있는 폴더를 추가하세요)"))
+                return;
             var selectedItems = ActivePane.SelectedItems;
             if (selectedItems != null && selectedItems.Count == 1 && !selectedItems[0].IsDirectory)
             {
@@ -1466,6 +1474,8 @@ namespace Folderss
 
         private void ExecuteTransfer(bool move)
         {
+            if (TryHandleArchiveTransfer(move))
+                return;
             var selected = ActivePane.SelectedItems.ToList();
             if (selected.Count == 0)
             {
@@ -1499,6 +1509,8 @@ namespace Folderss
 
         private void CreateLink_Click(object sender, RoutedEventArgs e)
         {
+            if (BlockedInArchive("링크를 만들 수 없습니다", true))
+                return;
             var selected = ActivePane.SelectedItems.ToList();
             if (selected.Count == 0)
             {
@@ -1552,6 +1564,8 @@ namespace Folderss
 
         private void DeleteSelected(bool permanently)
         {
+            if (BlockedInArchive("삭제할 수 없습니다"))
+                return;
             var selected = ActivePane.SelectedItems.ToList();
             if (selected.Count == 0)
             {
@@ -1571,6 +1585,8 @@ namespace Folderss
 
         private void Rename_Click(object sender, RoutedEventArgs e)
         {
+            if (BlockedInArchive("이름을 바꿀 수 없습니다"))
+                return;
             var item = ActivePane.SelectedItem;
             if (item == null)
             {
@@ -1605,6 +1621,8 @@ namespace Folderss
 
         private void NewFolder_Click(object sender, RoutedEventArgs e)
         {
+            if (BlockedInArchive("새 폴더를 만들 수 없습니다"))
+                return;
             if (IsDestinationPinLocked(ActivePane.CurrentPath))
             {
                 ShowPinLockedMessage();
@@ -1631,6 +1649,8 @@ namespace Folderss
 
         private void NewFile_Click(object sender, RoutedEventArgs e)
         {
+            if (BlockedInArchive("새 파일을 만들 수 없습니다"))
+                return;
             if (IsDestinationPinLocked(ActivePane.CurrentPath))
             {
                 ShowPinLockedMessage();
@@ -1670,7 +1690,7 @@ namespace Folderss
         private void ShowGit_Click(object sender, RoutedEventArgs e)
         {
             var pane = ActivePane;
-            if (pane == null)
+            if (pane == null || BlockedInArchive("Git 창을 열 수 없습니다"))
                 return;
 
             // 기준 폴더: 옵션이 "선택한 폴더 우선"이고 폴더 하나만 골랐으면 그 폴더, 아니면 패널의 현재 폴더.
@@ -1727,6 +1747,12 @@ namespace Folderss
 
         private void OpenInExplorer_Click(object sender, RoutedEventArgs e)
         {
+            if (ActivePane.IsInArchive)
+            {
+                // zip 안 위치는 탐색기 경로가 아니다 — zip 파일을 고른 탐색기 창을 연다.
+                OpenPathInExplorer(ActivePane.ArchivePath);
+                return;
+            }
             var selected = ActivePane.SelectedItem;
             string arguments;
 
@@ -2159,7 +2185,7 @@ namespace Folderss
 
         private string ActivePaneCurrentPath
         {
-            get { return ActivePane == null ? null : ActivePane.CurrentPath; }
+            get { return ActivePane == null ? null : ActivePane.FileSystemPath; }
         }
 
         private void SwitchToAdjacentPane(int direction)
@@ -2214,6 +2240,8 @@ namespace Folderss
                 return true;
             if (files == null || files.Count == 0)
                 return false;
+            if (BlockedPasteIntoArchive(targetPane))
+                return true;
 
             var targetPath = targetPane?.CurrentPath;
             if (string.IsNullOrWhiteSpace(targetPath) || !Directory.Exists(targetPath))
@@ -2665,6 +2693,8 @@ namespace Folderss
         private static string GetDocumentPathForExplorer(LayoutDocument document)
         {
             var browser = document.Content as FolderBrowser;
+            if (browser != null && browser.IsInArchive)
+                return browser.ArchivePath;
             if (browser != null)
                 return string.IsNullOrWhiteSpace(browser.CurrentPath) ? null : browser.CurrentPath;
 
@@ -2892,7 +2922,7 @@ namespace Folderss
                 return _consolePanel;
 
             _consolePanel = new Controls.ConsolePanel();
-            _consolePanel.ActiveDirectoryProvider = () => ActivePane.CurrentPath;
+            _consolePanel.ActiveDirectoryProvider = () => ActivePane.FileSystemPath;
             _consolePanel.GotFocus += ConsolePanel_GotFocus;
             _consolePanel.MaximizeRequested += (s, ev) => TogglePanelMaximize();
             _consolePanel.MinimizeRequested += (s, ev) => CloseConsoleDocument();

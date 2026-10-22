@@ -24,7 +24,20 @@ namespace Folderss.Models
         /// <summary>링크 항목에만 붙는 행 툴팁. null이면 WPF가 툴팁을 만들지 않는다.</summary>
         public string LinkToolTip
         {
-            get { return IsLink ? "링크 대상: " + (LinkTarget ?? "(알 수 없음)") : null; }
+            get
+            {
+                if (ArchiveEntry != null && ArchiveEntry.IsEncrypted)
+                    return "암호로 보호된 항목 — 열거나 풀 수 없습니다";
+                return IsLink ? "링크 대상: " + (LinkTarget ?? "(알 수 없음)") : null;
+            }
+        }
+
+        /// <summary>zip 안 항목이면 그 항목(이때 <see cref="FullPath"/>는 <c>C:\a\b.zip\sub\f.txt</c> 같은 가상 경로). 실제 파일이면 null.</summary>
+        public Folderss.Services.ZipEntryInfo ArchiveEntry { get; set; }
+
+        public bool IsArchiveEntry
+        {
+            get { return ArchiveEntry != null; }
         }
 
         public string Kind
@@ -67,6 +80,8 @@ namespace Folderss.Models
             {
                 if (IsLink)
                     return "🔗";
+                if (ArchiveEntry != null && ArchiveEntry.IsEncrypted)
+                    return "🔒";
                 if (IsDirectory)
                     return "📂";
 
