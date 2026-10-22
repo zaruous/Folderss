@@ -774,6 +774,30 @@ namespace Folderss
                 // async void 이벤트에서 부르므로 여기서 막지 않으면 앱이 종료된다.
                 AppendOutput("오류: " + ex.Message);
             }
+            finally
+            {
+                EndDetailLoadingStatus(row);
+            }
+        }
+
+        /// <summary>
+        /// 저장소(워킹트리)를 골라 상세를 읽는 동안 단계를 상태 줄에 보인다. 링크된 워킹트리는 LibGit2Sharp로 못 읽어 git CLI로 읽으므로 느리다.
+        /// 다른 작업(<see cref="RunBusyAsync"/>) 중이면 그 상태를 덮지 않고, 그새 다른 저장소를 골랐으면 그쪽이 표시한다.
+        /// </summary>
+        private void ShowDetailLoadingStatus(RepositoryRow row, string stage)
+        {
+            if (_busyCount > 0 || !ReferenceEquals(row, SelectedRow))
+                return;
+            var branch = row.Snapshot?.Branch;
+            StatusText.Text = string.Format("{0}{1} 불러오는 중… {2}",
+                row.Info.DisplayPath, string.IsNullOrEmpty(branch) ? string.Empty : " [" + branch + "]", stage);
+        }
+
+        private void EndDetailLoadingStatus(RepositoryRow row)
+        {
+            if (_busyCount > 0 || !ReferenceEquals(row, SelectedRow) || _lifetime.IsCancellationRequested)
+                return;
+            StatusText.Text = string.Format("저장소 {0}개", _rows.Count);
         }
 
         private async Task LoadBranchesAndLogAsync(RepositoryRow row, CancellationToken token)
@@ -781,6 +805,7 @@ namespace Folderss
             var skipLog = row.Snapshot?.HeadOid == null && !_settings.LogAllBranches;   // 최초 커밋 전: log가 실패하므로 부르지 않는다
             var limit = _settings.LogLimit;
             var all = _settings.LogAllBranches;
+            ShowDetailLoadingStatus(row, "브랜치·로그");
             var libBranches = await ReadLibAsync(row, "브랜치", () => GitLibReader.ReadBranches(row.RootPath));
             var libLog = skipLog
                 ? (Ok: false, Value: (List<GitCommitInfo>)null)
@@ -848,9 +873,15 @@ namespace Folderss
             }
 
             if (BranchesSection.Visibility == Visibility.Visible && BranchList.ItemsSource != null && !ReferenceEquals(row, _branchGraphRow))
+            {
+                ShowDetailLoadingStatus(row, "브랜치 그래프");
                 await LoadBranchGraphAsync(row, token);
+            }
+            ShowDetailLoadingStatus(row, "원격 비교");
             await LoadRemoteAsync(row, token);
+            ShowDetailLoadingStatus(row, "워킹트리 목록");
             await LoadWorktreesAsync(row, token);
+            ShowDetailLoadingStatus(row, "stash");
             await LoadStashesAsync(row, token);
         }
 
