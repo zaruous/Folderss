@@ -6,6 +6,7 @@
   content="default-src 'self' https://folderss-viewer; script-src 'self' https://folderss-viewer; style-src 'self' https://folderss-viewer 'unsafe-inline'; font-src 'self' https://folderss-viewer data:; img-src 'self' https://folderss-viewer https://folderss-doc-asset data: http: https:;">
 <title>Markdown Viewer</title>
 <link rel="stylesheet" href="katex.min.css">
+<link id="hljs-theme" rel="stylesheet" href="themes/hljs-dark.css">
 <style>
 /* ── Reset ───────────────────────────────── */
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
@@ -149,7 +150,7 @@ mark.md-find-hit.active {
   border-right: 1px solid var(--border);
   padding: 8px 0;
   flex-shrink: 0;
-  background: var(--panel);
+  background: var(--bg);
 }
 #mdv-toc-panel.hidden { display: none; }
 
@@ -174,10 +175,11 @@ mark.md-find-hit.active {
 #mdv-toc-panel .toc-h6 { padding-left: 68px; }
 
 /* resize handle */
+/* 잡는 영역은 4px, 보이는 선은 가운데 1px (테두리 색 4px 막대가 두껍게 보이던 것) */
 .resize-handle {
   width: 4px;
   cursor: col-resize;
-  background: var(--border);
+  background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
   flex-shrink: 0;
   transition: background .15s;
 }
@@ -340,7 +342,7 @@ body.mode-split #mdv-split-handle {
   display: block;
   width: 4px;
   cursor: col-resize;
-  background: var(--border);
+  background: linear-gradient(var(--border), var(--border)) center / 1px 100% no-repeat;
   flex-shrink: 0;
 }
 body.mode-split #mdv-split-handle:hover { background: var(--accent); }
@@ -349,6 +351,8 @@ body.mode-split #mdv-split-handle:hover { background: var(--accent); }
 #mdv-operation-surface { display: none; }
 @media print {
   html, body { height: auto; overflow: visible; background: #fff; }
+  /* 인쇄·PDF는 흰 바탕이라 어두운 테마의 밝은 코드 색이 안 보이므로 코드 색을 끈다 */
+  #mdv-operation-surface pre code span { color: inherit !important; }
   #mdv-root { display: none !important; }
   #mdv-operation-surface {
     display: flex !important;

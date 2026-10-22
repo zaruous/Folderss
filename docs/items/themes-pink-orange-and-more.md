@@ -10,6 +10,8 @@
 
 3차 요청: 빌드 없이 프로그램을 시작할 때 테마를 읽도록(실행 폴더 `Themes\`).
 
+4차 요청: 추가 스킨 색감과 마크다운 패널 배경 개선, AS-IS/TO-BE 렌더링 비교로 확인.
+
 ## 원인 분석 또는 설계
 
 - 요청에 밝기·이름이 정해지지 않아 다음과 같이 정했다 (바꿀 수 있음).
@@ -48,6 +50,12 @@
 - 같은 `ThemeName`이면 외부 테마가 기본 테마를 대신한다(기본 테마를 고쳐 쓰는 용도). 외부끼리 같은 이름이면 뒤 파일을 오류로 뺀다.
 - 실행 중 파일을 바꾸면 다시 시작해야 반영된다(감시하지 않음).
 
+### 4차: 색감·마크다운 패널 개선
+
+- 실제 `markdown-app.html`을 Chromium에서 테마 색으로 렌더링해 비교(왼쪽 앱 영역은 테마 색으로 흉내 낸 HTML).
+- 발견: 마크다운 코드 블록에 구문 색 없음(hljs 테마 CSS 미로드, 기존 문제), 목차/본문 사이 4px 테두리 색 막대, 목차 바탕이 본문과 다름,
+  Sakura 전체 분홍으로 위계 없음, Sunset 탁한 갈색, Monokai 형광 연두, Gruvbox 노란 강조색이 튐.
+
 ## 구현 내용
 
 - 테마 팔레트 6개 추가, `AppTheme` enum 끝에 6개 값 추가(기존 값 순서 유지 → `theme.txt`는 이름으로 저장하므로 호환).
@@ -78,6 +86,13 @@
 - `Services/ThemeFileValidator.cs`(신규, 순수 로직), `ThemeManager`: `ExternalThemesDirectory`, `LoadErrors`, `LoadExternalThemes`, Black 기준 키 검사(`RequiredColorKeys` 대체).
 - `MainWindow`: `LoadErrors`가 있으면 시작 후(ApplicationIdle) `ReportThemeLoadErrors` 경고 창.
 - 테스트: 기본 테마 13개가 외부 검사를 통과(복사해 고쳐 쓸 수 있음), 허용 내용 4종 통과, `ObjectDataProvider`·병합 사전·`x:Static`(SystemColors 외)·`Binding`·`x:Class`·DTD·다른 최상위 요소 거부.
+
+### 4차 구현
+
+- `markdown-app.html`/`.js`: hljs 테마 CSS 링크(밝기에 따라 `applyTheme`에서 전환), 목차 리사이즈·분할 핸들을 4px 잡는 영역 + 1px 선,
+  목차 바탕 `var(--bg)`, 인쇄·PDF에서는 코드 색 끔(흰 바탕).
+- 팔레트: Sakura(흰 읽기 바탕, 강조 #C2185B), Sunset(따뜻한 차콜, 선택 #4A3020), Monokai(강조 #FFD866), Gruvbox(강조 #8EC07C). Tokyo Night·One Dark는 유지.
+- 대비: 4개 테마 본문·보조·선택 행·링크 모두 4.5:1 이상(최저 Sakura 링크 5.9).
 
 ## 변경 파일
 
@@ -119,8 +134,14 @@
 - 앱에서 확인 필요: 실행 폴더 `Themes\`에 기본 테마를 복사·이름 변경해 넣고 시작 → 메뉴에 나오는지, 키를 지운 파일·`ObjectDataProvider`를 넣은 파일이
   경고 창에 이유와 함께 나오고 목록에서 빠지는지, `ThemeName`을 기본 테마와 같게 하면 대신하는지.
 
+### 4차 검증
+
+- `ThemeFileTests` 13 통과, `node --check markdown-app.js` 통과.
+- AS-IS(master)/TO-BE 렌더링 이미지 6장으로 사용자 확인 요청. 앱에서 확인 필요: 코드 블록 색, 목차 구분선, PDF 내보내기 코드 가독성.
+
 ## 변경 이력
 
 - 2026-10-21: 6개 테마 추가, 뷰어 테마 매핑·설정 창 스크롤, 문서·체크리스트 갱신.
 - 2026-10-21: Themes 폴더 자동 인식으로 개선(enum·하드코딩 목록 제거, 뷰어 색을 테마 XAML에서 생성, 테마 파일 테스트 추가).
 - 2026-10-21: 시작 시 실행 폴더 Themes\ 로딩 추가(허용 목록 검사, 실패 파일 알림).
+- 2026-10-22: 추가 스킨 4종 색감 조정, 마크다운 코드 구문 색·목차 구분선·목차 바탕 개선.
