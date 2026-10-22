@@ -52,8 +52,11 @@ Folderss/
 │   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각(시각만 다르면 바이트 비교 선택) 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
 │   ├── CompareSettingsService.cs   — 폴더 비교 옵션 저장 (compare-settings.xml)
 │   ├── CompareOverlay.cs           — 비교 결과를 폴더 패널 한쪽의 현재 폴더 항목에 입히는 규칙(이쪽만/저쪽만, 방향) (순수 계산)
-│   ├── FileOperationJournal.cs     — 폴더 비교 창의 이동·복사·삭제 실행+기록(%LOCALAPPDATA%\Folderss\compare-history\*.jsonl, 7일 보관)과 최근부터 되돌리기. 휴지통은 IRecycleBin 주입
-│   ├── WindowsRecycleBin.cs        — IRecycleBin Windows 구현: 셸로 휴지통에 보내고, $I 정보 파일(원래 경로·삭제 시각)로 찾아 $R 항목을 되살림. 고정 드라이브만
+│   ├── FileOperationJournal.cs     — 폴더 비교 창의 이동·복사·삭제 실행+기록(%LOCALAPPDATA%\Folderss\compare-history\*.jsonl, 7일 보관)과 최근부터 되돌리기. 휴지통은 IRecycleBin 주입. 외부 실행기용 기록 API(Begin/AddItem/End)·이름 변경·새 폴더·새 파일 종류·막힌 항목은 두고 나머지만 되돌리기(UndoAvailable)는 메인 패널 대기열이 씀
+│   ├── FileJobs.cs                 — 메인 패널 파일 작업 모델(FileJob: 종류·상태·진행 수치·일시정지·취소), 충돌 선택(ConflictPolicy), 속도·남은 시간(TransferRate), 표시 문구 (순수 로직)
+│   ├── FileJobQueue.cs             — 메인 패널 파일 작업 대기열(STA 작업 스레드 하나, FIFO): 복사·이동·삭제 실행, 이름 충돌, 이력(file-history\*.jsonl) 기록, 실행 취소 계획·실행, 이름 변경·새 폴더·새 파일 즉시 실행+기록 (순수 로직)
+│   ├── FileCopier.cs               — 파일 하나 복사(Windows CopyFileEx: 진행 콜백·일시정지·취소·\\?\ 긴 경로, 대상 있으면 실패), 읽기 전용까지 지우는 삭제
+│   ├── WindowsRecycleBin.cs        — IRecycleBin Windows 구현: 셸로 휴지통에 보내고, $I 정보 파일(원래 경로·삭제 시각)로 찾아 $R 항목을 되살림. 고정 드라이브만(CanSend/IsRecyclable: 고정 드라이브·260자 미만)
 │   ├── CaptureSettingsService.cs   — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더(없으면 사용자 폴더), 설정 창 입력 검증 `Validate`)
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
@@ -102,6 +105,8 @@ Folderss/
 │   ├── Gruvbox.xaml                — Gruvbox Dark 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
+├── MainWindow.FileJobs.cs          — (partial) 파일 작업 대기열 연결: 복사·이동·삭제 넣기, 이름 충돌 질문, 끝나면 새로 고침·실패 요약, 실행 취소(Ctrl+Z) 확인, 종료 시 진행 중 작업 확인
+├── FileJobsWindow.cs               — 파일 작업 진행률 창(비모달, 대기열 전체·일시정지·취소)과 이름 충돌 대화상자 `FileConflictDialog`(GitDialogBase 상속), 코드로 구성
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `GitLibDiff`, 안 되면 `git diff --no-index`), 코드로 구성
@@ -198,6 +203,35 @@ Folderss/
   `ShouldAllowCertificateError`(localhost·오류 허용·추가한 내부 인증서로 체인+호스트 이름 확인)로 다시 판정한다. 설정 저장 시 `ClearServerCertificateErrorActionsAsync`.
 - 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
   그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
+
+### FileJobQueue / 파일 작업 진행률 창 / 메인 패널 실행 취소
+- 메인 패널의 복사·이동(`F6`·⋯ 메뉴 `반대편 패널로 복사`, 붙여넣기 `TryPasteFromClipboardInto`, 끌어다 놓기 `FolderBrowser.FileList_Drop`)과 삭제(`DeleteSelected`)는
+  `FileOperationService`를 직접 부르지 않고 `MainWindow.QueueFileTransfer`/`QueueFileDelete`(MainWindow.FileJobs.cs)로 `FileJobQueue`에 넣는다.
+  확인 창·고정(📌) 잠금 검사는 넣기 전에 호출부가 한다. 링크 만들기·바로 가기 놓기는 그대로 동기.
+- 대기열은 작업 스레드 하나(셸 휴지통 때문에 STA)에서 넣은 순서대로 하나씩 실행한다. 나란히 돌리지 않는 이유: 같은 디스크에서 서로 느려지고,
+  "복사 → 원본 삭제"처럼 이어지는 작업이 순서를 잃으며, 실행 취소 이력 순서가 실행 순서와 같아진다.
+- 실행: 복사·이동할 파일 수·크기를 먼저 센다(같은 드라이브 안 이동은 이름만 바뀌므로 세지 않음). 파일은 `FileCopier.CopyFile`(CopyFileEx 진행 콜백 안에서
+  `FileJob.Checkpoint` — 일시정지면 기다리고 취소면 PROGRESS_CANCEL). 폴더는 직접 걸으며 파일마다 복사(링크 폴더 순환은 깊이 256에서 멈춤, 숨김·시스템 폴더 속성 보존).
+  다른 드라이브 이동은 복사 후 원본 삭제. 같은 드라이브인데 장치가 다르면(ERROR_NOT_SAME_DEVICE) 복사 후 삭제로 돌린다.
+- 이름 충돌은 실행 중에 `AskConflict`(작업 스레드 → `Dispatcher.Invoke` → `FileConflictDialog`)로 묻는다. 기본 건너뛰기, "나머지에도 적용"은 `ConflictPolicy`가 기억.
+  바꾸기는 대상 옛 항목을 휴지통으로(복사는 임시 이름 `~folderss-*.tmp`로 다 복사한 뒤 바꿔치기 — 실패·취소 시 옛 항목 그대로). 휴지통이 없으면(`IRecycleBin.CanSend`) 바꾸지 않는다.
+- 취소·실패한 최상위 항목은 원래대로 돌린다(만들던 복사본·임시본 삭제, 바꾸려고 보낸 옛 항목 복원). 폴더 복사 안의 파일 실패는 그 파일만 빼고 계속, 폴더 이동은 하나라도 실패하면 되돌림.
+- 끌어다 놓기 이동은 대기열이 끝까지 처리하므로 원본 쪽에 `DragDropEffects.None`을 돌려준다(셸 "최적화 이동" 규약 — Move를 돌려주면 탐색기가 아직 복사 중인 원본을 지울 수 있다).
+- 이력: `%LOCALAPPDATA%\Folderss\file-history\*.jsonl`(폴더 비교 창 `compare-history`와 분리 — 비교 창 이력 패널과 메인 창 `Ctrl+Z`가 서로의 작업을 되돌리지 않게).
+  작업 시작 때 `FileOperationJournal.Begin`, 최상위 항목마다 `AddItem`, 끝에 `End`. 이력을 못 쓰면 작업은 하되 "실행 취소할 수 없음"을 알린다(비교 창은 실행 거부).
+  이름 변경·새 폴더·새 파일은 UI 스레드에서 바로 실행하고 같은 이력에 기록(`Rename`/`CreateFolder`/`CreateFile`). 이력 객체 접근은 모두 `_journalLock`.
+- 실행 취소(`Ctrl+Z` = `UndoFileOperation`, ⋯ 메뉴 `실행 취소: …`): 대기열이 비어 있을 때만. 메뉴 머리글은 파일을 보지 않는 `PeekUndo`로 채운다.
+  `PlanUndo`(백그라운드 — 항목이 많으면 파일·휴지통 확인이 오래 걸림)가 최근 되돌릴 작업과 항목별 막힘(`ItemProblems`: 그 사이 바뀜·원래 자리 점유·
+  휴지통에 없음·휴지통 없는 위치의 복사본·내용이 생긴 새 폴더/파일)을 계산하고, 확인 창(`CompareConfirmDialog`)이 막힌 항목이 있으면 확인 체크를 요구한다.
+  `WindowsRecycleBin`은 휴지통 폴더의 `$I` 목록을 폴더 수정 시각이 같으면 다시 쓰므로(항목이 들고 나면 시각이 바뀜) 항목마다 휴지통 전체를 읽지 않는다.
+  실행은 대기열 작업(`FileJobKind.Undo`)으로 `UndoAvailable` — 막힌 항목은 그대로 두고 작업을 "넘김"으로 기록. 되돌릴 항목이 하나도 없으면 넘길지 묻는다.
+  영구 삭제는 기록만 하고 대상에서 건너뛴다(확인 창에 그 뒤 영구 삭제 수 표시). 되돌리면 고정(📌) 폴더 구조가 바뀌는 경우는 막는다.
+- 진행률 창(`FileJobsWindow`): 작업이 0.8초 넘게 걸리면 포커스를 뺏지 않고 뜨며(`ShowActivated=false`), 0.25초마다 `FileJob.Snapshot`을 그린다. 자동으로 뜬 창은 사용자가 만지지 않았으면 대기열이 비고 1.5초 뒤 닫힌다.
+  끝난 작업은 30개까지 목록에 남는다. 끝나면 `OnFileJobFinished`가 모든 패널을 새로 고치고 실패·남긴 항목을 메시지 하나로 알린다(취소는 알리지 않음).
+- `Delete`: 휴지통에 보낼 수 없는 항목(`WindowsRecycleBin.IsRecyclable` — 네트워크·이동식·260자 이상)이 섞이면 영구 삭제 경고 + 확인 체크 후 따로 영구 삭제 작업으로 넣는다. `Shift+Delete`도 확인 체크.
+- 종료(`Window_Closing`): 대기열에 작업이 있으면 묻고, 종료하면 모두 취소한 뒤 최대 5초 메시지를 돌리며 기다린다(진행 중 항목 되돌리기).
+- 테스트: `tests/Folderss.SearchTests/FileJobQueueTests.cs`(진행 수치, 충돌 선택·적용, 바꾸기와 되돌리기, 일시정지·FIFO, 대기 취소, 복사 도중 취소, 잠긴 파일, 긴 경로, 휴지통 없음,
+  부분 되돌리기, 넘기기, 이름 변경·새 항목, 중단된 작업, 이력 쓰기 실패, 속도·문구). 진행률 창·대화상자는 WPF라 실제 실행으로 확인한다.
 
 ### KeyBindingService
 - 기본 단축키 매핑을 코드에서 정의

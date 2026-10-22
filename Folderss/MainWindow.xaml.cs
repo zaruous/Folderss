@@ -302,6 +302,7 @@ namespace Folderss
         {
             PopulateOpenWithMenu();
             UpdateViewMenuChecks();
+            UpdateUndoMenuItem();
             MainContextMenu.PlacementTarget = MainMenuButton;
             MainContextMenu.Placement = PlacementMode.Bottom;
             MainContextMenu.IsOpen = true;
@@ -1195,6 +1196,14 @@ namespace Folderss
                 }
             }
 
+            // 진행 중인 파일 작업이 있으면 묻고, 종료하면 취소 후 진행 중 항목을 되돌릴 때까지 잠시 기다린다(MainWindow.FileJobs.cs).
+            if (!ConfirmExitWithFileJobs())
+            {
+                e.Cancel = true;
+                _reallyClose = false;
+                return;
+            }
+
             // 여기까지 오면 본체가 스스로 끝내는 정상 종료다(취소 가능한 확인을 모두 지남). 플러그인 종료 감지가 이것과 구분한다.
             PluginManager.MarkUserRequestedExit();
 
@@ -1484,28 +1493,8 @@ namespace Folderss
             if (answer != MessageBoxResult.Yes)
                 return;
 
-            var errors = new List<string>();
-            foreach (var item in selected)
-            {
-                try
-                {
-                    var sourceParent = Path.GetDirectoryName(item.FullPath);
-                    if (move && string.Equals(sourceParent, TargetPane.CurrentPath, StringComparison.OrdinalIgnoreCase))
-                        throw new IOException("원본과 대상 폴더가 같습니다.");
-
-                    if (move)
-                        FileOperationService.Move(item.FullPath, TargetPane.CurrentPath);
-                    else
-                        FileOperationService.Copy(item.FullPath, TargetPane.CurrentPath);
-                }
-                catch (Exception exception)
-                {
-                    errors.Add(item.Name + ": " + exception.Message);
-                }
-            }
-
-            RefreshBothPanes();
-            ShowErrorsIfAny(verb, errors);
+            // 백그라운드 대기열에서 실행한다(진행률·일시정지·취소, 끝나면 새로 고침과 실패 요약 — MainWindow.FileJobs.cs).
+            QueueFileTransfer(selected.Select(item => item.FullPath).ToList(), TargetPane.CurrentPath, move);
         }
 
         private void CreateLink_Click(object sender, RoutedEventArgs e)
@@ -1576,36 +1565,8 @@ namespace Folderss
                 return;
             }
 
-            var message = permanently
-                ? string.Format("{0}개 항목을 영구 삭제하시겠습니까?\n이 작업은 되돌릴 수 없습니다.", selected.Count)
-                : string.Format("{0}개 항목을 휴지통으로 보내시겠습니까?", selected.Count);
-            var answer = MessageBox.Show(
-                message,
-                permanently ? "영구 삭제 확인" : "휴지통으로 이동",
-                MessageBoxButton.YesNo,
-                permanently ? MessageBoxImage.Warning : MessageBoxImage.Question);
-
-            if (answer != MessageBoxResult.Yes)
-                return;
-
-            var errors = new List<string>();
-            foreach (var item in selected)
-            {
-                try
-                {
-                    if (permanently)
-                        FileOperationService.DeletePermanently(item.FullPath);
-                    else
-                        FileOperationService.MoveToRecycleBin(item.FullPath);
-                }
-                catch (Exception exception)
-                {
-                    errors.Add(item.Name + ": " + exception.Message);
-                }
-            }
-
-            RefreshBothPanes();
-            ShowErrorsIfAny(permanently ? "영구 삭제" : "휴지통으로 이동", errors);
+            // 확인(휴지통 없는 위치는 영구 삭제 경고 + 확인 체크)과 백그라운드 실행 — MainWindow.FileJobs.cs
+            QueueFileDelete(selected.Select(item => item.FullPath).ToList(), permanently);
         }
 
         private void Rename_Click(object sender, RoutedEventArgs e)
@@ -1624,13 +1585,16 @@ namespace Folderss
                 return;
             }
 
+            if (!EnsureNoUndoRunning("이름 변경"))
+                return;
+
             var prompt = new PromptWindow("이름 변경", "새 이름을 입력하세요.", item.Name) { Owner = this };
             if (prompt.ShowDialog() != true || string.Equals(prompt.Value.Trim(), item.Name, StringComparison.Ordinal))
                 return;
 
             try
             {
-                FileOperationService.Rename(item.FullPath, prompt.Value);
+                RenameRecorded(item.FullPath, prompt.Value);
                 RefreshBothPanes();
             }
             catch (Exception exception)
@@ -1647,13 +1611,16 @@ namespace Folderss
                 return;
             }
 
+            if (!EnsureNoUndoRunning("새 폴더"))
+                return;
+
             var prompt = new PromptWindow("새 폴더", "폴더 이름을 입력하세요.", "새 폴더") { Owner = this };
             if (prompt.ShowDialog() != true)
                 return;
 
             try
             {
-                FileOperationService.CreateDirectory(ActivePane.CurrentPath, prompt.Value);
+                CreateFolderRecorded(ActivePane.CurrentPath, prompt.Value);
                 ActivePane.RefreshItems();
             }
             catch (Exception exception)
@@ -1670,13 +1637,16 @@ namespace Folderss
                 return;
             }
 
+            if (!EnsureNoUndoRunning("새 파일"))
+                return;
+
             var prompt = new PromptWindow("새 파일", "파일 이름을 입력하세요.", "새 파일.txt") { Owner = this };
             if (prompt.ShowDialog() != true)
                 return;
 
             try
             {
-                FileOperationService.CreateFile(ActivePane.CurrentPath, prompt.Value);
+                CreateFileRecorded(ActivePane.CurrentPath, prompt.Value);
                 ActivePane.RefreshItems();
             }
             catch (Exception exception)
@@ -1968,6 +1938,11 @@ namespace Folderss
                 ActivePane.NavigateUp();
                 e.Handled = true;
             }
+            else if (kb.Matches(e, "UndoFileOperation"))
+            {
+                UndoLastFileOperation();
+                e.Handled = true;
+            }
         }
 
         /// <summary>
@@ -2254,21 +2229,8 @@ namespace Folderss
                 ShowPinLockedMessage();
                 return true;
             }
-            var errors = new List<string>();
-            foreach (string source in files)
-            {
-                try
-                {
-                    if (isCut)
-                        FileOperationService.Move(source, targetPath);
-                    else
-                        FileOperationService.Copy(source, targetPath);
-                }
-                catch (Exception exception)
-                {
-                    errors.Add(Path.GetFileName(source) + ": " + exception.Message);
-                }
-            }
+            // 백그라운드 대기열에서 실행한다(끝나면 새로 고침·실패 요약). 잘라내기 표시는 원본 목록을 넘긴 지금 푼다.
+            QueueFileTransfer(files.Cast<string>().ToList(), targetPath, isCut);
 
             if (isCut)
             {
@@ -2280,12 +2242,6 @@ namespace Folderss
                     pane.RefreshItems();
                 }
             }
-            else
-            {
-                targetPane.RefreshItems();
-            }
-
-            ShowErrorsIfAny("붙여넣기", errors);
             return true;
         }
 

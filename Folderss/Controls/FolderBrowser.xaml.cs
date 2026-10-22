@@ -1104,6 +1104,18 @@ namespace Folderss.Controls
                 }
             }
 
+            // 메인 창 패널의 복사·이동은 백그라운드 대기열로(진행률·취소·실행 취소). 이동은 이쪽이 끝까지 하므로(셸의 "최적화 이동")
+            // 끌어 온 쪽(탐색기 등)이 원본을 지우지 않도록 Move를 돌려주지 않는다 — 아직 복사 중인 원본을 지우면 안 된다.
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+            if (mainWindow != null && effect != DragDropEffects.Link)
+            {
+                mainWindow.QueueFileTransfer(paths, destination, effect == DragDropEffects.Move);
+                if (effect == DragDropEffects.Move)
+                    e.Effects = DragDropEffects.None;
+                UpdateStatusText();
+                return;
+            }
+
             var errors = new List<string>();
             foreach (var source in paths)
             {

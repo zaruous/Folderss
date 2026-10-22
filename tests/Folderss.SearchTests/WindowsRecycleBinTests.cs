@@ -104,5 +104,50 @@ namespace Folderss.SearchTests
                 Directory.Delete(folder, true);
             }
         }
+
+        [SkippableFact]
+        public void Windows_IndexIsReread_WhenBinChanges()
+        {
+            // 되돌리기 확인은 항목마다 휴지통을 찾으므로 정보 파일 목록을 한 번 읽어 다시 쓴다.
+            // 그 뒤에 보낸 항목도 찾아야 하고, 되살린 항목은 더 이상 찾지 않아야 한다.
+            Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows), "Windows 휴지통 전용");
+            var folder = Path.Combine(Path.GetTempPath(), "folderss-bin-" + Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(folder);
+            try
+            {
+                var first = Path.Combine(folder, "first.txt");
+                var second = Path.Combine(folder, "second.txt");
+                File.WriteAllText(first, "1");
+                File.WriteAllText(second, "2");
+                var bin = new WindowsRecycleBin();
+
+                var sentFirst = bin.Send(first);
+                Skip.IfNot(bin.CanRestore(first, sentFirst), "이 환경의 휴지통에서 항목을 찾지 못함(휴지통 꺼짐 등)");
+                var sentSecond = bin.Send(second);
+
+                Assert.True(bin.CanRestore(second, sentSecond));
+                bin.Restore(second, sentSecond);
+                Assert.False(bin.CanRestore(second, sentSecond));
+                bin.Restore(first, sentFirst);
+                Assert.Equal("1", File.ReadAllText(first));
+                Assert.Equal("2", File.ReadAllText(second));
+            }
+            finally
+            {
+                Directory.Delete(folder, true);
+            }
+        }
+
+        [SkippableFact]
+        public void IsRecyclable_FixedDriveShortPathOnly()
+        {
+            Skip.IfNot(RuntimeInformation.IsOSPlatform(OSPlatform.Windows), "Windows 전용");
+            var temp = Path.GetTempPath();
+            Skip.IfNot(new DriveInfo(Path.GetPathRoot(temp)).DriveType == DriveType.Fixed, "임시 폴더가 고정 드라이브가 아님");
+
+            Assert.True(WindowsRecycleBin.IsRecyclable(Path.Combine(temp, "a.txt")));
+            Assert.False(WindowsRecycleBin.IsRecyclable(Path.Combine(temp, new string('x', 300))));
+            Assert.False(WindowsRecycleBin.IsRecyclable(@"\\server\share\a.txt"));
+        }
     }
 }
