@@ -6,6 +6,7 @@
 Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
+│   ├── FolderBrowser.PathCopy.cs   — 같은 컨트롤의 경로 복사 부분(partial): 대상 고르기(선택·목록 순서, 없으면 현재 폴더), 우클릭·⋯ 메뉴 "경로 복사 ▸", 단축키, 상태 줄 잠깐 표시
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
 │   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
@@ -69,7 +70,10 @@ Folderss/
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
-│   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
+│   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴 (맨 위 앱 항목 `CustomMenuItem`: `Label` null = 구분선, `Children` = 하위 메뉴)
+│   ├── PathCopyFormatter.cs        — 경로 복사 형식(전체·따옴표·이름·상위 폴더·저장소/반대편 패널 기준 상대·UNC), 구분자, 대체 규칙, Windows 경로 루트·상대 경로 계산 (순수 로직, OS와 무관하게 같은 결과)
+│   ├── PathCopyService.cs          — 경로 복사의 Windows 쪽: 저장소 찾기(.git 폴더/파일), UNC 변환(WNetGetUniversalName → WNetGetConnection), 텍스트만 클립보드, 셸·WPF 메뉴 항목 만들기, 단축키 표시
+│   ├── PathCopySettingsService.cs  — 경로 복사 설정 저장 (path-copy-settings.xml: 단축키 형식·경로 구분자, `Current`, SettingsFile 사용·실패는 예외)
 │   ├── PluginManager.cs            — 플러그인 로드(플러그인별 AssemblyLoadContext, 계약 DLL은 본체 것 공유)·팝업 창·IPluginManager 구현(PluginHost)·팝업용 폴더 패널·플러그인 예외 판별
 │   ├── PluginPackage.cs            — plugin.json 검증, 진입점 DLL의 계약 참조 버전 확인, plugins\<id>.zip 등록·목록, 해시별 폴더로 안전한 압축 해제 (순수 로직)
 │   ├── PluginGitHubSource.cs       — 공개 GitHub 저장소 최신 정식 릴리스 조회·zip 받기(100MB 제한, digest SHA-256 비교), 오류는 문장 예외 (순수 로직)
@@ -108,7 +112,7 @@ Folderss/
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
-├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 플러그인)
+├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 네트워크, 경로 복사, 플러그인)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── CaptureOverlayWindow.cs         — 화면 캡쳐: 가상 화면 전체를 GDI로 찍고(`CaptureVirtualScreen`) 모든 모니터를 덮는 창에 깔아 드래그로 영역 선택, 코드로 구성
 ├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 메뉴(다른 이름으로 저장, 기본 저장 폴더 탐색기로 열기), 저장 후 탐색기 열기 확인 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
@@ -204,6 +208,20 @@ Folderss/
 - 사용자 커스터마이징을 XML로 `%LOCALAPPDATA%\Folderss\keybindings.xml`에 저장
 - `kb.Matches(e, "CommandId")` 패턴으로 MainWindow PreviewKeyDown에서 사용
 - **단축키 추가 시 연관 파일**: KeyBindingService.cs, MainWindow.xaml.cs, SettingsWindow
+
+### 경로 복사 (PathCopyFormatter / PathCopyService / FolderBrowser.PathCopy)
+- 진입점 세 곳이 같은 `FolderBrowser.CopyPaths`로 모인다: 파일 목록·트리뷰 셸 우클릭 메뉴 맨 위 `경로 복사 ▸`(`BuildPathCopyShellMenu`),
+  ⋯ 메인 메뉴 `경로 복사`(`MainMenuButton_Click` → `ActivePane.FillPathCopyMenu`, 열 때마다 다시 채움), 단축키 `CopyFolderPath`(기본 `Ctrl+Shift+C`, `CopyPathForShortcut`).
+  ID는 예전 트리 전용 "폴더 경로 복사" 그대로라 사용자 keybindings.xml이 계속 맞는다.
+- 대상: 선택 항목을 목록에 보이는 순서로, 없으면 현재 폴더. 단축키는 트리에 포커스가 있으면 트리에서 고른 폴더.
+- 형식 규칙은 모두 `PathCopyFormatter`(순수, `tests/.../PathCopyFormatterTests.cs`). System.IO.Path를 쓰지 않고 Windows 루트(`C:\`, `\\server\share`, `\\?\`)를 직접 처리해
+  테스트가 OS와 무관하다. 조건부 형식(저장소 기준·반대편 패널 기준·UNC)은 `IsAvailable`이 참일 때만 메뉴에 보이고, 단축키 형식으로 쓸 수 없으면 그 항목만 전체 경로로 대신(`FallbackCount`).
+- 저장소 루트는 항목을 **담은 폴더**부터 위로 `.git` 폴더/파일을 찾는다(저장소 루트 폴더 자신은 상위 저장소 기준). 반대편 패널은 `MainWindow.AttachFolderBrowser`가 넣는
+  `OppositeFolderProvider`(이 패널이 아닌 첫 폴더 패널 — ⋯ 메뉴 "반대편 패널"과 같은 규칙). 폴더 비교 창·플러그인 팝업 패널은 넣지 않아 그 형식이 없다.
+- UNC: 드라이브 종류가 네트워크일 때만 `WNetGetUniversalName`(UNIVERSAL_NAME_INFO), 안 되면 `WNetGetConnection` + 나머지 경로(`CombineUnc`). 로컬 드라이브를 관리 공유(`\\PC\C$`)로 바꾸지 않는다.
+- 클립보드는 텍스트만(`ClipboardService.TrySetDataObject(string)`, FileDrop 없음), 복사 후 잘라내기 표시 해제. 상태 줄 문구(`StatusMessage`)는 셸 메뉴 뒤 `RefreshItems`가 덮지 않게 디스패처 뒤로 미뤄 4초 보인다.
+- 셸 메뉴 하위 메뉴: `ShellContextMenuService.InsertCustomItem`이 `CreatePopupMenu` + `MF_POPUP`으로 붙이고, 명령 번호는 하위 메뉴 안 항목까지 순서대로 `CustomCmdBase + n`. 부모 `DestroyMenu`가 하위 메뉴도 정리한다.
+- 설정(`설정 > 경로 복사`, `PathCopySettingsService.Current`): 단축키 형식, 구분자(`\` / `/` 상대 경로만 / `/` 모든 경로). 메뉴·단축키는 복사할 때마다 `Current`를 읽어 저장 즉시 반영.
 
 ### SearchPanel / SearchService
 - `Ctrl+F`(`ShowSearch`)로 여는 별도 팝업 창(`파일 검색`)에서 실행, `MainWindow.ShowSearchPanel()` 참고

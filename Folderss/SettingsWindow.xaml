@@ -93,6 +93,9 @@
                     <ListBoxItem Tag="Network">
                         <TextBlock Text="네트워크"/>
                     </ListBoxItem>
+                    <ListBoxItem Tag="PathCopy">
+                        <TextBlock Text="경로 복사"/>
+                    </ListBoxItem>
                     <ListBoxItem Tag="Plugins">
                         <TextBlock Text="플러그인"/>
                     </ListBoxItem>
@@ -822,6 +825,29 @@
                             <Button Content="추가…" Click="NetworkCertificateAdd_Click" Padding="10,4" Margin="0,0,6,0"/>
                             <Button Content="삭제" Click="NetworkCertificateRemove_Click" Padding="10,4"/>
                         </StackPanel>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PathCopy panel: 경로 복사 단축키 형식·경로 구분자 (path-copy-settings.xml) -->
+                <ScrollViewer x:Name="PathCopyPanel" Visibility="Collapsed" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="24,16">
+                        <TextBlock Text="경로 복사" FontSize="15" FontWeight="SemiBold" Margin="0,0,0,4"/>
+                        <TextBlock FontSize="11" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"
+                                   Text="폴더 패널 우클릭·⋯ 메뉴의 '경로 복사'와 경로 복사 단축키(단축키 탭의 '경로 복사', 기본 Ctrl+Shift+C)의 설정입니다. 경로는 텍스트로만 복사합니다(탐색기에 붙여넣어도 파일은 복사되지 않음)."/>
+                        <TextBlock FontSize="11" Margin="0,16,0,4" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"
+                                   Text="단축키로 복사할 형식"/>
+                        <ComboBox x:Name="PathCopyShortcutFormatCombo" HorizontalAlignment="Left" MinWidth="300"
+                                  SelectionChanged="PathCopyCombo_SelectionChanged"/>
+                        <TextBlock FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"
+                                   Text="트리뷰에 포커스가 있으면 트리에서 고른 폴더, 파일 목록이면 선택한 항목(없으면 현재 폴더)을 복사합니다. 저장소 밖·네트워크 드라이브가 아닌 곳처럼 고른 형식을 쓸 수 없는 항목은 전체 경로로 복사합니다."/>
+                        <TextBlock FontSize="11" Margin="0,16,0,4" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"
+                                   Text="경로 구분자"/>
+                        <ComboBox x:Name="PathCopySeparatorCombo" HorizontalAlignment="Left" MinWidth="300"
+                                  SelectionChanged="PathCopyCombo_SelectionChanged"/>
+                        <TextBlock FontSize="11" Margin="0,3,0,0" TextWrapping="Wrap" Foreground="{DynamicResource SecondaryText}"
+                                   Text="/ 는 마크다운 링크·설정 파일·git 명령처럼 슬래시를 쓰는 곳에 붙여넣을 때 씁니다. 메뉴의 모든 형식에 적용되고, 이름 형식에는 영향이 없습니다."/>
+                        <TextBlock x:Name="PathCopyPreviewText" FontSize="11" Margin="0,16,0,0" TextWrapping="Wrap"
+                                   FontFamily="Consolas" Foreground="{DynamicResource SecondaryText}"/>
                     </StackPanel>
                 </ScrollViewer>
 

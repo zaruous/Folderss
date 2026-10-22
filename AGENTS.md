@@ -73,6 +73,7 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `MainWindow.xaml` — 메뉴 `InputGestureText` 업데이트 (해당 메뉴 있으면)
 - [ ] `SettingsWindow.xaml.cs` — 설정 창에서 키 표시 이름 등록 (필요 시)
 - [ ] `README.md` — 단축키 표 업데이트
+- [ ] `docs/keyboard-shortcuts.md` — 사용자 정의 단축키 표(CommandId·표시 이름·처리 위치)와 "미구현 제안" 표 정리
 
 ### 설정 항목 추가 시
 - [ ] `SettingsWindow.xaml` — UI 컨트롤 추가
