@@ -25,11 +25,17 @@ namespace Folderss.Services
         private const uint MfSeparator = 0x0800;
         private const uint MfString = 0x0000;
         private const uint MfByPosition = 0x0400;
+        private const uint MfPopup = 0x0010;
 
+        /// <summary>
+        /// 셸 메뉴 맨 위에 넣는 앱 항목. <see cref="Label"/>이 null이면 구분선,
+        /// <see cref="Children"/>가 있으면 하위 메뉴(<see cref="Invoke"/>는 쓰지 않음).
+        /// </summary>
         public struct CustomMenuItem
         {
             public string Label;
             public Action Invoke;
+            public IList<CustomMenuItem> Children;
         }
 
         public static void Show(IntPtr ownerHandle, IEnumerable<string> paths, int x, int y,
@@ -117,11 +123,13 @@ namespace Folderss.Services
                 ThrowIfFailed(contextMenu.QueryContextMenu(menuHandle, 0, CmdFirst, CmdLast, CmfNormal));
 
                 var customList = customItems != null ? customItems : new List<CustomMenuItem>();
+                // 앱 항목(하위 메뉴 안 항목 포함)의 명령 번호 = CustomCmdBase + 이 목록의 위치.
+                var customActions = new List<Action>();
                 if (customList.Count > 0)
                 {
                     // Insert at the TOP so items are immediately visible without scrolling
                     for (int i = 0; i < customList.Count; i++)
-                        InsertMenu(menuHandle, (uint)i, MfByPosition | MfString, new UIntPtr(CustomCmdBase + (uint)i), customList[i].Label);
+                        InsertCustomItem(menuHandle, (uint)i, customList[i], customActions);
                     InsertMenu(menuHandle, (uint)customList.Count, MfByPosition | MfSeparator, UIntPtr.Zero, null);
                 }
 
@@ -138,8 +146,8 @@ namespace Folderss.Services
                     if (command >= CustomCmdBase)
                     {
                         var idx = (int)(command - CustomCmdBase);
-                        if (idx < customList.Count)
-                            customList[idx].Invoke?.Invoke();
+                        if (idx < customActions.Count)
+                            customActions[idx]?.Invoke();
                     }
                     else if (command >= CmdFirst)
                     {
@@ -165,6 +173,37 @@ namespace Folderss.Services
                 ReleaseComObject(parentFolder);
                 ReleaseComObject(desktopFolder);
             }
+        }
+
+        /// <summary>
+        /// 앱 항목 하나를 <paramref name="position"/>에 넣는다. 하위 메뉴는 새 팝업 메뉴를 만들어 붙인다 — 붙인 뒤에는
+        /// 부모 메뉴의 DestroyMenu가 함께 정리한다. 명령 항목의 동작은 <paramref name="actions"/>에 순서대로 모은다.
+        /// </summary>
+        private static void InsertCustomItem(IntPtr menu, uint position, CustomMenuItem item, List<Action> actions)
+        {
+            if (item.Label == null)
+            {
+                InsertMenu(menu, position, MfByPosition | MfSeparator, UIntPtr.Zero, null);
+                return;
+            }
+
+            if (item.Children != null)
+            {
+                var subMenu = CreatePopupMenu();
+                if (subMenu == IntPtr.Zero)
+                    throw new InvalidOperationException("Windows 컨텍스트 메뉴를 만들지 못했습니다.");
+                for (int i = 0; i < item.Children.Count; i++)
+                    InsertCustomItem(subMenu, (uint)i, item.Children[i], actions);
+                if (!InsertMenu(menu, position, MfByPosition | MfString | MfPopup, new UIntPtr((ulong)subMenu.ToInt64()), item.Label))
+                {
+                    DestroyMenu(subMenu);
+                    throw new InvalidOperationException("Windows 컨텍스트 메뉴를 만들지 못했습니다.");
+                }
+                return;
+            }
+
+            InsertMenu(menu, position, MfByPosition | MfString, new UIntPtr(CustomCmdBase + (uint)actions.Count), item.Label);
+            actions.Add(item.Invoke);
         }
 
         private static void InvokeCommand(IContextMenu contextMenu, IntPtr ownerHandle, uint commandOffset, string directory)

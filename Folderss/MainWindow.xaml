@@ -108,6 +108,11 @@
                                 <Separator/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
+                            <!-- 항목은 메뉴를 열 때 활성 패널의 선택으로 채운다 (FolderBrowser.FillPathCopyMenu) -->
+                            <MenuItem x:Name="CopyPathMenuItem" Header="경로 복사"
+                                      ToolTip="활성 패널에서 선택한 항목(없으면 현재 폴더)의 경로를 형식을 골라 텍스트로 복사합니다.">
+                                <MenuItem Header="(복사할 항목 없음)" IsEnabled="False"/>
+                            </MenuItem>
                             <MenuItem Header="탐색기로 열기" Click="OpenInExplorer_Click"/>
                             <MenuItem Header="압축 풀기…" Click="ExtractArchive_Click"
                                       ToolTip="선택한 zip 파일(zip 안이면 선택한 항목, 없으면 zip 전체)의 압축을 풉니다. 풀 위치·같은 이름 처리를 고릅니다."/>

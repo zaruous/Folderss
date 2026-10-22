@@ -80,6 +80,7 @@ namespace Folderss
         private readonly DiffSettings _workingDiff;
         private readonly CaptureSettings _workingCapture = CaptureSettingsService.Load();
         private readonly NetworkSettings _workingNetwork = NetworkSettingsService.Current.Clone();
+        private readonly PathCopySettings _workingPathCopy = PathCopySettingsService.Current.Clone();
         private readonly ObservableCollection<CertificateSummary> _networkCertificates = new ObservableCollection<CertificateSummary>();
 
         private const int GitTabIndex = 5;
@@ -181,6 +182,7 @@ namespace Folderss
             InitializeDiffPanel();
             InitializeCapturePanel();
             InitializeNetworkPanel();
+            InitializePathCopyPanel();
             InitializePluginPages();
 
             TabNav.SelectedIndex = 0;
@@ -371,6 +373,60 @@ namespace Folderss
             CaptureSaveFolderBox.Text = CaptureSettingsService.DefaultSaveFolder;
         }
 
+        // ── 경로 복사 ──────────────────────────────────────────────────────
+
+        private static readonly (PathCopySeparator Value, string Text)[] PathCopySeparatorChoices =
+        {
+            (PathCopySeparator.Backslash, "\\  Windows 기본 (권장)"),
+            (PathCopySeparator.SlashForRelative, "/  상대 경로만"),
+            (PathCopySeparator.SlashForAll, "/  모든 경로")
+        };
+
+        private void InitializePathCopyPanel()
+        {
+            var formats = PathCopyFormatter.MenuOrder;
+            FillCombo(PathCopyShortcutFormatCombo, formats.Select(PathCopyFormatter.DisplayName),
+                formats.ToList().IndexOf(_workingPathCopy.ShortcutFormat));
+            FillCombo(PathCopySeparatorCombo, PathCopySeparatorChoices.Select(c => c.Text),
+                Array.FindIndex(PathCopySeparatorChoices, c => c.Value == _workingPathCopy.Separator));
+            UpdatePathCopyPreview();
+        }
+
+        private void PathCopyCombo_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            UpdatePathCopyPreview();
+        }
+
+        private PathCopyFormat SelectedPathCopyFormat =>
+            PathCopyFormatter.MenuOrder[Math.Max(0, PathCopyShortcutFormatCombo.SelectedIndex)];
+
+        private PathCopySeparator SelectedPathCopySeparator =>
+            PathCopySeparatorChoices[Math.Max(0, PathCopySeparatorCombo.SelectedIndex)].Value;
+
+        /// <summary>고른 형식·구분자로 예시 경로를 바꿔 보인다(네트워크 드라이브 Z:가 \\fileserver\work인 저장소 안 파일).</summary>
+        private void UpdatePathCopyPreview()
+        {
+            if (PathCopyPreviewText == null || PathCopyShortcutFormatCombo?.ItemsSource == null || PathCopySeparatorCombo?.ItemsSource == null)
+                return;
+            const string sample = @"Z:\Folderss\docs\read me.md";
+            var context = new PathCopyContext
+            {
+                FindRepositoryRoot = folder => PathCopyFormatter.FindRepositoryRoot(folder, f => string.Equals(f, @"Z:\Folderss", StringComparison.OrdinalIgnoreCase)),
+                OppositeFolder = @"Z:\Folderss\src",
+                ResolveUnc = path => PathCopyFormatter.CombineUnc(@"\\fileserver\work", path),
+                Separator = SelectedPathCopySeparator
+            };
+            var line = PathCopyFormatter.FormatOne(sample, SelectedPathCopyFormat, context, out _);
+            PathCopyPreviewText.Text = "예: " + sample + "\n →  " + line +
+                "\n(저장소 루트 Z:\\Folderss, 반대편 패널 Z:\\Folderss\\src, Z: = \\\\fileserver\\work 로 가정)";
+        }
+
+        private void CollectPathCopySettings()
+        {
+            _workingPathCopy.ShortcutFormat = SelectedPathCopyFormat;
+            _workingPathCopy.Separator = SelectedPathCopySeparator;
+        }
+
         /// <summary>캡쳐 탭 입력을 검증해 <see cref="_workingCapture"/>에 반영한다. 잘못된 값이면 캡쳐 탭을 열고 false.</summary>
         private bool TryCollectCaptureSettings()
         {
@@ -483,6 +539,7 @@ namespace Folderss
             DiffPanel.Visibility      = tag == "Diff"      ? Visibility.Visible : Visibility.Collapsed;
             CapturePanel.Visibility   = tag == "Capture"   ? Visibility.Visible : Visibility.Collapsed;
             NetworkPanel.Visibility   = tag == "Network"   ? Visibility.Visible : Visibility.Collapsed;
+            PathCopyPanel.Visibility  = tag == "PathCopy"  ? Visibility.Visible : Visibility.Collapsed;
             PluginsPanel.Visibility   = tag == "Plugins"   ? Visibility.Visible : Visibility.Collapsed;
             foreach (var page in _pluginPages)
                 page.Panel.Visibility = ReferenceEquals(item, page.NavItem) ? Visibility.Visible : Visibility.Collapsed;
@@ -674,6 +731,7 @@ namespace Folderss
                 return false;
 
             CollectNetworkSettings();
+            CollectPathCopySettings();
             _workingConsoleSettings.FontSize = fontSize;
             _workingConsoleSettings.PreferredProfileKey = preferredProfileKey;
             _workingConsoleSettings.CustomProfiles = _workingConsoleProfiles
@@ -694,6 +752,7 @@ namespace Folderss
             TrySave(failures, "비교", "diff-settings.xml", () => DiffSettingsService.Save(_workingDiff));
             TrySave(failures, "캡쳐", "capture-settings.xml", () => CaptureSettingsService.Save(_workingCapture));
             TrySave(failures, "네트워크", "network-settings.xml", () => NetworkSettingsService.Save(_workingNetwork));
+            TrySave(failures, "경로 복사", "path-copy-settings.xml", () => PathCopySettingsService.Save(_workingPathCopy));
             foreach (var page in _pluginPages.Where(p => p.Page != null && p.ViewCreated))
                 TrySave(failures, "플러그인: " + page.Title, page.PluginId, page.Page.Save);
             SavedGitSettings = _workingGit.Clone();

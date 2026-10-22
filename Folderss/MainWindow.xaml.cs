@@ -100,6 +100,11 @@ namespace Folderss
             var documents = Environment.GetFolderPath(Environment.SpecialFolder.MyDocuments);
             _sessionState = SessionStateService.Load();
             _keyBindingService.Load();
+            PathCopyService.ShortcutTextProvider = () =>
+            {
+                var binding = _keyBindingService.GetBinding("CopyFolderPath");
+                return binding == null || binding.Key == Key.None ? null : binding.KeyDisplayText;
+            };
 
             AttachFolderBrowser(LeftPane);
             AttachFolderBrowser(RightPane);
@@ -301,6 +306,7 @@ namespace Folderss
         private void MainMenuButton_Click(object sender, RoutedEventArgs e)
         {
             PopulateOpenWithMenu();
+            ActivePane?.FillPathCopyMenu(CopyPathMenuItem);
             UpdateViewMenuChecks();
             UpdateUndoMenuItem();
             MainContextMenu.PlacementTarget = MainMenuButton;
@@ -764,6 +770,8 @@ namespace Folderss
             browser.FileOpenRequested += Browser_FileOpenRequested;
             browser.CompareFilesRequested += Browser_CompareFilesRequested;
             browser.CompareFoldersRequested += Browser_CompareFoldersRequested;
+            // 경로 복사 "상대 경로 (반대편 패널 기준)": 이 패널이 아닌 첫 폴더 패널(⋯ 메뉴 "반대편 패널"과 같은 규칙)
+            browser.OppositeFolderProvider = () => GetFolderBrowsers().FirstOrDefault(pane => !ReferenceEquals(pane, browser))?.CurrentPath;
         }
 
         private void Browser_CompareFilesRequested(object sender, string[] files)
@@ -1932,8 +1940,8 @@ namespace Folderss
             }
             else if (kb.Matches(e, "CopyFolderPath"))
             {
-                // 트리에 키보드 포커스가 있는 패널만 복사한다(파일 목록 포커스면 아무 것도 하지 않음)
-                if (GetFolderBrowsers().Any(pane => pane.CopyFolderTreePathToClipboard()))
+                // 경로 복사: 포커스가 있는 패널이 트리면 트리 폴더, 파일 목록이면 선택(없으면 현재 폴더)을 설정 형식으로 복사
+                if (GetFolderBrowsers().Any(pane => pane.CopyPathForShortcut()))
                     e.Handled = true;
             }
             else if (kb.Matches(e, "CutClipboard"))

@@ -29,6 +29,8 @@
     <Compile Include="..\..\Folderss\Services\CaptureAnnotation.cs" Link="Linked\CaptureAnnotation.cs" />
     <Compile Include="..\..\Folderss\Services\CaptureSettingsService.cs" Link="Linked\CaptureSettingsService.cs" />
     <Compile Include="..\..\Folderss\Services\IgnoreRuleSet.cs" Link="Linked\IgnoreRuleSet.cs" />
+    <Compile Include="..\..\Folderss\Services\PathCopyFormatter.cs" Link="Linked\PathCopyFormatter.cs" />
+    <Compile Include="..\..\Folderss\Services\PathCopySettingsService.cs" Link="Linked\PathCopySettingsService.cs" />
     <Compile Include="..\..\Folderss\Models\GitModels.cs" Link="Linked\GitModels.cs" />
     <Compile Include="..\..\Folderss\Services\GitRepositoryScanner.cs" Link="Linked\GitRepositoryScanner.cs" />
     <Compile Include="..\..\Folderss\Services\GitOutputParser.cs" Link="Linked\GitOutputParser.cs" />

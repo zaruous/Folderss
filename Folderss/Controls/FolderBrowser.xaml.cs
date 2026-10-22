@@ -1495,6 +1495,10 @@ namespace Folderss.Controls
             }
             AddArchiveShellMenuItems(customItems);
 
+            var pathCopyMenu = BuildPathCopyShellMenu(GetPathCopyTargets());
+            if (pathCopyMenu.HasValue)
+                customItems.Add(pathCopyMenu.Value);
+
             var screenPoint = PointToScreen(e.GetPosition(this));
             try
             {
@@ -1669,30 +1673,6 @@ namespace Folderss.Controls
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
                 window.ClearCutStateFromClipboard();
-        }
-
-        /// <summary>
-        /// 트리에서 선택한 폴더의 전체 경로를 텍스트로만 클립보드에 복사한다(폴더 경로 복사, 기본 Ctrl+Shift+C).
-        /// Ctrl+C와 달리 FileDrop을 넣지 않아 탐색기에 붙여넣어도 폴더가 복사되지 않는다.
-        /// 트리에 키보드 포커스가 없거나 선택한 폴더가 없으면 false.
-        /// </summary>
-        public bool CopyFolderTreePathToClipboard()
-        {
-            if (!FolderTree.IsKeyboardFocusWithin)
-                return false;
-
-            var item = FolderTree.SelectedItem as TreeViewItem;
-            var path = item == null ? null : item.Tag as string;
-            if (string.IsNullOrWhiteSpace(path))
-                return false;
-
-            if (ClipboardService.TrySetDataObject(path))
-            {
-                var window = Window.GetWindow(this) as Folderss.MainWindow;
-                if (window != null)
-                    window.ClearCutStateFromClipboard();
-            }
-            return true;
         }
 
         private static string BuildNameListText(IEnumerable<string> paths)
@@ -2063,6 +2043,10 @@ namespace Folderss.Controls
                     };
                 })
                 .ToList();
+
+            var pathCopyMenu = BuildPathCopyShellMenu(selectedPaths);
+            if (pathCopyMenu.HasValue)
+                customItems.Add(pathCopyMenu.Value);
 
             var screenPoint = PointToScreen(e.GetPosition(this));
             try
