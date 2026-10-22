@@ -35,6 +35,7 @@
 | `SwitchPaneRight` | 오른쪽 패널 전환 | `Ctrl+Shift+→` | MainWindow | 다음 폴더 패널로 포커스 전환 |
 | `ShowSearch` | 파일 검색 | `Ctrl+F` | MainWindow | 파일 검색 창 열기 (내용 검색/파일명 검색 대상 선택, 와일드카드 패턴) |
 | `PanelMaximize` | 패널 최대화 토글 | `F11` | MainWindow | 활성 패널/문서 최대화 토글 |
+| `UndoFileOperation` | 실행 취소 (파일 작업) | `Ctrl+Z` | MainWindow | 폴더 패널 포커스(텍스트 입력 중 아님)일 때 메인 패널의 마지막 파일 작업(복사·이동·휴지통 삭제·이름 변경·새 폴더·새 파일)을 확인 창을 거쳐 되돌림. ⋯ 메뉴 `실행 취소: …`와 같은 명령(`MainWindow.UndoLastFileOperation`). 경로·필터 입력란에서는 텍스트 되돌리기, 뷰어·캡쳐 편집 창은 각자 처리 |
 
 ---
 
@@ -167,6 +168,6 @@ Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)
 | `Ctrl+L` / `F4` | 경로 입력란 포커스 | 중간 | Windows 탐색기, 브라우저 공통 |
 | `Ctrl+D` | 즐겨찾기에 현재 폴더 추가 | 중간 | 브라우저 북마크 패턴 |
 | `Ctrl+Shift+C` | 파일 목록에서 선택한 파일 경로 복사 | 중간 | 트리뷰 폴더 경로 복사(`CopyFolderPath`)는 구현됨. 파일 목록까지 넓힐지 검토 |
-| `Ctrl+Z` | 실행 취소 (마지막 파일 작업) | 낮음 | 구현 복잡도 높음 |
 | `Ctrl+H` | 숨김 파일 표시 토글 | 낮음 | 편의 기능 |
 | `Space` | 빠른 미리보기 (Quick Look) | 낮음 | macOS Finder 스타일 |
+| `Ctrl+Y` | 다시 실행 (실행 취소한 파일 작업) | 낮음 | `Ctrl+Z` 실행 취소는 구현됨(`UndoFileOperation`, `docs/items/file-operation-queue-and-undo.md`). 다시 실행은 아직 없음 |

@@ -91,6 +91,12 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `docs/architecture.md` — 서비스·컨트롤 목록 업데이트
 - [ ] `README.md` — 아키텍처 요약 업데이트
 
+### 메인 패널 파일 작업 추가·변경 시
+- [ ] 복사·이동·삭제는 `MainWindow.QueueFileTransfer`/`QueueFileDelete`(`MainWindow.FileJobs.cs`)로 대기열에 넣는다. UI 스레드에서 `FileOperationService`를 직접 부르면 진행률·취소·실행 취소(Ctrl+Z) 이력에서 빠지고 큰 작업에서 화면이 멈춘다
+- [ ] 이름 변경·새 폴더·새 파일 같은 즉시 작업은 `RenameRecorded`/`CreateFolderRecorded`/`CreateFileRecorded`(→ `FileJobQueue`)로 실행해 이력에 남긴다
+- [ ] 새 종류를 실행 취소하려면 `JournalOperationKind` 끝에 값을 더하고 `FileOperationJournal.ItemProblems`·`Revert`, `FileJobQueue.DescribeOperation`·`DescribeUndoStep`, `FileJobQueueTests`를 함께 고친다
+- [ ] 폴더 비교 창 작업은 비교 창 이력(`compare-history`)에, 메인 패널 작업은 `file-history`에 — 두 이력을 섞지 않는다
+
 ### 플러그인 계약 변경 시
 - [ ] `Folderss.PluginContract/PluginContracts.cs` — 기존 멤버 삭제·시그니처 변경은 이미 배포된 플러그인을 깨뜨린다. 추가 위주로 하고, 깨지는 변경이면 계약 `<Version>` 주 버전을 올린다
 - [ ] `Services/PluginManager.cs` — `PluginHost`(IPluginManager 구현) 갱신

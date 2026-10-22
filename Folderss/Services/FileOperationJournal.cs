@@ -9,7 +9,11 @@ using System.Text.Json.Serialization;
 
 namespace Folderss.Services
 {
-    public enum JournalOperationKind { Move, Copy, Delete, DeletePermanently }
+    /// <summary>
+    /// 작업 종류. 뒤의 셋(이름 변경·새 폴더·새 파일)은 메인 패널 작업 이력만 쓴다(폴더 비교 창은 만들지 않음).
+    /// 저장은 이름으로 하므로 값을 끝에만 더한다.
+    /// </summary>
+    public enum JournalOperationKind { Move, Copy, Delete, DeletePermanently, Rename, CreateFolder, CreateFile }
 
     public enum JournalOperationState
     {
@@ -31,6 +35,9 @@ namespace Folderss.Services
         DateTime Send(string path);
         bool CanRestore(string originalPath, DateTime sentUtc);
         void Restore(string originalPath, DateTime sentUtc);
+
+        /// <summary>이 위치를 휴지통으로 보낼 수 있는가(보내기 전에 미리 판단·경고하는 용도). 기본은 가능.</summary>
+        bool CanSend(string path) => true;
     }
 
     public sealed class JournalItem
@@ -74,6 +81,8 @@ namespace Folderss.Services
     /// 기록은 <c>yyyy-MM-dd.jsonl</c>(UTC 날짜)에 한 줄씩 덧붙이고 7일 지나면 지운다.
     /// 작업마다 "시작"을 먼저 쓰고 실행한다 — 시작을 못 쓰면 실행하지 않아 이력에 안 남는 작업이 생기지 않는다.
     /// 한 번에 한 작업만 부른다(비교 창이 순서를 보장).
+    /// 메인 패널 파일 작업 대기열(<see cref="FileJobQueue"/>)은 별도 폴더의 인스턴스를 쓰고, 실행은 직접 하면서
+    /// <see cref="Begin"/>/<see cref="AddItem"/>/<see cref="End"/>로 같은 형식의 기록만 남긴다(대기열이 잠금으로 순서를 보장).
     /// </summary>
     public sealed class FileOperationJournal
     {
@@ -277,28 +286,55 @@ namespace Folderss.Services
             }
 
             foreach (var item in Pending(op))
+                problems.AddRange(ItemProblems(op.Kind, item));
+            return problems;
+        }
+
+        /// <summary>항목 하나를 되돌리지 못하게 막는 이유들(<see cref="CheckUndo"/>와 같은 판정). 비어 있으면 그 항목은 되돌릴 수 있다.</summary>
+        public List<string> ItemProblems(JournalOperationKind kind, JournalItem item)
+        {
+            var problems = new List<string>();
+            switch (kind)
             {
-                switch (op.Kind)
-                {
-                    case JournalOperationKind.Move:
-                        if (!Unchanged(item, item.Destination))
-                            problems.Add("옮긴 뒤 바뀌었거나 없음: " + item.Destination);
-                        if (Exists(item.Source))
-                            problems.Add("원래 자리에 같은 이름이 새로 있음: " + item.Source);
-                        if (item.ReplacedPath != null && !_recycleBin.CanRestore(item.ReplacedPath, item.RecycledUtc.Value))
-                            problems.Add("교체한 옛 항목이 휴지통에 없음: " + item.ReplacedPath);
-                        break;
-                    case JournalOperationKind.Copy:
-                        if (!Unchanged(item, item.Destination))
-                            problems.Add("복사한 뒤 바뀌었거나 없음: " + item.Destination);
-                        break;
-                    case JournalOperationKind.Delete:
-                        if (Exists(item.Source))
-                            problems.Add("원래 자리에 같은 이름이 새로 있음: " + item.Source);
-                        if (!_recycleBin.CanRestore(item.Source, item.RecycledUtc.Value))
-                            problems.Add("휴지통에 없음: " + item.Source);
-                        break;
-                }
+                case JournalOperationKind.Move:
+                    if (!Unchanged(item, item.Destination))
+                        problems.Add("옮긴 뒤 바뀌었거나 없음: " + item.Destination);
+                    if (Exists(item.Source))
+                        problems.Add("원래 자리에 같은 이름이 새로 있음: " + item.Source);
+                    if (item.ReplacedPath != null && !_recycleBin.CanRestore(item.ReplacedPath, item.RecycledUtc.Value))
+                        problems.Add("교체한 옛 항목이 휴지통에 없음: " + item.ReplacedPath);
+                    break;
+                case JournalOperationKind.Copy:
+                    if (!Unchanged(item, item.Destination))
+                        problems.Add("복사한 뒤 바뀌었거나 없음: " + item.Destination);
+                    else if (!_recycleBin.CanSend(item.Destination))
+                        problems.Add("휴지통을 쓸 수 없는 위치라 복사본을 지우지 않음(직접 지우세요): " + item.Destination);
+                    if (item.ReplacedPath != null && !_recycleBin.CanRestore(item.ReplacedPath, item.RecycledUtc.Value))
+                        problems.Add("교체한 옛 항목이 휴지통에 없음: " + item.ReplacedPath);
+                    break;
+                case JournalOperationKind.Delete:
+                    if (Exists(item.Source))
+                        problems.Add("원래 자리에 같은 이름이 새로 있음: " + item.Source);
+                    if (!_recycleBin.CanRestore(item.Source, item.RecycledUtc.Value))
+                        problems.Add("휴지통에 없음: " + item.Source);
+                    break;
+                case JournalOperationKind.Rename:
+                    if (!Unchanged(item, item.Destination))
+                        problems.Add("이름을 바꾼 뒤 바뀌었거나 없음: " + item.Destination);
+                    // 대소문자만 바꾼 이름이면 원래 이름이 곧 지금 항목이다.
+                    if (!string.Equals(item.Source, item.Destination, StringComparison.OrdinalIgnoreCase) && Exists(item.Source))
+                        problems.Add("원래 이름으로 된 항목이 새로 있음: " + item.Source);
+                    break;
+                case JournalOperationKind.CreateFolder:
+                    if (!Directory.Exists(item.Destination))
+                        problems.Add("만든 폴더가 없음: " + item.Destination);
+                    else if (Directory.EnumerateFileSystemEntries(item.Destination).Any())
+                        problems.Add("만든 폴더에 항목이 생겨 지우지 않음: " + item.Destination);
+                    break;
+                case JournalOperationKind.CreateFile:
+                    if (!Unchanged(item, item.Destination))
+                        problems.Add("만든 파일이 바뀌었거나 없어 지우지 않음: " + item.Destination);
+                    break;
             }
             return problems;
         }
@@ -342,6 +378,109 @@ namespace Folderss.Services
                 throw new InvalidOperationException("최근 작업부터 차례로 넘길 수 있습니다.");
             Append(new Line { T = "skip", Id = op.Id, At = _utcNow() });
             op.State = JournalOperationState.Skipped;
+        }
+
+        /// <summary>
+        /// 되돌릴 수 있는 항목만 되돌린다(최근 작업만). 그 사이 바뀌었거나 원래 자리가 차 있는 등 막힌 항목은 건드리지 않고 이유를 돌려준다.
+        /// 막힌 항목이 남으면 작업을 "넘김"으로 기록해 그 앞 작업이 다음 되돌리기 대상이 된다.
+        /// <paramref name="token"/>으로 멈추거나 도중에 실패하면 거기서 멈춘다(되돌린 항목은 기록됨) — 다시 부르면 남은 항목만 한다.
+        /// </summary>
+        public List<string> UndoAvailable(JournalOperation op, System.Threading.CancellationToken token = default)
+        {
+            if (op == null || !ReferenceEquals(op, UndoTarget))
+                throw new InvalidOperationException("최근 작업부터 차례로 되돌릴 수 있습니다.");
+
+            var blocked = new List<string>();
+            var ready = new List<JournalItem>();
+            foreach (var item in Pending(op))
+            {
+                var problems = ItemProblems(op.Kind, item);
+                if (problems.Count > 0)
+                    blocked.AddRange(problems);
+                else
+                    ready.Add(item);
+            }
+
+            ready.Reverse();
+            foreach (var item in ready)
+            {
+                token.ThrowIfCancellationRequested();
+                var index = op.Items.IndexOf(item);
+                try
+                {
+                    Revert(op.Kind, item);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    op.UndoError = ex.Message;
+                    Append(new Line { T = "revert", Id = op.Id, I = index, Ok = false, Err = ex.Message, At = _utcNow() });
+                    throw new IOException("되돌리기 중 실패: " + ex.Message, ex);
+                }
+                item.Reverted = true;
+                Append(new Line { T = "revert", Id = op.Id, I = index, Ok = true, At = _utcNow() });
+            }
+
+            op.UndoError = null;
+            if (blocked.Count > 0)
+            {
+                Append(new Line { T = "skip", Id = op.Id, At = _utcNow() });
+                op.State = JournalOperationState.Skipped;
+            }
+            else
+            {
+                op.State = JournalOperationState.Undone;
+            }
+            return blocked;
+        }
+
+        // ── 외부 실행기용 기록(메인 패널 파일 작업 대기열) ─────────────────────
+        // 실행은 부르는 쪽이 하고(진행률·일시정지·충돌 선택), 이력은 같은 형식으로 남긴다.
+        // 순서: Begin(시작 기록 — 실패하면 예외, 아무것도 남지 않음) → 항목마다 AddItem → End.
+
+        /// <summary>작업 시작을 기록하고 이력에 넣는다. 기록하지 못하면 예외.</summary>
+        public JournalOperation Begin(JournalOperationKind kind, IEnumerable<string> plan)
+        {
+            var sources = (plan ?? Enumerable.Empty<string>()).Select(TrimEnd).ToList();
+            var op = new JournalOperation { Id = Guid.NewGuid().ToString("N"), StartedUtc = _utcNow(), Kind = kind };
+            Append(new Line { T = "begin", Id = op.Id, At = op.StartedUtc, Kind = kind.ToString(), Plan = sources });
+            _operations.Add(op);
+            return op;
+        }
+
+        /// <summary>항목 결과를 더한다. 파일에 쓰지 못하면 작업을 중단됨으로 표시하고 예외(메모리에는 남아 이번 실행 중에는 되돌릴 수 있음).</summary>
+        public void AddItem(JournalOperation op, JournalItem item)
+        {
+            op.Items.Add(item);
+            try
+            {
+                Append(ItemLine(op.Id, op.Items.Count - 1, item));
+            }
+            catch
+            {
+                op.State = JournalOperationState.Interrupted;
+                throw;
+            }
+        }
+
+        /// <summary>작업 끝을 기록한다. 쓰지 못하면 중단됨으로 표시하고 예외.</summary>
+        public void End(JournalOperation op)
+        {
+            try
+            {
+                Append(new Line { T = "end", Id = op.Id, At = _utcNow() });
+            }
+            catch
+            {
+                op.State = JournalOperationState.Interrupted;
+                throw;
+            }
+        }
+
+        /// <summary>도중에 기록을 못 이어 쓴 작업을 중단됨으로 표시한다(메모리만).</summary>
+        public static void MarkInterrupted(JournalOperation op)
+        {
+            if (op != null && op.State == JournalOperationState.Completed)
+                op.State = JournalOperationState.Interrupted;
         }
 
         private JournalOperation Run(JournalOperationKind kind, IEnumerable<string> paths, Func<string, JournalItem> execute)
@@ -395,9 +534,20 @@ namespace Folderss.Services
                     break;
                 case JournalOperationKind.Copy:
                     _recycleBin.Send(item.Destination);
+                    if (item.ReplacedPath != null)
+                        _recycleBin.Restore(item.ReplacedPath, item.RecycledUtc.Value);
                     break;
                 case JournalOperationKind.Delete:
                     _recycleBin.Restore(item.Source, item.RecycledUtc.Value);
+                    break;
+                case JournalOperationKind.Rename:
+                    MoveEntry(item.Destination, item.Source, item.IsDirectory);
+                    break;
+                case JournalOperationKind.CreateFolder:
+                    Directory.Delete(item.Destination, false);   // 비어 있을 때만 지워진다
+                    break;
+                case JournalOperationKind.CreateFile:
+                    File.Delete(item.Destination);
                     break;
             }
         }
@@ -527,7 +677,8 @@ namespace Folderss.Services
             throw new FileNotFoundException("항목이 없습니다: " + source, source);
         }
 
-        private static void CaptureFacts(JournalItem item, string path)
+        /// <summary>파일이면 결과의 크기·수정 시각을 적어 둔다(되돌리기 전에 그 사이 바뀌었는지 본다).</summary>
+        internal static void CaptureFacts(JournalItem item, string path)
         {
             if (item.IsDirectory)
                 return;

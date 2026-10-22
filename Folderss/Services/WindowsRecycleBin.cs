@@ -27,6 +27,27 @@ namespace Folderss.Services
 
         public bool CanRestore(string originalPath, DateTime sentUtc) => Find(originalPath, sentUtc) != null;
 
+        /// <summary>
+        /// 휴지통에 보낼 수 있는 위치인가: 고정 드라이브이고 경로가 260자(MAX_PATH) 미만.
+        /// 네트워크·이동식 드라이브는 휴지통이 없어 보내기가 곧 영구 삭제가 되고, 셸 휴지통 보내기는 긴 경로를 처리하지 못한다.
+        /// </summary>
+        public bool CanSend(string path) => IsRecyclable(path);
+
+        public static bool IsRecyclable(string path)
+        {
+            try
+            {
+                var full = Path.GetFullPath(path);
+                var root = Path.GetPathRoot(full);
+                return full.Length < 260 && !string.IsNullOrEmpty(root) && !root.StartsWith(@"\\", StringComparison.Ordinal) &&
+                       new DriveInfo(root).DriveType == DriveType.Fixed;
+            }
+            catch (Exception ex) when (ex is ArgumentException || ex is IOException || ex is NotSupportedException || ex is UnauthorizedAccessException)
+            {
+                return false;
+            }
+        }
+
         public void Restore(string originalPath, DateTime sentUtc)
         {
             var info = Find(originalPath, sentUtc)
@@ -55,12 +76,8 @@ namespace Folderss.Services
             var target = Path.GetFullPath(originalPath);
             string best = null;
             var bestGap = TimeSpan.MaxValue;
-            foreach (var info in Directory.EnumerateFiles(folder, "$I*"))
+            foreach (var (info, parsed) in ReadIndex(folder))
             {
-                RecycleInfo parsed;
-                try { parsed = ParseInfoFile(File.ReadAllBytes(info)); }
-                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is FormatException) { continue; }
-
                 if (!string.Equals(parsed.OriginalPath, target, StringComparison.OrdinalIgnoreCase))
                     continue;
                 var stored = Path.Combine(folder, "$R" + Path.GetFileName(info).Substring(2));
@@ -74,6 +91,40 @@ namespace Folderss.Services
                 }
             }
             return best;
+        }
+
+        private static readonly object IndexLock = new object();
+        private static readonly System.Collections.Generic.Dictionary<string, (DateTime Stamp, System.Collections.Generic.List<(string Info, RecycleInfo Parsed)> Entries)> Index =
+            new System.Collections.Generic.Dictionary<string, (DateTime, System.Collections.Generic.List<(string, RecycleInfo)>)>(StringComparer.OrdinalIgnoreCase);
+
+        /// <summary>
+        /// 휴지통 폴더의 정보 파일 목록(원래 경로·삭제 시각). 되돌리기 확인은 항목마다 찾으므로, 폴더 수정 시각이 그대로면 앞서 읽은 것을 다시 쓴다
+        /// (항목이 들어오거나 나가면 폴더 수정 시각이 바뀐다 — 시각을 먼저 읽고 목록을 읽어, 그 사이 바뀌면 다음 호출에서 다시 읽힌다).
+        /// </summary>
+        private static System.Collections.Generic.List<(string Info, RecycleInfo Parsed)> ReadIndex(string folder)
+        {
+            var stamp = Directory.GetLastWriteTimeUtc(folder);
+            lock (IndexLock)
+            {
+                if (Index.TryGetValue(folder, out var cached) && cached.Stamp == stamp)
+                    return cached.Entries;
+            }
+            var entries = new System.Collections.Generic.List<(string, RecycleInfo)>();
+            foreach (var info in Directory.EnumerateFiles(folder, "$I*"))
+            {
+                try
+                {
+                    entries.Add((info, ParseInfoFile(File.ReadAllBytes(info))));
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is FormatException)
+                {
+                    // 읽을 수 없거나 형식이 다른 정보 파일은 우리가 보낸 항목이 아니므로 건너뛴다(예전 Find와 같음).
+                    continue;
+                }
+            }
+            lock (IndexLock)
+                Index[folder] = (stamp, entries);
+            return entries;
         }
 
         private static void EnsureRecyclable(string path)
