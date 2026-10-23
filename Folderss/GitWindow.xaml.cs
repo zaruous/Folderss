@@ -2272,6 +2272,12 @@ namespace Folderss
         private string _branchBaseChoice;
         private RepositoryRow _branchBaseRow;
 
+        /// <summary>
+        /// true면 비교 방향을 뒤집는다(대상 → 기준). 목록 선택(버튼 대상)을 바꾸지 않으려고 콤보·목록은 그대로 두고 비교만 뒤집는다 —
+        /// 기준이 목록에 없는 원격 브랜치·detached HEAD여도 된다.
+        /// </summary>
+        private bool _branchCompareReversed;
+
         /// <summary>코드로 기준 콤보를 채우는 중 — 사용자 선택으로 기록하지 않는다.</summary>
         private bool _fillingBranchBases;
 
@@ -2309,6 +2315,13 @@ namespace Folderss
             await LoadBranchFilesAsync();
         }
 
+        private async void BranchCompareSwap_Click(object sender, RoutedEventArgs e)
+        {
+            _branchCompareReversed = !_branchCompareReversed;
+            BranchCompareSwapButton.Content = _branchCompareReversed ? "⇄ 반대" : "⇄";
+            await LoadBranchFilesAsync();
+        }
+
         private void ClearBranchFiles(string diffMessage)
         {
             _branchFiles = null;
@@ -2325,6 +2338,7 @@ namespace Folderss
             var target = BranchList.SelectedItem as GitBranchInfo;
             var baseBranch = BranchCompareBaseCombo.SelectedItem as GitBranchInfo;
             var sinceMergeBase = BranchCompareModeCombo.SelectedIndex != 1;
+            var reversed = _branchCompareReversed;
             BranchCompareTargetText.Text = target?.Name ?? "(목록에서 브랜치 선택)";
             ClearBranchFiles(BranchFilesHint);
             if (row == null || target == null || baseBranch == null)
@@ -2343,8 +2357,9 @@ namespace Folderss
             BranchFilesHeader.Text = "파일 (불러오는 중…)";
             try
             {
-                var from = baseBranch.TipHash;
-                var to = target.TipHash;
+                var (fromBranch, toBranch) = reversed ? (target, baseBranch) : (baseBranch, target);
+                var from = fromBranch.TipHash;
+                var to = toBranch.TipHash;
                 var lib = await ReadLibAsync(row, "브랜치 비교 파일 목록", () => GitLibReader.ReadRevisionFiles(row.RootPath, from, to, sinceMergeBase));
                 var result = lib.Ok
                     ? null
@@ -2352,7 +2367,8 @@ namespace Folderss
                         GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
                 // 기다리는 사이 저장소·대상·기준·방식이 바뀌었으면 버린다(바뀐 쪽이 다시 읽는다).
                 if (!ReferenceEquals(row, SelectedRow) || !ReferenceEquals(target, BranchList.SelectedItem)
-                    || !ReferenceEquals(baseBranch, BranchCompareBaseCombo.SelectedItem) || sinceMergeBase != (BranchCompareModeCombo.SelectedIndex != 1))
+                    || !ReferenceEquals(baseBranch, BranchCompareBaseCombo.SelectedItem) || sinceMergeBase != (BranchCompareModeCombo.SelectedIndex != 1)
+                    || reversed != _branchCompareReversed)
                     return;
                 if (!lib.Ok && !result.Success)
                 {
@@ -2362,10 +2378,12 @@ namespace Folderss
                 }
 
                 var entries = lib.Ok ? lib.Value : GitOutputParser.ParseNameStatus(result.StdOut);
-                _branchFiles = (from, to, sinceMergeBase, baseBranch.Name + (sinceMergeBase ? " ... " : " ↔ ") + target.Name);
+                var label = fromBranch.Name + (sinceMergeBase ? " ... " : " → ") + toBranch.Name;
+                _branchFiles = (from, to, sinceMergeBase, label);
                 BranchFileList.ItemsSource = entries;
                 BranchFileTree.ItemsSource = GitChangeTree.Build(entries);
-                BranchFilesHeader.Text = string.Format("파일 {0}", entries.Count);
+                // 방향을 뒤집을 수 있어 어느 쪽의 변경인지 제목에 늘 보인다.
+                BranchFilesHeader.Text = string.Format("파일 {0}  ({1})", entries.Count, label);
                 BranchFilesHeader.ToolTip = GitStatusEntry.Summarize(entries);
                 BranchDiff.Clear(entries.Count == 0 ? "바뀐 파일이 없습니다." : "파일을 선택하면 차이를 보여 줍니다.");
             }

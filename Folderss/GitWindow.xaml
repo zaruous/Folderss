@@ -581,7 +581,8 @@
                                           DisplayMemberPath="Name"
                                           SelectionChanged="BranchCompare_SelectionChanged"
                                           ToolTip="비교 기준 브랜치 (기본: 현재 브랜치)"/>
-                                <TextBlock Text="↔" VerticalAlignment="Center" Margin="8,0"/>
+                                <Button x:Name="BranchCompareSwapButton" Content="⇄" Margin="6,0" Padding="8,0" Click="BranchCompareSwap_Click"
+                                        ToolTip="비교 방향을 뒤집습니다 (기준 쪽의 변경 보기). 목록 선택·버튼 대상은 바뀌지 않습니다"/>
                                 <TextBlock x:Name="BranchCompareTargetText" VerticalAlignment="Center" FontWeight="SemiBold"
                                            Text="(목록에서 브랜치 선택)"/>
                                 <ComboBox x:Name="BranchCompareModeCombo" Width="220" Margin="12,0,0,0" SelectedIndex="0"

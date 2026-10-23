@@ -329,6 +329,11 @@ namespace Folderss.SearchTests
             var tips = GitLibReader.ReadRevisionFiles(repo, "main", "feature", false).Select(Line).ToList();
             Assert.Contains("M||main-only.txt", tips);
             Assert.Equal(4, tips.Count);
+
+            // 브랜치 탭 ⇄: feature를 main에 병합하면 main...feature는 비지만(대상에만 있는 변경 없음), 뒤집은 feature...main은 main 쪽 변경을 보인다.
+            await Git(repo, "merge", "-q", "--no-ff", "-m", "merge", "feature");
+            Assert.Empty(GitLibReader.ReadRevisionFiles(repo, "main", "feature", true));
+            Assert.Equal(new[] { "M||main-only.txt" }, GitLibReader.ReadRevisionFiles(repo, "feature", "main", true).Select(Line).ToList());
         }
 
         [SkippableFact]
