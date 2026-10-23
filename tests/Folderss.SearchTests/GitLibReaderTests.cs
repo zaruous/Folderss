@@ -337,6 +337,43 @@ namespace Folderss.SearchTests
         }
 
         [SkippableFact]
+        public async Task Blob_MatchesCatFile()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitAsync("blob");
+            Directory.CreateDirectory(Path.Combine(repo, "새 폴더"));
+            File.WriteAllText(Path.Combine(repo, "새 폴더", "한글.txt"), "한글\r\n두 줄\n");
+            File.WriteAllBytes(Path.Combine(repo, "bin.dat"), new byte[] { 0, 1, 2, 0, 255 });
+            File.WriteAllText(Path.Combine(repo, "gone.txt"), "old\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "first");
+            var first = (await Git(repo, "rev-parse", "HEAD")).Trim();
+            File.Delete(Path.Combine(repo, "gone.txt"));
+            File.WriteAllText(Path.Combine(repo, "새 폴더", "한글.txt"), "바뀜\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "second");
+
+            async Task<byte[]> CatFile(string spec)
+            {
+                var result = await GitCommandRunner.RunAsync(repo, new[] { "cat-file", "blob", spec }, GitCommandRunner.QueryTimeout,
+                    CancellationToken.None, readOnly: true, rawOutput: true);
+                Assert.True(result.Success, result.StdErr);
+                return result.StdOutBytes;
+            }
+            foreach (var (rev, path) in new[] { (first, "새 폴더/한글.txt"), ("HEAD", "새 폴더/한글.txt"), (first, "bin.dat"), (first, "gone.txt") })
+            {
+                var lib = GitLibReader.ReadBlob(repo, rev, path, 1024);
+                Assert.True(lib.Found);
+                Assert.Equal(await CatFile(rev + ":" + path), lib.Bytes);
+            }
+            Assert.False(GitLibReader.ReadBlob(repo, "HEAD", "gone.txt", 1024).Found);   // 삭제된 뒤
+            Assert.False(GitLibReader.ReadBlob(repo, "HEAD", "새 폴더", 1024).Found);    // 폴더는 파일이 아님
+            var big = GitLibReader.ReadBlob(repo, first, "새 폴더/한글.txt", 3);          // 한도 초과
+            Assert.True(big.Found);
+            Assert.Null(big.Bytes);
+        }
+
+        [SkippableFact]
         public async Task Branches_MatchCli()
         {
             Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");

@@ -605,6 +605,12 @@
                                                   Foreground="{DynamicResource PrimaryText}"
                                                   Click="BranchFilesTreeToggle_Click"
                                                   ToolTip="바뀐 파일을 폴더별로 묶어 봅니다"/>
+                                        <CheckBox x:Name="BranchFilesDiffToggle" DockPanel.Dock="Right" Margin="0,0,10,0"
+                                                  VerticalAlignment="Center"
+                                                  Content="diff 보기"
+                                                  Foreground="{DynamicResource PrimaryText}"
+                                                  Click="BranchFilesDiffToggle_Click"
+                                                  ToolTip="끄면 고른 파일의 비교 대상 쪽 코드 내용, 켜면 변경(diff)을 봅니다"/>
                                         <TextBlock x:Name="BranchFilesHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="파일"
                                                    TextTrimming="CharacterEllipsis"/>
                                     </DockPanel>
@@ -813,6 +819,12 @@
                                           Foreground="{DynamicResource PrimaryText}"
                                           Click="LogFilesTreeToggle_Click"
                                           ToolTip="커밋에서 바뀐 파일을 폴더별로 묶어 봅니다"/>
+                                <CheckBox x:Name="LogFilesDiffToggle" DockPanel.Dock="Right" Margin="0,0,10,0"
+                                          VerticalAlignment="Center"
+                                          Content="diff 보기"
+                                          Foreground="{DynamicResource PrimaryText}"
+                                          Click="LogFilesDiffToggle_Click"
+                                          ToolTip="끄면 고른 파일의 그 커밋 시점 코드 내용, 켜면 변경(diff)을 봅니다"/>
                                 <TextBlock x:Name="LogFilesHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="파일"
                                            TextTrimming="CharacterEllipsis"/>
                             </DockPanel>
