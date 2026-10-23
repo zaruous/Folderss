@@ -54,3 +54,6 @@
 ## 변경 이력
 
 - 2026-10-23: 요청 접수(로그 변경 파일의 raw 코드 보기). 표시 위치는 사용자 답변대로 Git 창 안 코드 보기 기본 + diff 선택. 구현·단위 테스트 완료, Windows 확인 대기.
+- 2026-10-23: 코드 보기에서 줄 번호가 두 개(diff처럼 변경 전/후 열) 나오는 문제 → `ShowLines` 때만 `LineList.Tag = "SingleLineNumber"`로
+  변경 전 번호 열을 접음(`GitDiffView.xaml` DataTrigger, 열 너비 Auto). diff(`Complete`)는 Tag를 비워 두 열 그대로. 같은 화면을 쓰는 '변경 없는 파일 보기'도 함께 고쳐짐.
+  행마다 숨기지 않은 이유: diff의 추가/삭제 줄은 한쪽 번호가 비어 있어 행별로 접으면 정렬이 어긋난다. WPF 화면이라 단위 테스트 없음 — Windows에서 확인 필요.
