@@ -376,31 +376,54 @@ namespace Folderss.Services
                 var oldTree = parents == null || parents.Length == 0
                     ? null
                     : (repo.Lookup<Commit>(parents[0]) ?? throw new NotSupportedException("부모 커밋 없음")).Tree;
-                var options = new CompareOptions
-                {
-                    Similarity = new SimilarityOptions
-                    {
-                        RenameDetectionMode = RenameDetectionMode.Renames,
-                        RenameLimit = repo.Config.Get<int>("diff.renameLimit")?.Value ?? 1000
-                    }
-                };
-                var list = new List<GitStatusEntry>();
-                foreach (var change in repo.Diff.Compare<TreeChanges>(oldTree, commit.Tree, options))
-                {
-                    var code = StatusCode(change.Status);
-                    if (code == '\0')
-                        continue;
-                    var renamed = code == 'R' || code == 'C';
-                    list.Add(new GitStatusEntry
-                    {
-                        Path = change.Path,
-                        OriginalPath = renamed ? change.OldPath : null,
-                        IndexState = code,
-                        Side = GitChangeSide.Index
-                    });
-                }
-                return list;
+                return CompareTrees(repo, oldTree, commit.Tree);
             }
+        }
+
+        /// <summary>
+        /// 두 리비전 사이에서 바뀐 파일 — <see cref="GitDiffCommands.RevisionFiles"/> + <see cref="GitOutputParser.ParseNameStatus"/>와 같은 목록.
+        /// <paramref name="sinceMergeBase"/>가 true면 갈라진 지점(merge-base) ↔ <paramref name="to"/>.
+        /// </summary>
+        public static List<GitStatusEntry> ReadRevisionFiles(string root, string from, string to, bool sinceMergeBase)
+        {
+            using (var repo = new Repository(root))
+            {
+                var one = repo.Lookup(from)?.Peel<Commit>() ?? throw new NotSupportedException("리비전 없음: " + from);
+                var two = repo.Lookup(to)?.Peel<Commit>() ?? throw new NotSupportedException("리비전 없음: " + to);
+                var oldCommit = sinceMergeBase
+                    ? repo.ObjectDatabase.FindMergeBase(one, two) ?? throw new NotSupportedException("공통 조상 없음")
+                    : one;
+                return CompareTrees(repo, oldCommit.Tree, two.Tree);
+            }
+        }
+
+        /// <summary>트리 비교를 <c>--name-status -M</c> 목록으로. 이름 변경 감지 한도는 git처럼 <c>diff.renameLimit</c>(없으면 1000).</summary>
+        private static List<GitStatusEntry> CompareTrees(Repository repo, Tree oldTree, Tree newTree)
+        {
+            var options = new CompareOptions
+            {
+                Similarity = new SimilarityOptions
+                {
+                    RenameDetectionMode = RenameDetectionMode.Renames,
+                    RenameLimit = repo.Config.Get<int>("diff.renameLimit")?.Value ?? 1000
+                }
+            };
+            var list = new List<GitStatusEntry>();
+            foreach (var change in repo.Diff.Compare<TreeChanges>(oldTree, newTree, options))
+            {
+                var code = StatusCode(change.Status);
+                if (code == '\0')
+                    continue;
+                var renamed = code == 'R' || code == 'C';
+                list.Add(new GitStatusEntry
+                {
+                    Path = change.Path,
+                    OriginalPath = renamed ? change.OldPath : null,
+                    IndexState = code,
+                    Side = GitChangeSide.Index
+                });
+            }
+            return list;
         }
 
         private static char StatusCode(ChangeKind kind)
