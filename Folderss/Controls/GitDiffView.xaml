@@ -71,17 +71,21 @@
                         <!-- 추가/삭제 색은 테마와 무관하게 반투명 초록/빨강을 깔아 어두운·밝은 테마 모두에서 읽히게 한다. -->
                         <Grid x:Name="Row" Background="Transparent">
                             <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="44"/>
+                                <!-- 변경 전 번호 열: 코드 내용 보기(ShowLines)에서는 접어 번호를 하나만 보인다. -->
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="44"/>
                                 <ColumnDefinition Width="*"/>
                             </Grid.ColumnDefinitions>
-                            <TextBlock Grid.Column="0" Text="{Binding OldLine}" TextAlignment="Right" Margin="0,0,6,0"
+                            <TextBlock x:Name="OldNumber" Grid.Column="0" Width="38" Text="{Binding OldLine}" TextAlignment="Right" Margin="0,0,6,0"
                                        Foreground="{DynamicResource SecondaryText}"/>
                             <TextBlock Grid.Column="1" Text="{Binding NewLine}" TextAlignment="Right" Margin="0,0,8,0"
                                        Foreground="{DynamicResource SecondaryText}"/>
                             <TextBlock x:Name="LineText" Grid.Column="2" Text="{Binding Text}"/>
                         </Grid>
                         <DataTemplate.Triggers>
+                            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="SingleLineNumber">
+                                <Setter TargetName="OldNumber" Property="Visibility" Value="Collapsed"/>
+                            </DataTrigger>
                             <DataTrigger Binding="{Binding Kind}" Value="Added">
                                 <Setter TargetName="Row" Property="Background" Value="#3328A745"/>
                             </DataTrigger>
