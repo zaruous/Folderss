@@ -482,6 +482,9 @@ Folderss/
 - 브랜치 탭 비교 파일 목록: 아래 영역에서 `기준` 콤보(기본 현재 브랜치, 모든 로컬·원격 + detached HEAD) ↔ 목록에서 고른 브랜치의 바뀐 파일.
   `방식` 콤보로 `기준...대상`(merge-base ↔ 대상, 기본) / `기준 대상`(두 끝). 리비전은 `TipHash`로 넘긴다. 목록은 `GitLibReader.ReadRevisionFiles`
   (실패 시 `GitDiffCommands.RevisionFiles` + `ParseNameStatus`), 파일 diff는 `GitDiffCommands.RevisionFile` — 로그 탭 파일 목록과 같은 구조(docs/items/git-branch-compare-files.md).
+- 로그·브랜치 비교 파일 보기: 파일을 고르면 기본은 리비전 시점 코드 내용(`ShowRevisionContentAsync` — `GitLibReader.ReadBlob`, 실패 시 `cat-file`,
+  `PreviewLines`로 변경 없는 파일 보기와 같은 디코딩·한도, `GitDiffView.ShowLines`), `diff 보기` 체크 시 diff. 저장된 바이트 그대로라 체크아웃 변환 없음.
+  늦게 온 내용은 `GitDiffView.CurrentRequestId`로 버린다(docs/items/git-log-file-content-view.md).
 - 외부 비교 도구: `GitDiffRequest.ExternalSelector`가 있는 비교만 `git difftool --no-prompt [--dir-diff]`로 연다(커밋·범위는 폴더 비교).
   직접 지정은 `-c difftool.folderss.cmd=<BuildToolCommand>` + `--tool=folderss`로 이번 실행에만 등록 — `{left}`/`{right}`는 항상
   `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,

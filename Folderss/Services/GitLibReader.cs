@@ -397,6 +397,28 @@ namespace Folderss.Services
             }
         }
 
+        /// <summary>
+        /// 리비전 시점의 파일 내용 — <c>git cat-file blob &lt;rev&gt;:&lt;path&gt;</c>와 같은 바이트(필터·줄 끝 변환 없음).
+        /// 그 리비전에 파일이 없으면 Found=false, <paramref name="maxBytes"/>보다 크면 Bytes=null.
+        /// </summary>
+        public static (bool Found, byte[] Bytes) ReadBlob(string root, string revision, string path, long maxBytes)
+        {
+            using (var repo = new Repository(root))
+            {
+                var commit = repo.Lookup(revision)?.Peel<Commit>() ?? throw new NotSupportedException("리비전 없음: " + revision);
+                if (!(commit[path]?.Target is Blob blob))
+                    return (false, null);
+                if (blob.Size > maxBytes)
+                    return (true, null);
+                using (var stream = blob.GetContentStream())
+                using (var buffer = new MemoryStream())
+                {
+                    stream.CopyTo(buffer);
+                    return (true, buffer.ToArray());
+                }
+            }
+        }
+
         /// <summary>트리 비교를 <c>--name-status -M</c> 목록으로. 이름 변경 감지 한도는 git처럼 <c>diff.renameLimit</c>(없으면 1000).</summary>
         private static List<GitStatusEntry> CompareTrees(Repository repo, Tree oldTree, Tree newTree)
         {
