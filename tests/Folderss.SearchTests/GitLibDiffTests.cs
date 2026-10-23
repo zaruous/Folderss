@@ -209,6 +209,11 @@ namespace Folderss.SearchTests
             await AssertSameAsCli(repo, GitDiffCommands.Range("HEAD..." + GitDiffCommands.Upstream));
             await AssertSameAsCli(repo, GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream));
             await AssertSameAsCli(repo, GitDiffCommands.WorkTreeAgainst(GitDiffCommands.Upstream, ignoreWhitespace: true));
+            // 브랜치 탭 비교: 두 끝 / 갈라진 지점부터
+            await AssertSameAsCli(repo, GitDiffCommands.RevisionFile(root, "main", false, "a.txt", null));
+            await AssertSameAsCli(repo, GitDiffCommands.RevisionFile("feature", "main", false, "b.txt", null));
+            await AssertSameAsCli(repo, GitDiffCommands.RevisionFile("feature", "main", true, "b.txt", null));
+            await AssertSameAsCli(repo, GitDiffCommands.RevisionFile("main", "feature", false, "c.txt", null, ignoreWhitespace: true));
         }
 
         [SkippableFact]

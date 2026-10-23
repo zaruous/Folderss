@@ -35,7 +35,7 @@ Folderss/
 │   ├── GitRepositoryScanner.cs     — 기준 폴더 아래(와 위) Git 저장소 탐색 (순수 System.IO)
 │   ├── GitCommandRunner.cs         — git CLI 실행 (ArgumentList, 타임아웃·취소·프로세스 트리 종료, UTF-8, 동시 4개)
 │   ├── GitOutputParser.cs          — status porcelain v2 / log / for-each-ref / unified diff 파서
-│   ├── GitLibReader.cs             — 조회(status·브랜치·로그·커밋 파일 목록·upstream 비교·stash·워킹트리)를 LibGit2Sharp로, 결과는 CLI+파서와 동일
+│   ├── GitLibReader.cs             — 조회(status·브랜치·로그·커밋/브랜치 비교 파일 목록·upstream 비교·stash·워킹트리)를 LibGit2Sharp로, 결과는 CLI+파서와 동일
 │   ├── GitLibDiff.cs               — diff(작업 트리·스테이지·커밋·원격 비교·두 파일)를 libgit2 xdiff로 프로세스 없이, 출력 텍스트는 CLI와 동일
 │   ├── GitStashCommands.cs         — stash list/push(-u, --keep-index, pathspec stdin)/apply·pop·branch(--index)/drop/clear 인수
 │   ├── GitSyncCommands.cs          — pull/push/fetch/커밋/브랜치 삭제(로컬·원격)·브랜치 업데이트(base ← compare) 옵션 클래스와 인수(버튼 기본값과 ▾ 대화상자가 같은 함수 사용)
@@ -479,6 +479,9 @@ Folderss/
   LibGit2Sharp(`GitLibReader.ReadBranchGraph`, 해시·부모만 만들고 남은 행만 제목 등을 채움) 우선, 실패 시 `GitBranchGraph.CliArguments`
   (`log --topo-order --branches [--remotes] [HEAD]`) + `ParseLog` — 두 경로 모두 같은 `Build`를 거친다. 전체 히스토리를 걸으므로 브랜치 탭을 볼 때만 읽는다
   (`_branchGraphRow`). 버튼(전환·삭제·업데이트)은 계속 왼쪽 목록 선택을 대상으로 하고, 그래프는 보기 전용(목록 선택 시 그 끝 행 선택).
+- 브랜치 탭 비교 파일 목록: 아래 영역에서 `기준` 콤보(기본 현재 브랜치, 모든 로컬·원격 + detached HEAD) ↔ 목록에서 고른 브랜치의 바뀐 파일.
+  `방식` 콤보로 `기준...대상`(merge-base ↔ 대상, 기본) / `기준 대상`(두 끝). 리비전은 `TipHash`로 넘긴다. 목록은 `GitLibReader.ReadRevisionFiles`
+  (실패 시 `GitDiffCommands.RevisionFiles` + `ParseNameStatus`), 파일 diff는 `GitDiffCommands.RevisionFile` — 로그 탭 파일 목록과 같은 구조(docs/items/git-branch-compare-files.md).
 - 외부 비교 도구: `GitDiffRequest.ExternalSelector`가 있는 비교만 `git difftool --no-prompt [--dir-diff]`로 연다(커밋·범위는 폴더 비교).
   직접 지정은 `-c difftool.folderss.cmd=<BuildToolCommand>` + `--tool=folderss`로 이번 실행에만 등록 — `{left}`/`{right}`는 항상
   `"$LOCAL"`/`"$REMOTE"`로 바뀌고 실행 파일은 작은따옴표로 감싼다(git이 셸로 실행). 도구가 닫힐 때까지 기다리므로 시간 제한 없음,

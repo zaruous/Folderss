@@ -285,6 +285,58 @@ namespace Folderss.SearchTests
         }
 
         [SkippableFact]
+        public async Task RevisionFiles_MatchCli_BothModes()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitAsync("revision-files");
+            string Lines10(string tag) => string.Concat(Enumerable.Range(1, 10).Select(i => tag + " line " + i + "\n"));
+            void Write(string path, string text)
+            {
+                var full = Path.Combine(repo, path);
+                Directory.CreateDirectory(Path.GetDirectoryName(full));
+                File.WriteAllText(full, text);
+            }
+            Write("shared.txt", "shared\n");
+            Write("move.txt", Lines10("move"));
+            Write("main-only.txt", "base\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "root");
+
+            // feature: 수정·이름 변경·추가(한글 경로) / main: 다른 파일 수정
+            await Git(repo, "switch", "-q", "-c", "feature");
+            Write("shared.txt", "shared feature\n");
+            Directory.CreateDirectory(Path.Combine(repo, "sub"));
+            File.Move(Path.Combine(repo, "move.txt"), Path.Combine(repo, "sub", "moved.txt"));
+            Write("새 폴더/추가.txt", "added\n");
+            await Git(repo, "add", "-A");
+            await Git(repo, "commit", "-q", "-m", "feature");
+            await Git(repo, "switch", "-q", "main");
+            Write("main-only.txt", "main\n");
+            await Git(repo, "commit", "-q", "-am", "main");
+
+            static string Line(GitStatusEntry e) => $"{e.IndexState}|{e.OriginalPath}|{e.Path}";
+            foreach (var (from, to) in new[] { ("main", "feature"), ("feature", "main") })
+                foreach (var sinceMergeBase in new[] { true, false })
+                {
+                    var cli = GitOutputParser.ParseNameStatus(await Git(repo, GitDiffCommands.RevisionFiles(from, to, sinceMergeBase).ToArray()));
+                    var lib = GitLibReader.ReadRevisionFiles(repo, from, to, sinceMergeBase);
+                    Assert.Equal(cli.Select(Line).ToList(), lib.Select(Line).ToList());
+                }
+
+            // 갈라진 지점부터: feature 쪽 변경만. 두 끝: main에서만 바뀐 파일도 차이로 보인다.
+            var since = GitLibReader.ReadRevisionFiles(repo, "main", "feature", true).Select(Line).ToList();
+            Assert.Equal(new[] { "M||shared.txt", "R|move.txt|sub/moved.txt", "A||새 폴더/추가.txt" }, since);
+            var tips = GitLibReader.ReadRevisionFiles(repo, "main", "feature", false).Select(Line).ToList();
+            Assert.Contains("M||main-only.txt", tips);
+            Assert.Equal(4, tips.Count);
+
+            // 브랜치 탭 ⇄: feature를 main에 병합하면 main...feature는 비지만(대상에만 있는 변경 없음), 뒤집은 feature...main은 main 쪽 변경을 보인다.
+            await Git(repo, "merge", "-q", "--no-ff", "-m", "merge", "feature");
+            Assert.Empty(GitLibReader.ReadRevisionFiles(repo, "main", "feature", true));
+            Assert.Equal(new[] { "M||main-only.txt" }, GitLibReader.ReadRevisionFiles(repo, "feature", "main", true).Select(Line).ToList());
+        }
+
+        [SkippableFact]
         public async Task Branches_MatchCli()
         {
             Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
