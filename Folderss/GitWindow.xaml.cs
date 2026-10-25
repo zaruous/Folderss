@@ -2573,7 +2573,7 @@ namespace Folderss
                 GitRefCommands.CreateBranch(dialog.BranchName, dialog.StartPoint, dialog.SwitchAfter), GitCommandRunner.QueryTimeout);
         }
 
-        // ── 로그: reset · revert · 브랜치 · 체크아웃 ──────────────────────────
+        // ── 로그: reset · 브랜치 · 체크아웃 ───────────────────────────────────
 
         private GitCommitInfo SelectedCommit => LogList.SelectedItem as GitCommitInfo;
 
@@ -2612,54 +2612,7 @@ namespace Folderss
                 });
         }
 
-        private async void LogRevert_Click(object sender, RoutedEventArgs e)
-        {
-            if (SelectedCommit != null)
-                await RevertCommitAsync(SelectedCommit.Hash);
-        }
-
-        /// <summary>커밋을 되돌리는 새 커밋(revert). 병합 여부는 로그 목록이 아닌 커밋을 다시 읽어 판단한다(목록 부모는 단순화됐을 수 있음).</summary>
-        private async Task RevertCommitAsync(string hash)
-        {
-            var row = SelectedRow;
-            var snapshot = row?.Snapshot;
-            if (snapshot == null)
-                return;
-            var commit = await ReadCommitAsync(row, hash);
-            if (commit == null || !ReferenceEquals(row, SelectedRow))
-                return;
-
-            var uncommitted = snapshot.Entries.Count(entry => !entry.IsUntracked);
-            var dialog = new GitRevertDialog(commit, snapshot.IsDetached ? "detached HEAD" : snapshot.Branch, uncommitted) { Owner = this };
-            if (dialog.ShowDialog() != true)
-                return;
-            if (!ConfirmNoUnsavedDocuments("revert"))
-                return;
-
-            await RunOnSelectedAsync("revert 중…", GitRefCommands.Revert(commit.Hash, commit.Parents.Length > 1, dialog.NoCommit), GitCommandRunner.QueryTimeout,
-                onDone: result =>
-                {
-                    if (!result.Success)
-                        AppendOutput("revert가 충돌로 멈췄다면 콘솔/IDE에서 해결한 뒤 커밋하거나 git revert --abort로 취소하세요 (git status로 확인).");
-                    else if (dialog.NoCommit)
-                        AppendOutput("되돌린 변경이 스테이지되었습니다. 메시지를 쓰고 커밋하세요.");
-                });
-        }
-
-        /// <summary>커밋 하나(부모·제목)를 읽는다. 실패하면 출력에 알리고 null.</summary>
-        private async Task<GitCommitInfo> ReadCommitAsync(RepositoryRow row, string hash)
-        {
-            var result = await GitCommandRunner.RunAsync(row.RootPath, new[] { "log", "-1", "-z", GitOutputParser.LogFormat, hash, "--" },
-                GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
-            if (!result.Success)
-            {
-                AppendResult(row.Info, result);
-                return null;
-            }
-            return GitOutputParser.ParseLog(result.StdOut).FirstOrDefault();
-        }
-
-        // ── 브랜치 우클릭: reset · revert ─────────────────────────────────────
+        // ── 브랜치 우클릭: reset ───────────────────────────────────────────────
 
         private void BranchList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
@@ -2671,27 +2624,15 @@ namespace Folderss
             }
             // 현재 브랜치로 reset은 HEAD를 옮기지 않는다(변경 버리기는 변경 탭에서).
             BranchResetMenuItem.IsEnabled = !branch.IsCurrent;
-            // revert는 현재 브랜치에 이미 들어 있는 커밋만(이 브랜치에만 있는 커밋 0개). 그 밖은 거꾸로 적용할 변경이 HEAD에 없어 충돌한다.
-            // Ahead는 브랜치 그래프를 읽은 뒤에 채워지므로 그 전에는 꺼 둔다.
-            BranchRevertMenuItem.IsEnabled = branch.IsCurrent || branch.Ahead == 0;
         }
 
         private async void BranchReset_Click(object sender, RoutedEventArgs e)
         {
-            var row = SelectedRow;
             var branch = BranchList.SelectedItem as GitBranchInfo;
-            if (row == null || branch == null || branch.IsCurrent || string.IsNullOrEmpty(branch.TipHash))
+            if (branch == null || branch.IsCurrent || string.IsNullOrEmpty(branch.TipHash))
                 return;
-            var commit = await ReadCommitAsync(row, branch.TipHash);
-            if (commit != null && ReferenceEquals(row, SelectedRow))
-                await ResetToCommitAsync(commit, branch.Behind ?? 0);
-        }
-
-        private async void BranchRevert_Click(object sender, RoutedEventArgs e)
-        {
-            var branch = BranchList.SelectedItem as GitBranchInfo;
-            if (branch != null && !string.IsNullOrEmpty(branch.TipHash) && (branch.IsCurrent || branch.Ahead == 0))
-                await RevertCommitAsync(branch.TipHash);
+            // 목록에 보이던 끝 커밋(해시)으로 옮긴다. Behind = 현재 HEAD에만 있는 커밋 수(그래프를 읽기 전이면 null).
+            await ResetToCommitAsync(new GitCommitInfo { Hash = branch.TipHash, Subject = branch.Subject }, branch.Behind ?? 0);
         }
 
         private async void LogBranch_Click(object sender, RoutedEventArgs e)

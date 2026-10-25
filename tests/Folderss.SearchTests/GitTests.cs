@@ -1386,44 +1386,6 @@ namespace Folderss.SearchTests
             Assert.Equal("one\n", File.ReadAllText(Path.Combine(hard, "f.txt")));
         }
 
-        [SkippableFact]
-        public async Task RealGit_Revert_AddsUndoCommit_NoCommitStages_AndMergeUsesFirstParent()
-        {
-            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
-
-            // 기본: 편집기 없이 되돌리는 새 커밋을 만든다(이력은 그대로).
-            var (repo, first, second) = await TwoCommitRepoAsync("revert-commit");
-            var result = await RunArgs(repo, GitRefCommands.Revert(second, isMerge: false, noCommit: false));
-            Assert.True(result.Success, result.StdErr);
-            var log = GitOutputParser.ParseLog((await Git(repo, "log", "-z", GitOutputParser.LogFormat)).StdOut);
-            Assert.Equal(3, log.Count);
-            Assert.Equal(second, log[0].Parents.Single());
-            Assert.Equal("one\n", File.ReadAllText(Path.Combine(repo, "f.txt")));
-            Assert.Empty((await StatusAsync(repo)).Entries);
-
-            // --no-commit: HEAD는 그대로, 되돌린 변경은 스테이지에 남는다.
-            var (staged, _, stagedSecond) = await TwoCommitRepoAsync("revert-nocommit");
-            Assert.True((await RunArgs(staged, GitRefCommands.Revert(stagedSecond, isMerge: false, noCommit: true))).Success);
-            var status = await StatusAsync(staged);
-            Assert.Equal(stagedSecond, status.HeadOid);
-            Assert.True(status.Entries.Single().IsStaged);
-
-            // 병합 커밋: -m 1 없이는 git이 거부하고, 있으면 병합으로 들어온 변경만 빠진다.
-            var (merged, _, _) = await TwoCommitRepoAsync("revert-merge");
-            await Git(merged, "switch", "-q", "-c", "topic");
-            File.WriteAllText(Path.Combine(merged, "t.txt"), "topic\n");
-            await CommitAllAsync(merged, "topic");
-            await Git(merged, "switch", "-q", "-");
-            File.WriteAllText(Path.Combine(merged, "m.txt"), "main\n");
-            await CommitAllAsync(merged, "main side");
-            Assert.True((await Git(merged, "merge", "--no-ff", "-q", "-m", "merge topic", "topic")).Success);
-            var mergeHash = GitOutputParser.ParseLog((await Git(merged, "log", "-1", "-z", GitOutputParser.LogFormat)).StdOut).Single().Hash;
-            Assert.False((await RunArgs(merged, GitRefCommands.Revert(mergeHash, isMerge: false, noCommit: false))).Success);
-            Assert.True((await RunArgs(merged, GitRefCommands.Revert(mergeHash, isMerge: true, noCommit: false))).Success);
-            Assert.False(File.Exists(Path.Combine(merged, "t.txt")));
-            Assert.True(File.Exists(Path.Combine(merged, "m.txt")));
-        }
-
         private static Task<GitResult> RestoreAsync(string repo, GitRestoreMode mode, System.Collections.Generic.IEnumerable<GitStatusEntry> targets) =>
             GitCommandRunner.RunAsync(repo, GitRestoreCommands.Arguments(mode), GitCommandRunner.QueryTimeout, CancellationToken.None,
                 standardInput: GitRestoreCommands.PathspecInput(targets));

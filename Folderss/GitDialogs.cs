@@ -170,28 +170,6 @@ namespace Folderss
         }
     }
 
-    /// <summary>revert: 커밋의 변경을 거꾸로 적용하는 새 커밋. 기본은 바로 커밋, 해제하면 변경만 스테이지(--no-commit).</summary>
-    public sealed class GitRevertDialog : GitDialogBase
-    {
-        private readonly CheckBox _commit;
-
-        public bool NoCommit => _commit.IsChecked != true;
-
-        public GitRevertDialog(GitCommitInfo target, string currentBranch, int uncommittedCount) : base("revert", 520)
-        {
-            AddText(string.Format("{0}에 {1} \"{2}\"의 변경을 거꾸로 적용합니다.", currentBranch ?? "현재 HEAD", target.ShortHash, target.Subject));
-            AddText("기존 커밋은 그대로 두고 되돌리는 커밋을 새로 더하므로, 이미 push한 커밋에도 안전합니다.", secondary: true, top: 4);
-            if (target.Parents.Length > 1)
-                AddText("병합 커밋입니다. 첫 번째 부모(병합받은 쪽) 기준으로, 병합으로 들어온 변경을 되돌립니다(-m 1).", secondary: true, top: 8);
-
-            _commit = AddCheck("바로 커밋 (해제하면 되돌린 변경을 스테이지만 함)", true);
-            if (uncommittedCount > 0)
-                AddText(string.Format("⚠ 커밋 안 한 변경이 {0}개 있습니다. 되돌릴 파일과 겹치면 git이 거부합니다.", uncommittedCount), warning: true, top: 10);
-            AddText("충돌이 나면 멈춥니다. 해결한 뒤 커밋하거나 git revert --abort로 취소하세요.", secondary: true, top: 12);
-            AddButtons("revert");
-        }
-    }
-
     /// <summary>새 브랜치: 이름, 시작점(현재 HEAD / 커밋 / 로컬·원격 브랜치), 만든 뒤 전환 여부.</summary>
     public sealed class GitBranchDialog : GitDialogBase
     {
