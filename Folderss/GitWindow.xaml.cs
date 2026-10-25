@@ -2612,18 +2612,34 @@ namespace Folderss
                 });
         }
 
-        // ── 브랜치 우클릭: reset ───────────────────────────────────────────────
+        // ── 브랜치 우클릭: reset · stash ───────────────────────────────────────
 
         private void BranchList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
         {
-            var branch = BranchList.SelectedItem as GitBranchInfo;
-            if (branch == null || string.IsNullOrEmpty(branch.TipHash) || _busyCount > 0)
+            if (SelectedRow?.Snapshot == null || _busyCount > 0)
             {
                 e.Handled = true;
                 return;
             }
             // 현재 브랜치로 reset은 HEAD를 옮기지 않는다(변경 버리기는 변경 탭에서).
-            BranchResetMenuItem.IsEnabled = !branch.IsCurrent;
+            var branch = BranchList.SelectedItem as GitBranchInfo;
+            BranchResetMenuItem.IsEnabled = branch != null && !branch.IsCurrent && !string.IsNullOrEmpty(branch.TipHash);
+            // stash는 브랜치 선택과 무관하게 현재 작업 트리 대상.
+            BranchStashPushMenuItem.IsEnabled = BranchStashNamedMenuItem.IsEnabled = SelectedRow.Snapshot.Entries.Count > 0;
+            var latest = LatestStash;
+            BranchStashPopMenuItem.IsEnabled = latest != null;
+            BranchStashPopMenuItem.Header = latest != null ? "pop (" + latest.Ref + ")" : "pop (stash 없음)";
+        }
+
+        /// <summary>가장 최근 stash(stash@{0}). stash 목록은 저장소를 고를 때 함께 읽는다.</summary>
+        private GitStashInfo LatestStash => (StashList.ItemsSource as List<GitStashInfo>)?.FirstOrDefault();
+
+        private async void BranchStashPop_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = LatestStash;
+            if (stash == null || !ConfirmNoUnsavedDocuments("stash 적용"))
+                return;
+            await RunStashApplyAsync(stash, GitStashApplyMode.Pop, false, null);
         }
 
         private async void BranchReset_Click(object sender, RoutedEventArgs e)

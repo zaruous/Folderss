@@ -544,6 +544,16 @@
                                     <ContextMenu>
                                         <MenuItem x:Name="BranchResetMenuItem" Header="현재 브랜치를 여기로 reset…" Click="BranchReset_Click"
                                                   ToolTip="현재 브랜치를 이 브랜치가 가리키는 커밋으로 옮깁니다 (soft / mixed / hard 선택)"/>
+                                        <Separator/>
+                                        <!-- stash는 브랜치와 상관없이 현재 작업 트리 대상. reset 전에 변경을 대피시키는 용도 -->
+                                        <MenuItem Header="stash">
+                                            <MenuItem x:Name="BranchStashPushMenuItem" Header="저장" Click="StashPush_Click"
+                                                      ToolTip="커밋 안 한 변경을 stash에 넣습니다 (이름은 git 기본: WIP on &lt;브랜치&gt;)"/>
+                                            <MenuItem x:Name="BranchStashPopMenuItem" Header="pop" Click="BranchStashPop_Click"
+                                                      ToolTip="가장 최근 stash를 적용하고 삭제합니다 (충돌하면 stash는 남음)"/>
+                                            <MenuItem x:Name="BranchStashNamedMenuItem" Header="이름 지어 저장…" Click="StashPushOptions_Click"
+                                                      ToolTip="메시지(이름)를 정해 stash에 넣습니다 (새 파일 포함 등 옵션)"/>
+                                        </MenuItem>
                                     </ContextMenu>
                                 </ListBox.ContextMenu>
                             </ListBox>
