@@ -2586,13 +2586,19 @@ namespace Folderss
 
         private async void LogReset_Click(object sender, RoutedEventArgs e)
         {
-            var commit = SelectedCommit;
+            if (SelectedCommit != null)
+                await ResetToCommitAsync(SelectedCommit, 0);
+        }
+
+        /// <param name="droppedCommits">대상에 없고 현재 HEAD에만 있는 커밋 수(대화상자 경고용).</param>
+        private async Task ResetToCommitAsync(GitCommitInfo commit, int droppedCommits)
+        {
             var snapshot = SelectedRow?.Snapshot;
-            if (commit == null || snapshot == null)
+            if (snapshot == null)
                 return;
 
             var uncommitted = snapshot.Entries.Count(entry => !entry.IsUntracked);
-            var dialog = new GitResetDialog(commit, snapshot.IsDetached ? "detached HEAD" : snapshot.Branch, uncommitted) { Owner = this };
+            var dialog = new GitResetDialog(commit, snapshot.IsDetached ? "detached HEAD" : snapshot.Branch, uncommitted, droppedCommits) { Owner = this };
             if (dialog.ShowDialog() != true)
                 return;
             if (dialog.Mode == GitResetMode.Hard && !ConfirmNoUnsavedDocuments("hard reset"))
@@ -2604,6 +2610,45 @@ namespace Folderss
                     if (result.Success)
                         AppendOutput("되돌린 커밋은 git reflog로 찾을 수 있습니다. 이전 위치로 돌아가려면 reflog의 해시로 다시 reset하세요.");
                 });
+        }
+
+        // ── 브랜치 우클릭: reset · stash ───────────────────────────────────────
+
+        private void BranchList_ContextMenuOpening(object sender, ContextMenuEventArgs e)
+        {
+            if (SelectedRow?.Snapshot == null || _busyCount > 0)
+            {
+                e.Handled = true;
+                return;
+            }
+            // 현재 브랜치로 reset은 HEAD를 옮기지 않는다(변경 버리기는 변경 탭에서).
+            var branch = BranchList.SelectedItem as GitBranchInfo;
+            BranchResetMenuItem.IsEnabled = branch != null && !branch.IsCurrent && !string.IsNullOrEmpty(branch.TipHash);
+            // stash는 브랜치 선택과 무관하게 현재 작업 트리 대상.
+            BranchStashPushMenuItem.IsEnabled = BranchStashNamedMenuItem.IsEnabled = SelectedRow.Snapshot.Entries.Count > 0;
+            var latest = LatestStash;
+            BranchStashPopMenuItem.IsEnabled = latest != null;
+            BranchStashPopMenuItem.Header = latest != null ? "pop (" + latest.Ref + ")" : "pop (stash 없음)";
+        }
+
+        /// <summary>가장 최근 stash(stash@{0}). stash 목록은 저장소를 고를 때 함께 읽는다.</summary>
+        private GitStashInfo LatestStash => (StashList.ItemsSource as List<GitStashInfo>)?.FirstOrDefault();
+
+        private async void BranchStashPop_Click(object sender, RoutedEventArgs e)
+        {
+            var stash = LatestStash;
+            if (stash == null || !ConfirmNoUnsavedDocuments("stash 적용"))
+                return;
+            await RunStashApplyAsync(stash, GitStashApplyMode.Pop, false, null);
+        }
+
+        private async void BranchReset_Click(object sender, RoutedEventArgs e)
+        {
+            var branch = BranchList.SelectedItem as GitBranchInfo;
+            if (branch == null || branch.IsCurrent || string.IsNullOrEmpty(branch.TipHash))
+                return;
+            // 목록에 보이던 끝 커밋(해시)으로 옮긴다. Behind = 현재 HEAD에만 있는 커밋 수(그래프를 읽기 전이면 null).
+            await ResetToCommitAsync(new GitCommitInfo { Hash = branch.TipHash, Subject = branch.Subject }, branch.Behind ?? 0);
         }
 
         private async void LogBranch_Click(object sender, RoutedEventArgs e)
