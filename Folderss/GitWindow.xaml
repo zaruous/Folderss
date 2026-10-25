@@ -519,52 +519,119 @@
                                   Click="BranchRemoteToggle_Click"
                                   ToolTip="원격 브랜치도 목록과 그래프에 보입니다. 원격 브랜치는 마지막 fetch 때의 상태입니다"/>
                     </StackPanel>
-                    <!-- 왼쪽 브랜치 목록(버튼 대상), 오른쪽 요약 그래프(브랜치 끝·갈라진 지점만, 보기 전용) -->
                     <Grid Margin="0,4,0,0">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="300" MinWidth="120"/>
-                            <ColumnDefinition Width="5"/>
-                            <ColumnDefinition Width="*" MinWidth="200"/>
-                        </Grid.ColumnDefinitions>
-                        <ListBox x:Name="BranchList"
-                                 FontFamily="Consolas"
-                                 DisplayMemberPath="DisplayText"
-                                 SelectionChanged="BranchList_SelectionChanged"
-                                 PreviewKeyDown="RowCopy_PreviewKeyDown"
-                                 MouseDoubleClick="BranchList_MouseDoubleClick"
-                                 ToolTip="↑ 이 브랜치에만 있는 커밋 수, ↓ 현재 브랜치에만 있는 커밋 수"/>
-                        <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>
-                        <ListView x:Name="BranchGraphList" Grid.Column="2"
-                                  SelectionMode="Single"
-                                  PreviewKeyDown="RowCopy_PreviewKeyDown"
-                                  VirtualizingPanel.IsVirtualizing="True"
-                                  VirtualizingPanel.VirtualizationMode="Recycling">
-                            <!-- 로그 목록과 같이 행 높이를 고정해 그래프 선이 이어지게 한다. -->
-                            <ListView.ItemContainerStyle>
-                                <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
-                                    <Setter Property="Height" Value="22"/>
-                                    <Setter Property="MinHeight" Value="0"/>
-                                    <Setter Property="Padding" Value="0"/>
-                                    <Setter Property="Margin" Value="0"/>
-                                    <Setter Property="BorderThickness" Value="0"/>
-                                    <Setter Property="VerticalContentAlignment" Value="Stretch"/>
-                                </Style>
-                            </ListView.ItemContainerStyle>
-                            <ListView.View>
-                                <GridView>
-                                    <GridViewColumn x:Name="BranchGraphColumn" Header="그래프" Width="40">
-                                        <GridViewColumn.CellTemplate>
-                                            <DataTemplate>
-                                                <controls:GitGraphCell Row="{Binding Graph}" Margin="-6,0,-6,0" VerticalAlignment="Stretch"/>
-                                            </DataTemplate>
-                                        </GridViewColumn.CellTemplate>
-                                    </GridViewColumn>
-                                    <GridViewColumn Header="브랜치" Width="200" DisplayMemberBinding="{Binding Refs}"/>
-                                    <GridViewColumn Header="제목" Width="320" DisplayMemberBinding="{Binding Subject}"/>
-                                    <GridViewColumn Header="날짜" Width="130" DisplayMemberBinding="{Binding TimeText}"/>
-                                </GridView>
-                            </ListView.View>
-                        </ListView>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="*" MinHeight="80"/>
+                            <RowDefinition Height="5"/>
+                            <RowDefinition Height="*" MinHeight="80"/>
+                        </Grid.RowDefinitions>
+                        <!-- 위: 왼쪽 브랜치 목록(버튼 대상), 오른쪽 요약 그래프(브랜치 끝·갈라진 지점만, 보기 전용) -->
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="300" MinWidth="120"/>
+                                <ColumnDefinition Width="5"/>
+                                <ColumnDefinition Width="*" MinWidth="200"/>
+                            </Grid.ColumnDefinitions>
+                            <ListBox x:Name="BranchList"
+                                     FontFamily="Consolas"
+                                     DisplayMemberPath="DisplayText"
+                                     SelectionChanged="BranchList_SelectionChanged"
+                                     PreviewKeyDown="RowCopy_PreviewKeyDown"
+                                     MouseDoubleClick="BranchList_MouseDoubleClick"
+                                     ToolTip="↑ 이 브랜치에만 있는 커밋 수, ↓ 현재 브랜치에만 있는 커밋 수"/>
+                            <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>
+                            <ListView x:Name="BranchGraphList" Grid.Column="2"
+                                      SelectionMode="Single"
+                                      PreviewKeyDown="RowCopy_PreviewKeyDown"
+                                      VirtualizingPanel.IsVirtualizing="True"
+                                      VirtualizingPanel.VirtualizationMode="Recycling">
+                                <!-- 로그 목록과 같이 행 높이를 고정해 그래프 선이 이어지게 한다. -->
+                                <ListView.ItemContainerStyle>
+                                    <Style TargetType="ListViewItem" BasedOn="{StaticResource {x:Type ListViewItem}}">
+                                        <Setter Property="Height" Value="22"/>
+                                        <Setter Property="MinHeight" Value="0"/>
+                                        <Setter Property="Padding" Value="0"/>
+                                        <Setter Property="Margin" Value="0"/>
+                                        <Setter Property="BorderThickness" Value="0"/>
+                                        <Setter Property="VerticalContentAlignment" Value="Stretch"/>
+                                    </Style>
+                                </ListView.ItemContainerStyle>
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn x:Name="BranchGraphColumn" Header="그래프" Width="40">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <controls:GitGraphCell Row="{Binding Graph}" Margin="-6,0,-6,0" VerticalAlignment="Stretch"/>
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
+                                        <GridViewColumn Header="브랜치" Width="200" DisplayMemberBinding="{Binding Refs}"/>
+                                        <GridViewColumn Header="제목" Width="320" DisplayMemberBinding="{Binding Subject}"/>
+                                        <GridViewColumn Header="날짜" Width="130" DisplayMemberBinding="{Binding TimeText}"/>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+                        </Grid>
+                        <GridSplitter Grid.Row="1" Height="5" HorizontalAlignment="Stretch" Background="Transparent"/>
+                        <!-- 아래: 기준 브랜치(기본 현재) ↔ 목록에서 고른 브랜치의 바뀐 파일 목록(트리 보기 가능)과 고른 파일 하나의 diff -->
+                        <DockPanel Grid.Row="2" Margin="0,4,0,0">
+                            <StackPanel DockPanel.Dock="Top" Orientation="Horizontal" Margin="2,0,0,4">
+                                <TextBlock Text="기준" VerticalAlignment="Center" Margin="0,0,6,0"/>
+                                <ComboBox x:Name="BranchCompareBaseCombo" Width="200"
+                                          DisplayMemberPath="Name"
+                                          SelectionChanged="BranchCompare_SelectionChanged"
+                                          ToolTip="비교 기준 브랜치 (기본: 현재 브랜치)"/>
+                                <Button x:Name="BranchCompareSwapButton" Content="⇄" Margin="6,0" Padding="8,0" Click="BranchCompareSwap_Click"
+                                        ToolTip="비교 방향을 뒤집습니다 (기준 쪽의 변경 보기). 목록 선택·버튼 대상은 바뀌지 않습니다"/>
+                                <TextBlock x:Name="BranchCompareTargetText" VerticalAlignment="Center" FontWeight="SemiBold"
+                                           Text="(목록에서 브랜치 선택)"/>
+                                <ComboBox x:Name="BranchCompareModeCombo" Width="220" Margin="12,0,0,0" SelectedIndex="0"
+                                          SelectionChanged="BranchCompare_SelectionChanged">
+                                    <ComboBoxItem ToolTip="git diff 기준...대상 — 두 브랜치가 갈라진 지점부터 대상 브랜치에서 바뀐 파일 (기준 쪽 변경은 빠짐)">갈라진 뒤 대상의 변경</ComboBoxItem>
+                                    <ComboBoxItem ToolTip="git diff 기준 대상 — 두 브랜치 끝의 파일 내용 차이 (양쪽 변경이 모두 보임)">두 브랜치 끝 비교</ComboBoxItem>
+                                </ComboBox>
+                            </StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="280" MinWidth="120"/>
+                                    <ColumnDefinition Width="5"/>
+                                    <ColumnDefinition Width="*" MinWidth="200"/>
+                                </Grid.ColumnDefinitions>
+                                <DockPanel>
+                                    <DockPanel DockPanel.Dock="Top" Margin="2,0,0,4">
+                                        <CheckBox x:Name="BranchFilesTreeToggle" DockPanel.Dock="Right"
+                                                  VerticalAlignment="Center"
+                                                  Content="트리로 보기"
+                                                  Foreground="{DynamicResource PrimaryText}"
+                                                  Click="BranchFilesTreeToggle_Click"
+                                                  ToolTip="바뀐 파일을 폴더별로 묶어 봅니다"/>
+                                        <CheckBox x:Name="BranchFilesDiffToggle" DockPanel.Dock="Right" Margin="0,0,10,0"
+                                                  VerticalAlignment="Center"
+                                                  Content="diff 보기"
+                                                  Foreground="{DynamicResource PrimaryText}"
+                                                  Click="BranchFilesDiffToggle_Click"
+                                                  ToolTip="끄면 고른 파일의 비교 대상 쪽 코드 내용, 켜면 변경(diff)을 봅니다"/>
+                                        <TextBlock x:Name="BranchFilesHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="파일"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                    </DockPanel>
+                                    <Grid>
+                                        <ListBox x:Name="BranchFileList"
+                                                 FontFamily="Consolas"
+                                                 ItemTemplate="{StaticResource GitEntryTemplate}"
+                                                 SelectionChanged="BranchFileList_SelectionChanged"
+                                                 PreviewKeyDown="LogFileCopy_PreviewKeyDown"
+                                                 ToolTip="Ctrl+C: 파일 이름 복사, Ctrl+Shift+C: 전체 경로 복사"/>
+                                        <TreeView x:Name="BranchFileTree"
+                                                  Visibility="Collapsed"
+                                                  Style="{StaticResource GitChangeTreeStyle}"
+                                                  SelectedItemChanged="BranchFileTree_SelectedItemChanged"
+                                                  PreviewKeyDown="LogFileCopy_PreviewKeyDown"/>
+                                    </Grid>
+                                </DockPanel>
+                                <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>
+                                <controls:GitDiffView x:Name="BranchDiff" Grid.Column="2"/>
+                            </Grid>
+                        </DockPanel>
                     </Grid>
                 </DockPanel>
 
@@ -752,6 +819,12 @@
                                           Foreground="{DynamicResource PrimaryText}"
                                           Click="LogFilesTreeToggle_Click"
                                           ToolTip="커밋에서 바뀐 파일을 폴더별로 묶어 봅니다"/>
+                                <CheckBox x:Name="LogFilesDiffToggle" DockPanel.Dock="Right" Margin="0,0,10,0"
+                                          VerticalAlignment="Center"
+                                          Content="diff 보기"
+                                          Foreground="{DynamicResource PrimaryText}"
+                                          Click="LogFilesDiffToggle_Click"
+                                          ToolTip="끄면 고른 파일의 그 커밋 시점 코드 내용, 켜면 변경(diff)을 봅니다"/>
                                 <TextBlock x:Name="LogFilesHeader" VerticalAlignment="Center" FontWeight="SemiBold" Text="파일"
                                            TextTrimming="CharacterEllipsis"/>
                             </DockPanel>

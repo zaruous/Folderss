@@ -267,6 +267,41 @@ namespace Folderss.Services
             };
         }
 
+        /// <summary>
+        /// 두 리비전(브랜치 끝 해시 등) 사이에서 바뀐 파일 목록(<see cref="GitOutputParser.ParseNameStatus"/>와 짝).
+        /// <paramref name="sinceMergeBase"/>가 true면 <c>A...B</c>(갈라진 지점 ↔ B — B 쪽에서만 바뀐 것), false면 <c>A B</c>(두 끝의 차이).
+        /// </summary>
+        public static List<string> RevisionFiles(string from, string to, bool sinceMergeBase)
+        {
+            var args = new List<string> { "diff", "--no-color", "--no-ext-diff", "-M", "-z", "--name-status" };
+            args.AddRange(RevisionSelector(from, to, sinceMergeBase));
+            args.Add("--");
+            return args;
+        }
+
+        /// <summary><see cref="RevisionFiles"/>의 파일 하나 diff. 이름 변경은 원래 경로도 넣어야 짝이 맞는다.</summary>
+        public static GitDiffRequest RevisionFile(string from, string to, bool sinceMergeBase, string path, string originalPath, bool ignoreWhitespace = false)
+        {
+            var paths = new[] { originalPath, path }.Where(p => !string.IsNullOrEmpty(p)).ToList();
+            var selector = RevisionSelector(from, to, sinceMergeBase);
+            selector.AddRange(PathSelector(paths.ToArray()));
+            return new GitDiffRequest
+            {
+                Arguments = Diff(ignoreWhitespace, new string[0], selector),
+                ExternalSelector = selector,
+                OldSide = sinceMergeBase ? null : from,
+                OldSideMergeBaseOf = sinceMergeBase ? new[] { from, to } : null,
+                NewSide = to,
+                Paths = paths,
+                IgnoreWhitespace = ignoreWhitespace
+            };
+        }
+
+        private static List<string> RevisionSelector(string from, string to, bool sinceMergeBase)
+        {
+            return sinceMergeBase ? new List<string> { from + "..." + to } : new List<string> { from, to };
+        }
+
         /// <summary><c>&lt;from&gt;..&lt;to&gt;</c> 범위 커밋 목록(<see cref="GitOutputParser.ParseLog"/>와 짝).</summary>
         public static List<string> LogRange(string from, string to, int limit)
         {

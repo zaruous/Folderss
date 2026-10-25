@@ -121,7 +121,7 @@ namespace Folderss
             GitCommandRunner.ConfiguredGitPath = _settings.GitExecutablePath;
             ApplyWindowState(GitWindowStateService.Load());
 
-            foreach (var view in new[] { ChangesDiff, RemoteDiff, LogDiff, StashDiff })
+            foreach (var view in new[] { ChangesDiff, RemoteDiff, LogDiff, StashDiff, BranchDiff })
             {
                 view.ExternalToolRequested += DiffView_ExternalToolRequested;
                 view.ViewModeChanged += DiffView_ViewModeChanged;
@@ -688,6 +688,10 @@ namespace Folderss
             BranchList.ItemsSource = null;
             BranchGraphList.ItemsSource = null;
             _branchGraphRow = null;
+            _fillingBranchBases = true;
+            BranchCompareBaseCombo.ItemsSource = null;
+            _fillingBranchBases = false;
+            ClearBranchFiles(BranchFilesHint);
             WorktreeList.ItemsSource = null;
             _worktrees = new List<GitWorktreeInfo>();
             StashList.ItemsSource = null;
@@ -1414,11 +1418,7 @@ namespace Folderss
                         return (new List<GitDiffLine>(), "작업 트리에 파일이 없습니다.");
                     if (new FileInfo(full).Length > MaxPreviewBytes)
                         return (new List<GitDiffLine>(), "파일이 너무 커서(10MB 초과) 미리 보지 않습니다. 더블클릭해 여세요.");
-                    var bytes = File.ReadAllBytes(full);
-                    // NUL이 있는데 UTF-16/32 BOM이 아니면 바이너리로 본다(git과 같은 기준: 앞 8000바이트).
-                    if (!GitTextDecoder.HasWideBom(bytes) && Array.IndexOf(bytes, (byte)0, 0, Math.Min(bytes.Length, 8000)) >= 0)
-                        return (new List<GitDiffLine>(), "바이너리 파일입니다.");
-                    return (GitOutputParser.ContentLines(GitTextDecoder.DecodeFile(bytes, fallback), GitDiffView.MaxLines), "빈 파일입니다.");
+                    return PreviewLines(File.ReadAllBytes(full), fallback);
                 });
 
                 // 기다리는 사이 다른 항목을 골랐으면 버린다.
@@ -1602,7 +1602,7 @@ namespace Folderss
                 var basis = commit.Parents.Length == 0 ? "최초 커밋" : commit.Parents.Length > 1 ? "병합 커밋 — 첫 부모 기준" : null;
                 LogFilesHeader.Text = string.Format("파일 {0}{1}", entries.Count, basis == null ? string.Empty : " (" + basis + ")");
                 LogFilesHeader.ToolTip = GitStatusEntry.Summarize(entries);
-                LogDiff.Clear(entries.Count == 0 ? "바뀐 파일이 없습니다." : "파일을 선택하면 차이를 보여 줍니다.");
+                LogDiff.Clear(entries.Count == 0 ? "바뀐 파일이 없습니다." : "파일을 선택하면 내용을 보여 줍니다.");
             }
             catch (OperationCanceledException)
             {
@@ -1617,7 +1617,7 @@ namespace Folderss
             // 두 보기의 선택은 따로라, 전환하면 diff가 어느 선택의 것인지 헷갈리지 않게 비운다.
             LogFileList.UnselectAll();
             if (_logFilesCommit != null)
-                LogDiff.Clear("파일을 선택하면 차이를 보여 줍니다.");
+                LogDiff.Clear("파일을 선택하면 내용을 보여 줍니다.");
         }
 
         private async void LogFileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -1640,7 +1640,7 @@ namespace Folderss
         }
 
         /// <summary>
-        /// 로그 파일 목록·트리: Ctrl+C는 이름, Ctrl+Shift+C는 전체 경로를 텍스트로만 복사한다(트리 폴더는 폴더 자신).
+        /// 로그·브랜치 비교 파일 목록·트리: Ctrl+C는 이름, Ctrl+Shift+C는 전체 경로를 텍스트로만 복사한다(트리 폴더는 폴더 자신).
         /// 변경 사항 탭과 달리 파일 복사(FileDrop)는 하지 않는다 — 작업 트리 파일은 그 커밋의 내용이 아니기 때문.
         /// </summary>
         private void LogFileCopy_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1649,21 +1649,105 @@ namespace Folderss
             if (e.Key != Key.C || (modifiers != ModifierKeys.Control && modifiers != (ModifierKeys.Control | ModifierKeys.Shift)))
                 return;
             var root = SelectedRow?.RootPath;
-            var path = ReferenceEquals(sender, LogFileTree) ? (LogFileTree.SelectedItem as GitChangeNode)?.Path : (LogFileList.SelectedItem as GitStatusEntry)?.Path;
+            var path = sender is TreeView tree ? (tree.SelectedItem as GitChangeNode)?.Path : ((sender as ListBox)?.SelectedItem as GitStatusEntry)?.Path;
             if (root == null || string.IsNullOrEmpty(path))
                 return;
             e.Handled = true;
             ClipboardService.TrySetDataObject(GitChangeTree.ClipboardText(new[] { path }, root, fullPath: modifiers.HasFlag(ModifierKeys.Shift)));
         }
 
+        /// <summary>고른 파일을 보인다: 기본은 그 커밋 시점 코드 내용, <c>diff 보기</c>를 켜면 변경.</summary>
         private Task ShowCommitFileDiffAsync(GitStatusEntry entry)
         {
             var commit = _logFilesCommit;
             if (commit == null)
                 return Task.CompletedTask;
             var title = string.Format("{0}  {1}: {2}", commit.ShortHash, entry.StatusLabel, entry.PathText);
+            if (LogFilesDiffToggle.IsChecked != true)
+                return ShowRevisionContentAsync(LogDiff, commit.Hash, entry, title + "  — 코드");
             return LoadDiffAsync(LogDiff, WithTitle(GitDiffCommands.CommitFile(commit.Hash, commit.Parents, entry.Path, entry.OriginalPath,
                 _diff.IgnoreWhitespace), title));
+        }
+
+        private async void LogFilesDiffToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var entry = SelectedFileEntry(LogFilesTreeToggle, LogFileList, LogFileTree);
+            if (entry != null)
+                await ShowCommitFileDiffAsync(entry);
+        }
+
+        // ── 로그·브랜치 비교 파일: 리비전 시점 코드 내용 ────────────────────────
+
+        /// <summary>파일 목록(평면) 또는 트리에서 고른 파일. 트리의 폴더면 null.</summary>
+        private static GitStatusEntry SelectedFileEntry(CheckBox treeToggle, ListBox list, TreeView tree)
+        {
+            return treeToggle.IsChecked == true
+                ? (tree.SelectedItem as GitChangeNode) is GitChangeNode node && !node.IsFolder ? node.Entry : null
+                : list.SelectedItem as GitStatusEntry;
+        }
+
+        /// <summary>
+        /// <paramref name="revision"/> 시점의 파일 내용을 줄 번호와 함께 보인다(BOM 규칙으로 디코딩, 10MB 초과·바이너리는 안내만).
+        /// 내용은 git에 저장된 그대로다(core.autocrlf 등 체크아웃 변환 없음). 삭제된 파일은 내용이 없으므로 diff 보기를 안내한다.
+        /// </summary>
+        private async Task ShowRevisionContentAsync(GitDiffView view, string revision, GitStatusEntry entry, string title)
+        {
+            var row = SelectedRow;
+            if (row == null)
+                return;
+            if (entry.Kind == GitChangeKind.Deleted)
+            {
+                view.ShowLines(title, new List<GitDiffLine>(), "삭제된 파일입니다. 'diff 보기'를 켜면 이전 내용을 볼 수 있습니다.");
+                return;
+            }
+
+            view.ShowLines(title, new List<GitDiffLine>(), "불러오는 중…");
+            // 읽는 사이 다른 파일·커밋·폴더를 고르거나 diff로 바꾸면 이 번호가 바뀐다 → 늦게 온 내용은 버린다.
+            var id = view.CurrentRequestId;
+            try
+            {
+                var lib = await ReadLibAsync(row, "파일 내용", () => GitLibReader.ReadBlob(row.RootPath, revision, entry.Path, MaxPreviewBytes));
+                var (found, bytes) = lib.Ok ? lib.Value : await ReadBlobCliAsync(row, revision, entry.Path);
+                var fallback = ResolveFallbackEncoding();
+                var (lines, message) = !found ? (new List<GitDiffLine>(), "이 리비전에서 파일을 찾지 못했습니다.")
+                    : bytes == null ? (new List<GitDiffLine>(), "파일이 너무 커서(10MB 초과) 미리 보지 않습니다.")
+                    : await Task.Run(() => PreviewLines(bytes, fallback));
+                if (view.CurrentRequestId == id)
+                    view.ShowLines(title, lines, message);
+            }
+            catch (OperationCanceledException)
+            {
+            }
+            catch (Exception ex)
+            {
+                // async void 이벤트에서 부르므로 여기서 막는다.
+                if (view.CurrentRequestId == id)
+                    view.ShowLines(title, new List<GitDiffLine>(), "내용을 읽지 못했습니다: " + ex.Message);
+            }
+        }
+
+        /// <summary><see cref="GitLibReader.ReadBlob"/>의 git CLI 대체(<c>cat-file -s</c>로 크기 확인 후 <c>cat-file blob</c>). 크기 조회 실패는 파일 없음으로 본다.</summary>
+        private async Task<(bool Found, byte[] Bytes)> ReadBlobCliAsync(RepositoryRow row, string revision, string path)
+        {
+            var spec = revision + ":" + path;
+            var size = await GitCommandRunner.RunAsync(row.RootPath, new[] { "cat-file", "-s", spec }, GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+            if (!size.Success)
+                return (false, null);
+            if (!long.TryParse(size.StdOut.Trim(), out var length) || length > MaxPreviewBytes)
+                return (true, null);
+            var blob = await GitCommandRunner.RunAsync(row.RootPath, new[] { "cat-file", "blob", spec }, GitCommandRunner.QueryTimeout, _lifetime.Token,
+                readOnly: true, rawOutput: true);
+            if (!blob.Success)
+                throw new InvalidOperationException(FirstLine(blob.StdErr) ?? "cat-file 실패");
+            return (true, blob.StdOutBytes);
+        }
+
+        /// <summary>파일 바이트를 줄 목록으로. NUL이 있는데 UTF-16/32 BOM이 아니면 바이너리로 본다(git과 같은 기준: 앞 8000바이트).</summary>
+        private static (List<GitDiffLine> Lines, string Message) PreviewLines(byte[] bytes, Encoding fallback)
+        {
+            if (!GitTextDecoder.HasWideBom(bytes) && Array.IndexOf(bytes, (byte)0, 0, Math.Min(bytes.Length, 8000)) >= 0)
+                return (new List<GitDiffLine>(), "바이너리 파일입니다.");
+            return (GitOutputParser.ContentLines(GitTextDecoder.DecodeFile(bytes, fallback), GitDiffView.MaxLines), "빈 파일입니다.");
         }
 
         private async void RemoteCommitList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -2132,6 +2216,7 @@ namespace Folderss
         {
             var showRemote = BranchRemoteToggle.IsChecked == true;
             BranchList.ItemsSource = _branches.Where(b => showRemote || !b.IsRemote).ToList();
+            ShowBranchCompareBases();
         }
 
         private void BranchRemoteToggle_Click(object sender, RoutedEventArgs e)
@@ -2242,9 +2327,10 @@ namespace Folderss
             SelectBranchInGraph();
         }
 
-        private void BranchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        private async void BranchList_SelectionChanged(object sender, SelectionChangedEventArgs e)
         {
             SelectBranchInGraph();
+            await LoadBranchFilesAsync();
         }
 
         /// <summary>목록에서 고른 브랜치의 끝 커밋을 그래프에서 선택해 보이게 한다.</summary>
@@ -2256,6 +2342,183 @@ namespace Folderss
             BranchGraphList.SelectedItem = target;
             if (target != null)
                 BranchGraphList.ScrollIntoView(target);
+        }
+
+        // ── 브랜치 비교: 기준 브랜치 ↔ 목록에서 고른 브랜치의 파일 목록 → 고른 파일 하나의 diff ──
+
+        private const string BranchFilesHint = "브랜치를 선택하면 기준 브랜치와 비교해 바뀐 파일을 보여 줍니다.";
+
+        /// <summary>사용자가 기준으로 고른 현재가 아닌 브랜치 이름과 그 저장소. null이면 현재 브랜치를 따라간다. 상세를 다시 읽어도(ClearDetail) 유지.</summary>
+        private string _branchBaseChoice;
+        private RepositoryRow _branchBaseRow;
+
+        /// <summary>
+        /// true면 비교 방향을 뒤집는다(대상 → 기준). 목록 선택(버튼 대상)을 바꾸지 않으려고 콤보·목록은 그대로 두고 비교만 뒤집는다 —
+        /// 기준이 목록에 없는 원격 브랜치·detached HEAD여도 된다.
+        /// </summary>
+        private bool _branchCompareReversed;
+
+        /// <summary>코드로 기준 콤보를 채우는 중 — 사용자 선택으로 기록하지 않는다.</summary>
+        private bool _fillingBranchBases;
+
+        /// <summary>파일 목록이 보이고 있는 비교(기준 해시, 대상 해시, 갈라진 지점부터 여부, 제목용 이름). 파일을 고르면 이 기준으로 diff를 만든다.</summary>
+        private (string From, string To, bool SinceMergeBase, string Label)? _branchFiles;
+
+        /// <summary>
+        /// 기준 후보: 모든 브랜치(원격 포함, 목록 필터와 무관) + detached HEAD. 같은 저장소에서 현재가 아닌 브랜치를 기준으로 골라 뒀으면 이름으로 유지하고,
+        /// 아니면 현재 브랜치 — 브랜치를 전환하면 기준도 새 현재 브랜치를 따라간다.
+        /// </summary>
+        private void ShowBranchCompareBases()
+        {
+            var row = SelectedRow;
+            var previous = ReferenceEquals(row, _branchBaseRow) ? _branchBaseChoice : null;
+            var bases = new List<GitBranchInfo>();
+            if (row?.Snapshot != null && row.Snapshot.IsDetached && row.Snapshot.HeadOid != null)
+                bases.Add(new GitBranchInfo { Name = "HEAD (detached)", TipHash = row.Snapshot.HeadOid, IsCurrent = true });
+            bases.AddRange(_branches);
+            _fillingBranchBases = true;
+            BranchCompareBaseCombo.ItemsSource = bases;
+            BranchCompareBaseCombo.SelectedItem = bases.FirstOrDefault(b => b.Name == previous) ?? bases.FirstOrDefault(b => b.IsCurrent);
+            _fillingBranchBases = false;
+        }
+
+        private async void BranchCompare_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (!IsLoaded || _fillingBranchBases)
+                return;
+            if (ReferenceEquals(sender, BranchCompareBaseCombo))
+            {
+                var selected = BranchCompareBaseCombo.SelectedItem as GitBranchInfo;
+                _branchBaseChoice = selected != null && !selected.IsCurrent ? selected.Name : null;
+                _branchBaseRow = SelectedRow;
+            }
+            await LoadBranchFilesAsync();
+        }
+
+        private async void BranchCompareSwap_Click(object sender, RoutedEventArgs e)
+        {
+            _branchCompareReversed = !_branchCompareReversed;
+            BranchCompareSwapButton.Content = _branchCompareReversed ? "⇄ 반대" : "⇄";
+            await LoadBranchFilesAsync();
+        }
+
+        private void ClearBranchFiles(string diffMessage)
+        {
+            _branchFiles = null;
+            BranchFileList.ItemsSource = null;
+            BranchFileTree.ItemsSource = null;
+            BranchFilesHeader.Text = "파일";
+            BranchFilesHeader.ToolTip = null;
+            BranchDiff.Clear(diffMessage);
+        }
+
+        private async Task LoadBranchFilesAsync()
+        {
+            var row = SelectedRow;
+            var target = BranchList.SelectedItem as GitBranchInfo;
+            var baseBranch = BranchCompareBaseCombo.SelectedItem as GitBranchInfo;
+            var sinceMergeBase = BranchCompareModeCombo.SelectedIndex != 1;
+            var reversed = _branchCompareReversed;
+            BranchCompareTargetText.Text = target?.Name ?? "(목록에서 브랜치 선택)";
+            ClearBranchFiles(BranchFilesHint);
+            if (row == null || target == null || baseBranch == null)
+                return;
+            if (string.IsNullOrEmpty(target.TipHash) || string.IsNullOrEmpty(baseBranch.TipHash))
+            {
+                BranchDiff.Clear("커밋을 가리키지 않는 브랜치입니다.");
+                return;
+            }
+            if (target.TipHash == baseBranch.TipHash)
+            {
+                BranchDiff.Clear(string.Format("'{0}'과(와) '{1}'은(는) 같은 커밋을 가리킵니다.", baseBranch.Name, target.Name));
+                return;
+            }
+
+            BranchFilesHeader.Text = "파일 (불러오는 중…)";
+            try
+            {
+                var (fromBranch, toBranch) = reversed ? (target, baseBranch) : (baseBranch, target);
+                var from = fromBranch.TipHash;
+                var to = toBranch.TipHash;
+                var lib = await ReadLibAsync(row, "브랜치 비교 파일 목록", () => GitLibReader.ReadRevisionFiles(row.RootPath, from, to, sinceMergeBase));
+                var result = lib.Ok
+                    ? null
+                    : await GitCommandRunner.RunAsync(row.RootPath, GitDiffCommands.RevisionFiles(from, to, sinceMergeBase),
+                        GitCommandRunner.QueryTimeout, _lifetime.Token, readOnly: true);
+                // 기다리는 사이 저장소·대상·기준·방식이 바뀌었으면 버린다(바뀐 쪽이 다시 읽는다).
+                if (!ReferenceEquals(row, SelectedRow) || !ReferenceEquals(target, BranchList.SelectedItem)
+                    || !ReferenceEquals(baseBranch, BranchCompareBaseCombo.SelectedItem) || sinceMergeBase != (BranchCompareModeCombo.SelectedIndex != 1)
+                    || reversed != _branchCompareReversed)
+                    return;
+                if (!lib.Ok && !result.Success)
+                {
+                    BranchFilesHeader.Text = "파일 (읽지 못함)";
+                    AppendResult(row.Info, result);
+                    return;
+                }
+
+                var entries = lib.Ok ? lib.Value : GitOutputParser.ParseNameStatus(result.StdOut);
+                var label = fromBranch.Name + (sinceMergeBase ? " ... " : " → ") + toBranch.Name;
+                _branchFiles = (from, to, sinceMergeBase, label);
+                BranchFileList.ItemsSource = entries;
+                BranchFileTree.ItemsSource = GitChangeTree.Build(entries);
+                // 방향을 뒤집을 수 있어 어느 쪽의 변경인지 제목에 늘 보인다.
+                BranchFilesHeader.Text = string.Format("파일 {0}  ({1})", entries.Count, label);
+                BranchFilesHeader.ToolTip = GitStatusEntry.Summarize(entries);
+                BranchDiff.Clear(entries.Count == 0 ? "바뀐 파일이 없습니다." : "파일을 선택하면 내용을 보여 줍니다.");
+            }
+            catch (OperationCanceledException)
+            {
+            }
+        }
+
+        private void BranchFilesTreeToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var tree = BranchFilesTreeToggle.IsChecked == true;
+            BranchFileList.Visibility = tree ? Visibility.Collapsed : Visibility.Visible;
+            BranchFileTree.Visibility = tree ? Visibility.Visible : Visibility.Collapsed;
+            // 두 보기의 선택은 따로라, 전환하면 diff가 어느 선택의 것인지 헷갈리지 않게 비운다.
+            BranchFileList.UnselectAll();
+            if (_branchFiles != null)
+                BranchDiff.Clear("파일을 선택하면 내용을 보여 줍니다.");
+        }
+
+        private async void BranchFileList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+        {
+            if (BranchFileList.SelectedItem is GitStatusEntry entry)
+                await ShowBranchFileDiffAsync(entry);
+        }
+
+        private async void BranchFileTree_SelectedItemChanged(object sender, RoutedPropertyChangedEventArgs<object> e)
+        {
+            var node = BranchFileTree.SelectedItem as GitChangeNode;
+            if (node == null)
+                return;
+            if (node.IsFolder)
+            {
+                BranchDiff.Clear(string.Format("폴더 {0} — 파일 {1}개", node.Path, node.Entries.Count()));
+                return;
+            }
+            await ShowBranchFileDiffAsync(node.Entry);
+        }
+
+        private Task ShowBranchFileDiffAsync(GitStatusEntry entry)
+        {
+            if (_branchFiles == null)
+                return Task.CompletedTask;
+            var files = _branchFiles.Value;
+            var title = string.Format("{0}  {1}: {2}", files.Label, entry.StatusLabel, entry.PathText);
+            if (BranchFilesDiffToggle.IsChecked != true)
+                return ShowRevisionContentAsync(BranchDiff, files.To, entry, title + "  — 비교 대상 쪽 코드");
+            return LoadDiffAsync(BranchDiff, WithTitle(GitDiffCommands.RevisionFile(files.From, files.To, files.SinceMergeBase, entry.Path, entry.OriginalPath,
+                _diff.IgnoreWhitespace), title));
+        }
+
+        private async void BranchFilesDiffToggle_Click(object sender, RoutedEventArgs e)
+        {
+            var entry = SelectedFileEntry(BranchFilesTreeToggle, BranchFileList, BranchFileTree);
+            if (entry != null)
+                await ShowBranchFileDiffAsync(entry);
         }
 
         private async void NewBranch_Click(object sender, RoutedEventArgs e)
@@ -3050,7 +3313,7 @@ namespace Folderss
                 if (previousDiff.DiffViewMode != _diff.DiffViewMode)
                 {
                     // 기본 보기가 바뀌면 세 diff 창 모두 새 기본값으로 맞춘다(창에서 따로 바꿔 둔 값은 덮어씀).
-                    ChangesDiff.ViewMode = RemoteDiff.ViewMode = LogDiff.ViewMode = StashDiff.ViewMode = _diff.DiffViewMode;
+                    ChangesDiff.ViewMode = RemoteDiff.ViewMode = LogDiff.ViewMode = StashDiff.ViewMode = BranchDiff.ViewMode = _diff.DiffViewMode;
                 }
 
                 if (previous.LogLimit != _settings.LogLimit || previous.LogAllBranches != _settings.LogAllBranches

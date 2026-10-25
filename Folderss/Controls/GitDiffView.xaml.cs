@@ -81,6 +81,12 @@ namespace Folderss.Controls
             return _requestId;
         }
 
+        /// <summary><see cref="LineList"/> Tag 값: 줄 번호 열을 하나만 보인다(XAML DataTrigger가 변경 전 번호 열을 접음).</summary>
+        private const string SingleLineNumber = "SingleLineNumber";
+
+        /// <summary>마지막 표시 번호. Clear·BeginLoad·ShowLines마다 바뀌므로, 비동기로 읽은 내용을 보이기 전에 그 사이 다른 표시가 있었는지 확인하는 데 쓴다.</summary>
+        public int CurrentRequestId => _requestId;
+
         /// <summary>diff가 아닌 줄 목록(변경 없는 파일 내용 등)을 바로 보인다. 외부 도구·보기 모드는 숨긴다.</summary>
         public void ShowLines(string title, System.Collections.Generic.List<GitDiffLine> lines, string emptyMessage)
         {
@@ -88,6 +94,7 @@ namespace Folderss.Controls
             SetRequest(null);
             TitleText.Text = title;
             TitleText.ToolTip = title;
+            LineList.Tag = SingleLineNumber;   // 파일 내용은 변경 전/후 구분이 없어 번호 열 하나만
             LineList.ItemsSource = lines;
             ShowMessage(lines.Count == 0 ? emptyMessage : null);
         }
@@ -98,6 +105,7 @@ namespace Folderss.Controls
             if (requestId != _requestId)
                 return false;
 
+            LineList.Tag = null;
             var lines = GitOutputParser.ParseDiff(diffText, MaxLines);
             LineList.ItemsSource = lines;
             ShowMessage(lines.Count == 0 ? emptyMessage : null);
