@@ -538,7 +538,17 @@
                                      SelectionChanged="BranchList_SelectionChanged"
                                      PreviewKeyDown="RowCopy_PreviewKeyDown"
                                      MouseDoubleClick="BranchList_MouseDoubleClick"
-                                     ToolTip="↑ 이 브랜치에만 있는 커밋 수, ↓ 현재 브랜치에만 있는 커밋 수"/>
+                                     ContextMenuOpening="BranchList_ContextMenuOpening"
+                                     ToolTip="↑ 이 브랜치에만 있는 커밋 수, ↓ 현재 브랜치에만 있는 커밋 수">
+                                <ListBox.ContextMenu>
+                                    <ContextMenu>
+                                        <MenuItem x:Name="BranchResetMenuItem" Header="현재 브랜치를 여기로 reset…" Click="BranchReset_Click"
+                                                  ToolTip="현재 브랜치를 이 브랜치가 가리키는 커밋으로 옮깁니다 (soft / mixed / hard 선택)"/>
+                                        <MenuItem x:Name="BranchRevertMenuItem" Header="이 브랜치의 마지막 커밋 revert…" Click="BranchRevert_Click"
+                                                  ToolTip="이 브랜치 끝 커밋의 변경을 거꾸로 적용하는 새 커밋을 현재 브랜치에 만듭니다. 현재 브랜치에 이미 들어 있는 커밋만 됩니다"/>
+                                    </ContextMenu>
+                                </ListBox.ContextMenu>
+                            </ListBox>
                             <GridSplitter Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Background="Transparent"/>
                             <ListView x:Name="BranchGraphList" Grid.Column="2"
                                       SelectionMode="Single"
@@ -780,6 +790,7 @@
                         <ListView.ContextMenu>
                             <ContextMenu>
                                 <MenuItem Header="이 커밋으로 reset…" Click="LogReset_Click"/>
+                                <MenuItem Header="이 커밋 revert…" Click="LogRevert_Click"/>
                                 <MenuItem Header="여기서 브랜치…" Click="LogBranch_Click"/>
                                 <MenuItem Header="체크아웃…" Click="LogCheckout_Click"/>
                                 <Separator/>

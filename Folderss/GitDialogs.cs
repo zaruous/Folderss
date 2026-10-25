@@ -132,10 +132,13 @@ namespace Folderss
 
         public GitResetMode Mode => _soft.IsChecked == true ? GitResetMode.Soft : _hard.IsChecked == true ? GitResetMode.Hard : GitResetMode.Mixed;
 
-        public GitResetDialog(GitCommitInfo target, string currentBranch, int uncommittedCount) : base("reset", 520)
+        /// <param name="droppedCommits">대상에 없고 현재 HEAD에만 있는 커밋 수(브랜치로 reset할 때). 0보다 크면 브랜치에서 빠진다고 알린다.</param>
+        public GitResetDialog(GitCommitInfo target, string currentBranch, int uncommittedCount, int droppedCommits = 0) : base("reset", 520)
         {
             _uncommitted = uncommittedCount;
             AddText(string.Format("{0}의 HEAD를 {1} \"{2}\"(으)로 옮깁니다.", currentBranch ?? "현재 HEAD", target.ShortHash, target.Subject));
+            if (droppedCommits > 0)
+                AddText(string.Format("⚠ 현재 브랜치에만 있는 커밋 {0}개가 브랜치에서 빠집니다(모드와 상관없이).", droppedCommits), warning: true, top: 8);
 
             AddLabel("모드");
             _soft = AddRadio("reset", "soft — 커밋만 되돌림", "HEAD만 옮기고, 되돌린 커밋의 변경은 스테이지된 채로 남습니다.", false);
@@ -164,6 +167,28 @@ namespace Folderss
             _hardWarning.Visibility = _hardConfirm.Visibility = hard ? Visibility.Visible : Visibility.Collapsed;
             if (_ok != null)
                 _ok.IsEnabled = !hard || _hardConfirm.IsChecked == true;
+        }
+    }
+
+    /// <summary>revert: 커밋의 변경을 거꾸로 적용하는 새 커밋. 기본은 바로 커밋, 해제하면 변경만 스테이지(--no-commit).</summary>
+    public sealed class GitRevertDialog : GitDialogBase
+    {
+        private readonly CheckBox _commit;
+
+        public bool NoCommit => _commit.IsChecked != true;
+
+        public GitRevertDialog(GitCommitInfo target, string currentBranch, int uncommittedCount) : base("revert", 520)
+        {
+            AddText(string.Format("{0}에 {1} \"{2}\"의 변경을 거꾸로 적용합니다.", currentBranch ?? "현재 HEAD", target.ShortHash, target.Subject));
+            AddText("기존 커밋은 그대로 두고 되돌리는 커밋을 새로 더하므로, 이미 push한 커밋에도 안전합니다.", secondary: true, top: 4);
+            if (target.Parents.Length > 1)
+                AddText("병합 커밋입니다. 첫 번째 부모(병합받은 쪽) 기준으로, 병합으로 들어온 변경을 되돌립니다(-m 1).", secondary: true, top: 8);
+
+            _commit = AddCheck("바로 커밋 (해제하면 되돌린 변경을 스테이지만 함)", true);
+            if (uncommittedCount > 0)
+                AddText(string.Format("⚠ 커밋 안 한 변경이 {0}개 있습니다. 되돌릴 파일과 겹치면 git이 거부합니다.", uncommittedCount), warning: true, top: 10);
+            AddText("충돌이 나면 멈춥니다. 해결한 뒤 커밋하거나 git revert --abort로 취소하세요.", secondary: true, top: 12);
+            AddButtons("revert");
         }
     }
 

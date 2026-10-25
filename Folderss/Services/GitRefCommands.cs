@@ -13,7 +13,7 @@ namespace Folderss.Services
     }
 
     /// <summary>
-    /// reset·브랜치·체크아웃·워킹트리 명령 인수. UI와 테스트가 같은 인수를 쓰도록 한 곳에 둔다.
+    /// reset·revert·브랜치·체크아웃·워킹트리 명령 인수. UI와 테스트가 같은 인수를 쓰도록 한 곳에 둔다.
     /// 사용자 입력(브랜치 이름·경로)은 항상 옵션이 아닌 인수 자리에 오도록 순서를 고정하고, 이름은 먼저 <see cref="CheckBranchName"/>로 검사한다.
     /// </summary>
     public static class GitRefCommands
@@ -22,6 +22,22 @@ namespace Folderss.Services
         {
             var flag = mode == GitResetMode.Soft ? "--soft" : mode == GitResetMode.Hard ? "--hard" : "--mixed";
             return new List<string> { "reset", flag, target, "--" };
+        }
+
+        /// <summary>
+        /// 커밋의 변경을 거꾸로 적용한다(이력은 그대로라 push한 커밋에도 안전). 기본은 편집기 없이 바로 커밋(<c>--no-edit</c>),
+        /// <paramref name="noCommit"/>면 변경만 스테이지한다. 병합 커밋은 첫 부모(병합받은 쪽) 기준(<c>-m 1</c>)으로 되돌린다.
+        /// </summary>
+        public static List<string> Revert(string commit, bool isMerge, bool noCommit)
+        {
+            var args = new List<string> { "revert", noCommit ? "--no-commit" : "--no-edit" };
+            if (isMerge)
+            {
+                args.Add("-m");
+                args.Add("1");
+            }
+            args.Add(commit);
+            return args;
         }
 
         /// <summary>git 자체 규칙으로 브랜치 이름을 검사한다(성공 = 쓸 수 있는 이름). '-'로 시작하는 이름도 여기서 걸러진다.</summary>
