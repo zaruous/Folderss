@@ -53,9 +53,10 @@ dotnet build .\Folderss.sln -c Debug
 
 ### 뷰어 추가 시
 - [ ] `Viewers/<Name>Viewer.xaml/.cs` — `IFileViewer` 구현 (WebView2 기반은 `TextViewer` 참고)
-- [ ] `.csproj` — `<Page>` 및 `<Compile>` 항목 추가
-- [ ] `Services/ViewerConfigService.cs` — `Resolve()` switch에 `"builtin:<name>"` 케이스 등록
-- [ ] `SettingsWindow.xaml` — 뷰어 탭 `NewViewerCombo`에 ComboBoxItem 추가
+- [ ] `.csproj` — SDK 스타일이라 `.cs`/`.xaml`은 자동 포함(따로 항목 추가 불필요)
+- [ ] `Services/ViewerConfigService.cs` — `"builtin:<name>"` 상수, `Resolve()` switch 케이스, `GetViewerKeys()` 목록(설정 창 `NewViewerCombo`가 이 목록에 바인딩됨)
+- [ ] `SettingsWindow.xaml.cs` — `ToViewerDisplayName()`에 표시 이름 추가
+- [ ] `tests/Folderss.SearchTests/ViewerStubs.cs` — 새 뷰어 타입의 빈 스텁 추가(없으면 `ViewerConfigService` 소스 링크가 테스트 프로젝트에서 컴파일 안 됨)
 - [ ] `Viewers/Resources/` — HTML/JS/CSS 리소스 추가 시 `.csproj` `<Content>` 항목도 추가
 - [ ] `docs/architecture.md` — 뷰어 목록 업데이트
 
@@ -115,6 +116,11 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
   매번 대화상자를 띄우지 않는다. 처음부터 고를 것이 본질인 기능(reset 모드 등)만 버튼이 곧바로 대화상자를 연다.
 - 강제 옵션(`-D`, `--force` 등)은 ▾ 대화상자에서 기본 꺼짐 + 경고 + 확인 체크(`GitForceConfirmDialog`). 원격의 남의 작업을 덮을 수 있는 강제 푸시는 두지 않는다.
 - Git 대화상자는 `GitDialogs.cs`의 `GitDialogBase`(테마 색, 버튼, 닫기 전 비동기 검사 `ValidateAsync`)를 상속해 만든다.
+
+### 블록 편집기: Markdown 밖 속성은 사이드카로 (#78)
+- 블록 편집기(`builtin:blocks`)에서 Markdown으로 나타낼 수 없는 속성(색·크기·너비 등)을 추가할 때는 Markdown에 HTML·확장 문법을 섞지 않는다.
+  `EditorBlock.Attributes`에 키를 두고 문서 옆 사이드카(`문서.md.meta.json`, `Services/BlockSidecar`)로 저장한다.
+- 새 키를 쓰면 `BlockSidecarTests`에 왕복(저장 → 다시 읽기 → 같은 블록에 붙음) 테스트를 추가하고, `docs/architecture.md` 블록 편집기 절의 키 목록을 갱신한다.
 
 ### ContextMenu 스타일
 WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍게 보임.

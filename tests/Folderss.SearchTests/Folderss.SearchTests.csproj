@@ -64,6 +64,10 @@
     <Compile Include="..\..\Folderss\Services\FileOperationService.cs" Link="Linked\FileOperationService.cs" />
     <Compile Include="..\..\Folderss\Services\WindowsRecycleBin.cs" Link="Linked\WindowsRecycleBin.cs" />
     <Compile Include="..\..\Folderss\Services\ThemeFileValidator.cs" Link="Linked\ThemeFileValidator.cs" />
+    <Compile Include="..\..\Folderss\Models\EditorBlock.cs" Link="Linked\EditorBlock.cs" />
+    <Compile Include="..\..\Folderss\Services\BlockMarkdown.cs" Link="Linked\BlockMarkdown.cs" />
+    <Compile Include="..\..\Folderss\Services\BlockOperations.cs" Link="Linked\BlockOperations.cs" />
+    <Compile Include="..\..\Folderss\Services\BlockSidecar.cs" Link="Linked\BlockSidecar.cs" />
   </ItemGroup>
 
   <!-- ThemeFileTests: 테마 XAML을 출력 폴더에 복사해 키 구성을 검사한다 -->

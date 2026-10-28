@@ -12,6 +12,7 @@ namespace Folderss.Services
         public const string BuiltInTextKey = "builtin:text";
         public const string BuiltInMarkdownKey = "builtin:markdown";
         public const string BuiltInMonacoKey = "builtin:monaco";
+        public const string BuiltInBlocksKey = "builtin:blocks";
 
         private static readonly string DefaultConfigPath = Path.Combine(
             Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -94,6 +95,8 @@ namespace Folderss.Services
                     return new Folderss.Viewers.MarkdownViewer();
                 case BuiltInMonacoKey:
                     return new Folderss.Viewers.MonacoViewer();
+                case BuiltInBlocksKey:
+                    return new Folderss.Viewers.BlockEditorViewer();
                 default:
                     return null;
             }
@@ -163,7 +166,7 @@ namespace Folderss.Services
 
         public static IReadOnlyList<string> GetViewerKeys()
         {
-            return new[] { SystemDefaultKey, BuiltInMarkdownKey, BuiltInMonacoKey, BuiltInTextKey };
+            return new[] { SystemDefaultKey, BuiltInMarkdownKey, BuiltInBlocksKey, BuiltInMonacoKey, BuiltInTextKey };
         }
 
         private string GetEffectiveMappingKey(string extension)

@@ -1025,8 +1025,9 @@ namespace Folderss.Viewers
         /// <summary>
         /// BOM이 있으면 그 인코딩, 없으면 UTF-8. 단 BOM 없는 파일이 UTF-8로 읽히지 않으면(한국어 Windows의 오래된 CP949 문서 등)
         /// 시스템 ANSI 코드 페이지로 읽는다. 저장도 읽은 인코딩 그대로 하므로 원래 인코딩이 유지된다.
+        /// 블록 편집기 뷰어(<see cref="BlockEditorViewer"/>)도 같은 규칙으로 읽고 쓴다.
         /// </summary>
-        private static Encoding DetectEncoding(string filePath)
+        internal static Encoding DetectEncoding(string filePath)
         {
             byte[] bytes;
             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite | FileShare.Delete))
