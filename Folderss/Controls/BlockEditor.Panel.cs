@@ -58,7 +58,10 @@ namespace Folderss.Controls
                 public double Width;
                 public int Columns;
                 public string Source;
+                public string AttrKey;
             }
+
+            public IEnumerable<BlockRow> RealizedRows => _realized.Values;
 
             public BlockPanel(BlockEditor owner)
             {
@@ -257,7 +260,17 @@ namespace Folderss.Controls
             private bool Matches(HeightEntry entry, EditorBlock block, int columns)
             {
                 return entry.Kind == block.Kind && entry.Indent == block.Indent && entry.Columns == columns &&
-                       Math.Abs(entry.Width - _columnWidth) < 0.5 && string.Equals(entry.Text, block.Text) && string.Equals(entry.Source, block.Source);
+                       Math.Abs(entry.Width - _columnWidth) < 0.5 && string.Equals(entry.Text, block.Text) &&
+                       string.Equals(entry.Source, block.Source) && string.Equals(entry.AttrKey, GetHeightAttrKey(block));
+            }
+
+            private static string GetHeightAttrKey(EditorBlock block)
+            {
+                if (block.Attributes == null)
+                    return null;
+                return (block.GetAttribute(EditorBlock.AttrWidth) ?? string.Empty) + "|" +
+                       (block.GetAttribute(EditorBlock.AttrHeading) ?? string.Empty) + "|" +
+                       (block.GetAttribute(EditorBlock.AttrDescription) ?? string.Empty);
             }
 
             private HeightEntry NewEntry(EditorBlock block, int index, double height)
@@ -271,6 +284,7 @@ namespace Folderss.Controls
                     Width = _columnWidth,
                     Columns = TableShapeAt(index),
                     Source = block.Source,
+                    AttrKey = GetHeightAttrKey(block),
                 };
             }
 
@@ -287,10 +301,25 @@ namespace Folderss.Controls
                         var path = _owner.ResolveImagePath(block.Source);
                         if (path != null && BlockImageLoader.TryGetSize(path, out size) && size.Width > 0)
                         {
-                            var shown = Math.Min(width, size.Width);
-                            return shown * size.Height / size.Width + 50;
+                            double customW;
+                            var maxW = double.TryParse(block.GetAttribute(EditorBlock.AttrWidth), out customW) && customW > 0
+                                ? Math.Min(width, customW)
+                                : Math.Min(width, size.Width);
+                            return maxW * size.Height / size.Width + 50;
                         }
                         return 260;
+                    case BlockKind.Toc:
+                        var headingCount = 0;
+                        for (var i = 0; i < _owner._blocks.Count; i++)
+                            if (_owner._blocks[i].GetHeadingLevel() > 0)
+                                headingCount++;
+                        return Math.Max(1, headingCount) * 24 + 44;
+                    case BlockKind.Math:
+                        return EstimateLines(block.Text, 16, width - 30, false) * 28 + 36;
+                    case BlockKind.File:
+                        return 58;
+                    case BlockKind.Bookmark:
+                        return 76;
                     case BlockKind.TableRow:
                         var columns = Math.Max(1, ColumnsAt(index));
                         var cellWidth = Math.Max(30, width / columns - 14);
@@ -317,6 +346,10 @@ namespace Folderss.Controls
                     case BlockKind.Numbered:
                     case BlockKind.Todo:
                     case BlockKind.Toggle:
+                        var th = block.GetToggleHeadingLevel();
+                        if (th == 1) return EstimateLines(block.Text, 24, width - 26, false) * 33 + 22;
+                        if (th == 2) return EstimateLines(block.Text, 20, width - 26, false) * 27 + 18;
+                        if (th == 3) return EstimateLines(block.Text, 17, width - 26, false) * 23 + 14;
                         return EstimateLines(block.Text, 15, width - 26, false) * 20 + 8;
                     default:
                         return EstimateLines(block.Text, 15, width, false) * 20 + 8;

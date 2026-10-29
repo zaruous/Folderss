@@ -1095,7 +1095,7 @@ namespace Folderss
             }
 
             // 트리: 노드 위에서만(스크롤바·펼침 단추 제외). TreeView는 단일 선택뿐이라 Ctrl/Shift+클릭은 IsMarked로 직접 처리한다.
-            for (var node = source; node != null && !(node is TreeView); node = System.Windows.Media.VisualTreeHelper.GetParent(node))
+            for (var node = source; node != null && !(node is TreeView); node = ElementTree.GetParent(node))
             {
                 if (node is System.Windows.Controls.Primitives.ScrollBar || node is System.Windows.Controls.Primitives.ToggleButton)
                     return;

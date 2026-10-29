@@ -150,7 +150,7 @@ namespace Folderss.Controls
         private void FavoritesTree_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(FavoritesTree);
-            var container = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+            var container = ElementTree.FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
             _draggedFavorite = container == null ? null : container.DataContext as FavoriteLocation;
             if (container != null)
                 container.Focus();
@@ -187,7 +187,7 @@ namespace Folderss.Controls
         private void FavoritesTree_Drop(object sender, DragEventArgs e)
         {
             var favorite = e.Data.GetData(typeof(FavoriteLocation)) as FavoriteLocation;
-            var targetContainer = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+            var targetContainer = ElementTree.FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
             var targetItem = targetContainer == null ? null : targetContainer.DataContext;
             var targetFavorite = targetItem as FavoriteLocation;
             var targetGroup = targetItem as FavoriteGroup ?? FindGroup(targetFavorite);
@@ -228,7 +228,7 @@ namespace Folderss.Controls
 
         private void FavoritesTree_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var container = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+            var container = ElementTree.FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
             if (container == null)
             {
                 e.Handled = true;
@@ -241,7 +241,7 @@ namespace Folderss.Controls
 
         private FavoriteGroup GetDropTargetGroup(DependencyObject source)
         {
-            var container = FindAncestor<TreeViewItem>(source);
+            var container = ElementTree.FindAncestor<TreeViewItem>(source);
             if (container == null)
                 return null;
 
@@ -640,20 +640,6 @@ namespace Folderss.Controls
             {
                 MessageBox.Show(exception.Message, "즐겨찾기를 저장할 수 없습니다", MessageBoxButton.OK, MessageBoxImage.Warning);
             }
-        }
-
-        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
-        {
-            while (current != null)
-            {
-                var match = current as T;
-                if (match != null)
-                    return match;
-
-                current = VisualTreeHelper.GetParent(current);
-            }
-
-            return null;
         }
     }
 

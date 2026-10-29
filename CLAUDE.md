@@ -122,6 +122,10 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
   `EditorBlock.Attributes`에 키를 두고 문서 옆 사이드카(`문서.md.meta.json`, `Services/BlockSidecar`)로 저장한다.
 - 새 키를 쓰면 `BlockSidecarTests`에 왕복(저장 → 다시 읽기 → 같은 블록에 붙음) 테스트를 추가하고, `docs/architecture.md` 블록 편집기 절의 키 목록을 갱신한다.
 
+### 이벤트 원본에서 조상 찾기
+마우스·드래그 이벤트의 `e.OriginalSource`는 `TextBlock` 안의 `Run`/`Span`(ContentElement)일 수 있다. 이것을 `VisualTreeHelper.GetParent`에 넘기면 `InvalidOperationException`으로 앱이 종료된다(블록 편집기 수식 클릭 크래시).
+조상을 찾을 때는 직접 루프를 쓰지 말고 `Controls/ElementTree.FindAncestor<T>` / `ElementTree.GetParent`를 쓴다.
+
 ### ContextMenu 스타일
 WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍게 보임.
 `Controls.xaml`에 `ControlTemplate` 재정의가 있으므로 새 ContextMenu 추가 시 별도 스타일 불필요.

@@ -147,5 +147,51 @@ namespace Folderss.SearchTests
             Assert.Equal("red", a.GetAttribute("background"));   // 사본을 고쳐도 원본은 그대로
             Assert.Equal("doc.md.meta.json", BlockSidecar.PathFor("doc.md"));
         }
+
+        [Fact]
+        public void MediaAndBlockAttributes_RoundTripThroughSidecar()
+        {
+            var toggleHeading = new EditorBlock(BlockKind.Toggle, "아키텍처 개요");
+            toggleHeading.SetAttribute(EditorBlock.AttrHeading, "2");
+
+            var callout = new EditorBlock(BlockKind.Callout, "주의할 점") { CalloutType = "WARNING" };
+            callout.SetAttribute(EditorBlock.AttrIcon, "🔥");
+
+            var image = new EditorBlock(BlockKind.Image, "다이어그램") { Source = "images/arch.png" };
+            image.SetAttribute(EditorBlock.AttrWidth, "480");
+            image.SetAttribute(EditorBlock.AttrAlign, "center");
+
+            var file = new EditorBlock(BlockKind.File, "설계서.pdf") { Source = "docs/spec.pdf" };
+            file.SetAttribute(EditorBlock.AttrSize, "1.4 MB");
+
+            var bookmark = new EditorBlock(BlockKind.Bookmark, "Folderss GitHub") { Source = "https://github.com/example/folderss" };
+            bookmark.SetAttribute(EditorBlock.AttrTitle, "Folderss - Dual Pane File Manager");
+            bookmark.SetAttribute(EditorBlock.AttrDescription, "Windows WPF dual-pane file manager.");
+
+            var blocks = new List<EditorBlock>
+            {
+                toggleHeading,
+                new EditorBlock(BlockKind.Paragraph, "토글 내부 문단", 1),
+                callout,
+                image,
+                file,
+                bookmark,
+            };
+
+            string sidecar;
+            int unmatched;
+            var reread = SaveAndReload(blocks, out sidecar, out unmatched);
+
+            Assert.Equal(0, unmatched);
+            Assert.Equal("2", reread[0].GetAttribute(EditorBlock.AttrHeading));
+            Assert.Equal(2, reread[0].GetToggleHeadingLevel());
+            Assert.Equal(2, reread[0].GetHeadingLevel());
+            Assert.Equal("🔥", reread[2].GetAttribute(EditorBlock.AttrIcon));
+            Assert.Equal("480", reread[3].GetAttribute(EditorBlock.AttrWidth));
+            Assert.Equal("center", reread[3].GetAttribute(EditorBlock.AttrAlign));
+            Assert.Equal("1.4 MB", reread[4].GetAttribute(EditorBlock.AttrSize));
+            Assert.Equal("Folderss - Dual Pane File Manager", reread[5].GetAttribute(EditorBlock.AttrTitle));
+            Assert.Equal("Windows WPF dual-pane file manager.", reread[5].GetAttribute(EditorBlock.AttrDescription));
+        }
     }
 }

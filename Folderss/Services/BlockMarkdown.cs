@@ -29,6 +29,8 @@ namespace Folderss.Services
         private static readonly Regex NumberedShortcut = new Regex(@"^\d{1,9}[.)] $");
         private static readonly Regex TableDelimiter = new Regex(@"^\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$");
         private static readonly Regex ImageLine = new Regex(@"^!\[([^\]]*)\]\([ \t]*(?:<([^>]*)>|([^)\s]+))(?:[ \t]+""[^""]*"")?[ \t]*\)$");
+        private static readonly Regex FileLine = new Regex(@"^\[📎(?:[ \t]+([^\]]*)|([^\]]*))\]\([ \t]*(?:<([^>]*)>|([^)\s]+))(?:[ \t]+""[^""]*"")?[ \t]*\)$");
+        private static readonly Regex BookmarkLine = new Regex(@"^\[🔖(?:[ \t]+([^\]]*)|([^\]]*))\]\([ \t]*(?:<([^>]*)>|([^)\s]+))(?:[ \t]+""[^""]*"")?[ \t]*\)$");
 
         public static readonly string[] CalloutTypes = { "NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION" };
 
@@ -118,6 +120,38 @@ namespace Folderss.Services
                         continue;
                     }
 
+                    var trimmedContent = content.TrimEnd();
+                    if (trimmedContent.StartsWith("$$", StringComparison.Ordinal))
+                    {
+                        var level = LevelForBlock(indent);
+                        if (trimmedContent.Length >= 4 && trimmedContent.EndsWith("$$", StringComparison.Ordinal))
+                        {
+                            var expr = trimmedContent.Substring(2, trimmedContent.Length - 4).Trim();
+                            output.Add(new EditorBlock(BlockKind.Math, expr, level));
+                            Close();
+                            continue;
+                        }
+                        if (trimmedContent == "$$")
+                        {
+                            var end = FindMathEnd(i + 1);
+                            var body = new List<string>();
+                            for (var k = i + 1; k < end && k < _lines.Length; k++)
+                                body.Add(StripIndent(_lines[k], indent).TrimEnd());
+                            output.Add(new EditorBlock(BlockKind.Math, string.Join("\n", body), level));
+                            i = Math.Min(end, _lines.Length - 1);
+                            Close();
+                            continue;
+                        }
+                    }
+
+                    if (indent < 4 && (string.Equals(trimmedContent, "[TOC]", StringComparison.OrdinalIgnoreCase)
+                        || string.Equals(trimmedContent, "<!-- toc -->", StringComparison.OrdinalIgnoreCase)))
+                    {
+                        output.Add(new EditorBlock(BlockKind.Toc, string.Empty, LevelForBlock(indent)));
+                        Close();
+                        continue;
+                    }
+
                     if (content.StartsWith("<details", StringComparison.OrdinalIgnoreCase))
                     {
                         i = ParseDetails(output, i, indent);
@@ -184,6 +218,30 @@ namespace Folderss.Services
                         output.Add(new EditorBlock(BlockKind.Image, image.Groups[1].Value, LevelForBlock(indent))
                         {
                             Source = image.Groups[2].Success ? image.Groups[2].Value : image.Groups[3].Value,
+                        });
+                        Close();
+                        continue;
+                    }
+
+                    var file = FileLine.Match(content.TrimEnd());
+                    if (file.Success)
+                    {
+                        var label = file.Groups[1].Success ? file.Groups[1].Value : file.Groups[2].Value;
+                        output.Add(new EditorBlock(BlockKind.File, label, LevelForBlock(indent))
+                        {
+                            Source = file.Groups[3].Success ? file.Groups[3].Value : file.Groups[4].Value,
+                        });
+                        Close();
+                        continue;
+                    }
+
+                    var bookmark = BookmarkLine.Match(content.TrimEnd());
+                    if (bookmark.Success)
+                    {
+                        var label = bookmark.Groups[1].Success ? bookmark.Groups[1].Value : bookmark.Groups[2].Value;
+                        output.Add(new EditorBlock(BlockKind.Bookmark, label, LevelForBlock(indent))
+                        {
+                            Source = bookmark.Groups[3].Success ? bookmark.Groups[3].Value : bookmark.Groups[4].Value,
                         });
                         Close();
                         continue;
@@ -410,6 +468,16 @@ namespace Folderss.Services
                 {
                     var t = _lines[k].Trim();
                     if (t.Length >= fence.Length && t.All(c => c == fence[0]))
+                        return k;
+                }
+                return _lines.Length;
+            }
+
+            private int FindMathEnd(int from)
+            {
+                for (var k = from; k < _lines.Length; k++)
+                {
+                    if (_lines[k].Trim() == "$$")
                         return k;
                 }
                 return _lines.Length;
@@ -658,6 +726,34 @@ namespace Folderss.Services
                         sb.Append(indent).Append("![").Append(OneLine(block.Text).Replace("]", "\\]")).Append("](").Append(source).Append(")\n");
                         break;
 
+                    case BlockKind.Toc:
+                        sb.Append(indent).Append("[TOC]\n");
+                        break;
+
+                    case BlockKind.Math:
+                        sb.Append(indent).Append("$$\n");
+                        if (block.Text.Length > 0)
+                            foreach (var line in SplitLines(block.Text))
+                                sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
+                        sb.Append(indent).Append("$$\n");
+                        break;
+
+                    case BlockKind.File:
+                        var fileSource = block.Source ?? string.Empty;
+                        if (fileSource.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
+                            fileSource = "<" + fileSource + ">";
+                        var fileLabel = OneLine(block.Text).Replace("]", "\\]");
+                        sb.Append(indent).Append(fileLabel.Length > 0 ? "[📎 " + fileLabel + "](" : "[📎](").Append(fileSource).Append(")\n");
+                        break;
+
+                    case BlockKind.Bookmark:
+                        var bmSource = block.Source ?? string.Empty;
+                        if (bmSource.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
+                            bmSource = "<" + bmSource + ">";
+                        var bmLabel = OneLine(block.Text).Replace("]", "\\]");
+                        sb.Append(indent).Append(bmLabel.Length > 0 ? "[🔖 " + bmLabel + "](" : "[🔖](").Append(bmSource).Append(")\n");
+                        break;
+
                     case BlockKind.Toggle:
                         sb.Append(indent).Append(block.Collapsed ? "<details>" : "<details open>").Append('\n');
                         sb.Append(indent).Append("<summary>").Append(OneLine(block.Text)).Append("</summary>\n\n");
@@ -776,6 +872,10 @@ namespace Folderss.Services
                 case "> ":
                 case "\" ": kind = BlockKind.Quote; return true;
                 case "```": kind = BlockKind.Code; return true;
+                case "$$":
+                case "$$ ": kind = BlockKind.Math; return true;
+                case "[TOC] ":
+                case "[toc] ": kind = BlockKind.Toc; return true;
                 case "---": kind = BlockKind.Divider; return true;
             }
             if (prefix != null && NumberedShortcut.IsMatch(prefix))

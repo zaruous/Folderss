@@ -234,6 +234,10 @@ namespace Folderss.SearchTests
         [InlineData("[x] ", BlockKind.Todo, true)]
         [InlineData("> ", BlockKind.Quote, false)]
         [InlineData("```", BlockKind.Code, false)]
+        [InlineData("$$", BlockKind.Math, false)]
+        [InlineData("$$ ", BlockKind.Math, false)]
+        [InlineData("[TOC] ", BlockKind.Toc, false)]
+        [InlineData("[toc] ", BlockKind.Toc, false)]
         [InlineData("---", BlockKind.Divider, false)]
         public void Shortcut_MatchesNotionMarkdownTriggers(string prefix, BlockKind expected, bool expectedChecked)
         {
@@ -429,6 +433,62 @@ namespace Folderss.SearchTests
             b.Source = "b.png";
             Assert.False(a.SameContent(b));
             Assert.NotEqual(a.Id, a.Duplicate().Id);
+        }
+
+        [Fact]
+        public void Toc_Math_File_Bookmark_RoundTripAndParseVariants()
+        {
+            var markdown = Md(
+                "[TOC]",
+                "",
+                "$$",
+                "E = mc^2",
+                "$$",
+                "",
+                "$$ \\frac{a}{b} $$",
+                "",
+                "[📎 설계서.pdf](docs/spec.pdf)",
+                "",
+                "[🔖 Folderss 저장소](https://github.com/example/folderss)",
+                "",
+                "<!-- toc -->");
+
+            var blocks = BlockMarkdown.Parse(markdown);
+
+            Assert.Equal(new[]
+            {
+                BlockKind.Toc,
+                BlockKind.Math,
+                BlockKind.Math,
+                BlockKind.File,
+                BlockKind.Bookmark,
+                BlockKind.Toc,
+            }, blocks.Select(b => b.Kind));
+
+            Assert.Equal("E = mc^2", blocks[1].Text);
+            Assert.Equal("\\frac{a}{b}", blocks[2].Text);
+            Assert.Equal("설계서.pdf", blocks[3].Text);
+            Assert.Equal("docs/spec.pdf", blocks[3].Source);
+            Assert.Equal("Folderss 저장소", blocks[4].Text);
+            Assert.Equal("https://github.com/example/folderss", blocks[4].Source);
+
+            var serialized = BlockMarkdown.Serialize(blocks);
+            Assert.Equal(Md(
+                "[TOC]",
+                "",
+                "$$",
+                "E = mc^2",
+                "$$",
+                "",
+                "$$",
+                "\\frac{a}{b}",
+                "$$",
+                "",
+                "[📎 설계서.pdf](docs/spec.pdf)",
+                "",
+                "[🔖 Folderss 저장소](https://github.com/example/folderss)",
+                "",
+                "[TOC]"), serialized);
         }
     }
 }

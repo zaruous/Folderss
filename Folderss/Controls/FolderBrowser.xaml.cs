@@ -981,7 +981,7 @@ namespace Folderss.Controls
         private void FileList_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             _dragStartPoint = e.GetPosition(FileList);
-            var container = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
+            var container = ElementTree.FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
             _dragPending = container != null;
             // Ctrl 클릭은 ListView(SelectionMode=Extended)의 토글 선택에 맡긴다.
             // 여기서 단일 선택으로 바꾸면 그 뒤의 토글이 방금 선택한 항목을 다시 풀어 Ctrl 다중 선택이 되지 않는다.
@@ -1150,7 +1150,7 @@ namespace Folderss.Controls
 
         private string GetDropDestination(DependencyObject originalSource)
         {
-            var container = FindAncestor<ListViewItem>(originalSource);
+            var container = ElementTree.FindAncestor<ListViewItem>(originalSource);
             var item = container == null ? null : container.DataContext as FileSystemItem;
             return item != null && item.IsDirectory ? item.FullPath : CurrentPath;
         }
@@ -1370,7 +1370,7 @@ namespace Folderss.Controls
         {
             Activate();
 
-            var container = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
+            var container = ElementTree.FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
             if (container == null)
             {
                 FileList.SelectedItems.Clear();
@@ -1461,20 +1461,6 @@ namespace Folderss.Controls
             }
 
             e.Handled = true;
-        }
-
-        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
-        {
-            while (current != null)
-            {
-                var match = current as T;
-                if (match != null)
-                    return match;
-
-                current = VisualTreeHelper.GetParent(current);
-            }
-
-            return null;
         }
 
         public void NavigateUp()
@@ -1973,7 +1959,7 @@ namespace Folderss.Controls
             if (_safeMode)
                 return;
 
-            var container = FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
+            var container = ElementTree.FindAncestor<TreeViewItem>(e.OriginalSource as DependencyObject);
             var path = container == null ? _treeRootPath : container.Tag as string;
             if (string.IsNullOrWhiteSpace(path) || !Directory.Exists(path))
                 return;

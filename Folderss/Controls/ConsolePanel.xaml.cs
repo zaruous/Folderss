@@ -523,7 +523,7 @@ namespace Folderss.Controls
         private void ConsoleTabs_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
             var source = e.OriginalSource as DependencyObject;
-            var tabItem = FindAncestor<TabItem>(source);
+            var tabItem = ElementTree.FindAncestor<TabItem>(source);
             var tab = tabItem == null ? null : tabItem.DataContext as ConsoleTab;
             _allowAddTabActivation = tab != null && tab.IsAddTab;
         }
@@ -574,20 +574,6 @@ namespace Folderss.Controls
             {
                 FocusCommandBox();
             }), System.Windows.Threading.DispatcherPriority.Input);
-        }
-
-        private static T FindAncestor<T>(DependencyObject current) where T : DependencyObject
-        {
-            while (current != null)
-            {
-                var match = current as T;
-                if (match != null)
-                    return match;
-
-                current = System.Windows.Media.VisualTreeHelper.GetParent(current);
-            }
-
-            return null;
         }
 
         private void CloseTab_Click(object sender, RoutedEventArgs e)

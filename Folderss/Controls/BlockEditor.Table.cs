@@ -312,7 +312,7 @@ namespace Folderss.Controls
 
         // ── 이미지·보조 입력란 ────────────────────────────────────────────
 
-        /// <summary>코드 언어·이미지 경로 입력란이 바뀌었다.</summary>
+        /// <summary>코드 언어·이미지·파일·북마크 경로 입력란이 바뀌었다.</summary>
         private void OnMetaChanged(BlockRow row, string value)
         {
             if (_suppressTextChanged)
@@ -321,6 +321,11 @@ namespace Folderss.Controls
             {
                 row.Block.Source = value;
                 row.RefreshImage();
+            }
+            else if (row.Block.Kind == BlockKind.File || row.Block.Kind == BlockKind.Bookmark)
+            {
+                row.Block.Source = value;
+                row.RefreshMediaCard();
             }
             else
             {

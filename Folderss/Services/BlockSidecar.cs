@@ -169,7 +169,8 @@ namespace Folderss.Services
         public static string Hash(EditorBlock block)
         {
             var text = string.Join("\n", (block.Text ?? string.Empty).Replace("\r\n", "\n").Split('\n').Select(line => line.TrimEnd())).Trim();
-            var input = block.Kind + "\n" + text + (block.Kind == BlockKind.Image ? "\n" + block.Source : string.Empty);
+            var hasSource = block.Kind == BlockKind.Image || block.Kind == BlockKind.File || block.Kind == BlockKind.Bookmark;
+            var input = block.Kind + "\n" + text + (hasSource ? "\n" + block.Source : string.Empty);
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))).Substring(0, 16).ToLowerInvariant();
         }
 

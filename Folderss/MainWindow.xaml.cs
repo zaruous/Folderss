@@ -2645,7 +2645,7 @@ namespace Folderss
 
         private void DockManager_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var tab = FindVisualAncestor<AvalonDock.Controls.LayoutDocumentTabItem>(
+            var tab = Controls.ElementTree.FindAncestor<AvalonDock.Controls.LayoutDocumentTabItem>(
                 e.OriginalSource as DependencyObject);
             if (tab == null) return;
 
@@ -2918,16 +2918,6 @@ namespace Folderss
                 _consolePanel = null;
             if (document != null && document.ContentId == "disk-usage")
                 _diskUsagePanel = null;
-        }
-
-        private static T FindVisualAncestor<T>(DependencyObject element) where T : DependencyObject
-        {
-            while (element != null)
-            {
-                if (element is T found) return found;
-                element = System.Windows.Media.VisualTreeHelper.GetParent(element);
-            }
-            return null;
         }
 
         private Controls.ConsolePanel GetConsolePanel()
@@ -3248,7 +3238,7 @@ namespace Folderss
 
         private void DockManager_PreviewMouseLeftButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var tab = FindVisualAncestor<AvalonDock.Controls.LayoutDocumentTabItem>(
+            var tab = Controls.ElementTree.FindAncestor<AvalonDock.Controls.LayoutDocumentTabItem>(
                 e.OriginalSource as DependencyObject);
             var document = tab == null ? null : tab.Model as LayoutDocument;
             if (document == null || document.ContentId != "add-folder-panel" || _openingPanelFromAddTab)

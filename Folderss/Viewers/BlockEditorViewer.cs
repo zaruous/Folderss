@@ -23,7 +23,8 @@ namespace Folderss.Viewers
 
         private const string ShortcutHelp =
             "Enter 블록 나누기 · Shift+Enter 줄바꿈 · Tab/Shift+Tab 들여쓰기\n" +
-            "/ 블록 메뉴(/표, /이미지 포함) · # ## ### - 1. [] > ``` --- 입력하면 자동 변환\n" +
+            "/ 블록 메뉴(/표, /이미지, /수식, /목차, /파일, /북마크, /토글제목1~3 포함) · # ## ### - 1. [] > ``` $$ [TOC] --- 입력 시 자동 변환\n" +
+            "이미지: Ctrl+V 클립보드 이미지 붙여넣기(images/ 자동 저장) · 탐색기/폴더 패널에서 파일 드래그 앤 드롭 · 우측 끝 핸들 끌기로 폭 조절\n" +
             "표: Tab 다음 셀(끝에서 행 추가) · Enter 아래에 행 추가 · 빈 행 Backspace 행 삭제 · 엑셀 붙여넣기\n" +
             "Esc 블록 선택(Shift+↑↓ 확장, Del 삭제, Ctrl+C Markdown 복사)\n" +
             "Ctrl+Shift+↑↓ 블록 이동 · Ctrl+D 복제 · Ctrl+Enter 체크·접기\n" +
@@ -99,6 +100,14 @@ namespace Folderss.Viewers
                 ModifiedChanged?.Invoke(this, _editor.IsModified);
             };
             _editor.SaveRequested += (s, e) => Save();
+
+            Loaded += (s, e) => NetworkSettingsService.Changed += OnNetworkSettingsChanged;
+            Unloaded += (s, e) => NetworkSettingsService.Changed -= OnNetworkSettingsChanged;
+        }
+
+        private void OnNetworkSettingsChanged(object sender, EventArgs e)
+        {
+            Dispatcher.BeginInvoke(new Action(() => _editor.RefreshRemoteImages()));
         }
 
         public void Load(string filePath)
@@ -126,6 +135,7 @@ namespace Folderss.Viewers
             _crlf = content.Contains("\r\n");
             _notice.Visibility = Visibility.Collapsed;
             _editor.Visibility = Visibility.Visible;
+            _editor.DocumentPath = filePath;
             _editor.BaseDirectory = Path.GetDirectoryName(filePath);
 
             // Markdown 밖 속성(블록 색 등)은 문서 옆 사이드카(문서.md.meta.json)에 있다(#78).

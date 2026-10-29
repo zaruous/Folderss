@@ -28,6 +28,14 @@ namespace Folderss.Models
         TableRow,
         /// <summary>이미지(<c>![대체 텍스트](경로)</c>만 있는 줄). 대체 텍스트는 <see cref="EditorBlock.Text"/>, 경로는 <see cref="EditorBlock.Source"/>.</summary>
         Image,
+        /// <summary>문서 내 제목 블록들을 모아 보여주는 자동 목차(<c>[TOC]</c>).</summary>
+        Toc,
+        /// <summary>수식 블록(<c>$$ ... $$</c>). 원문 LaTeX 수식은 <see cref="EditorBlock.Text"/>에 담는다.</summary>
+        Math,
+        /// <summary>파일 첨부 카드(<c>[📎 이름](경로)</c>). 표시 이름은 <see cref="EditorBlock.Text"/>, 경로는 <see cref="EditorBlock.Source"/>.</summary>
+        File,
+        /// <summary>웹 북마크 카드(<c>[🔖 제목](URL)</c>). 표시 제목은 <see cref="EditorBlock.Text"/>, URL은 <see cref="EditorBlock.Source"/>.</summary>
+        Bookmark,
     }
 
     /// <summary>
@@ -71,6 +79,39 @@ namespace Folderss.Models
 
         /// <summary>표 행의 셀 구분자.</summary>
         public const char CellSeparator = '\t';
+
+        public const string AttrWidth = "width";
+        public const string AttrAlign = "align";
+        public const string AttrHeading = "heading";
+        public const string AttrIcon = "icon";
+        public const string AttrTitle = "title";
+        public const string AttrDescription = "description";
+        public const string AttrSize = "size";
+
+        /// <summary>토글 제목 단계(1~3). 일반 토글이나 다른 블록이면 0.</summary>
+        public int GetToggleHeadingLevel()
+        {
+            if (Kind != BlockKind.Toggle)
+                return 0;
+            var h = GetAttribute(AttrHeading);
+            if (h == "1") return 1;
+            if (h == "2") return 2;
+            if (h == "3") return 3;
+            return 0;
+        }
+
+        /// <summary>제목 단계(1~3). <see cref="BlockKind.Heading1"/>~<see cref="BlockKind.Heading3"/> 또는 토글 제목이면 1~3, 아니면 0.</summary>
+        public int GetHeadingLevel()
+        {
+            switch (Kind)
+            {
+                case BlockKind.Heading1: return 1;
+                case BlockKind.Heading2: return 2;
+                case BlockKind.Heading3: return 3;
+                case BlockKind.Toggle: return GetToggleHeadingLevel();
+                default: return 0;
+            }
+        }
 
         /// <summary>
         /// Markdown으로 나타낼 수 없는 속성(블록 글자색 <c>color</c>·배경색 <c>background</c> 등). Markdown은 순수하게 두고
@@ -148,7 +189,7 @@ namespace Folderss.Models
         /// <summary>여러 줄 원문을 그대로 다루는 블록(Enter가 줄바꿈)인지.</summary>
         public static bool IsVerbatim(BlockKind kind)
         {
-            return kind == BlockKind.Code || kind == BlockKind.Raw;
+            return kind == BlockKind.Code || kind == BlockKind.Raw || kind == BlockKind.Math;
         }
 
         /// <summary>내용(식별자 제외)이 같은지. 실행 취소 기록이 바뀐 블록만 저장하는 데 쓴다.</summary>
