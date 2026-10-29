@@ -13,7 +13,7 @@ namespace Folderss.Viewers
     /// Markdown 파일을 Notion식 블록 편집기(<see cref="BlockEditor"/>)로 편집하는 뷰어(<c>builtin:blocks</c>).
     /// 읽은 인코딩·줄바꿈(CRLF/LF)으로 저장하고, 저장할 때 Markdown 형식은 <see cref="BlockMarkdown"/> 규칙으로 정리된다.
     /// </summary>
-    public sealed class BlockEditorViewer : UserControl, IFileViewer, IViewerShortcutHandler
+    public sealed class BlockEditorViewer : UserControl, IFileViewer, IViewerShortcutHandler, IFileOpenRequester
     {
         /// <summary>
         /// 편집기는 화면에 보이는 블록만 입력란을 만들므로(가상화) 블록 수 제한은 없다. 이 크기는 해석·메모리 상한일 뿐이다
@@ -48,6 +48,9 @@ namespace Folderss.Viewers
 
         public event EventHandler<string> TitleChanged;
         public event EventHandler<bool> ModifiedChanged;
+
+        /// <summary>페이지 링크 블록을 눌렀다(열 문서 경로). 본체가 새 탭으로 연다.</summary>
+        public event EventHandler<string> FileOpenRequested;
 
         public BlockEditorViewer()
         {
@@ -100,6 +103,7 @@ namespace Folderss.Viewers
                 ModifiedChanged?.Invoke(this, _editor.IsModified);
             };
             _editor.SaveRequested += (s, e) => Save();
+            _editor.PageOpenRequested += (s, path) => FileOpenRequested?.Invoke(this, path);
 
             Loaded += (s, e) => NetworkSettingsService.Changed += OnNetworkSettingsChanged;
             Unloaded += (s, e) => NetworkSettingsService.Changed -= OnNetworkSettingsChanged;

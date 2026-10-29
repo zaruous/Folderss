@@ -56,6 +56,11 @@ namespace Folderss.Controls
         private bool[] _tableHeader = new bool[0];
         private int[] _tableStart = new int[0];
         private bool[] _tableLast = new bool[0];
+        // 여러 열 배치(BlockOperations.ColumnLayout): 묶음 [시작, 끝)(밖은 -1)·열 번호·묶음 시작 위치의 열 너비 비율
+        private int[] _colStart = new int[0];
+        private int[] _colEnd = new int[0];
+        private int[] _colIndex = new int[0];
+        private double[][] _colRatios = new double[0][];
         private readonly Dictionary<long, int> _indexById = new Dictionary<long, int>();
 
         // 실행 취소: 마지막 기록 시점 문서의 동결 사본(_committed)과 바뀐 구간 기록
@@ -87,7 +92,7 @@ namespace Folderss.Controls
         private BlockRow _dragRow;
         private Point _dragStart;
         private bool _dragging;
-        private int _dropIndex = -1;
+        private DropTarget _drop;
 
         /// <summary>저장하지 않은 변경 여부가 바뀌었다.</summary>
         public event EventHandler ModifiedChanged;
@@ -414,6 +419,7 @@ namespace Folderss.Controls
         /// </summary>
         private void RefreshStructure()
         {
+            BlockOperations.ColumnLayout(_blocks, out _colStart, out _colEnd, out _colIndex, out _colRatios);
             _visible = BlockOperations.VisibleFlags(_blocks);
             _numbers = BlockOperations.ListNumbers(_blocks);
             BlockOperations.TableLayout(_blocks, out _tableColumns, out _tableHeader);
@@ -889,7 +895,7 @@ namespace Folderss.Controls
             if (selectionStart == 0 && text.Length > 0)
             {
                 block.Text = text;
-                _blocks.Insert(index, new EditorBlock(continues, string.Empty, block.Indent));
+                _blocks.Insert(index, InColumnOf(new EditorBlock(continues, string.Empty, block.Indent), block));
                 SyncRows();
                 FocusRow(index + 1, 0);
                 RecordChange();
@@ -919,7 +925,7 @@ namespace Folderss.Controls
                 insertAt = index + 1;
             }
 
-            _blocks.Insert(insertAt, created);
+            _blocks.Insert(insertAt, InColumnOf(created, block));
             BlockOperations.NormalizeIndents(_blocks);
             SyncRows();
             FocusRow(insertAt, 0);
@@ -935,7 +941,7 @@ namespace Folderss.Controls
             var index = IndexOf(row);
             var block = row.Block;
 
-            if (block.Kind == BlockKind.Image || block.Kind == BlockKind.File || block.Kind == BlockKind.Bookmark)
+            if (block.Kind == BlockKind.Image || EditorBlock.IsLinkCard(block.Kind))
             {
                 // 이미지·파일·북마크는 텍스트로 바꾸면 경로를 잃으므로 블록을 선택한다(한 번 더 누르면 삭제).
                 SelectBlocks(index, index);
@@ -966,7 +972,7 @@ namespace Folderss.Controls
                 return;
             var target = _blocks[previous];
             if (target.Kind == BlockKind.TableRow || target.Kind == BlockKind.Image ||
-                target.Kind == BlockKind.File || target.Kind == BlockKind.Bookmark)
+                EditorBlock.IsLinkCard(target.Kind))
             {
                 // 표·미디어에는 글자를 합치지 않는다. 빈 문단이면 지우고 앞 블록 끝으로 간다.
                 if (block.Text.Length == 0)
@@ -1004,7 +1010,7 @@ namespace Folderss.Controls
             {
                 var next = NextEditable(index, 1);
                 if (next < 0 || _blocks[next].Kind == BlockKind.TableRow || _blocks[next].Kind == BlockKind.Image ||
-                    _blocks[next].Kind == BlockKind.File || _blocks[next].Kind == BlockKind.Bookmark)
+                    EditorBlock.IsLinkCard(_blocks[next].Kind))
                     return;
                 row.Block.Text += _blocks[next].Text;
                 _blocks.RemoveAt(next);
@@ -1065,6 +1071,121 @@ namespace Folderss.Controls
             RecordChange();
         }
 
+        // ── 여러 열 ────────────────────────────────────────────────────────
+
+        private bool InColumnGroup(int index)
+        {
+            return index >= 0 && index < _colStart.Length && _colStart[index] >= 0;
+        }
+
+        /// <summary>[first, last] 블록(자식 포함)을 <paramref name="count"/>열로 나란히 놓는다. 열 안의 블록은 다시 나누지 않는다.</summary>
+        private void MakeColumns(int first, int last, int count)
+        {
+            if (first < 0)
+                return;
+            var end = BlockOperations.ExtendToSubtrees(_blocks, first, last + 1);
+            for (var i = first; i < end; i++)
+            {
+                if (InColumnGroup(i))
+                {
+                    MessageBox.Show(Window.GetWindow(this), "열 안의 블록은 다시 열로 나눌 수 없습니다. 블록 메뉴 > 열 > '열 풀기'로 먼저 푸세요.", "여러 열",
+                        MessageBoxButton.OK, MessageBoxImage.Information);
+                    return;
+                }
+            }
+            BlockOperations.MakeColumns(_blocks, first, end, count);
+            _selAnchor = _selActive = -1;
+            SyncRows();
+            FocusRow(first, int.MaxValue);
+            RecordChange();
+        }
+
+        /// <summary>[first, last] 블록을 옆 열의 끝으로 옮긴다(오른쪽 끝 열이면 새 열).</summary>
+        private void MoveBlocksToColumn(int first, int last, int direction)
+        {
+            if (!InColumnGroup(first))
+                return;
+            var end = BlockOperations.ExtendToSubtrees(_blocks, first, last + 1);
+            var count = end - first;
+            var at = BlockOperations.MoveToColumn(_blocks, first, end, direction, _colStart, _colEnd, _colIndex);
+            if (at < 0)
+                return;
+            SyncRows();
+            SelectBlocks(at, at + count - 1);
+            RecordChange();
+        }
+
+        /// <summary>열 너비 비율(예: <c>2:1</c>, null이면 같은 너비)을 <paramref name="index"/>가 든 묶음에 정한다.</summary>
+        private void SetColumnRatio(int index, string ratio)
+        {
+            if (!InColumnGroup(index))
+                return;
+            _blocks[_colStart[index]].SetAttribute(EditorBlock.AttrColumnRatio, ratio);
+            SyncRows();
+            RecordChange();
+        }
+
+        private void UngroupColumnsAt(int index)
+        {
+            if (!InColumnGroup(index))
+                return;
+            BlockOperations.UngroupColumns(_blocks, index, _colStart, _colEnd);
+            SyncRows();
+            RecordChange();
+        }
+
+        private MenuItem CreateColumnMenu(BlockRow row, Func<int> first, Func<int> last, Func<bool> valid)
+        {
+            var item = new MenuItem { Header = "열" };
+            var index = IndexOf(row);
+            if (!InColumnGroup(index))
+            {
+                item.Items.Add(CreateMenuItem("2열로 나란히", "/2열", () => { if (valid()) MakeColumns(first(), last(), 2); }));
+                item.Items.Add(CreateMenuItem("3열로 나란히", "/3열", () => { if (valid()) MakeColumns(first(), last(), 3); }));
+                return item;
+            }
+
+            var start = _colStart[index];
+            var count = _colRatios[start].Length;
+            var column = _colIndex[index];
+            var left = CreateMenuItem("왼쪽 열로 옮기기", string.Empty, () => { if (valid()) MoveBlocksToColumn(first(), last(), -1); });
+            left.IsEnabled = column > 0;
+            var right = CreateMenuItem(column == count - 1 ? "오른쪽 새 열로 옮기기" : "오른쪽 열로 옮기기", string.Empty, () => { if (valid()) MoveBlocksToColumn(first(), last(), 1); });
+            right.IsEnabled = column < count - 1 || count < BlockOperations.MaxColumns;
+            item.Items.Add(left);
+            item.Items.Add(right);
+            item.Items.Add(new Separator());
+
+            var widths = new MenuItem { Header = "열 너비" };
+            var current = _blocks[start].GetAttribute(EditorBlock.AttrColumnRatio);
+            foreach (var preset in ColumnRatioPresets(count))
+            {
+                var ratio = preset.Value;
+                var presetItem = CreateMenuItem(preset.Key, string.Empty, () => SetColumnRatio(IndexOf(row), ratio));
+                presetItem.IsChecked = ratio == current;
+                widths.Items.Add(presetItem);
+            }
+            item.Items.Add(widths);
+            item.Items.Add(CreateMenuItem("열 풀기 (세로로)", string.Empty, () => UngroupColumnsAt(IndexOf(row))));
+            return item;
+        }
+
+        private static IEnumerable<KeyValuePair<string, string>> ColumnRatioPresets(int count)
+        {
+            yield return new KeyValuePair<string, string>("같은 너비", null);
+            if (count == 2)
+            {
+                yield return new KeyValuePair<string, string>("왼쪽 넓게 (2:1)", "2:1");
+                yield return new KeyValuePair<string, string>("오른쪽 넓게 (1:2)", "1:2");
+            }
+            else if (count == 3)
+            {
+                yield return new KeyValuePair<string, string>("가운데 넓게 (1:2:1)", "1:2:1");
+                yield return new KeyValuePair<string, string>("왼쪽 넓게 (2:1:1)", "2:1:1");
+                yield return new KeyValuePair<string, string>("오른쪽 넓게 (1:1:2)", "1:1:2");
+            }
+        }
+
         /// <summary>[first, last] 블록(자식 포함)을 바로 아래에 복제한다.</summary>
         private void DuplicateBlocks(int first, int last)
         {
@@ -1112,7 +1233,7 @@ namespace Folderss.Controls
                     block.Text = string.Empty;
                     if (i == last)
                     {
-                        afterNonEditable = new EditorBlock(BlockKind.Paragraph, string.Empty, block.Indent);
+                        afterNonEditable = InColumnOf(new EditorBlock(BlockKind.Paragraph, string.Empty, block.Indent), block);
                         _blocks.Insert(i + 1, afterNonEditable);
                     }
                 }
@@ -1161,7 +1282,7 @@ namespace Folderss.Controls
                 case BlockKind.Math:
                     var index = IndexOf(row);
                     var at = BlockOperations.SubtreeEnd(_blocks, index);
-                    _blocks.Insert(at, new EditorBlock(BlockKind.Paragraph, string.Empty, block.Indent));
+                    _blocks.Insert(at, InColumnOf(new EditorBlock(BlockKind.Paragraph, string.Empty, block.Indent), block));
                     SyncRows();
                     FocusRow(at, 0);
                     RecordChange();
@@ -1252,7 +1373,7 @@ namespace Folderss.Controls
             else
             {
                 target = BlockOperations.SubtreeEnd(_blocks, index);
-                _blocks.Insert(target, new EditorBlock(BlockKind.Paragraph, "/", row.Block.Indent));
+                _blocks.Insert(target, InColumnOf(new EditorBlock(BlockKind.Paragraph, "/", row.Block.Indent), row.Block));
             }
             BlockOperations.NormalizeIndents(_blocks);
             _selAnchor = _selActive = -1;
@@ -1311,7 +1432,7 @@ namespace Folderss.Controls
                 Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(UpdateSlashQuery));
             }
             else if (inserted != null && !EditorBlock.IsVerbatim(row.Block.Kind) &&
-                     row.Block.Kind != BlockKind.Image && row.Block.Kind != BlockKind.File && row.Block.Kind != BlockKind.Bookmark &&
+                     row.Block.Kind != BlockKind.Image && !EditorBlock.IsLinkCard(row.Block.Kind) &&
                      inserted.AddedLength == 1)
             {
                 var at = inserted.Offset;
@@ -1457,7 +1578,10 @@ namespace Folderss.Controls
             var tail = current.Substring(selectionStart);
 
             foreach (var item in parsed)
+            {
                 item.Indent += block.Indent;
+                InColumnOf(item, block);
+            }
 
             var inserted = new List<EditorBlock>();
             if (current.Length == 0 && block.Kind == BlockKind.Paragraph)
@@ -1482,7 +1606,7 @@ namespace Folderss.Controls
             {
                 if (last.Kind == BlockKind.Divider)
                 {
-                    last = new EditorBlock(BlockKind.Paragraph, string.Empty, last.Indent);
+                    last = InColumnOf(new EditorBlock(BlockKind.Paragraph, string.Empty, last.Indent), block);
                     inserted.Add(last);
                     caret = 0;
                 }
@@ -1494,6 +1618,13 @@ namespace Folderss.Controls
             SyncRows();
             FocusRow(_blocks.IndexOf(last), caret);
             RecordChange();
+        }
+
+        /// <summary>새 블록을 <paramref name="from"/>과 같은 열에 둔다 — 열 묶음 안에서 만든 블록이 묶음 밖으로 빠지지 않게(묶음 밖이면 지움).</summary>
+        private static EditorBlock InColumnOf(EditorBlock created, EditorBlock from)
+        {
+            created.SetAttribute(EditorBlock.AttrColumn, from == null ? null : from.GetAttribute(EditorBlock.AttrColumn));
+            return created;
         }
 
         private static void CopyContent(EditorBlock source, EditorBlock target)
@@ -1668,7 +1799,7 @@ namespace Folderss.Controls
                     if (_blocks[_selActive].Kind == BlockKind.Divider)
                     {
                         var at = _selActive + 1;
-                        _blocks.Insert(at, new EditorBlock(BlockKind.Paragraph, string.Empty, _blocks[_selActive].Indent));
+                        _blocks.Insert(at, InColumnOf(new EditorBlock(BlockKind.Paragraph, string.Empty, _blocks[_selActive].Indent), _blocks[_selActive]));
                         _selAnchor = _selActive = -1;
                         SyncRows();
                         FocusRow(at, 0);
@@ -1765,7 +1896,10 @@ namespace Folderss.Controls
                 return;
             var indent = _blocks[last].Indent;
             foreach (var block in parsed)
+            {
                 block.Indent += indent;
+                InColumnOf(block, _blocks[last]);
+            }
             _blocks.InsertRange(end, parsed);
             BlockOperations.NormalizeIndents(_blocks);
             SyncRows();
@@ -1779,9 +1913,8 @@ namespace Folderss.Controls
                 return;
             e.Effects = DragDropEffects.Copy;
             e.Handled = true;
-            var pos = e.GetPosition(_panel);
-            var drop = _panel.DropIndexAt(pos.Y);
-            _panel.ShowDropLine(drop, drop < _blocks.Count ? _blocks[drop].Indent : 0);
+            var drop = _panel.DropTargetAt(e.GetPosition(_panel));
+            _panel.ShowDropLine(drop, drop.Index < _blocks.Count ? _blocks[drop.Index].Indent : 0);
         }
 
         private void OnPreviewFileDragLeave(object sender, DragEventArgs e)
@@ -1798,9 +1931,9 @@ namespace Folderss.Controls
             if (files == null || files.Length == 0)
                 return;
             e.Handled = true;
-            var pos = e.GetPosition(_panel);
-            var drop = Math.Max(0, Math.Min(_panel.DropIndexAt(pos.Y), _blocks.Count - 1));
-            HandleDroppedFiles(files, drop);
+            // 표시선(그 블록 앞) 자리에 들어가도록 바로 앞 블록 뒤에 넣는다
+            var drop = _panel.DropTargetAt(e.GetPosition(_panel));
+            HandleDroppedFiles(files, Math.Max(0, Math.Min(drop.Index - 1, _blocks.Count - 1)), drop);
         }
 
         // ── 블록 손잡이: 끌어 옮기기·메뉴 ─────────────────────────────────
@@ -1810,7 +1943,7 @@ namespace Folderss.Controls
             _dragRow = row;
             _dragStart = e.GetPosition(_panel);
             _dragging = false;
-            _dropIndex = -1;
+            _drop = null;
             handle.CaptureMouse();
             e.Handled = true;
         }
@@ -1841,7 +1974,7 @@ namespace Folderss.Controls
         private void HandleMouseUp(BlockRow row, UIElement handle, MouseButtonEventArgs e)
         {
             var wasDragging = _dragging;
-            var drop = _dropIndex;
+            var drop = _drop;
             EndDrag(handle);
             e.Handled = true;
             if (wasDragging)
@@ -1854,7 +1987,7 @@ namespace Folderss.Controls
         {
             _dragging = false;
             _dragRow = null;
-            _dropIndex = -1;
+            _drop = null;
             _panel.HideDropLine();
             if (handle.IsMouseCaptured)
                 handle.ReleaseMouseCapture();
@@ -1864,33 +1997,44 @@ namespace Folderss.Controls
         {
             var start = IndexOf(_dragRow);
             var end = BlockOperations.SubtreeEnd(_blocks, start);
-            var drop = _panel.DropIndexAt(position.Y);
-            if (drop >= start && drop <= end)
+            var drop = _panel.DropTargetAt(position);
+            if (!CanDrop(start, end, drop))
             {
-                _dropIndex = -1;
+                _drop = null;
                 _panel.HideDropLine();
                 return;
             }
-            _dropIndex = drop;
-            _panel.ShowDropLine(drop, drop < _blocks.Count ? _blocks[drop].Indent : 0);
+            _drop = drop;
+            _panel.ShowDropLine(drop, drop.Index < _blocks.Count ? _blocks[drop.Index].Indent : 0);
         }
 
-        private void DropBlock(BlockRow row, int drop)
+        /// <summary>[start, end) 블록을 <paramref name="drop"/>에 놓으면 바뀌는지(자기 자리 앞뒤라도 다른 열이면 옮긴다).</summary>
+        private bool CanDrop(int start, int end, DropTarget drop)
+        {
+            if (drop == null || (drop.Index > start && drop.Index < end))
+                return false;
+            return (drop.Index != start && drop.Index != end) || drop.Column != _blocks[start].GetAttribute(EditorBlock.AttrColumn);
+        }
+
+        private void DropBlock(BlockRow row, DropTarget drop)
         {
             var start = IndexOf(row);
-            if (start < 0 || drop < 0)
+            if (start < 0)
                 return;
             var end = BlockOperations.SubtreeEnd(_blocks, start);
-            if (drop >= start && drop <= end)
+            if (!CanDrop(start, end, drop))
                 return;
 
             var moving = _blocks.GetRange(start, end - start);
             _blocks.RemoveRange(start, end - start);
-            var insertAt = drop > start ? drop - (end - start) : drop;
+            var insertAt = drop.Index > start ? drop.Index - (end - start) : drop.Index;
             var targetIndent = insertAt < _blocks.Count ? _blocks[insertAt].Indent : 0;
             var delta = targetIndent - moving[0].Indent;
             foreach (var block in moving)
+            {
                 block.Indent = Math.Max(0, block.Indent + delta);
+                block.SetAttribute(EditorBlock.AttrColumn, drop.Column);   // 놓은 열로(묶음 밖이면 묶음에서 뺌)
+            }
             _blocks.InsertRange(insertAt, moving);
             BlockOperations.NormalizeIndents(_blocks);
             _selAnchor = _selActive = -1;
@@ -1924,6 +2068,7 @@ namespace Folderss.Controls
             }
             menu.Items.Add(turnInto);
             menu.Items.Add(CreateColorMenu(first, last, valid));
+            menu.Items.Add(CreateColumnMenu(row, first, last, valid));
             menu.Items.Add(new Separator());
             menu.Items.Add(CreateMenuItem("Markdown으로 복사", "Ctrl+C", () => { if (valid()) CopyBlocks(first(), last()); }));
             if (row.Block.Kind == BlockKind.TableRow)
@@ -1950,6 +2095,12 @@ namespace Folderss.Controls
             {
                 menu.Items.Add(new Separator());
                 menu.Items.Add(CreateMenuItem("파일 열기", string.Empty, () => OpenLocalTarget(ResolveImagePath(row.Block.Source))));
+                menu.Items.Add(CreateMenuItem("탐색기에서 열기", string.Empty, () => RevealInExplorer(ResolveImagePath(row.Block.Source))));
+            }
+            if (row.Block.Kind == BlockKind.Page)
+            {
+                menu.Items.Add(new Separator());
+                menu.Items.Add(CreateMenuItem("페이지 열기", string.Empty, () => OpenPage(row.Block)));
                 menu.Items.Add(CreateMenuItem("탐색기에서 열기", string.Empty, () => RevealInExplorer(ResolveImagePath(row.Block.Source))));
             }
             if (row.Block.Kind == BlockKind.Bookmark)
@@ -2042,6 +2193,21 @@ namespace Folderss.Controls
             {
                 Title = "북마크", Icon = "🔖", Hint = "[🔖](URL)", Keywords = new[] { "bookmark", "link", "web", "url", "북마크", "웹링크" },
                 Run = (editor, row, at) => editor.PromptAndInsertBookmarkBlock(editor.IndexOf(row)),
+            },
+            new SlashCommand
+            {
+                Title = "페이지", Icon = "📄", Hint = "[📄](경로.md)", Keywords = new[] { "page", "subpage", "페이지", "하위페이지", "문서" },
+                Run = (editor, row, at) => editor.PromptAndInsertPageBlock(editor.IndexOf(row)),
+            },
+            new SlashCommand
+            {
+                Title = "2열", Icon = "▥", Hint = "나란히", Keywords = new[] { "2col", "columns", "column", "2열", "열", "나란히" },
+                Run = (editor, row, at) => editor.MakeColumns(editor.IndexOf(row), editor.IndexOf(row), 2),
+            },
+            new SlashCommand
+            {
+                Title = "3열", Icon = "▥", Hint = "나란히", Keywords = new[] { "3col", "columns", "column", "3열", "열", "나란히" },
+                Run = (editor, row, at) => editor.MakeColumns(editor.IndexOf(row), editor.IndexOf(row), 3),
             },
             new SlashCommand
             {
@@ -2267,12 +2433,12 @@ namespace Folderss.Controls
             }
 
             var at = BlockOperations.SubtreeEnd(_blocks, index);
-            var created = new EditorBlock(kind, string.Empty, row.Block.Indent);
+            var created = InColumnOf(new EditorBlock(kind, string.Empty, row.Block.Indent), row.Block);
             if (kind == BlockKind.Toggle && !string.IsNullOrEmpty(toggleHeading))
                 created.SetAttribute(EditorBlock.AttrHeading, toggleHeading);
             _blocks.Insert(at, created);
             if (kind == BlockKind.Divider || kind == BlockKind.Toc)
-                _blocks.Insert(at + 1, new EditorBlock(BlockKind.Paragraph, string.Empty, row.Block.Indent));
+                _blocks.Insert(at + 1, InColumnOf(new EditorBlock(BlockKind.Paragraph, string.Empty, row.Block.Indent), row.Block));
             BlockOperations.NormalizeIndents(_blocks);
             SyncRows();
             FocusRow((kind == BlockKind.Divider || kind == BlockKind.Toc) ? at + 1 : at, 0);

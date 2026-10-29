@@ -29,8 +29,8 @@ namespace Folderss.Services
         private static readonly Regex NumberedShortcut = new Regex(@"^\d{1,9}[.)] $");
         private static readonly Regex TableDelimiter = new Regex(@"^\|?[ \t]*:?-+:?[ \t]*(\|[ \t]*:?-+:?[ \t]*)*\|?[ \t]*$");
         private static readonly Regex ImageLine = new Regex(@"^!\[([^\]]*)\]\([ \t]*(?:<([^>]*)>|([^)\s]+))(?:[ \t]+""[^""]*"")?[ \t]*\)$");
-        private static readonly Regex FileLine = new Regex(@"^\[📎(?:[ \t]+([^\]]*)|([^\]]*))\]\([ \t]*(?:<([^>]*)>|([^)\s]+))(?:[ \t]+""[^""]*"")?[ \t]*\)$");
-        private static readonly Regex BookmarkLine = new Regex(@"^\[🔖(?:[ \t]+([^\]]*)|([^\]]*))\]\([ \t]*(?:<([^>]*)>|([^)\s]+))(?:[ \t]+""[^""]*"")?[ \t]*\)$");
+        /// <summary>링크 카드 줄 <c>[아이콘 제목](경로)</c>: 1 = 아이콘, 2·3 = 제목, 4·5 = 경로(꺾쇠 안 / 밖).</summary>
+        private static readonly Regex LinkCardLine = new Regex(@"^\[(📎|🔖|📄)(?:[ \t]+([^\]]*)|([^\]]*))\]\([ \t]*(?:<([^>]*)>|([^)\s]+))(?:[ \t]+""[^""]*"")?[ \t]*\)$");
 
         public static readonly string[] CalloutTypes = { "NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION" };
 
@@ -223,25 +223,13 @@ namespace Folderss.Services
                         continue;
                     }
 
-                    var file = FileLine.Match(content.TrimEnd());
-                    if (file.Success)
+                    var card = LinkCardLine.Match(content.TrimEnd());
+                    if (card.Success)
                     {
-                        var label = file.Groups[1].Success ? file.Groups[1].Value : file.Groups[2].Value;
-                        output.Add(new EditorBlock(BlockKind.File, label, LevelForBlock(indent))
+                        var label = card.Groups[2].Success ? card.Groups[2].Value : card.Groups[3].Value;
+                        output.Add(new EditorBlock(LinkCardKind(card.Groups[1].Value), label, LevelForBlock(indent))
                         {
-                            Source = file.Groups[3].Success ? file.Groups[3].Value : file.Groups[4].Value,
-                        });
-                        Close();
-                        continue;
-                    }
-
-                    var bookmark = BookmarkLine.Match(content.TrimEnd());
-                    if (bookmark.Success)
-                    {
-                        var label = bookmark.Groups[1].Success ? bookmark.Groups[1].Value : bookmark.Groups[2].Value;
-                        output.Add(new EditorBlock(BlockKind.Bookmark, label, LevelForBlock(indent))
-                        {
-                            Source = bookmark.Groups[3].Success ? bookmark.Groups[3].Value : bookmark.Groups[4].Value,
+                            Source = card.Groups[4].Success ? card.Groups[4].Value : card.Groups[5].Value,
                         });
                         Close();
                         continue;
@@ -739,19 +727,14 @@ namespace Folderss.Services
                         break;
 
                     case BlockKind.File:
-                        var fileSource = block.Source ?? string.Empty;
-                        if (fileSource.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
-                            fileSource = "<" + fileSource + ">";
-                        var fileLabel = OneLine(block.Text).Replace("]", "\\]");
-                        sb.Append(indent).Append(fileLabel.Length > 0 ? "[📎 " + fileLabel + "](" : "[📎](").Append(fileSource).Append(")\n");
-                        break;
-
                     case BlockKind.Bookmark:
-                        var bmSource = block.Source ?? string.Empty;
-                        if (bmSource.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
-                            bmSource = "<" + bmSource + ">";
-                        var bmLabel = OneLine(block.Text).Replace("]", "\\]");
-                        sb.Append(indent).Append(bmLabel.Length > 0 ? "[🔖 " + bmLabel + "](" : "[🔖](").Append(bmSource).Append(")\n");
+                    case BlockKind.Page:
+                        var cardSource = block.Source ?? string.Empty;
+                        if (cardSource.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
+                            cardSource = "<" + cardSource + ">";
+                        var cardLabel = OneLine(block.Text).Replace("]", "\\]");
+                        var cardIcon = LinkCardIcon(block.Kind);
+                        sb.Append(indent).Append(cardLabel.Length > 0 ? "[" + cardIcon + " " + cardLabel + "](" : "[" + cardIcon + "](").Append(cardSource).Append(")\n");
                         break;
 
                     case BlockKind.Toggle:
@@ -824,6 +807,17 @@ namespace Folderss.Services
         private static string OneLine(string text)
         {
             return (text ?? string.Empty).Replace("\r\n", " ").Replace('\n', ' ');
+        }
+
+        /// <summary>링크 카드 줄의 아이콘(<c>📎</c> 파일·<c>🔖</c> 북마크·<c>📄</c> 페이지).</summary>
+        private static string LinkCardIcon(BlockKind kind)
+        {
+            return kind == BlockKind.Bookmark ? "🔖" : kind == BlockKind.Page ? "📄" : "📎";
+        }
+
+        private static BlockKind LinkCardKind(string icon)
+        {
+            return icon == "🔖" ? BlockKind.Bookmark : icon == "📄" ? BlockKind.Page : BlockKind.File;
         }
 
         private static int LongestBacktickRun(string text)

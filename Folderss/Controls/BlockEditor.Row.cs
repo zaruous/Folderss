@@ -325,7 +325,7 @@ namespace Folderss.Controls
                 RefreshState();
                 if (Block.Kind == BlockKind.Image)
                     RefreshImage();
-                else if (Block.Kind == BlockKind.File || Block.Kind == BlockKind.Bookmark)
+                else if (EditorBlock.IsLinkCard(Block.Kind))
                     RefreshMediaCard();
             }
 
@@ -356,7 +356,7 @@ namespace Folderss.Controls
 
             private string MetaValue()
             {
-                return (Block.Kind == BlockKind.Image || Block.Kind == BlockKind.File || Block.Kind == BlockKind.Bookmark
+                return (Block.Kind == BlockKind.Image || EditorBlock.IsLinkCard(Block.Kind)
                     ? Block.Source
                     : Block.Language) ?? string.Empty;
             }
@@ -380,7 +380,7 @@ namespace Folderss.Controls
             private void SyncEditors()
             {
                 var kind = Block.Kind;
-                var showMeta = kind == BlockKind.Code || kind == BlockKind.Image || kind == BlockKind.File || kind == BlockKind.Bookmark;
+                var showMeta = kind == BlockKind.Code || kind == BlockKind.Image || EditorBlock.IsLinkCard(kind);
                 if (!_editing)
                 {
                     _display.Visibility = kind == BlockKind.Divider || kind == BlockKind.Toc || kind == BlockKind.TableRow ? Visibility.Collapsed : Visibility.Visible;
@@ -435,7 +435,7 @@ namespace Folderss.Controls
                     _mainEditor.Visibility = Visibility.Visible;
                 }
 
-                var editorRow = kind == BlockKind.Image || kind == BlockKind.File || kind == BlockKind.Bookmark ? 2 : 1;
+                var editorRow = kind == BlockKind.Image || EditorBlock.IsLinkCard(kind) ? 2 : 1;
                 Grid.SetRow(_mainEditor, editorRow);
                 ApplyTextStyle(_mainEditor);
                 _mainEditor.AcceptsTab = EditorBlock.IsVerbatim(kind);
@@ -451,13 +451,13 @@ namespace Folderss.Controls
             {
                 _mainEditor = CreateTextBox(Block.Text);
                 Grid.SetColumn(_mainEditor, 1);
-                Grid.SetRow(_mainEditor, Block.Kind == BlockKind.Image || Block.Kind == BlockKind.File || Block.Kind == BlockKind.Bookmark ? 2 : 1);
+                Grid.SetRow(_mainEditor, Block.Kind == BlockKind.Image || EditorBlock.IsLinkCard(Block.Kind) ? 2 : 1);
                 _bodyGrid.Children.Add(_mainEditor);
 
                 _mainEditor.TextChanged += (s, e) =>
                 {
                     _owner.OnEditorTextChanged(this, e);
-                    if (Block.Kind == BlockKind.File || Block.Kind == BlockKind.Bookmark)
+                    if (EditorBlock.IsLinkCard(Block.Kind))
                         RefreshMediaCard();
                 };
                 _mainEditor.GotKeyboardFocus += (s, e) =>
@@ -528,7 +528,7 @@ namespace Folderss.Controls
                 _appliedTextColor = null;
 
                 ApplyTextStyle(_display);
-                Grid.SetRow(_display, kind == BlockKind.Image || kind == BlockKind.File || kind == BlockKind.Bookmark ? 2 : 1);
+                Grid.SetRow(_display, kind == BlockKind.Image || EditorBlock.IsLinkCard(kind) ? 2 : 1);
 
                 if (kind == BlockKind.Divider)
                     EnsureDivider().Visibility = Visibility.Visible;
@@ -545,7 +545,7 @@ namespace Folderss.Controls
                     _tocPanel.Visibility = Visibility.Collapsed;
                 }
 
-                if (kind == BlockKind.File || kind == BlockKind.Bookmark)
+                if (EditorBlock.IsLinkCard(kind))
                 {
                     EnsureMediaCard().Visibility = Visibility.Visible;
                 }
@@ -554,13 +554,14 @@ namespace Folderss.Controls
                     _mediaCard.Visibility = Visibility.Collapsed;
                 }
 
-                if (kind == BlockKind.Code || kind == BlockKind.Image || kind == BlockKind.File || kind == BlockKind.Bookmark)
+                if (kind == BlockKind.Code || kind == BlockKind.Image || EditorBlock.IsLinkCard(kind))
                 {
                     var meta = EnsureMetaDisplay();
                     meta.Text = MetaValue();
                     var tip = kind == BlockKind.Image ? "이미지 경로 (문서 폴더 기준 상대 경로, 절대 경로 또는 http/https 주소)"
                         : kind == BlockKind.File ? "첨부 파일 경로 (문서 폴더 기준 상대 경로 또는 절대 경로)"
                         : kind == BlockKind.Bookmark ? "북마크 웹 주소 (https://...)"
+                        : kind == BlockKind.Page ? "페이지(.md 문서) 경로 (문서 폴더 기준 상대 경로 또는 절대 경로)"
                         : "코드 언어 (예: csharp, python, json)";
                     meta.ToolTip = tip;
                     if (_metaBox != null)
@@ -592,9 +593,9 @@ namespace Folderss.Controls
                     : headingLevel == 2 ? new Thickness(0, 16, 0, 2)
                     : headingLevel == 3 ? new Thickness(0, 10, 0, 1)
                     : kind == BlockKind.TableRow ? new Thickness(0)
-                    : verbatim || kind == BlockKind.Callout || kind == BlockKind.Image || kind == BlockKind.Toc || kind == BlockKind.File || kind == BlockKind.Bookmark ? new Thickness(0, 4, 0, 4)
+                    : verbatim || kind == BlockKind.Callout || kind == BlockKind.Image || kind == BlockKind.Toc || EditorBlock.IsLinkCard(kind) ? new Thickness(0, 4, 0, 4)
                     : new Thickness(0, 1, 0, 1);
-                _gutterTop = headingLevel == 1 ? 9 : headingLevel == 2 ? 5 : verbatim || kind == BlockKind.Callout || kind == BlockKind.Toc || kind == BlockKind.File || kind == BlockKind.Bookmark ? 8 : 2;
+                _gutterTop = headingLevel == 1 ? 9 : headingLevel == 2 ? 5 : verbatim || kind == BlockKind.Callout || kind == BlockKind.Toc || EditorBlock.IsLinkCard(kind) ? 8 : 2;
                 if (_gutter != null)
                     _gutter.Margin = new Thickness(0, _gutterTop, 4, 0);
 
@@ -1218,6 +1219,74 @@ namespace Folderss.Controls
 
                     card.Child = grid;
                 }
+                else if (Block.Kind == BlockKind.Page)
+                {
+                    // 페이지 링크: 제목을 누르면 그 문서를 새 탭으로 연다
+                    var grid = new Grid();
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(1, GridUnitType.Star) });
+                    grid.ColumnDefinitions.Add(new ColumnDefinition { Width = GridLength.Auto });
+                    grid.Children.Add(new TextBlock { Text = "📄", FontSize = 18, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 10, 0) });
+
+                    var path = _owner.ResolveImagePath(Block.Source);
+                    var exists = path != null && File.Exists(path);
+                    var infoStack = new StackPanel { VerticalAlignment = VerticalAlignment.Center };
+                    var titleBlock = new TextBlock
+                    {
+                        Text = PageTitle(Block),
+                        FontSize = 13.5,
+                        FontWeight = FontWeights.SemiBold,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        TextDecorations = TextDecorations.Underline,
+                        Cursor = Cursors.Hand,
+                        ToolTip = "페이지 열기",
+                    };
+                    titleBlock.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryText");
+                    titleBlock.MouseLeftButtonDown += (_, ev) =>
+                    {
+                        ev.Handled = true;
+                        _owner.OpenPage(Block);
+                    };
+                    infoStack.Children.Add(titleBlock);
+                    var subBlock = new TextBlock
+                    {
+                        Text = (Block.Source ?? string.Empty) + (exists || string.IsNullOrWhiteSpace(Block.Source) ? string.Empty : " · 파일 없음"),
+                        FontSize = 11.5,
+                        TextTrimming = TextTrimming.CharacterEllipsis,
+                        Margin = new Thickness(0, 2, 0, 0),
+                    };
+                    subBlock.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+                    infoStack.Children.Add(subBlock);
+                    Grid.SetColumn(infoStack, 1);
+                    grid.Children.Add(infoStack);
+
+                    var openBtn = new Button
+                    {
+                        Content = exists ? "열기" : "만들기",
+                        Padding = new Thickness(8, 3, 8, 3),
+                        Margin = new Thickness(6, 0, 0, 0),
+                        FontSize = 11.5,
+                        VerticalAlignment = VerticalAlignment.Center,
+                    };
+                    openBtn.Click += (_, ev) =>
+                    {
+                        ev.Handled = true;
+                        _owner.OpenPage(Block);
+                    };
+                    Grid.SetColumn(openBtn, 2);
+                    grid.Children.Add(openBtn);
+
+                    card.Child = grid;
+                }
+            }
+
+            /// <summary>페이지 링크 제목: 적은 제목, 없으면 파일 이름(확장자 제외).</summary>
+            private static string PageTitle(EditorBlock block)
+            {
+                if (!string.IsNullOrWhiteSpace(block.Text))
+                    return block.Text;
+                var name = Path.GetFileNameWithoutExtension(Uri.UnescapeDataString(block.Source ?? string.Empty));
+                return string.IsNullOrWhiteSpace(name) ? "(페이지 경로를 입력하세요)" : name;
             }
 
             public void OpenBookmarkInBrowser()
@@ -1344,7 +1413,7 @@ namespace Folderss.Controls
             {
                 ApplyTextStyle(_placeholder);
                 _placeholder.Text = PlaceholderOf(Block);
-                Grid.SetRow(_placeholder, Block.Kind == BlockKind.Image || Block.Kind == BlockKind.File || Block.Kind == BlockKind.Bookmark ? 2 : 1);
+                Grid.SetRow(_placeholder, Block.Kind == BlockKind.Image || EditorBlock.IsLinkCard(Block.Kind) ? 2 : 1);
             }
 
             /// <summary>체크·접힘·콜아웃 종류처럼 종류는 그대로인 상태 변화를 반영한다. 바뀐 것만 건드린다.</summary>
@@ -2036,7 +2105,8 @@ namespace Folderss.Controls
                     case BlockKind.Raw: return 13;
                     case BlockKind.Image:
                     case BlockKind.File:
-                    case BlockKind.Bookmark: return 12.5;
+                    case BlockKind.Bookmark:
+                    case BlockKind.Page: return 12.5;
                     default: return 15;
                 }
             }
@@ -2067,6 +2137,7 @@ namespace Folderss.Controls
                     case BlockKind.Image: return "캡션(대체 텍스트)";
                     case BlockKind.File: return "표시할 파일 이름";
                     case BlockKind.Bookmark: return "표시할 북마크 제목";
+                    case BlockKind.Page: return "페이지 제목";
                     default: return "글을 쓰거나 '/'를 눌러 명령 사용";
                 }
             }

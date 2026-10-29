@@ -36,6 +36,8 @@ namespace Folderss.Models
         File,
         /// <summary>웹 북마크 카드(<c>[🔖 제목](URL)</c>). 표시 제목은 <see cref="EditorBlock.Text"/>, URL은 <see cref="EditorBlock.Source"/>.</summary>
         Bookmark,
+        /// <summary>다른 문서(페이지 = <c>.md</c> 파일)로 가는 링크 카드(<c>[📄 제목](경로.md)</c>). 제목은 <see cref="EditorBlock.Text"/>, 경로는 <see cref="EditorBlock.Source"/>.</summary>
+        Page,
     }
 
     /// <summary>
@@ -87,6 +89,15 @@ namespace Folderss.Models
         public const string AttrTitle = "title";
         public const string AttrDescription = "description";
         public const string AttrSize = "size";
+
+        /// <summary>
+        /// 여러 열 배치: <c>묶음id/열번호</c>(예: <c>k3f9a2/1</c>). 같은 묶음id로 이어진 블록들이 나란히 놓인 열 묶음이고, Markdown에는 1열 → 2열 순서대로 쓴다.
+        /// 정리 규칙은 <c>BlockOperations.ColumnLayout</c>.
+        /// </summary>
+        public const string AttrColumn = "column";
+
+        /// <summary>열 묶음 첫 블록에만 두는 열 너비 비율(예: <c>1:2</c>). 없으면 같은 너비.</summary>
+        public const string AttrColumnRatio = "colratio";
 
         /// <summary>토글 제목 단계(1~3). 일반 토글이나 다른 블록이면 0.</summary>
         public int GetToggleHeadingLevel()
@@ -190,6 +201,12 @@ namespace Folderss.Models
         public static bool IsVerbatim(BlockKind kind)
         {
             return kind == BlockKind.Code || kind == BlockKind.Raw || kind == BlockKind.Math;
+        }
+
+        /// <summary>경로(<see cref="Source"/>)와 제목을 카드로 보여 주는 블록(파일 첨부·북마크·페이지 링크)인지.</summary>
+        public static bool IsLinkCard(BlockKind kind)
+        {
+            return kind == BlockKind.File || kind == BlockKind.Bookmark || kind == BlockKind.Page;
         }
 
         /// <summary>내용(식별자 제외)이 같은지. 실행 취소 기록이 바뀐 블록만 저장하는 데 쓴다.</summary>

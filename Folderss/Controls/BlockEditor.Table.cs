@@ -114,7 +114,7 @@ namespace Folderss.Controls
                 return;
             var above = _blocks[at - 1];
             var columns = Math.Max(1, at - 1 < _tableColumns.Length ? _tableColumns[at - 1] : BlockMarkdown.CountCells(above.Text));
-            _blocks.Insert(at, new EditorBlock(BlockKind.TableRow, BlockMarkdown.JoinCells(Enumerable.Repeat(string.Empty, columns)), above.Indent));
+            _blocks.Insert(at, InColumnOf(new EditorBlock(BlockKind.TableRow, BlockMarkdown.JoinCells(Enumerable.Repeat(string.Empty, columns)), above.Indent), above));
             SyncRows();
             FocusRow(at, 0, column);
             RecordChange();
@@ -201,6 +201,8 @@ namespace Folderss.Controls
                 new EditorBlock(BlockKind.TableRow, empty, indent),
                 new EditorBlock(BlockKind.TableRow, empty, indent),
             };
+            foreach (var tableRow in rows)
+                InColumnOf(tableRow, row.Block);
             int at;
             if (row.Block.Kind == BlockKind.Paragraph && row.Block.Text.Trim().Length == 0)
             {
@@ -222,7 +224,7 @@ namespace Folderss.Controls
         private void InsertImage(BlockRow row)
         {
             var index = IndexOf(row);
-            var image = new EditorBlock(BlockKind.Image, string.Empty, row.Block.Indent);
+            var image = InColumnOf(new EditorBlock(BlockKind.Image, string.Empty, row.Block.Indent), row.Block);
             int at;
             if (row.Block.Kind == BlockKind.Paragraph && row.Block.Text.Trim().Length == 0)
             {
@@ -288,7 +290,7 @@ namespace Folderss.Controls
                 }
                 else
                 {
-                    var newRow = new EditorBlock(BlockKind.TableRow, string.Empty, indent);
+                    var newRow = InColumnOf(new EditorBlock(BlockKind.TableRow, string.Empty, indent), row.Block);
                     _blocks.Insert(index + i, newRow);
                     cells = new List<string>();
                     last = index + i;
@@ -322,7 +324,7 @@ namespace Folderss.Controls
                 row.Block.Source = value;
                 row.RefreshImage();
             }
-            else if (row.Block.Kind == BlockKind.File || row.Block.Kind == BlockKind.Bookmark)
+            else if (EditorBlock.IsLinkCard(row.Block.Kind))
             {
                 row.Block.Source = value;
                 row.RefreshMediaCard();

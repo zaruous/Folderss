@@ -127,6 +127,7 @@ namespace Folderss.Controls
 
             var current = _blocks[index];
             mediaBlock.Indent = current.Indent;
+            InColumnOf(mediaBlock, current);
 
             if (current.Kind == BlockKind.Paragraph && string.IsNullOrEmpty(current.Text) && string.IsNullOrEmpty(current.Source))
             {
@@ -150,11 +151,11 @@ namespace Folderss.Controls
         private void EnsureTrailingParagraph(int index)
         {
             if (index == _blocks.Count - 1)
-                _blocks.Add(new EditorBlock(BlockKind.Paragraph, string.Empty, _blocks[index].Indent));
+                _blocks.Add(InColumnOf(new EditorBlock(BlockKind.Paragraph, string.Empty, _blocks[index].Indent), _blocks[index]));
         }
 
         /// <summary>탐색기·폴더 패널에서 드롭한 파일들을 이미지 블록 또는 파일 첨부 블록으로 삽입한다.</summary>
-        internal void HandleDroppedFiles(string[] files, int targetIndex)
+        internal void HandleDroppedFiles(string[] files, int targetIndex, DropTarget drop = null)
         {
             if (files == null || files.Length == 0)
                 return;
@@ -222,6 +223,11 @@ namespace Folderss.Controls
                     }
                 }
 
+                // 끌어 놓은 자리의 열(없으면 기준 블록의 열)
+                if (drop != null)
+                    created.SetAttribute(EditorBlock.AttrColumn, drop.Column);
+                else
+                    InColumnOf(created, _blocks[Math.Max(0, Math.Min(targetIndex, _blocks.Count - 1))]);
                 if (replaceFirst)
                 {
                     CopyContent(created, _blocks[insertAt]);
@@ -347,6 +353,84 @@ namespace Folderss.Controls
             InsertOrReplaceMediaBlock(index, block);
         }
 
+        // ── 페이지 링크 ────────────────────────────────────────────────────
+
+        /// <summary>페이지 링크를 눌렀다: 열 문서 전체 경로. 뷰어가 새 탭으로 연다(<c>IFileOpenRequester</c>).</summary>
+        public event EventHandler<string> PageOpenRequested;
+
+        /// <summary><c>/페이지</c>: 하위 페이지를 새로 만들거나 기존 문서를 골라 페이지 링크 블록을 넣는다.</summary>
+        internal void PromptAndInsertPageBlock(int index)
+        {
+            if (string.IsNullOrEmpty(BaseDirectory) || !Directory.Exists(BaseDirectory))
+            {
+                MessageBox.Show(Window.GetWindow(this), "먼저 문서를 파일로 저장한 뒤에 페이지를 연결할 수 있습니다.", "페이지", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            var dlg = new BlockPageDialog(BaseDirectory, DocumentPath) { Owner = Window.GetWindow(this) };
+            if (dlg.ShowDialog() != true)
+                return;
+            if (dlg.CreateNew)
+            {
+                try
+                {
+                    CreatePageFile(dlg.FullPath, dlg.PageTitle);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    MessageBox.Show(Window.GetWindow(this), "페이지 파일을 만들 수 없습니다.\n" + ex.Message, "페이지", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+            }
+            InsertOrReplaceMediaBlock(index, new EditorBlock(BlockKind.Page, dlg.PageTitle) { Source = dlg.RelativePath });
+        }
+
+        /// <summary>새 페이지 문서: 제목 한 줄만 든 Markdown 파일(폴더가 없으면 만든다). 이미 있으면 덮어쓰지 않는다.</summary>
+        internal static void CreatePageFile(string fullPath, string title)
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(fullPath));
+            using (var stream = new FileStream(fullPath, FileMode.CreateNew, FileAccess.Write))
+            using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                writer.Write("# " + (string.IsNullOrWhiteSpace(title) ? Path.GetFileNameWithoutExtension(fullPath) : title.Trim()) + "\n");
+        }
+
+        /// <summary>페이지 링크 열기. 파일이 없으면 만들지 묻는다.</summary>
+        internal void OpenPage(EditorBlock block)
+        {
+            var path = ResolveImagePath(block.Source);
+            if (path == null)
+            {
+                MessageBox.Show(Window.GetWindow(this), "페이지 경로를 먼저 입력하세요.", "페이지 열기", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            if (!File.Exists(path))
+            {
+                if (MessageBox.Show(Window.GetWindow(this), "페이지 파일이 없습니다.\n" + path + "\n\n새로 만들까요?", "페이지 열기",
+                        MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
+                    return;
+                try
+                {
+                    CreatePageFile(path, block.Text);
+                }
+                catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+                {
+                    MessageBox.Show(Window.GetWindow(this), "페이지 파일을 만들 수 없습니다.\n" + ex.Message, "페이지 열기", MessageBoxButton.OK, MessageBoxImage.Warning);
+                    return;
+                }
+                RefreshLinkCards();
+            }
+            PageOpenRequested?.Invoke(this, path);
+        }
+
+        /// <summary>화면에 있는 링크 카드(파일 있음/없음 표시)를 다시 그린다.</summary>
+        private void RefreshLinkCards()
+        {
+            foreach (var row in _panel.RealizedRows)
+            {
+                if (row.Block != null && EditorBlock.IsLinkCard(row.Block.Kind))
+                    row.RefreshMediaCard();
+            }
+        }
+
         internal static string FormatFileSize(long bytes)
         {
             if (bytes < 1024)
@@ -445,6 +529,104 @@ namespace Folderss.Controls
         CopyToImages,
         RelativePath,
         AbsolutePath,
+    }
+
+    /// <summary><c>/페이지</c>: 하위 페이지(문서 옆 <c>문서이름/제목.md</c>)를 새로 만들지, 기존 문서를 연결할지 고르는 대화상자.</summary>
+    internal sealed class BlockPageDialog : GitDialogBase
+    {
+        private readonly string _baseDirectory;
+        private readonly string _pageFolder;
+        private readonly RadioButton _newRadio;
+        private readonly TextBox _titleBox;
+        private readonly TextBox _pathBox;
+
+        public bool CreateNew => _newRadio.IsChecked == true;
+        public string PageTitle => CreateNew || (_titleBox.Text ?? string.Empty).Trim().Length > 0
+            ? (_titleBox.Text ?? string.Empty).Trim()
+            : Path.GetFileNameWithoutExtension(ExistingPath);
+        public string FullPath => CreateNew ? Path.Combine(_baseDirectory, _pageFolder, SafeFileName(PageTitle) + ".md") : ExistingPath;
+
+        /// <summary>블록에 저장할 경로: 문서 폴더 안이면 상대 경로(<c>/</c>), 밖이면 절대 경로.</summary>
+        public string RelativePath
+        {
+            get
+            {
+                var full = Path.GetFullPath(FullPath);
+                var baseDir = Path.GetFullPath(_baseDirectory).TrimEnd(Path.DirectorySeparatorChar) + Path.DirectorySeparatorChar;
+                return full.StartsWith(baseDir, StringComparison.OrdinalIgnoreCase)
+                    ? full.Substring(baseDir.Length).Replace('\\', '/')
+                    : full;
+            }
+        }
+
+        private string ExistingPath
+        {
+            get
+            {
+                var value = (_pathBox.Text ?? string.Empty).Trim().Trim('"');
+                return value.Length == 0 || Path.IsPathRooted(value) ? value : Path.Combine(_baseDirectory, value);
+            }
+        }
+
+        public BlockPageDialog(string baseDirectory, string documentPath)
+            : base("페이지 링크 추가", 460)
+        {
+            _baseDirectory = baseDirectory;
+            var docName = string.IsNullOrEmpty(documentPath) ? "pages" : Path.GetFileNameWithoutExtension(documentPath);
+            _pageFolder = SafeFileName(docName);
+
+            _newRadio = AddRadio("page", "새 하위 페이지 만들기 (권장)", "문서 옆 '" + _pageFolder + "' 폴더에 제목 이름의 .md 문서를 만들고 링크합니다.", true);
+            AddLabel("페이지 제목");
+            _titleBox = new TextBox { Padding = new Thickness(6, 4, 6, 4), Margin = new Thickness(20, 0, 0, 0) };
+            Body.Children.Add(_titleBox);
+
+            var existingRadio = AddRadio("page", "기존 문서 연결", "이미 있는 Markdown 문서를 링크합니다(제목을 비우면 파일 이름).", false);
+            var pathRow = new DockPanel { Margin = new Thickness(20, 6, 0, 0) };
+            var browse = new Button { Content = "찾아보기…", Padding = new Thickness(8, 3, 8, 3), Margin = new Thickness(6, 0, 0, 0) };
+            DockPanel.SetDock(browse, Dock.Right);
+            _pathBox = new TextBox { Padding = new Thickness(6, 4, 6, 4) };
+            pathRow.Children.Add(browse);
+            pathRow.Children.Add(_pathBox);
+            Body.Children.Add(pathRow);
+            browse.Click += (_, __) =>
+            {
+                var open = new OpenFileDialog { Title = "연결할 문서", Filter = "Markdown (*.md;*.markdown)|*.md;*.markdown|모든 파일 (*.*)|*.*", InitialDirectory = _baseDirectory };
+                if (open.ShowDialog(this) == true)
+                {
+                    _pathBox.Text = open.FileName;
+                    existingRadio.IsChecked = true;
+                }
+            };
+            _pathBox.GotKeyboardFocus += (_, __) => existingRadio.IsChecked = true;
+
+            AddButtons("추가");
+            Loaded += (_, __) => _titleBox.Focus();
+        }
+
+        protected override Task<string> ValidateAsync()
+        {
+            if (CreateNew)
+            {
+                if (PageTitle.Length == 0)
+                    return Task.FromResult("페이지 제목을 입력하세요.");
+                if (File.Exists(FullPath))
+                    return Task.FromResult("같은 이름의 페이지가 이미 있습니다: " + FullPath + "\n'기존 문서 연결'을 고르세요.");
+                return Task.FromResult<string>(null);
+            }
+            var existing = ExistingPath;
+            if (existing.Length == 0 || !File.Exists(existing))
+                return Task.FromResult("연결할 문서를 찾을 수 없습니다.");
+            return Task.FromResult<string>(null);
+        }
+
+        /// <summary>파일 이름에 쓸 수 없는 글자를 <c>_</c>로.</summary>
+        private static string SafeFileName(string name)
+        {
+            foreach (var invalid in Path.GetInvalidFileNameChars())
+                name = name.Replace(invalid, '_');
+            name = name.Trim().TrimEnd('.');
+            return name.Length == 0 ? "page" : name;
+        }
     }
 
     /// <summary>문서 폴더 밖의 이미지를 드롭했을 때 처리 방식을 고르는 대화상자.</summary>

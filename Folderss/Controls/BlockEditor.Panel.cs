@@ -13,6 +13,17 @@ namespace Folderss.Controls
 {
     public sealed partial class BlockEditor
     {
+        /// <summary>끌어 놓을 자리: <see cref="Index"/> 앞에 넣고, 열 묶음 안이면 그 열(<see cref="EditorBlock.AttrColumn"/> 값, 묶음 밖이면 null).</summary>
+        internal sealed class DropTarget
+        {
+            public int Index;
+            public string Column;
+            // 표시선 위치(패널 내용 좌표, 왼쪽은 본문 열 기준)
+            public double Y;
+            public double X;
+            public double Width;
+        }
+
         /// <summary>
         /// 블록 편집기의 가상화 패널(ScrollViewer의 IScrollInfo).
         /// <list type="bullet">
@@ -21,6 +32,8 @@ namespace Folderss.Controls
         /// <item>행이 없는 블록의 높이는 종류·글자 수로 추정하고, 한 번 측정한 높이는 (내용·폭이 같으면) 기억한다.
         /// 블록 위치(<see cref="_tops"/>)는 높이 합으로 구하며 구조나 높이가 바뀔 때만 다시 계산한다(O(블록 수) 덧셈).</item>
         /// <item>스크롤 위치는 "어느 블록의 몇 px 아래"(앵커)로 기억한다. 위쪽 블록의 추정 높이가 실제 높이로 바뀌어도 보던 내용이 흔들리지 않는다.</item>
+        /// <item>여러 열 묶음은 세로 흐름에서 한 덩어리다: 묶음 안 블록의 <see cref="_tops"/>는 모두 묶음 위쪽 y(검색·앵커용)이고,
+        /// 실제 위치·폭은 열마다 쌓은 <see cref="_rowTop"/>·<see cref="_rowX"/>·<see cref="_rowW"/>에 둔다. 묶음 높이는 가장 긴 열.</item>
         /// </list>
         /// </summary>
         private sealed class BlockPanel : Panel, IScrollInfo
@@ -29,6 +42,7 @@ namespace Folderss.Controls
             private const double BottomPad = 160;
             private const double SideLeft = 8;
             private const double SideRight = 36;
+            private const double ColumnGap = 16;
             private const int PoolLimit = 80;
 
             private readonly BlockEditor _owner;
@@ -37,7 +51,11 @@ namespace Folderss.Controls
             private readonly Stack<BlockRow> _pool = new Stack<BlockRow>();
             private readonly List<int> _arranged = new List<int>();
             private readonly Border _dropLine;
-            private double[] _tops = new double[1];
+            private double[] _tops = new double[1];       // 세로 흐름 위치(묶음 안은 묶음 위쪽) — 단조 증가, 검색·앵커·전체 높이
+            private double[] _rowTop = new double[0];     // 블록의 실제 위쪽 y
+            private double[] _rowH = new double[0];
+            private double[] _rowX = new double[0];       // 열 안에서의 왼쪽(_columnLeft 기준)·폭
+            private double[] _rowW = new double[0];
             private bool _topsDirty = true;
             private double _columnWidth = -1;
             private double _columnLeft;
@@ -46,7 +64,7 @@ namespace Folderss.Controls
             private double _anchorDelta;
             private Size _viewport = new Size(800, 600);
             private double _extent;
-            private int _dropIndex = -1;
+            private DropTarget _drop;
             private int _dropIndent;
 
             private sealed class HeightEntry
@@ -211,15 +229,75 @@ namespace Folderss.Controls
                 var blocks = _owner._blocks;
                 var n = blocks.Count;
                 if (_tops.Length != n + 1)
-                    _tops = new double[n + 1];
-                var y = 0.0;
-                for (var i = 0; i < n; i++)
                 {
+                    _tops = new double[n + 1];
+                    _rowTop = new double[n];
+                    _rowH = new double[n];
+                    _rowX = new double[n];
+                    _rowW = new double[n];
+                }
+                var y = 0.0;
+                var i = 0;
+                while (i < n)
+                {
+                    if (InColumnGroup(i))
+                    {
+                        // 열 묶음: 열마다 아래로 쌓고, 묶음은 가장 긴 열만큼 차지한다
+                        var end = _owner._colEnd[i];
+                        double[] lefts, widths;
+                        ColumnGeometry(i, out lefts, out widths);
+                        var bottoms = new double[lefts.Length];
+                        for (var c = 0; c < bottoms.Length; c++)
+                            bottoms[c] = y;
+                        for (var k = i; k < end; k++)
+                        {
+                            var c = _owner._colIndex[k];
+                            _tops[k] = y;
+                            _rowTop[k] = bottoms[c];
+                            _rowX[k] = lefts[c];
+                            _rowW[k] = widths[c];
+                            _rowH[k] = HeightOf(k, widths[c]);
+                            bottoms[c] += _rowH[k];
+                        }
+                        y = bottoms.Max();
+                        i = end;
+                        continue;
+                    }
                     _tops[i] = y;
-                    y += HeightOf(i);
+                    _rowTop[i] = y;
+                    _rowX[i] = 0;
+                    _rowW[i] = _columnWidth;
+                    _rowH[i] = HeightOf(i, _columnWidth);
+                    y += _rowH[i];
+                    i++;
                 }
                 _tops[n] = y;
                 _topsDirty = false;
+            }
+
+            private bool InColumnGroup(int index)
+            {
+                return _owner._colStart.Length == _owner._blocks.Count && _owner._colStart[index] >= 0;
+            }
+
+            /// <summary>
+            /// 열 묶음(<paramref name="start"/>에서 시작)의 열마다 왼쪽·폭(<see cref="_columnLeft"/> 기준). 행마다 손잡이 자리(<see cref="GutterWidth"/>)가 있으므로
+            /// 손잡이를 뺀 본문 폭을 너비 비율로 나눈다.
+            /// </summary>
+            private void ColumnGeometry(int start, out double[] lefts, out double[] widths)
+            {
+                var ratios = _owner._colRatios[start];
+                var count = ratios.Length;
+                lefts = new double[count];
+                widths = new double[count];
+                var content = Math.Max(count * 60, _columnWidth - count * GutterWidth - (count - 1) * ColumnGap);
+                var x = 0.0;
+                for (var c = 0; c < count; c++)
+                {
+                    lefts[c] = x;
+                    widths[c] = GutterWidth + content * ratios[c];
+                    x += widths[c] + ColumnGap;
+                }
             }
 
             private void EnsureTops()
@@ -230,7 +308,7 @@ namespace Folderss.Controls
 
             private double HeightAt(int index)
             {
-                return _tops[index + 1] - _tops[index];
+                return _rowH[index];
             }
 
             private int ColumnsAt(int index)
@@ -244,23 +322,23 @@ namespace Folderss.Controls
                 return ColumnsAt(index) * 2 + (index < _owner._tableLast.Length && _owner._tableLast[index] ? 1 : 0);
             }
 
-            private double HeightOf(int index)
+            private double HeightOf(int index, double width)
             {
                 if (!_owner.IsVisibleIndex(index))
                     return 0;
                 var block = _owner._blocks[index];
                 HeightEntry entry;
-                if (_heights.TryGetValue(block.Id, out entry) && Matches(entry, block, TableShapeAt(index)))
+                if (_heights.TryGetValue(block.Id, out entry) && Matches(entry, block, TableShapeAt(index), width))
                     return entry.Height;
-                var height = Estimate(block, index);
-                _heights[block.Id] = NewEntry(block, index, height);
+                var height = Estimate(block, index, width);
+                _heights[block.Id] = NewEntry(block, index, height, width);
                 return height;
             }
 
-            private bool Matches(HeightEntry entry, EditorBlock block, int columns)
+            private static bool Matches(HeightEntry entry, EditorBlock block, int columns, double width)
             {
                 return entry.Kind == block.Kind && entry.Indent == block.Indent && entry.Columns == columns &&
-                       Math.Abs(entry.Width - _columnWidth) < 0.5 && string.Equals(entry.Text, block.Text) &&
+                       Math.Abs(entry.Width - width) < 0.5 && string.Equals(entry.Text, block.Text) &&
                        string.Equals(entry.Source, block.Source) && string.Equals(entry.AttrKey, GetHeightAttrKey(block));
             }
 
@@ -273,7 +351,7 @@ namespace Folderss.Controls
                        (block.GetAttribute(EditorBlock.AttrDescription) ?? string.Empty);
             }
 
-            private HeightEntry NewEntry(EditorBlock block, int index, double height)
+            private HeightEntry NewEntry(EditorBlock block, int index, double height, double width)
             {
                 return new HeightEntry
                 {
@@ -281,7 +359,7 @@ namespace Folderss.Controls
                     Text = block.Text,
                     Kind = block.Kind,
                     Indent = block.Indent,
-                    Width = _columnWidth,
+                    Width = width,
                     Columns = TableShapeAt(index),
                     Source = block.Source,
                     AttrKey = GetHeightAttrKey(block),
@@ -289,9 +367,9 @@ namespace Folderss.Controls
             }
 
             /// <summary>행을 만들지 않은 블록의 높이 추정. 정확할 필요는 없다(화면에 들어오면 실제 높이로 바뀌고 앵커가 위치를 지킨다).</summary>
-            private double Estimate(EditorBlock block, int index)
+            private double Estimate(EditorBlock block, int index, double rowWidth)
             {
-                var width = (_columnWidth > 0 ? _columnWidth : 860) - GutterWidth - block.Indent * IndentWidth;
+                var width = (rowWidth > 0 ? rowWidth : 860) - GutterWidth - block.Indent * IndentWidth;
                 switch (block.Kind)
                 {
                     case BlockKind.Divider:
@@ -317,6 +395,7 @@ namespace Folderss.Controls
                     case BlockKind.Math:
                         return EstimateLines(block.Text, 16, width - 30, false) * 28 + 36;
                     case BlockKind.File:
+                    case BlockKind.Page:
                         return 58;
                     case BlockKind.Bookmark:
                         return 76;
@@ -374,7 +453,7 @@ namespace Folderss.Controls
                 return lines + Math.Max(1, (int)Math.Ceiling(lineWidth / width));
             }
 
-            /// <summary><paramref name="contentY"/>(맨 위 여백 제외) 위치의 블록: tops[i] ≤ y 인 가장 큰 i.</summary>
+            /// <summary><paramref name="contentY"/>(맨 위 여백 제외) 위치의 블록: tops[i] ≤ y 인 가장 큰 i. 열 묶음 안이면 묶음 첫 블록.</summary>
             private int IndexAtY(double contentY)
             {
                 var n = _owner._blocks.Count;
@@ -389,7 +468,31 @@ namespace Folderss.Controls
                     else
                         hi = mid - 1;
                 }
-                return lo;
+                return InColumnGroup(lo) ? _owner._colStart[lo] : lo;
+            }
+
+            /// <summary>열 묶음(<paramref name="start"/>) 안에서 x(<see cref="_columnLeft"/> 기준) 아래의 열 번호.</summary>
+            private int ColumnAtX(int start, double x)
+            {
+                double[] lefts, widths;
+                ColumnGeometry(start, out lefts, out widths);
+                var column = 0;
+                for (var c = 1; c < lefts.Length; c++)
+                    if (x >= lefts[c] - ColumnGap / 2)
+                        column = c;
+                return column;
+            }
+
+            /// <summary>열 묶음 안 <paramref name="column"/>열의 블록 범위 [first, end).</summary>
+            private void ColumnRange(int start, int column, out int first, out int end)
+            {
+                var groupEnd = _owner._colEnd[start];
+                first = start;
+                while (first < groupEnd && _owner._colIndex[first] < column)
+                    first++;
+                end = first;
+                while (end < groupEnd && _owner._colIndex[end] == column)
+                    end++;
             }
 
             private void UpdateAnchor()
@@ -424,7 +527,7 @@ namespace Folderss.Controls
                 EnsureTops();
                 if (index < 0 || index >= _owner._blocks.Count)
                     return false;
-                var top = TopMargin + _tops[index] - _offset;
+                var top = TopMargin + _rowTop[index] - _offset;
                 return top + HeightAt(index) > 0 && top < _viewport.Height;
             }
 
@@ -433,7 +536,7 @@ namespace Folderss.Controls
                 if (index < 0 || index >= _owner._blocks.Count)
                     return;
                 EnsureTops();
-                var top = TopMargin + _tops[index];
+                var top = TopMargin + _rowTop[index];
                 var bottom = top + HeightAt(index);
                 if (top < _offset)
                     SetVerticalOffset(top - 24);
@@ -471,11 +574,11 @@ namespace Folderss.Controls
                         var row = GetRealized(index);
                         if (row == null)
                             continue;
-                        row.Root.Measure(new Size(_columnWidth, double.PositiveInfinity));
+                        row.Root.Measure(new Size(_rowW[index], double.PositiveInfinity));
                         var measured = row.Root.DesiredSize.Height;
                         if (Math.Abs(measured - HeightAt(index)) > 0.5)
                             changed = true;
-                        _heights[row.Block.Id] = NewEntry(row.Block, index, measured);
+                        _heights[row.Block.Id] = NewEntry(row.Block, index, measured, _rowW[index]);
                     }
                     if (!changed)
                         break;
@@ -505,7 +608,8 @@ namespace Folderss.Controls
                 var first = Math.Max(0, IndexAtY(from));
                 for (var i = first; i < n && _tops[i] < to; i++)
                 {
-                    if (!_owner.IsVisibleIndex(i))
+                    // 열 묶음 안에서는 실제 위치로 거른다(긴 열의 화면 밖 블록은 만들지 않음)
+                    if (!_owner.IsVisibleIndex(i) || _rowTop[i] + _rowH[i] < from || _rowTop[i] > to)
                         continue;
                     _arranged.Add(i);
                     needed.Add(blocks[i].Id);
@@ -537,16 +641,15 @@ namespace Folderss.Controls
                     var row = GetRealized(index);
                     if (row == null)
                         continue;
-                    var y = TopMargin + _tops[index] - _offset;
-                    row.Root.Arrange(new Rect(_columnLeft, y, _columnWidth, row.Root.DesiredSize.Height));
+                    var y = TopMargin + _rowTop[index] - _offset;
+                    row.Root.Arrange(new Rect(_columnLeft + _rowX[index], y, _rowW[index], row.Root.DesiredSize.Height));
                 }
 
-                var n = _owner._blocks.Count;
-                if (_dropIndex >= 0 && _dropLine.Visibility == Visibility.Visible)
+                if (_drop != null && _dropLine.Visibility == Visibility.Visible)
                 {
-                    var y = TopMargin + _tops[Math.Min(_dropIndex, n)] - _offset;
-                    var x = _columnLeft + GutterWidth + _dropIndent * IndentWidth;
-                    _dropLine.Arrange(new Rect(x, y - 1.5, Math.Max(0, _columnLeft + _columnWidth - x), 3));
+                    var y = TopMargin + _drop.Y - _offset;
+                    var x = _columnLeft + _drop.X + GutterWidth + _dropIndent * IndentWidth;
+                    _dropLine.Arrange(new Rect(x, y - 1.5, Math.Max(0, _columnLeft + _drop.X + _drop.Width - x), 3));
                 }
                 else
                 {
@@ -557,29 +660,56 @@ namespace Folderss.Controls
 
             // ── 끌어 옮기기 표시 ───────────────────────────────────────────
 
-            /// <summary>패널 좌표 y에 놓으면 들어갈 위치(그 블록 앞). 블록 아래쪽 절반이면 다음 보이는 블록 앞.</summary>
-            public int DropIndexAt(double panelY)
+            /// <summary>
+            /// 패널 좌표 <paramref name="point"/>에 놓으면 들어갈 자리(그 블록 앞). 블록 아래쪽 절반이면 다음 보이는 블록 앞.
+            /// 열 묶음 위면 x로 열을 고르고 그 열 안에서 자리를 찾는다(열 끝이면 그 열 마지막 블록 뒤).
+            /// </summary>
+            public DropTarget DropTargetAt(Point point)
             {
                 EnsureTops();
                 var n = _owner._blocks.Count;
-                var contentY = panelY + _offset - TopMargin;
+                var contentY = point.Y + _offset - TopMargin;
+                var x = point.X - _columnLeft;
                 if (n == 0 || contentY >= _tops[n])
-                    return n;
+                    return new DropTarget { Index = n, Y = _tops[n], Width = _columnWidth };
                 var index = Math.Max(0, IndexAtY(contentY));
+                if (InColumnGroup(index))
+                {
+                    var column = ColumnAtX(index, x);
+                    int first, end;
+                    ColumnRange(index, column, out first, out end);
+                    double[] lefts, widths;
+                    ColumnGeometry(index, out lefts, out widths);
+                    var target = new DropTarget { Index = end, X = lefts[column], Width = widths[column], Column = _owner._blocks[first].GetAttribute(EditorBlock.AttrColumn) };
+                    target.Y = _tops[index];
+                    for (var k = first; k < end; k++)
+                    {
+                        if (!_owner.IsVisibleIndex(k))
+                            continue;
+                        if (contentY < _rowTop[k] + _rowH[k] / 2)
+                        {
+                            target.Index = k;
+                            target.Y = _rowTop[k];
+                            return target;
+                        }
+                        target.Y = _rowTop[k] + _rowH[k];
+                    }
+                    return target;
+                }
                 while (index < n && !_owner.IsVisibleIndex(index))
                     index++;
-                if (index < n && contentY > _tops[index] + HeightAt(index) / 2)
+                if (index < n && contentY > _rowTop[index] + HeightAt(index) / 2)
                 {
                     index = _owner.NextVisible(index, 1);
                     if (index < 0)
                         index = n;
                 }
-                return index;
+                return new DropTarget { Index = index, Y = _tops[Math.Min(index, n)], Width = _columnWidth };
             }
 
-            public void ShowDropLine(int index, int indent)
+            public void ShowDropLine(DropTarget target, int indent)
             {
-                _dropIndex = index;
+                _drop = target;
                 _dropIndent = indent;
                 _dropLine.Visibility = Visibility.Visible;
                 InvalidateArrange();
@@ -587,24 +717,40 @@ namespace Folderss.Controls
 
             public void HideDropLine()
             {
-                _dropIndex = -1;
+                _drop = null;
                 _dropLine.Visibility = Visibility.Collapsed;
                 InvalidateArrange();
             }
 
             private void Panel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             {
-                // 행 밖(좌우 여백·문서 아래)을 누른 경우만 온다. 행 안은 행이 처리한다.
+                // 행 밖(좌우 여백·문서 아래·열 사이)을 누른 경우만 온다. 행 안은 행이 처리한다.
                 e.Handled = true;
                 EnsureTops();
                 var n = _owner._blocks.Count;
-                var contentY = e.GetPosition(this).Y + _offset - TopMargin;
+                var position = e.GetPosition(this);
+                var contentY = position.Y + _offset - TopMargin;
                 if (n == 0 || contentY >= _tops[n])
                 {
                     _owner.OnBottomClick();
                     return;
                 }
                 var index = Math.Max(0, IndexAtY(contentY));
+                if (InColumnGroup(index))
+                {
+                    // 그 열에서 y에 걸친 블록, 없으면 그 열 마지막 블록
+                    int first, end;
+                    ColumnRange(index, ColumnAtX(index, position.X - _columnLeft), out first, out end);
+                    index = Math.Max(first, end - 1);
+                    for (var k = first; k < end; k++)
+                    {
+                        if (contentY < _rowTop[k] + _rowH[k])
+                        {
+                            index = k;
+                            break;
+                        }
+                    }
+                }
                 if (_owner.IsEditable(index))
                     _owner.FocusRow(index, int.MaxValue, int.MaxValue);
                 else if (_owner.IsVisibleIndex(index))
