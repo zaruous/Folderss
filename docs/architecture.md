@@ -6,6 +6,8 @@
 Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
+│   ├── FolderBrowser.Archive.cs    — 같은 컨트롤의 zip 안 보기(읽기 전용): 가상 경로 이동·목록·zip 띠·미리보기·열기(임시 사본)·끌어 놓기·Ctrl+C·우클릭·압축 풀기/압축
+│   ├── FolderBrowser.PathCopy.cs   — 같은 컨트롤의 경로 복사 부분(partial): 대상 고르기(선택·목록 순서, 없으면 현재 폴더), 우클릭·⋯ 메뉴 "경로 복사 ▸", 단축키, 상태 줄 잠깐 표시
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
 │   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
@@ -62,8 +64,11 @@ Folderss/
 │   ├── DirectoryCompareService.cs  — 두 폴더 비교(상대 경로 짝짓기, 크기·시각(시각만 다르면 바이트 비교 선택) 또는 SHA-256, ignore 규칙, 폴더 집계, 취소 시 부분 결과)와 항목 복사 (순수 System.IO)
 │   ├── CompareSettingsService.cs   — 폴더 비교 옵션 저장 (compare-settings.xml)
 │   ├── CompareOverlay.cs           — 비교 결과를 폴더 패널 한쪽의 현재 폴더 항목에 입히는 규칙(이쪽만/저쪽만, 방향) (순수 계산)
-│   ├── FileOperationJournal.cs     — 폴더 비교 창의 이동·복사·삭제 실행+기록(%LOCALAPPDATA%\Folderss\compare-history\*.jsonl, 7일 보관)과 최근부터 되돌리기. 휴지통은 IRecycleBin 주입
-│   ├── WindowsRecycleBin.cs        — IRecycleBin Windows 구현: 셸로 휴지통에 보내고, $I 정보 파일(원래 경로·삭제 시각)로 찾아 $R 항목을 되살림. 고정 드라이브만
+│   ├── FileOperationJournal.cs     — 폴더 비교 창의 이동·복사·삭제 실행+기록(%LOCALAPPDATA%\Folderss\compare-history\*.jsonl, 7일 보관)과 최근부터 되돌리기. 휴지통은 IRecycleBin 주입. 외부 실행기용 기록 API(Begin/AddItem/End)·이름 변경·새 폴더·새 파일 종류·막힌 항목은 두고 나머지만 되돌리기(UndoAvailable)는 메인 패널 대기열이 씀
+│   ├── FileJobs.cs                 — 메인 패널 파일 작업 모델(FileJob: 종류·상태·진행 수치·일시정지·취소), 충돌 선택(ConflictPolicy), 속도·남은 시간(TransferRate), 표시 문구 (순수 로직)
+│   ├── FileJobQueue.cs             — 메인 패널 파일 작업 대기열(STA 작업 스레드 하나, FIFO): 복사·이동·삭제 실행, 이름 충돌, 이력(file-history\*.jsonl) 기록, 실행 취소 계획·실행, 이름 변경·새 폴더·새 파일 즉시 실행+기록 (순수 로직)
+│   ├── FileCopier.cs               — 파일 하나 복사(Windows CopyFileEx: 진행 콜백·일시정지·취소·\\?\ 긴 경로, 대상 있으면 실패), 읽기 전용까지 지우는 삭제
+│   ├── WindowsRecycleBin.cs        — IRecycleBin Windows 구현: 셸로 휴지통에 보내고, $I 정보 파일(원래 경로·삭제 시각)로 찾아 $R 항목을 되살림. 고정 드라이브만(CanSend/IsRecyclable: 고정 드라이브·260자 미만)
 │   ├── CaptureSettingsService.cs   — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더(없으면 사용자 폴더), 설정 창 입력 검증 `Validate`)
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
@@ -82,9 +87,15 @@ Folderss/
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
-│   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴
+│   ├── ShellContextMenuService.cs  — Windows 쉘 우클릭 컨텍스트 메뉴 (맨 위 앱 항목 `CustomMenuItem`: `Label` null = 구분선, `Children` = 하위 메뉴)
+│   ├── PathCopyFormatter.cs        — 경로 복사 형식(전체·따옴표·이름·상위 폴더·저장소/반대편 패널 기준 상대·UNC), 구분자, 대체 규칙, Windows 경로 루트·상대 경로 계산 (순수 로직, OS와 무관하게 같은 결과)
+│   ├── PathCopyService.cs          — 경로 복사의 Windows 쪽: 저장소 찾기(.git 폴더/파일), UNC 변환(WNetGetUniversalName → WNetGetConnection), 텍스트만 클립보드, 셸·WPF 메뉴 항목 만들기, 단축키 표시
+│   ├── PathCopySettingsService.cs  — 경로 복사 설정 저장 (path-copy-settings.xml: 단축키 형식·경로 구분자, `Current`, SettingsFile 사용·실패는 예외)
 │   ├── PluginManager.cs            — 플러그인 로드(플러그인별 AssemblyLoadContext, 계약 DLL은 본체 것 공유)·팝업 창·IPluginManager 구현(PluginHost)·팝업용 폴더 패널·플러그인 예외 판별
 │   ├── PluginPackage.cs            — plugin.json 검증, 진입점 DLL의 계약 참조 버전 확인, plugins\<id>.zip 등록·목록, 해시별 폴더로 안전한 압축 해제 (순수 로직)
+│   ├── ZipArchiveService.cs        — zip 가상 경로(`ZipArchivePath`: `C:\a\b.zip\sub` 분해·결합), 목록 트리(`ZipListing`)·캐시(`ZipListingCache`), 풀기 계획·실행(Zip Slip 이중 검사·이름 정리·충돌 모드·취소), zip 만들기 (순수 로직)
+│   ├── ZipEntryNameEncoding.cs     — UTF-8 플래그 없는 zip 이름을 항목마다 ASCII→UTF-8→CP949→CP437 순으로 판정하는 읽기 전용 Encoding (순수 로직)
+│   ├── ZipTempStore.cs             — zip 안 파일 열기·클립보드 복사용 실행별 임시 폴더(%TEMP%\Folderss\zip\<pid>-<시각>), 종료 때 정리·하루 지난 폴더 수거 (순수 로직)
 │   ├── PluginGitHubSource.cs       — 공개 GitHub 저장소 최신 정식 릴리스 조회·zip 받기(100MB 제한, digest SHA-256 비교), 오류는 문장 예외 (순수 로직)
 │   ├── PluginSourceStore.cs        — plugins\sources.json: 플러그인 id별 설치 출처(local / github.com/<소유자>/<저장소>) (순수 로직)
 │   ├── PluginSettingsStore.cs      — 플러그인별 키/값 settings.json (SettingsFile 사용, 실패는 예외)
@@ -115,13 +126,17 @@ Folderss/
 │   ├── Gruvbox.xaml                — Gruvbox Dark 테마
 │   └── Controls.xaml               — 공통 컨트롤 스타일 (모든 테마 공유)
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
+├── MainWindow.FileJobs.cs          — (partial) 파일 작업 대기열 연결: 복사·이동·삭제 넣기, 이름 충돌 질문, 끝나면 새로 고침·실패 요약, 실행 취소(Ctrl+Z) 확인, 종료 시 진행 중 작업 확인
+├── FileJobsWindow.cs               — 파일 작업 진행률 창(비모달, 대기열 전체·일시정지·취소)과 이름 충돌 대화상자 `FileConflictDialog`(GitDialogBase 상속), 코드로 구성
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `GitLibDiff`, 안 되면 `git diff --no-index`), 코드로 구성
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
+├── ArchiveDialogs.cs               — `ArchiveExtractDialog`·`ArchiveCompressDialog`(GitDialogBase 상속), `ArchiveProgressWindow`(0.4초 넘는 작업만, 취소), `ArchiveOperations`(백그라운드 실행·오류 알림·zip 이름 폴더 풀기)
+├── MainWindow.Archive.cs           — MainWindow의 zip 연결: 파일 작업 가드(`BlockedInArchive`), 이동·복사 처리, 반대편 패널, 결과 선택, ⋯ 메뉴 `압축 풀기…`·`zip으로 압축…`
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
-├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 플러그인)
+├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 네트워크, 경로 복사, 플러그인)
 ├── KeyCaptureWindow.cs             — 단축키 입력 캡처 팝업
 ├── CaptureOverlayWindow.cs         — 화면 캡쳐: 가상 화면 전체를 GDI로 찍고(`CaptureVirtualScreen`) 모든 모니터를 덮는 창에 깔아 드래그로 영역 선택, 코드로 구성
 ├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 메뉴(다른 이름으로 저장, 기본 저장 폴더 탐색기로 열기), 저장 후 탐색기 열기 확인 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
@@ -212,11 +227,54 @@ Folderss/
 - 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
   그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
 
+### FileJobQueue / 파일 작업 진행률 창 / 메인 패널 실행 취소
+- 메인 패널의 복사·이동(`F6`·⋯ 메뉴 `반대편 패널로 복사`, 붙여넣기 `TryPasteFromClipboardInto`, 끌어다 놓기 `FolderBrowser.FileList_Drop`)과 삭제(`DeleteSelected`)는
+  `FileOperationService`를 직접 부르지 않고 `MainWindow.QueueFileTransfer`/`QueueFileDelete`(MainWindow.FileJobs.cs)로 `FileJobQueue`에 넣는다.
+  확인 창·고정(📌) 잠금 검사는 넣기 전에 호출부가 한다. 링크 만들기·바로 가기 놓기는 그대로 동기.
+- 대기열은 작업 스레드 하나(셸 휴지통 때문에 STA)에서 넣은 순서대로 하나씩 실행한다. 나란히 돌리지 않는 이유: 같은 디스크에서 서로 느려지고,
+  "복사 → 원본 삭제"처럼 이어지는 작업이 순서를 잃으며, 실행 취소 이력 순서가 실행 순서와 같아진다.
+- 실행: 복사·이동할 파일 수·크기를 먼저 센다(같은 드라이브 안 이동은 이름만 바뀌므로 세지 않음). 파일은 `FileCopier.CopyFile`(CopyFileEx 진행 콜백 안에서
+  `FileJob.Checkpoint` — 일시정지면 기다리고 취소면 PROGRESS_CANCEL). 폴더는 직접 걸으며 파일마다 복사(링크 폴더 순환은 깊이 256에서 멈춤, 숨김·시스템 폴더 속성 보존).
+  다른 드라이브 이동은 복사 후 원본 삭제. 같은 드라이브인데 장치가 다르면(ERROR_NOT_SAME_DEVICE) 복사 후 삭제로 돌린다.
+- 이름 충돌은 실행 중에 `AskConflict`(작업 스레드 → `Dispatcher.Invoke` → `FileConflictDialog`)로 묻는다. 기본 건너뛰기, "나머지에도 적용"은 `ConflictPolicy`가 기억.
+  바꾸기는 대상 옛 항목을 휴지통으로(복사는 임시 이름 `~folderss-*.tmp`로 다 복사한 뒤 바꿔치기 — 실패·취소 시 옛 항목 그대로). 휴지통이 없으면(`IRecycleBin.CanSend`) 바꾸지 않는다.
+- 취소·실패한 최상위 항목은 원래대로 돌린다(만들던 복사본·임시본 삭제, 바꾸려고 보낸 옛 항목 복원). 폴더 복사 안의 파일 실패는 그 파일만 빼고 계속, 폴더 이동은 하나라도 실패하면 되돌림.
+- 끌어다 놓기 이동은 대기열이 끝까지 처리하므로 원본 쪽에 `DragDropEffects.None`을 돌려준다(셸 "최적화 이동" 규약 — Move를 돌려주면 탐색기가 아직 복사 중인 원본을 지울 수 있다).
+- 이력: `%LOCALAPPDATA%\Folderss\file-history\*.jsonl`(폴더 비교 창 `compare-history`와 분리 — 비교 창 이력 패널과 메인 창 `Ctrl+Z`가 서로의 작업을 되돌리지 않게).
+  작업 시작 때 `FileOperationJournal.Begin`, 최상위 항목마다 `AddItem`, 끝에 `End`. 이력을 못 쓰면 작업은 하되 "실행 취소할 수 없음"을 알린다(비교 창은 실행 거부).
+  이름 변경·새 폴더·새 파일은 UI 스레드에서 바로 실행하고 같은 이력에 기록(`Rename`/`CreateFolder`/`CreateFile`). 이력 객체 접근은 모두 `_journalLock`.
+- 실행 취소(`Ctrl+Z` = `UndoFileOperation`, ⋯ 메뉴 `실행 취소: …`): 대기열이 비어 있을 때만. 메뉴 머리글은 파일을 보지 않는 `PeekUndo`로 채운다.
+  `PlanUndo`(백그라운드 — 항목이 많으면 파일·휴지통 확인이 오래 걸림)가 최근 되돌릴 작업과 항목별 막힘(`ItemProblems`: 그 사이 바뀜·원래 자리 점유·
+  휴지통에 없음·휴지통 없는 위치의 복사본·내용이 생긴 새 폴더/파일)을 계산하고, 확인 창(`CompareConfirmDialog`)이 막힌 항목이 있으면 확인 체크를 요구한다.
+  `WindowsRecycleBin`은 휴지통 폴더의 `$I` 목록을 폴더 수정 시각이 같으면 다시 쓰므로(항목이 들고 나면 시각이 바뀜) 항목마다 휴지통 전체를 읽지 않는다.
+  실행은 대기열 작업(`FileJobKind.Undo`)으로 `UndoAvailable` — 막힌 항목은 그대로 두고 작업을 "넘김"으로 기록. 되돌릴 항목이 하나도 없으면 넘길지 묻는다.
+  영구 삭제는 기록만 하고 대상에서 건너뛴다(확인 창에 그 뒤 영구 삭제 수 표시). 되돌리면 고정(📌) 폴더 구조가 바뀌는 경우는 막는다.
+- 진행률 창(`FileJobsWindow`): 작업이 0.8초 넘게 걸리면 포커스를 뺏지 않고 뜨며(`ShowActivated=false`), 0.25초마다 `FileJob.Snapshot`을 그린다. 자동으로 뜬 창은 사용자가 만지지 않았으면 대기열이 비고 1.5초 뒤 닫힌다.
+  끝난 작업은 30개까지 목록에 남는다. 끝나면 `OnFileJobFinished`가 모든 패널을 새로 고치고 실패·남긴 항목을 메시지 하나로 알린다(취소는 알리지 않음).
+- `Delete`: 휴지통에 보낼 수 없는 항목(`WindowsRecycleBin.IsRecyclable` — 네트워크·이동식·260자 이상)이 섞이면 영구 삭제 경고 + 확인 체크 후 따로 영구 삭제 작업으로 넣는다. `Shift+Delete`도 확인 체크.
+- 종료(`Window_Closing`): 대기열에 작업이 있으면 묻고, 종료하면 모두 취소한 뒤 최대 5초 메시지를 돌리며 기다린다(진행 중 항목 되돌리기).
+- 테스트: `tests/Folderss.SearchTests/FileJobQueueTests.cs`(진행 수치, 충돌 선택·적용, 바꾸기와 되돌리기, 일시정지·FIFO, 대기 취소, 복사 도중 취소, 잠긴 파일, 긴 경로, 휴지통 없음,
+  부분 되돌리기, 넘기기, 이름 변경·새 항목, 중단된 작업, 이력 쓰기 실패, 속도·문구). 진행률 창·대화상자는 WPF라 실제 실행으로 확인한다.
+
 ### KeyBindingService
 - 기본 단축키 매핑을 코드에서 정의
 - 사용자 커스터마이징을 XML로 `%LOCALAPPDATA%\Folderss\keybindings.xml`에 저장
 - `kb.Matches(e, "CommandId")` 패턴으로 MainWindow PreviewKeyDown에서 사용
 - **단축키 추가 시 연관 파일**: KeyBindingService.cs, MainWindow.xaml.cs, SettingsWindow
+
+### 경로 복사 (PathCopyFormatter / PathCopyService / FolderBrowser.PathCopy)
+- 진입점 세 곳이 같은 `FolderBrowser.CopyPaths`로 모인다: 파일 목록·트리뷰 셸 우클릭 메뉴 맨 위 `경로 복사 ▸`(`BuildPathCopyShellMenu`),
+  ⋯ 메인 메뉴 `경로 복사`(`MainMenuButton_Click` → `ActivePane.FillPathCopyMenu`, 열 때마다 다시 채움), 단축키 `CopyFolderPath`(기본 `Ctrl+Shift+C`, `CopyPathForShortcut`).
+  ID는 예전 트리 전용 "폴더 경로 복사" 그대로라 사용자 keybindings.xml이 계속 맞는다.
+- 대상: 선택 항목을 목록에 보이는 순서로, 없으면 현재 폴더. 단축키는 트리에 포커스가 있으면 트리에서 고른 폴더.
+- 형식 규칙은 모두 `PathCopyFormatter`(순수, `tests/.../PathCopyFormatterTests.cs`). System.IO.Path를 쓰지 않고 Windows 루트(`C:\`, `\\server\share`, `\\?\`)를 직접 처리해
+  테스트가 OS와 무관하다. 조건부 형식(저장소 기준·반대편 패널 기준·UNC)은 `IsAvailable`이 참일 때만 메뉴에 보이고, 단축키 형식으로 쓸 수 없으면 그 항목만 전체 경로로 대신(`FallbackCount`).
+- 저장소 루트는 항목을 **담은 폴더**부터 위로 `.git` 폴더/파일을 찾는다(저장소 루트 폴더 자신은 상위 저장소 기준). 반대편 패널은 `MainWindow.AttachFolderBrowser`가 넣는
+  `OppositeFolderProvider`(이 패널이 아닌 첫 폴더 패널 — ⋯ 메뉴 "반대편 패널"과 같은 규칙). 폴더 비교 창·플러그인 팝업 패널은 넣지 않아 그 형식이 없다.
+- UNC: 드라이브 종류가 네트워크일 때만 `WNetGetUniversalName`(UNIVERSAL_NAME_INFO), 안 되면 `WNetGetConnection` + 나머지 경로(`CombineUnc`). 로컬 드라이브를 관리 공유(`\\PC\C$`)로 바꾸지 않는다.
+- 클립보드는 텍스트만(`ClipboardService.TrySetDataObject(string)`, FileDrop 없음), 복사 후 잘라내기 표시 해제. 상태 줄 문구(`StatusMessage`)는 셸 메뉴 뒤 `RefreshItems`가 덮지 않게 디스패처 뒤로 미뤄 4초 보인다.
+- 셸 메뉴 하위 메뉴: `ShellContextMenuService.InsertCustomItem`이 `CreatePopupMenu` + `MF_POPUP`으로 붙이고, 명령 번호는 하위 메뉴 안 항목까지 순서대로 `CustomCmdBase + n`. 부모 `DestroyMenu`가 하위 메뉴도 정리한다.
+- 설정(`설정 > 경로 복사`, `PathCopySettingsService.Current`): 단축키 형식, 구분자(`\` / `/` 상대 경로만 / `/` 모든 경로). 메뉴·단축키는 복사할 때마다 `Current`를 읽어 저장 즉시 반영.
 
 ### SearchPanel / SearchService
 - `Ctrl+F`(`ShowSearch`)로 여는 별도 팝업 창(`파일 검색`)에서 실행, `MainWindow.ShowSearchPanel()` 참고
@@ -395,6 +453,25 @@ Folderss/
   메타정보 "링크 대상" 행(링크일 때만 표시)으로 드러난다. OneDrive 자리표시자처럼 `LinkTarget`이 없는 reparse point는 링크로 보지 않는다.
 - 링크 생성은 `FileOperationService.CreateLink` — 심볼릭 링크 우선, 권한 오류(1314/UnauthorizedAccess)면 폴더는 `mklink /J`
   junction으로 대체, 파일은 안내와 함께 실패. `MainWindow.CreateLink_Click`은 `ExecuteTransfer`와 같은 대상 패널·핀 잠금·오류 모음 규칙.
+
+### zip을 폴더처럼 열기 (FolderBrowser.Archive / ZipArchiveService)
+- 상세 설계·참고 제품 조사·결정 목록: `docs/items/zip-as-folder.md`. 읽기 전용(zip 안 수정 없음).
+- **가상 경로**: zip 안에서는 `FolderBrowser.CurrentPath`가 `C:\a\b.zip\sub` 같은 가상 경로다(제목·경로 입력란·뒤로/앞으로·session.xml·dock-layout ContentId에 그대로).
+  `NavigateTo`가 실제 폴더가 아니면 `TryNavigateIntoArchive` → `ZipArchivePath.TrySplit`(끝에서 위로 올라가 처음 만나는 "존재하는 파일"이 `.zip`이거나 zip 시그니처면 zip)로 들어간다.
+  실제 폴더로 이동하면 `ExitArchiveState`. 실제 폴더가 필요한 곳은 `FileSystemPath`(zip 안이면 zip이 있는 폴더 — 콘솔 작업 폴더, 검색 대상, 트리 루트), 상태는 `IsInArchive`·`ArchivePath`.
+  세션·레이아웃 복원은 `MainWindow.FolderOrArchiveExists`로 가상 경로도 받는다. 플러그인 팝업 패널(`ArchiveBrowsingEnabled = false`)과 폴더 비교 창(안전 모드)은 zip에 들어가지 않는다.
+- **목록**: `ZipListingCache`(최근 8개, zip 크기·수정 시각이 같으면 재사용, 같은 zip 동시 요청은 한 번만)가 백그라운드에서 `ZipArchiveService.ReadListing`. 디렉터리 항목이 없으면 경로에서 폴더를 만들고,
+  `..`·`:`이 든 이름은 숨김(`UnsafeEntryCount`, 상태 줄 툴팁에 목록), 같은 경로가 여러 번이면 뒤의 것. 이름은 `ZipEntryNameEncoding`(플래그 있으면 .NET이 UTF-8) 후 NFC.
+  `FileSystemItem.ArchiveEntry`(`ZipEntryInfo`)가 있으면 zip 항목이다. zip 파일 자체를 `FileSystemWatcher`(필터 = zip 이름)로 지켜 바뀌면 다시 읽고, 읽지 못하면 zip이 있던 폴더로 나간다.
+- **풀기**: `PlanExtraction`(고른 항목을 대상 폴더 바로 아래에, `UniqueTopLevel`이면 기존 복사처럼 `이름 (2)`) → `Extract`(항목마다 `.xxxx.folderss-part`에 쓰고 이름 바꿈, 오류는 모으고 계속, 100개면 멈춤, 취소는 그때까지 남김).
+  풀기 직전 zip 크기·시각과 항목 수·이름(인덱스로 대조)이 목록과 다르면 `ChangedMessage`. 암호 항목(`IsEncrypted`)은 실패로 모은다(.NET이 풀지 못함). 대상 밖 경로는 `EnsureInside`로 다시 거부.
+- **열기**: `ZipTempStore.ExtractForOpen`(같은 zip·같은 파일이면 재사용, 읽기 전용 특성) → `FileOpenRequested`(뷰어 탭·기본 프로그램). 실행 형식은 확인, 처음 한 번 읽기 전용 안내.
+- **꺼내기**: 끌어 놓기는 앱 안 전용 형식(`ArchiveDragPayload`, 놓을 때 풂 — 탐색기로는 안 됨), `Ctrl+C`는 임시 폴더에 풀어 FileDrop(붙여넣기 코드 수정 없음), 우클릭 `반대편 패널로 복사`, ⋯ 이동(F6)은 막고 `ExecuteTransfer`의 복사는 반대편으로 풂.
+  끝나면 `MainWindow.ShowArchiveOperationResult`가 패널을 새로 고치고 `SelectCreatedItem`(폴더 감시 새로 고침 뒤에도 3초간 선택 유지)으로 만든 항목을 고른다.
+- **막는 작업**: `MainWindow.BlockedInArchive`(삭제·이름 변경·새 폴더/파일·링크·비교·즐겨찾기·Git), `BlockedPasteIntoArchive`, `CutSelectedToClipboard`, 끌어 넣기. 다음으로 열기 메뉴는 숨김, 탐색기로 열기는 zip 파일 선택.
+  새 파일 작업 명령을 추가하면 zip 안(`ActivePane.IsInArchive`)에서 어떻게 할지(막기·꺼내기) 정해야 한다.
+- **압축**: `ZipArchiveService.CreateZip`(같은 폴더 임시 파일 후 이름 바꿈, UTF-8 이름, 빈 폴더 포함, 하위 링크 폴더는 안으로 안 들어감, 만드는 zip 자신 제외). 진행 창·오류 알림은 `ArchiveOperations`.
+- 회귀 테스트: `tests/Folderss.SearchTests/ZipArchiveTests.cs`(가상 경로, 목록 트리, CP949·UTF-8(플래그 유무)·NFD 이름, 위험한 이름, 손상·암호, 복사/합치기 충돌 모드, 이름 정리, zip 변경 감지, 취소, 만들기, 임시 사본·정리).
 
 ### Git 창 (GitWindow)
 - 진입: `MainWindow.ShowGit_Click` — 기준 폴더는 `GitSettings.BaseFolderMode`(기본: 폴더 하나 선택 시 그 폴더, 아니면 `CurrentPath`).

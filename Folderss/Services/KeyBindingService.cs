@@ -37,7 +37,8 @@ namespace Folderss.Services
                 new KeyBindingEntry { CommandId = "NewFile",         DisplayName = "새 파일",          Key = Key.N,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "AddPanel",        DisplayName = "폴더 패널 추가",   Key = Key.T,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "CopyClipboard",   DisplayName = "복사 (클립보드)",  Key = Key.C,     Modifiers = ModifierKeys.Control },
-                new KeyBindingEntry { CommandId = "CopyFolderPath",  DisplayName = "폴더 경로 복사",   Key = Key.C,     Modifiers = ModifierKeys.Control | ModifierKeys.Shift },
+                // ID는 예전 "폴더 경로 복사"(트리 전용) 그대로 — 사용자가 바꾼 keybindings.xml이 계속 맞도록. 지금은 트리·파일 목록 모두 경로 복사.
+                new KeyBindingEntry { CommandId = "CopyFolderPath",  DisplayName = "경로 복사",        Key = Key.C,     Modifiers = ModifierKeys.Control | ModifierKeys.Shift },
                 new KeyBindingEntry { CommandId = "CutClipboard",    DisplayName = "잘라내기",         Key = Key.X,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "PasteClipboard",  DisplayName = "붙여넣기",         Key = Key.V,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "NavigateBack",    DisplayName = "뒤로",             Key = Key.Left,  Modifiers = ModifierKeys.Alt },
@@ -47,6 +48,7 @@ namespace Folderss.Services
                 new KeyBindingEntry { CommandId = "SwitchPaneRight", DisplayName = "오른쪽 패널 전환", Key = Key.Right, Modifiers = ModifierKeys.Control | ModifierKeys.Shift },
                 new KeyBindingEntry { CommandId = "ShowSearch",      DisplayName = "내용 검색",        Key = Key.F,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "PanelMaximize",  DisplayName = "패널 최대화 토글", Key = Key.F11 },
+                new KeyBindingEntry { CommandId = "UndoFileOperation", DisplayName = "실행 취소 (파일 작업)", Key = Key.Z, Modifiers = ModifierKeys.Control },
             };
         }
 

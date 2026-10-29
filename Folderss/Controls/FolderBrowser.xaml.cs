@@ -337,6 +337,11 @@ namespace Folderss.Controls
         {
             if (string.IsNullOrWhiteSpace(CurrentPath))
                 return;
+            if (IsInArchive)
+            {
+                LoadArchiveListing(null, false, false);
+                return;
+            }
 
             try
             {
@@ -403,6 +408,7 @@ namespace Folderss.Controls
                 ApplyCompareOverlay();
                 ApplyFilter();
                 UpdateStatusText();
+                ApplyPendingSelection();
             }
             catch (UnauthorizedAccessException)
             {
@@ -432,6 +438,8 @@ namespace Folderss.Controls
 
             if (!Directory.Exists(fullPath))
             {
+                if (TryNavigateIntoArchive(fullPath, addHistory))
+                    return;
                 MessageBox.Show("폴더가 존재하지 않습니다.", "Folderss", MessageBoxButton.OK, MessageBoxImage.Warning);
                 return;
             }
@@ -447,6 +455,7 @@ namespace Folderss.Controls
             if (_resultFilterFiles != null && !IsUnderResultFilterRoot(fullPath))
                 ClearSearchResultFilter();
 
+            ExitArchiveState();
             CurrentPath = fullPath;
             SearchBox.Text = string.Empty;
             SyncTreeAfterNavigation(fullPath);
@@ -491,6 +500,11 @@ namespace Folderss.Controls
 
         private void UpdateStatusText()
         {
+            if (IsInArchive)
+            {
+                UpdateArchiveStatusText();
+                return;
+            }
             StatusText.Text = _ignoredCount > 0
                 ? string.Format("{0:N0}개 항목 · ignore 규칙으로 {1:N0}개 숨김", _items.Count, _ignoredCount)
                 : string.Format("{0:N0}개 항목", _items.Count);
@@ -630,7 +644,7 @@ namespace Folderss.Controls
 
             if (visible)
             {
-                _treeRootPath = CurrentPath;
+                _treeRootPath = FileSystemPath;
                 RebuildFolderTree();
                 SetFolderPinned(true);
             }
@@ -766,7 +780,7 @@ namespace Folderss.Controls
 
         private void UpdatePathBoxText()
         {
-            PathBox.Text = _treeViewVisible && !string.IsNullOrWhiteSpace(_treeRootPath)
+            PathBox.Text = !IsInArchive && _treeViewVisible && !string.IsNullOrWhiteSpace(_treeRootPath)
                 ? _treeRootPath
                 : CurrentPath ?? string.Empty;
             PathBox.CaretIndex = PathBox.Text.Length;
@@ -923,6 +937,8 @@ namespace Folderss.Controls
             var item = SelectedItem;
             if (item == null)
                 return;
+            if (TryOpenArchiveItem(item))
+                return;
 
             if (item.IsDirectory)
             {
@@ -1005,6 +1021,11 @@ namespace Folderss.Controls
                 return;
 
             _dragPending = false;
+            if (IsInArchive)
+            {
+                BeginArchiveDrag();
+                return;
+            }
             var paths = SelectedItems
                 .Select(item => item.FullPath)
                 .Where(path => File.Exists(path) || Directory.Exists(path))
@@ -1022,6 +1043,8 @@ namespace Folderss.Controls
 
         private void FileList_DragOver(object sender, DragEventArgs e)
         {
+            if (TryHandleArchiveDragOver(e))
+                return;
             if (_safeMode)
             {
                 e.Effects = DragDropEffects.None;
@@ -1058,6 +1081,8 @@ namespace Folderss.Controls
 
         private void FileList_Drop(object sender, DragEventArgs e)
         {
+            if (TryHandleArchiveDrop(e))
+                return;
             if (_safeMode)
             {
                 e.Effects = DragDropEffects.None;
@@ -1102,6 +1127,18 @@ namespace Folderss.Controls
                     UpdateStatusText();
                     return;
                 }
+            }
+
+            // 메인 창 패널의 복사·이동은 백그라운드 대기열로(진행률·취소·실행 취소). 이동은 이쪽이 끝까지 하므로(셸의 "최적화 이동")
+            // 끌어 온 쪽(탐색기 등)이 원본을 지우지 않도록 Move를 돌려주지 않는다 — 아직 복사 중인 원본을 지우면 안 된다.
+            var mainWindow = Window.GetWindow(this) as MainWindow;
+            if (mainWindow != null && effect != DragDropEffects.Link)
+            {
+                mainWindow.QueueFileTransfer(paths, destination, effect == DragDropEffects.Move);
+                if (effect == DragDropEffects.Move)
+                    e.Effects = DragDropEffects.None;
+                UpdateStatusText();
+                return;
             }
 
             var errors = new List<string>();
@@ -1254,6 +1291,11 @@ namespace Folderss.Controls
             PreviewSummaryText.Text = item.IsDirectory
                 ? item.Name
                 : string.Format("{0}  /  {1:0.00} MB", item.Name, item.Size / 1024d / 1024d);
+            if (item.IsArchiveEntry)
+            {
+                await ShowArchiveEntryPreviewAsync(item, requestId);
+                return;
+            }
 
             try
             {
@@ -1272,6 +1314,11 @@ namespace Folderss.Controls
                 if (FilePreviewService.IsImage(item.FullPath))
                 {
                     ShowImagePreview(item.FullPath);
+                    return;
+                }
+                if (ZipArchivePath.IsBrowsableArchive(item.FullPath))
+                {
+                    await ShowZipSummaryPreviewAsync(item.FullPath, requestId);
                     return;
                 }
 
@@ -1394,6 +1441,12 @@ namespace Folderss.Controls
                 e.Handled = true;
                 return;
             }
+            if (IsInArchive)
+            {
+                ShowArchiveContextMenu();
+                e.Handled = true;
+                return;
+            }
             var selectedPaths = SelectedItems.Select(item => item.FullPath).ToList();
 
             if (selectedPaths.Count == 0)
@@ -1440,6 +1493,11 @@ namespace Folderss.Controls
                     Invoke = () => CompareFoldersRequested?.Invoke(this, folderPair)
                 });
             }
+            AddArchiveShellMenuItems(customItems);
+
+            var pathCopyMenu = BuildPathCopyShellMenu(GetPathCopyTargets());
+            if (pathCopyMenu.HasValue)
+                customItems.Add(pathCopyMenu.Value);
 
             var screenPoint = PointToScreen(e.GetPosition(this));
             try
@@ -1465,6 +1523,11 @@ namespace Folderss.Controls
 
         public void NavigateUp()
         {
+            if (IsInArchive)
+            {
+                NavigateUpFromArchive();
+                return;
+            }
             var parent = Directory.GetParent(CurrentPath);
             if (parent != null)
                 NavigateTo(parent.FullName);
@@ -1569,6 +1632,11 @@ namespace Folderss.Controls
                 CopyFolderTreeSelectionToClipboard(treePath);
                 return;
             }
+            if (IsInArchive)
+            {
+                CopyArchiveSelectionToClipboard();
+                return;
+            }
 
             var paths = SelectedItems
                 .Select(item => item.FullPath)
@@ -1591,30 +1659,6 @@ namespace Folderss.Controls
             var window = Window.GetWindow(this) as Folderss.MainWindow;
             if (window != null)
                 window.ClearCutStateFromClipboard();
-        }
-
-        /// <summary>
-        /// 트리에서 선택한 폴더의 전체 경로를 텍스트로만 클립보드에 복사한다(폴더 경로 복사, 기본 Ctrl+Shift+C).
-        /// Ctrl+C와 달리 FileDrop을 넣지 않아 탐색기에 붙여넣어도 폴더가 복사되지 않는다.
-        /// 트리에 키보드 포커스가 없거나 선택한 폴더가 없으면 false.
-        /// </summary>
-        public bool CopyFolderTreePathToClipboard()
-        {
-            if (!FolderTree.IsKeyboardFocusWithin)
-                return false;
-
-            var item = FolderTree.SelectedItem as TreeViewItem;
-            var path = item == null ? null : item.Tag as string;
-            if (string.IsNullOrWhiteSpace(path))
-                return false;
-
-            if (ClipboardService.TrySetDataObject(path))
-            {
-                var window = Window.GetWindow(this) as Folderss.MainWindow;
-                if (window != null)
-                    window.ClearCutStateFromClipboard();
-            }
-            return true;
         }
 
         private static string BuildNameListText(IEnumerable<string> paths)
@@ -1660,6 +1704,11 @@ namespace Folderss.Controls
 
         public void CutSelectedToClipboard()
         {
+            if (IsInArchive)
+            {
+                Folderss.MainWindow.ShowArchiveReadOnlyMessage("잘라낼 수 없습니다");
+                return;
+            }
             var selected = SelectedItems
                 .Where(item => File.Exists(item.FullPath) || Directory.Exists(item.FullPath))
                 .ToList();
@@ -1727,9 +1776,7 @@ namespace Folderss.Controls
 
         private void Up_Click(object sender, RoutedEventArgs e)
         {
-            var parent = Directory.GetParent(CurrentPath);
-            if (parent != null)
-                NavigateTo(parent.FullName);
+            NavigateUp();
         }
 
         private void PathBox_PreviewKeyDown(object sender, KeyEventArgs e)
@@ -1982,6 +2029,10 @@ namespace Folderss.Controls
                     };
                 })
                 .ToList();
+
+            var pathCopyMenu = BuildPathCopyShellMenu(selectedPaths);
+            if (pathCopyMenu.HasValue)
+                customItems.Add(pathCopyMenu.Value);
 
             var screenPoint = PointToScreen(e.GetPosition(this));
             try

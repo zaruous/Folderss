@@ -132,10 +132,13 @@ namespace Folderss
 
         public GitResetMode Mode => _soft.IsChecked == true ? GitResetMode.Soft : _hard.IsChecked == true ? GitResetMode.Hard : GitResetMode.Mixed;
 
-        public GitResetDialog(GitCommitInfo target, string currentBranch, int uncommittedCount) : base("reset", 520)
+        /// <param name="droppedCommits">대상에 없고 현재 HEAD에만 있는 커밋 수(브랜치로 reset할 때). 0보다 크면 브랜치에서 빠진다고 알린다.</param>
+        public GitResetDialog(GitCommitInfo target, string currentBranch, int uncommittedCount, int droppedCommits = 0) : base("reset", 520)
         {
             _uncommitted = uncommittedCount;
             AddText(string.Format("{0}의 HEAD를 {1} \"{2}\"(으)로 옮깁니다.", currentBranch ?? "현재 HEAD", target.ShortHash, target.Subject));
+            if (droppedCommits > 0)
+                AddText(string.Format("⚠ 현재 브랜치에만 있는 커밋 {0}개가 브랜치에서 빠집니다(모드와 상관없이).", droppedCommits), warning: true, top: 8);
 
             AddLabel("모드");
             _soft = AddRadio("reset", "soft — 커밋만 되돌림", "HEAD만 옮기고, 되돌린 커밋의 변경은 스테이지된 채로 남습니다.", false);

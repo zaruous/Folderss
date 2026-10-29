@@ -25,7 +25,7 @@
 | `NewFile` | 새 파일 | `Ctrl+N` | MainWindow | 활성 패널에 새 파일 생성 |
 | `AddPanel` | 폴더 패널 추가 | `Ctrl+T` | MainWindow | 새 폴더 브라우저 탭 추가 |
 | `CopyClipboard` | 복사 (클립보드) | `Ctrl+C` | MainWindow | 선택 항목 클립보드 복사; 즐겨찾기 패널에서는 경로 복사 |
-| `CopyFolderPath` | 폴더 경로 복사 | `Ctrl+Shift+C` | MainWindow | 폴더 패널 트리뷰에 포커스가 있을 때 선택한 폴더의 전체 경로를 텍스트로 복사 (FileDrop 없음). 파일 목록 포커스에서는 동작 안 함 |
+| `CopyFolderPath` | 경로 복사 | `Ctrl+Shift+C` | MainWindow → `FolderBrowser.CopyPathForShortcut` | 경로를 텍스트로 복사 (FileDrop 없음). 트리뷰 포커스: 선택한 폴더, 파일 목록 포커스: 선택 항목(목록 순서, 여러 개면 줄마다 하나, 없으면 현재 폴더). 형식은 `설정 > 경로 복사`(기본 전체 경로). ID는 예전 이름(폴더 경로 복사) 그대로 |
 | `CutClipboard` | 잘라내기 | `Ctrl+X` | MainWindow | 선택 항목 잘라내기 |
 | `PasteClipboard` | 붙여넣기 | `Ctrl+V` | MainWindow | 클립보드 항목 붙여넣기 |
 | `NavigateBack` | 뒤로 | `Alt+←` | MainWindow | 활성 패널 히스토리 뒤로 |
@@ -35,6 +35,7 @@
 | `SwitchPaneRight` | 오른쪽 패널 전환 | `Ctrl+Shift+→` | MainWindow | 다음 폴더 패널로 포커스 전환 |
 | `ShowSearch` | 파일 검색 | `Ctrl+F` | MainWindow | 파일 검색 창 열기 (내용 검색/파일명 검색 대상 선택, 와일드카드 패턴) |
 | `PanelMaximize` | 패널 최대화 토글 | `F11` | MainWindow | 활성 패널/문서 최대화 토글 |
+| `UndoFileOperation` | 실행 취소 (파일 작업) | `Ctrl+Z` | MainWindow | 폴더 패널 포커스(텍스트 입력 중 아님)일 때 메인 패널의 마지막 파일 작업(복사·이동·휴지통 삭제·이름 변경·새 폴더·새 파일)을 확인 창을 거쳐 되돌림. ⋯ 메뉴 `실행 취소: …`와 같은 명령(`MainWindow.UndoLastFileOperation`). 경로·필터 입력란에서는 텍스트 되돌리기, 뷰어·캡쳐 편집 창은 각자 처리 |
 
 ---
 
@@ -166,7 +167,6 @@ Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)
 | `Ctrl+W` | 현재 탭(패널) 닫기 | 높음 | `Ctrl+T`(추가)와 쌍을 이루는 기능 |
 | `Ctrl+L` / `F4` | 경로 입력란 포커스 | 중간 | Windows 탐색기, 브라우저 공통 |
 | `Ctrl+D` | 즐겨찾기에 현재 폴더 추가 | 중간 | 브라우저 북마크 패턴 |
-| `Ctrl+Shift+C` | 파일 목록에서 선택한 파일 경로 복사 | 중간 | 트리뷰 폴더 경로 복사(`CopyFolderPath`)는 구현됨. 파일 목록까지 넓힐지 검토 |
-| `Ctrl+Z` | 실행 취소 (마지막 파일 작업) | 낮음 | 구현 복잡도 높음 |
 | `Ctrl+H` | 숨김 파일 표시 토글 | 낮음 | 편의 기능 |
 | `Space` | 빠른 미리보기 (Quick Look) | 낮음 | macOS Finder 스타일 |
+| `Ctrl+Y` | 다시 실행 (실행 취소한 파일 작업) | 낮음 | `Ctrl+Z` 실행 취소는 구현됨(`UndoFileOperation`, `docs/items/file-operation-queue-and-undo.md`). 다시 실행은 아직 없음 |

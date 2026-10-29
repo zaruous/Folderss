@@ -448,6 +448,8 @@ namespace Folderss.Services
 
         public PluginFolderPanel(string path)
         {
+            // IFolderPanel.CurrentPath는 실제 폴더라는 계약이라 zip 안으로는 들어가지 않는다(zip은 파일 열기로 넘어감).
+            _browser.ArchiveBrowsingEnabled = false;
             _browser.FileOpenRequested += (sender, file) =>
             {
                 var open = PluginManager.OpenFileHandler;

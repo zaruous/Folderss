@@ -73,6 +73,7 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `MainWindow.xaml` — 메뉴 `InputGestureText` 업데이트 (해당 메뉴 있으면)
 - [ ] `SettingsWindow.xaml.cs` — 설정 창에서 키 표시 이름 등록 (필요 시)
 - [ ] `README.md` — 단축키 표 업데이트
+- [ ] `docs/keyboard-shortcuts.md` — 사용자 정의 단축키 표(CommandId·표시 이름·처리 위치)와 "미구현 제안" 표 정리
 
 ### 설정 항목 추가 시
 - [ ] `SettingsWindow.xaml` — UI 컨트롤 추가
@@ -91,6 +92,12 @@ dotnet build .\Folderss.sln -c Debug
 ### 새 서비스/컨트롤 추가 시
 - [ ] `docs/architecture.md` — 서비스·컨트롤 목록 업데이트
 - [ ] `README.md` — 아키텍처 요약 업데이트
+
+### 메인 패널 파일 작업 추가·변경 시
+- [ ] 복사·이동·삭제는 `MainWindow.QueueFileTransfer`/`QueueFileDelete`(`MainWindow.FileJobs.cs`)로 대기열에 넣는다. UI 스레드에서 `FileOperationService`를 직접 부르면 진행률·취소·실행 취소(Ctrl+Z) 이력에서 빠지고 큰 작업에서 화면이 멈춘다
+- [ ] 이름 변경·새 폴더·새 파일 같은 즉시 작업은 `RenameRecorded`/`CreateFolderRecorded`/`CreateFileRecorded`(→ `FileJobQueue`)로 실행해 이력에 남긴다
+- [ ] 새 종류를 실행 취소하려면 `JournalOperationKind` 끝에 값을 더하고 `FileOperationJournal.ItemProblems`·`Revert`, `FileJobQueue.DescribeOperation`·`DescribeUndoStep`, `FileJobQueueTests`를 함께 고친다
+- [ ] 폴더 비교 창 작업은 비교 창 이력(`compare-history`)에, 메인 패널 작업은 `file-history`에 — 두 이력을 섞지 않는다
 
 ### 플러그인 계약 변경 시
 - [ ] `Folderss.PluginContract/PluginContracts.cs` — 기존 멤버 삭제·시그니처 변경은 이미 배포된 플러그인을 깨뜨린다. 추가 위주로 하고, 깨지는 변경이면 계약 `<Version>` 주 버전을 올린다
@@ -144,6 +151,10 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
 ### ContextMenu 스타일
 WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍게 보임.
 `Controls.xaml`에 `ControlTemplate` 재정의가 있으므로 새 ContextMenu 추가 시 별도 스타일 불필요.
+
+### 폴더 패널 경로가 zip 안일 수 있음
+- zip 안을 보는 패널의 `FolderBrowser.CurrentPath`는 `C:\a\b.zip\sub` 같은 가상 경로이고 항목 `FullPath`도 실제 파일이 아니다(`IsInArchive`, `FileSystemItem.ArchiveEntry`).
+- 실제 폴더가 필요하면 `FileSystemPath`(zip이 있는 폴더)를 쓰고, 새 파일 작업 명령은 `MainWindow.BlockedInArchive`로 막거나 꺼내기로 처리한다(`docs/items/zip-as-folder.md`).
 
 ---
 
