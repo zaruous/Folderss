@@ -16,11 +16,20 @@ Folderss/
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
 │   ├── DiskUsageMiniPanel.xaml/.cs — 즐겨찾기 열 상단 도킹용 컴팩트 디스크 사용량 뷰 (얇은 바, 남은 용량, 툴팁 상세)
+│   ├── BlockEditor.cs              — Notion 스타일 블록 편집기 컨트롤: 키 처리·블록 연산·/ 메뉴·블록 선택·끌어 옮기기·변경분 실행 취소 (partial)
+│   ├── BlockEditor.Panel.cs        — 가상화 패널(IScrollInfo): 보이는 블록만 행 생성, 높이 추정·기억, 블록 기준 스크롤 앵커, 행 재사용
+│   ├── BlockEditor.Row.cs          — 블록 행: 평소 TextBlock으로 그리고 편집할 때만 TextBox(입력기 등록 회피), 표 셀·이미지
+│   ├── BlockEditor.Table.cs        — 표 셀 키(Tab·Enter 행 추가)·행/열 추가·삭제·엑셀 붙여넣기, /표·/이미지, 이미지 경로 해석
+│   ├── BlockImageLoader.cs         — 로컬·원격(http/https) 이미지 비동기 디코딩(화면 폭으로 줄임)·LRU 캐시·원본 크기 기억, 북마크 메타데이터 조회
+│   ├── BlockEditor.Media.cs        — 클립보드 이미지 붙여넣기(`images/` 저장), 탐색기/폴더 패널 파일 드롭, 파일/북마크 블록 추가 대화상자, 원본 크기 보기 창(`BlockImagePreviewWindow`), 순수 C# 수식 렌더러(`BlockMathRenderer`)
+│   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색"
+│   ├── ElementTree.cs              — 입력 이벤트 `OriginalSource`에서 조상 찾기(`Run` 등 ContentElement는 논리 부모로 건너감 — `VisualTreeHelper.GetParent` 예외 방지)
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
 │   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
 │   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기
 │   ├── TextViewer.xaml/.cs         — 읽기 전용 텍스트 뷰어
+│   ├── BlockEditorViewer.cs        — Markdown 파일을 BlockEditor로 편집하는 뷰어 (`builtin:blocks`, 인코딩·줄바꿈 유지 저장, 이미지 기준 폴더)
 │   ├── ViewerTheme.cs              — 웹 뷰어(마크다운·텍스트)에 넘길 테마 색(JSON)·WebView 바탕색을 테마 XAML 색에서 만듦
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
@@ -29,6 +38,7 @@ Folderss/
 │   ├── DirectoryCompareModels.cs   — 폴더 비교 상태(CompareStatus)·옵션(DirectoryCompareOptions, 기본값 = 권장값)·항목·결과
 │   ├── FavoriteLocation.cs         — 즐겨찾기 그룹·항목 모델, 그룹 위쪽 고정 바로가기(FavoritesConfiguration.Pinned) 포함
 │   ├── DriveUsageInfo.cs           — 드라이브 총량·사용량·여유 공간(GB, 비율) 모델
+│   ├── EditorBlock.cs              — 블록 편집기 블록(BlockKind·본문·Indent·체크·접힘·언어·콜아웃 종류, 행 재사용용 Id)
 │   ├── SearchResult.cs             — 파일 검색 결과 모델
 │   └── SearchTarget.cs             — 검색 대상 enum (Content/FileName)
 ├── Services/
@@ -71,6 +81,9 @@ Folderss/
 │   ├── DiskUsageService.cs         — `DriveInfo.GetDrives()` 기반 준비된 드라이브 사용량 조회
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
 │   ├── ViewerConfigService.cs      — 확장자 ↔ 뷰어 매핑 (viewer-config.json 저장)
+│   ├── BlockMarkdown.cs            — 블록 목록 ↔ Markdown 변환(CommonMark 목록 중첩, <details> 토글, > [!NOTE] 콜아웃, 원문 보존), 입력 단축 판별 (순수 로직)
+│   ├── BlockOperations.cs          — 블록 구조 연산: 하위 트리, 들여쓰기 규칙·정규화, 형제 단위 이동, 번호 표시, 접힘 (순수 로직)
+│   ├── BlockSidecar.cs             — Markdown 밖 블록 속성을 문서 옆 `문서.md.meta.json`에 저장·다시 붙이기(#78, 순수 로직)
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
@@ -594,6 +607,43 @@ Folderss/
   최대 `DiffHtmlReport.MaxLines`(10만) 줄, 넘으면 파서가 안내 줄을 붙인다. Git 창은 `LoadReportTextAsync`(선택 저장소 기준), 두 파일 비교 창은 화면과 같은 로더.
 - 브랜치 전환·pull 전 `MainWindow.CountModifiedDocumentsUnder(repo)`로 그 저장소 파일의 미저장 뷰어 탭을 세어 경고한다.
 - 회귀 테스트: `tests/Folderss.SearchTests/GitTests.cs`(탐색, 파서, 실제 git 왕복 — git 없으면 건너뜀).
+
+### 블록 편집기 (BlockEditor / BlockEditorViewer)
+- `builtin:blocks` 뷰어. 기본 매핑은 없고 `설정 > 뷰어`에서 확장자를 `Block Editor (Notion 스타일)`로 매핑해 쓴다(기본 `.md`는 Markdown 뷰어 그대로).
+  Notion 데스크톱 앱(`Notion.exe`)은 Electron 셸이고 `app.asar`에는 탭·설정·SQLite 캐시만 있으며 편집기 코드는 실행 때 notion.so에서 받는다 —
+  코드를 가져오지 않고 공개된 편집 동작(블록, `/` 메뉴, Markdown 입력 단축, 블록 이동 단축키, 표 행 추가)을 기준으로 WPF로 새로 만들었다.
+- 문서 모델: `EditorBlock`의 평면 목록. 중첩은 `Indent`로만 나타낸다(블록 i 바로 뒤의 더 깊은 블록들이 자식). 표는 행마다 블록(`TableRow`, 셀은 탭 구분, 같은 들여쓰기로
+  이어진 행이 한 표이고 첫 행이 머리글·정렬 보관), 이미지는 `Image`(캡션 = `Text`, 경로 = `Source`). 구조 연산은 `BlockOperations`(WPF 없음, 단위 테스트).
+- Markdown 변환 `BlockMarkdown`: 목록 자식은 부모 항목의 내용 시작 열만큼 들여써 읽고 쓴다. 토글 `<details [open]><summary>`, 콜아웃 `> [!TYPE]`,
+  GFM 표(구분 행에 `|`가 있고 셀 수가 머리글과 같을 때만), 이미지만 있는 줄 → `Image`. front matter·HTML·구분 행 없는 표는 `Raw`로 원문 보존.
+  저장하면 형식이 정규화되므로 `BlockMarkdownTests.NormalizedDocument_RoundTripsUnchanged`가 정규형 문서의 왕복 불변을 지킨다.
+- 가상화 `BlockPanel`(ScrollViewer의 IScrollInfo, `CanContentScroll=true`): 보이는 블록 + 위·아래 반 화면만 `BlockRow`를 만들고, 나머지는 종류·글자 수로 높이를 추정하며
+  측정한 높이는 (내용·폭이 같으면) 기억한다. 블록 위치는 높이 누적(`_tops`, 구조·높이가 바뀔 때만 O(n) 재계산). 스크롤 위치는 "블록 Id + 그 안 오프셋"(앵커)이라
+  추정 높이가 실제로 바뀌어도 보던 내용이 흔들리지 않는다. 포커스·`/` 메뉴·끌기 중인 행은 화면 밖이어도 유지. `MakeVisible`로 캐럿 따라 스크롤.
+- 행 `BlockRow`: 평소에는 `TextBlock`으로만 그리고, 마우스를 올리거나 커서가 들어올 때 그 행(표는 그 셀)에만 TextBox를 만든다. **이유**: IME가 설치된 Windows에서
+  WPF는 화면에 붙은 TextBox를 모두 입력기(TSF)에 등록하고, 등록된 TextBox의 `Text`를 바꾸면 `TextStore.RequestLock`으로 입력기와 프로세스 간 잠금을 주고받아
+  수백 ms~5초 멈췄다(가상화로 행을 다시 묶을 때). `InputMethod.IsInputMethodEnabled=false`로는 등록이 사라지지 않는다. TextBox는 내용을 넣은 뒤 화면에 붙이고,
+  TextBox를 만든 행(`HasEditors`)은 재사용 풀에 넣지 않는다. 종류가 바뀌어도 TextBox는 그대로 두고 모양만 바꾼다(입력 중 포커스·IME 조합 유지).
+  표 행은 [셀 | 오른쪽 끝 열 추가 `+`] / [마지막 행에만 아래 행 추가 `+`] 영역이고, 버튼 자리는 늘 잡아 두고 행에 마우스를 올렸을 때만 보인다(레이아웃이 흔들리지 않게).
+  마지막 행 여부(`_tableLast`)는 높이 기억의 조건에도 들어간다(`TableShapeAt`).
+- 이미지 `BlockImageLoader`: 파일 읽기·디코딩은 스레드 풀에서(화면 폭 × DPI로 `DecodePixelWidth`, 400px 단위), Freeze한 결과를 UI 스레드로. 최근 64개 LRU,
+  원본 픽셀 크기를 기억해 행을 만들기 전 높이 추정에 쓴다. 클립보드 이미지 붙여넣기(`images/<문서이름>-<시각>.png`), 탐색기/폴더 패널 파일 드래그 앤 드롭(외부 폴더 이미지는 `BlockImageDropDialog`), 우측 핸들 폭 조절(`width`), 정렬(`align`), 원본 크기 보기(`BlockImagePreviewWindow`), 수동 원격 이미지 로드(`이번만 불러오기`, `RemoteContentPolicy`·`NetworkSettingsService` 인증서 검증)를 지원한다. 수식(`Math`, `$$...$$` 및 인라인 `$...$`)은 순수 C# WPF 수식 렌더러(`BlockMathRenderer`)로 그리며, 목차(`Toc`, `[TOC]`/`<!-- toc -->`), 파일 첨부(`File`, `[📎 이름](경로)`), 북마크(`Bookmark`, `[🔖 제목](URL)`), 토글 제목 1~3(`Toggle` + `heading`), 콜아웃 아이콘 선택기(`Callout` + `icon`)를 지원한다.
+- 키: `OnPreviewKeyDown` 한 곳에서 처리(Ctrl+S/Z/Y → 블록 선택 모드 → `/` 메뉴 → 표 셀(`HandleTableKey`) → 입력란). 한글 조합 중 Enter(`Key.ImeProcessed`)는 조합이 끝난 뒤
+  블록을 나눈다(표 셀이면 행 추가). 자동 변환·`/` 감지는 `TextChanged` 시점의 커서 대신 `TextChange` 위치로 판단한다.
+- 실행 취소(`HistoryEntry`): 마지막 기록 시점 문서의 동결 사본(`_committed`)을 두고, 바뀐 구간(앞뒤 같은 사본 제외)의 이전 블록만 기록한다. 글자 입력은 그 블록 하나만
+  바꾸므로 문서를 훑지 않고, 같은 블록 연속 입력은 1.5초 안이면 한 단계로 묶는다. 저장(`MarkSaved`)하면 묶음을 끊어 버전 번호로 미수정 여부를 판단한다.
+  되돌린 블록은 Id가 같아 화면에 있던 행을 그대로 다시 쓴다. 토글 접기·펴기는 저장할 변경으로 세지 않는다.
+- 측정(약 1만 1천 줄, 블록 9,862개, 표 행 8,301개, 이미지 60개, Debug): 열기 0.13~0.17초, 글자 입력 약 15ms, 표 Enter 행 추가 50~65ms(편집기 키 처리 5~6ms, 나머지는
+  새 TextBox 포커스 후 WPF 그리기·입력기 처리), 실행 취소 약 25ms, 한 화면씩 이동 약 30ms, 큰 폭 점프 30~70ms, 구조 재계산·기록 비교·위치 계산 각 1~2ms.
+  그 밖에 처음 겪은 성능 문제: 세로 스크롤바 `Auto`의 이중 측정(→ `Visible`), UI Automation 전체 트리 갱신(→ `OnCreateAutomationPeer`로 화면에 보이는 블록만).
+- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`)은 `EditorBlock.Attributes`에 두고
+  문서 옆 `문서.md.meta.json`(`BlockSidecar`)에 저장한다 — Markdown 파일은 순수하게 남는다. 속성은 "Markdown에 쓰인 블록 순번 + (종류·본문) 해시 + 앞 블록 해시"로
+  붙인다: 문서 전체 해시가 같으면 순번으로, 다른 도구에서 고쳤으면 같은 내용의 블록을 순서대로 찾아(같은 내용이 여럿이면 앞 블록까지 맞는 쪽) 붙이고,
+  본문이 바뀐 블록의 속성은 버리고 개수를 상태 줄에 알린다. 속성이 없으면 사이드카를 지우고, 읽지 못한 사이드카는 덮어쓰기 전에 `.bak`로 보관한다.
+  속성은 `SameContent`·`Clone`에 들어가 실행 취소·수정 표시와 함께 움직인다. 색은 이름만 저장하고 실제 색은 테마 밝기로 고른다(`RefreshTheme`).
+  남은 일: Folderss 파일 작업(이름 바꾸기·이동·복사·삭제·실행 취소 기록)에서 사이드카를 함께 처리(#78).
+- 뷰어: 인코딩은 `MarkdownViewer.DetectEncoding`(BOM·CP949 판별)을 함께 쓰고, 저장은 읽은 인코딩·CRLF/LF로 `SettingsFile.WriteAllText`(임시 파일 후 교체).
+  `BaseDirectory`에 문서 폴더를 넘겨 이미지 상대 경로를 푼다. 32MB 넘는 파일만 열지 않는다. `↻ 다시 읽기` 때 미저장 변경이 있으면 확인한다. 외부 변경 감시·문서 내 검색은 아직 없다.
 
 ### 뷰어 미저장 표시 · 닫기 확인
 - `ViewerHost.IsModified`가 뷰어의 `ModifiedChanged`를 따라간다. `MainWindow.SetDocumentTitle`은 잠금 접두사(🔒)와 별개로

@@ -197,7 +197,7 @@ namespace Folderss.Controls
 
         private void ResultList_PreviewMouseRightButtonDown(object sender, MouseButtonEventArgs e)
         {
-            var container = FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
+            var container = ElementTree.FindAncestor<ListViewItem>(e.OriginalSource as DependencyObject);
             if (container == null)
             {
                 ResultList.SelectedItems.Clear();
@@ -406,16 +406,6 @@ namespace Folderss.Controls
             cts?.Dispose();
             if (CancelButton != null)
                 CancelButton.Visibility = Visibility.Collapsed;
-        }
-
-        private static T FindAncestor<T>(DependencyObject dep) where T : DependencyObject
-        {
-            while (dep != null)
-            {
-                if (dep is T target) return target;
-                dep = VisualTreeHelper.GetParent(dep);
-            }
-            return null;
         }
     }
 

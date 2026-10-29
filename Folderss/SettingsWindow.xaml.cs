@@ -1029,6 +1029,7 @@ namespace Folderss
             {
                 case ViewerConfigService.SystemDefaultKey: return "System Default";
                 case ViewerConfigService.BuiltInMarkdownKey: return "Markdown";
+                case ViewerConfigService.BuiltInBlocksKey: return "Block Editor (Notion 스타일)";
                 case ViewerConfigService.BuiltInMonacoKey: return "Monaco";
                 case ViewerConfigService.BuiltInTextKey: return "Text";
                 default: return key;

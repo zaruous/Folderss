@@ -9,4 +9,6 @@ namespace Folderss.Viewers
     public sealed class MarkdownViewer : IFileViewer { }
 
     public sealed class MonacoViewer : IFileViewer { }
+
+    public sealed class BlockEditorViewer : IFileViewer { }
 }

@@ -1,0 +1,110 @@
+{
+  "version": 1,
+  "file": "block-editor-test.md",
+  "document": "23f105db61e03420",
+  "blocks": [
+    {
+      "index": 13,
+      "kind": "Toggle",
+      "hash": "84b165cd2bd2384b",
+      "before": "4c337a7c651d386a",
+      "preview": "토글 제목 1: 프로젝트 주요 목표",
+      "attrs": {
+        "heading": "1"
+      }
+    },
+    {
+      "index": 17,
+      "kind": "Toggle",
+      "hash": "747dadb5e1599ed8",
+      "before": "e4673684b7228dfb",
+      "preview": "토글 제목 2: 핵심 아키텍처 원칙",
+      "attrs": {
+        "heading": "2"
+      }
+    },
+    {
+      "index": 21,
+      "kind": "Toggle",
+      "hash": "8c9307fef6e41b67",
+      "before": "238df9ea112c635d",
+      "preview": "토글 제목 3: 세부 구현 내역",
+      "attrs": {
+        "heading": "3"
+      }
+    },
+    {
+      "index": 27,
+      "kind": "Callout",
+      "hash": "aaa228b313f993f2",
+      "before": "35a87f526017f0a7",
+      "preview": "팁 콜아웃입니다. 블록 메뉴에서 배경색이나 글자색을 추가로 지정할 수 있…",
+      "attrs": {
+        "icon": "\uD83D\uDCA1"
+      }
+    },
+    {
+      "index": 28,
+      "kind": "Callout",
+      "hash": "427a4ca48653d31f",
+      "before": "aaa228b313f993f2",
+      "preview": "주의가 필요한 항목에 사용하는 경고 콜아웃입니다.",
+      "attrs": {
+        "icon": "\uD83D\uDD25"
+      }
+    },
+    {
+      "index": 32,
+      "kind": "File",
+      "hash": "91a06adfebbb1eac",
+      "before": "61178d41f8e89bb0",
+      "preview": "Folderss 솔루션 파일",
+      "attrs": {
+        "size": "2.1 KB"
+      }
+    },
+    {
+      "index": 33,
+      "kind": "File",
+      "hash": "b9029b3b93398a61",
+      "before": "91a06adfebbb1eac",
+      "preview": "아키텍처 명세서",
+      "attrs": {
+        "size": "31 KB"
+      }
+    },
+    {
+      "index": 37,
+      "kind": "Bookmark",
+      "hash": "58de4f132cd2d72b",
+      "before": "f263ec657713103b",
+      "preview": "Folderss GitHub 저장소",
+      "attrs": {
+        "description": "Windows WPF 기반의 듀얼 패널 파일 관리자 및 내장 마크다운/블록 편집기",
+        "title": "morluto/folderss: Windows WPF 듀얼 패널 파일 관리자"
+      }
+    },
+    {
+      "index": 41,
+      "kind": "Image",
+      "hash": "94913191376b0b3c",
+      "before": "ddadb4b890551c8a",
+      "preview": "Folderss 아키텍처 다이어그램",
+      "attrs": {
+        "align": "center",
+        "width": "560"
+      }
+    },
+    {
+      "index": 43,
+      "kind": "Image",
+      "hash": "65190af0702dff2a",
+      "before": "91c81c0e3c6e0207",
+      "preview": "원격 샘플 이미지",
+      "attrs": {
+        "align": "center",
+        "width": "560"
+      }
+    }
+  ]
+}
