@@ -2,7 +2,7 @@
 
 Windows용 듀얼 패널 파일 관리자입니다. WPF와 `net8.0-windows` 기반으로 구현했으며, AvalonDock을 활용한 자유로운 패널 도킹·탭·분리 창을 지원합니다.
 
-현재 버전: **v1.8.10**
+현재 버전: **v1.8.11**
 
 ![Folderss 스크린샷](<docs/images/program image.png>)
 
