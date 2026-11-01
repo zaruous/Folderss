@@ -93,6 +93,14 @@ WPF 하네스(스크래치, 화면 밖 창 — 방식은 `block-editor-stage1-se
 - 사람이 직접 볼 것: 찾기 막대 모양·테마 색(밝은·어두운 테마), 비활성 선택 강조가 눈에 띄는지, 실제 다른 편집기(메모장·VS Code)에서 저장할 때 반영 시점,
   확인창이 앱 앞에 뜨는지, 실제 탭에서 `파일.md#제목` 새 탭 열기(하네스는 뷰어 이벤트까지만 확인), 실행 확인에서 "예" 실행.
 
+### #76 병합 후 회귀 (2026-11-01)
+
+- 하네스 `harness76m`(`C:\Users\KYJ\AppData\Local\Temp\claude\D--git-cshap-Folderss\0e9a6dec-1b59-4430-8014-acdde638b328\scratchpad\harness76m\`) `find` 34·`external` 27 **모두 통과**(버그 1건 수정 후). 링크 `Ctrl+클릭` 시험은 표식 없이 보이는 링크 글자를 누르도록 바꾸고
+  `[a]`·`[c]`는 **편집하지 않는 행의 표시 글자(Run)**, `[b]`는 **서식 입력란(RichTextBox)** 에서 눌렀다.
+- 고친 버그(9228041): **표시 글자의 링크를 `Ctrl+클릭`하면 앱이 종료** — `OnLinkPreviewMouseDown`의 `_findBar.IsAncestorOf(e.OriginalSource)`가 Run(ContentElement)에서 `InvalidOperationException`.
+  `ElementTree.IsWithin`으로 바꿈(CLAUDE.md "이벤트 원본에서 조상 찾기" 패턴).
+- 서식 블록 안 찾기 결과 강조 위치(표식 뺀 글자 위치)·바꾸기 뒤 서식 유지는 `block-editor-stage2-inline-format.md` 검증 10.
+
 ## 변경 이력
 
 - 2026-11-01: 구현, 앱·테스트 프로젝트 빌드 확인. 테스트·하네스 실행은 #75 다른 항목(선택·이동, 표)과 병합한 뒤 일괄 진행.
