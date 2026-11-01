@@ -12,7 +12,7 @@ namespace Folderss.Viewers
     /// 블록 편집기 뷰어의 외부 변경 감지·반영과 링크 열기(#75).
     /// <list type="bullet">
     /// <item>문서와 사이드카(<c>문서.md.meta.json</c>)를 <see cref="FileSystemWatcher"/>로 감시한다. 디스크 내용이 마지막으로 읽거나 저장한 내용과 같으면(자기 저장 포함) 무시한다.</item>
-    /// <item>저장하지 않은 변경이 없으면 바로 다시 읽고, 있으면 묻는다(거부한 같은 내용은 다시 묻지 않음 — Markdown 뷰어와 같은 규칙). 보던 블록(앵커)은 유지한다.</item>
+    /// <item>외부 변경은 항상 다시 읽을지 묻는다 — 저장하지 않은 변경이 없으면 질문·기본 예, 있으면 경고·기본 아니요(거부한 같은 내용은 다시 묻지 않음 — Markdown 뷰어와 같은 규칙). 보던 블록(앵커)은 유지한다.</item>
     /// <item>보이지 않는 탭이면 활성화될 때 처리한다.</item>
     /// </list>
     /// </summary>
@@ -167,17 +167,22 @@ namespace Folderss.Viewers
             if (text == _promptedText && sidecar == _promptedSidecar)
                 return;
 
-            if (_editor.IsModified)
+            // Markdown 뷰어와 같이 외부 변경은 항상 묻는다. 미저장 변경이 있으면 경고·기본 '아니요', 없으면 기본 '예'.
             {
                 _reloadPromptOpen = true;
                 try
                 {
-                    const string message = "파일이 외부에서 변경되었습니다. 다시 읽으면 저장하지 않은 변경 내용이 사라집니다.\n\n다시 읽을까요?";
+                    var modified = _editor.IsModified;
+                    var message = modified
+                        ? "파일이 외부에서 변경되었습니다. 다시 읽으면 저장하지 않은 변경 내용이 사라집니다.\n\n다시 읽을까요?"
+                        : "파일이 외부에서 변경되었습니다. 다시 읽을까요?";
+                    var icon = modified ? MessageBoxImage.Warning : MessageBoxImage.Question;
+                    var defaultAnswer = modified ? MessageBoxResult.No : MessageBoxResult.Yes;
                     // owner 없이 띄우면 앱이 백그라운드일 때 확인창이 다른 창 뒤에 숨는다(Markdown 뷰어와 같은 처리).
                     var owner = Window.GetWindow(this);
                     var answer = owner != null
-                        ? MessageBox.Show(owner, message, Path.GetFileName(_filePath), MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No)
-                        : MessageBox.Show(message, Path.GetFileName(_filePath), MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No);
+                        ? MessageBox.Show(owner, message, Path.GetFileName(_filePath), MessageBoxButton.YesNo, icon, defaultAnswer)
+                        : MessageBox.Show(message, Path.GetFileName(_filePath), MessageBoxButton.YesNo, icon, defaultAnswer);
                     if (answer != MessageBoxResult.Yes)
                     {
                         _promptedText = text;

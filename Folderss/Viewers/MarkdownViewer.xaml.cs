@@ -506,6 +506,7 @@ namespace Folderss.Viewers
                 JsonString(_filePath));
             await WebView.CoreWebView2.ExecuteScriptAsync(script);
             await ConsumePendingAnchorAsync();
+            await ApplyPendingViewPositionAsync();
         }
 
         private async System.Threading.Tasks.Task CallAppReloadContent(string content)
@@ -524,9 +525,9 @@ namespace Folderss.Viewers
             await WebView.CoreWebView2.ExecuteScriptAsync(script);
         }
 
-        private void Save(string content)
+        private bool Save(string content)
         {
-            if (_filePath == null) return;
+            if (_filePath == null) return false;
             try
             {
                 // 원본을 먼저 지우고 옮기면 옮기기가 실패할 때 원본이 사라진다. 임시 파일에 쓴 뒤 덮어쓰기 이동으로 교체한다.
@@ -534,11 +535,13 @@ namespace Folderss.Viewers
                 _lastLoadedContent = content;
                 _pendingExternalReload = false;
                 var _ = WebView.CoreWebView2.ExecuteScriptAsync("app.markSaved()");
+                return true;
             }
             catch (Exception ex)
             {
                 System.Windows.MessageBox.Show(ex.Message, "저장 오류",
                     MessageBoxButton.OK, MessageBoxImage.Error);
+                return false;
             }
         }
 

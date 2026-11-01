@@ -24,14 +24,19 @@ Folderss/
 │   ├── BlockEditor.Media.cs        — 클립보드 이미지·복사한 파일 붙여넣기(`images/` 저장), 탐색기/폴더 패널 파일 드롭, 파일/북마크/페이지 블록 추가 대화상자(`BlockPageDialog`), 페이지 열기·만들기, 원본 크기 보기 창(`BlockImagePreviewWindow`), 순수 C# 수식 렌더러(`BlockMathRenderer`)
 │   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색"
 │   ├── BlockEditor.Find.cs         — 찾기·바꾸기 막대(Ctrl+F/H, F3), 제목 앵커 이동, 다시 읽은 뒤 스크롤 앵커 복원, 링크 Ctrl+클릭(#75)
+│   ├── BlockEditor.ViewSwitch.cs   — 블록 편집 ↔ 미리보기 전환 때 화면 맨 위 블록 → 제목·줄 번호 잡기, 받은 위치로 스크롤(#81)
+│   ├── BlockEditor.FrontMatter.cs  — front matter 속성 표(키 | 값) 표시·칸 편집·속성 추가/삭제·원문 편집 전환(#81)
 │   ├── ElementTree.cs              — 입력 이벤트 `OriginalSource`에서 조상 찾기(`Run` 등 ContentElement는 논리 부모로 건너감 — `VisualTreeHelper.GetParent` 예외 방지)
-│   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
+│   ├── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
+│   └── ViewerHost.ViewSwitch.cs    — `.md` 탭 툴바 `블록 편집`/`미리보기` 전환(저장 확인·위치 유지·파일별 기억, #81)
 ├── Viewers/
 │   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
 │   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기
 │   ├── TextViewer.xaml/.cs         — 읽기 전용 텍스트 뷰어
 │   ├── BlockEditorViewer.cs        — Markdown 파일을 BlockEditor로 편집하는 뷰어 (`builtin:blocks`, 인코딩·줄바꿈 유지 저장, 이미지 기준 폴더)
 │   ├── BlockEditorViewer.External.cs — 블록 편집기 외부 변경 감시·반영(문서+사이드카, 자기 저장 무시, 앵커 유지), 링크 열기(#75)
+│   ├── BlockEditorViewer.ViewSwitch.cs / MarkdownViewer.ViewSwitch.cs — `IMarkdownViewSwitchable` 구현(전환 전 저장, 위치 잡기·되돌리기, #81)
+│   ├── IMarkdownViewSwitchable.cs  — 블록 편집 ↔ 미리보기 전환 가능한 뷰어 인터페이스(#81)
 │   ├── ViewerTheme.cs              — 웹 뷰어(마크다운·텍스트)에 넘길 테마 색(JSON)·WebView 바탕색을 테마 XAML 색에서 만듦
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
@@ -87,6 +92,8 @@ Folderss/
 │   ├── BlockOperations.cs          — 블록 구조 연산: 하위 트리, 들여쓰기 규칙·정규화, 형제 단위 이동, 번호 표시, 접힘, 여러 열 정리·만들기·옮기기(`ColumnLayout`) (순수 로직)
 │   ├── BlockSidecar.cs             — Markdown 밖 블록 속성을 문서 옆 `문서.md.meta.json`에 저장·다시 붙이기(#78, 순수 로직)
 │   ├── BlockFind.cs                — 블록 편집기 찾기·바꾸기 매칭, 제목 슬러그·앵커, 다시 읽은 뒤 스크롤 앵커 대응, 링크 해석(#75, 순수 로직)
+│   ├── MarkdownViewSwitch.cs       — `.md` 블록 편집 ↔ 미리보기: 열 뷰어 고르기, 블록 ↔ 제목·줄 번호 대응, 파일별 마지막 보기·기본 보기(`markdown-view.json`, #81)
+│   ├── FrontMatter.cs              — 블록 편집기 front matter 속성 표 해석·속성 줄 단위 편집(YAML 라이브러리 없음, #81, 순수 로직)
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
@@ -618,7 +625,7 @@ Folderss/
 - 문서 모델: `EditorBlock`의 평면 목록. 중첩은 `Indent`로만 나타낸다(블록 i 바로 뒤의 더 깊은 블록들이 자식). 표는 행마다 블록(`TableRow`, 셀은 탭 구분, 같은 들여쓰기로
   이어진 행이 한 표이고 첫 행이 머리글·정렬 보관), 이미지는 `Image`(캡션 = `Text`, 경로 = `Source`). 구조 연산은 `BlockOperations`(WPF 없음, 단위 테스트).
 - Markdown 변환 `BlockMarkdown`: 목록 자식은 부모 항목의 내용 시작 열만큼 들여써 읽고 쓴다. 토글 `<details [open]><summary>`, 콜아웃 `> [!TYPE]`,
-  GFM 표(구분 행에 `|`가 있고 셀 수가 머리글과 같을 때만), 이미지만 있는 줄 → `Image`. front matter·HTML·구분 행 없는 표는 `Raw`로 원문 보존.
+  GFM 표(구분 행에 `|`가 있고 셀 수가 머리글과 같을 때만), 이미지만 있는 줄 → `Image`. 문서 맨 앞 front matter는 `FrontMatter`(원문 그대로 보관·저장), HTML·구분 행 없는 표는 `Raw`로 원문 보존.
   저장하면 형식이 정규화되므로 `BlockMarkdownTests.NormalizedDocument_RoundTripsUnchanged`가 정규형 문서의 왕복 불변을 지킨다.
 - 가상화 `BlockPanel`(ScrollViewer의 IScrollInfo, `CanContentScroll=true`): 보이는 블록 + 위·아래 반 화면만 `BlockRow`를 만들고, 나머지는 종류·글자 수로 높이를 추정하며
   측정한 높이는 (내용·폭이 같으면) 기억한다. 블록 위치는 높이 누적(`_tops`, 구조·높이가 바뀔 때만 O(n) 재계산). 스크롤 위치는 "블록 Id + 그 안 오프셋"(앵커)이라
@@ -665,6 +672,16 @@ Folderss/
   본문이 바뀐 블록의 속성은 버리고 개수를 상태 줄에 알린다. 속성이 없으면 사이드카를 지우고, 읽지 못한 사이드카는 덮어쓰기 전에 `.bak`로 보관한다.
   속성은 `SameContent`·`Clone`에 들어가 실행 취소·수정 표시와 함께 움직인다. 색은 이름만 저장하고 실제 색은 테마 밝기로 고른다(`RefreshTheme`).
   남은 일: Folderss 파일 작업(이름 바꾸기·이동·복사·삭제·실행 취소 기록)에서 사이드카를 함께 처리(#78).
+- front matter 속성 표(#81, `BlockEditor.FrontMatter.cs`, 순수 로직 `Services/FrontMatter` — `FrontMatterTests`): `FrontMatter` 블록은 `Text`에 `---` 줄까지 원문을 담고 `Raw`와 똑같이 쓰므로
+  열고 저장하면 front matter가 바이트 단위로 같다. 화면은 Notion 페이지 속성처럼 키 | 값 행: 한 줄 스칼라(따옴표 값 포함)·단순 목록(`[a, b]`, `- a`)은 값·칩으로,
+  중첩 맵·블록 스칼라(`|`·`>`)·앵커/별칭/태그·흐름 맵·사이 빈 줄 있는 목록은 `Complex`로 키 뒤 원문을 보여 주고(누르면 원문 편집), 최상위가 `key: value`가 아니면 전체 원문 표시.
+  편집은 그 속성의 줄만 다시 쓴다(`SetValue`·`SetItems`·`RenameKey`·`AddEntry`·`RemoveEntry`, 속성 순번 + 키가 맞을 때만): 값의 원래 따옴표 형식·콜론 뒤 공백·줄 끝 주석 유지,
+  일반 값으로 못 쓰는 글자면 큰따옴표, 목록의 원래 항목은 원문 토큰 그대로·블록 목록 들여쓰기 유지. 다른 줄(주석·빈 줄·순서·다른 키 따옴표)은 건드리지 않는다.
+  표는 행이 만들어질 때만 그리고 본문이 바뀔 때만 다시 그린다. 입력란은 누른 칸 하나에만(Tag 없음 — 편집기 키 처리 대상 아님), Enter 적용·Esc 취소·Tab 다음 칸, 포커스를 잃으면 적용,
+  `GetMarkdown`(저장) 전에도 적용. 적용은 `ApplyFrontMatterEdit` → 그 블록만 `RecordChange(row)`(한 단계, 앞뒤 입력과 묶지 않음). `원문 편집`은 블록 종류를 잠시 `Raw`로 바꾸고
+  입력란을 벗어나면(맨 앞·front matter 모양일 때) 다시 `FrontMatter` — 보기 전환이라 기록하지 않고 `_committed` 사본 종류만 맞춘다(수정 표시 없음).
+  front matter는 맨 앞 고정: 손잡이를 숨기고, 화살표 이동·포커스 대상에서 빼며(`IsEditable`), 옮기기·끌어 놓기로 그 위에 놓거나 옮기지 못하게 하고(`MovesFrontMatter`), 붙여넣은 front matter는 `Raw`로 둔다.
+  찾기 대상에서 뺀다(결과를 입력란 선택으로 보여 줄 수 없음). 사이드카 해시는 `FrontMatter`를 예전처럼 `Raw`로 계산해 기존 사이드카가 그대로 맞는다.
 - 뷰어: 인코딩은 `MarkdownViewer.DetectEncoding`(BOM·CP949 판별)을 함께 쓰고, 저장은 읽은 인코딩·CRLF/LF로 `SettingsFile.WriteAllText`(임시 파일 후 교체).
   `BaseDirectory`에 문서 폴더를 넘겨 이미지 상대 경로를 푼다. 32MB 넘는 파일만 열지 않는다. `↻ 다시 읽기` 때 미저장 변경이 있으면 확인한다.
 - 찾기·바꾸기(#75, `BlockEditor.Find.cs`, 순수 로직 `Services/BlockFind`): 가상화라 화면이 아니라 모델(`_blocks`)에서 찾는다(구분선·목차 제외, 표 행은 셀 경계를 넘는 일치 제외).
@@ -677,8 +694,27 @@ Folderss/
   뷰어(`BlockEditorViewer.OpenLink`)가 Markdown 뷰어와 같은 규칙으로 연다: `#제목`은 `ScrollToHeading`(GitHub 앵커 규칙 `BlockFind.Slugify`, 중복 `-1`), 로컬 `.md#제목`은 `MarkdownViewer.PendingAnchors`(두 뷰어가 공유)에 넣고 `FileOpenRequested`,
   실행 파일은 확인 뒤 실행, 그 밖의 로컬 파일은 뷰어 탭, 폴더는 탐색기, http/https/mailto는 셸. 열린·활성화된 블록 편집기는 `PendingAnchors`를 꺼내 그 제목으로 간다.
 - 외부 변경(`BlockEditorViewer.External.cs`): `FileSystemWatcher` 하나로 문서와 사이드카 두 파일을 감시(`Filters`), 400ms 디바운스, 비활성 탭은 `SetActive(true)` 때. 디스크 Markdown·사이드카가
-  마지막으로 읽거나 저장한 글자(`_diskText`·`_diskSidecar`)와 같으면 무시 — 자기 저장(`Save`가 쓴 직후 갱신)도 이렇게 걸러진다. 미저장 변경이 없으면 바로 다시 읽고, 있으면 묻는다(기본 아니요, 거부한 같은 내용은 다시 묻지 않음, owner 지정 MessageBox, 확인 뒤 최신 내용 다시 읽기).
+  마지막으로 읽거나 저장한 글자(`_diskText`·`_diskSidecar`)와 같으면 무시 — 자기 저장(`Save`가 쓴 직후 갱신)도 이렇게 걸러진다. Markdown 뷰어처럼 항상 묻는다 — 미저장 변경이 없으면 질문·기본 예, 있으면 경고·기본 아니요(거부한 같은 내용은 다시 묻지 않음, owner 지정 MessageBox, 확인 뒤 최신 내용 다시 읽기).
   다시 읽을 때 화면 맨 위 블록(`BlockPanel.GetTopAnchor`)의 복사본·위치·오프셋을 잡아 두었다가 새 문서에서 종류·본문이 같은 가장 가까운 블록(`BlockFind.MapAnchor`)으로 `ScrollToAnchor` — 새 블록은 Id가 달라 앵커를 내용으로 다시 찾는다.
+
+### 블록 편집 ↔ 미리보기 전환 (ViewerHost.ViewSwitch / MarkdownViewSwitch, #81)
+- `.md`·`.markdown` 탭이고 지금 뷰어가 Markdown 뷰어(`builtin:markdown`)나 블록 편집기(`builtin:blocks`)면 `ViewerHost` 툴바에 `블록 편집`/`미리보기` 토글이 보인다.
+  확장자 매핑은 바꾸지 않고 이 탭의 뷰어만 바꾼다. `LayoutDocument`·ContentId(`viewer|경로`)는 그대로라 패널 잠금(`PanelLockService`)·세션 항목·탭 위치가 유지되고,
+  새 뷰어의 `TitleChanged`는 기존 구독(`SetDocumentTitle`)으로 잠금 표시와 함께 반영된다. `.md`를 Monaco 등 다른 뷰어로 매핑했으면 버튼·기억을 쓰지 않는다.
+- 미저장 변경이 있으면 "저장한 뒤 전환할까요?"(확인/취소, 기본 취소). 확인이면 `IMarkdownViewSwitchable.SaveForSwitchAsync`(블록 편집기는 `Save`, Markdown 뷰어는 `app.currentContent()`로 받아 `Save`)
+  가 성공해야 전환한다. 편집 중 내용을 다른 뷰어로 넘기지 않는다(파일을 거쳐서만).
+- 전환: 위치 잡기(`CaptureViewPositionAsync`) → 파일별 보기 기록 → `DetachCurrentViewer`(이전 뷰어 `Dispose` — Markdown 뷰어는 `WebView2.Dispose`, 블록 편집기는 감시자 정지)
+  → `ViewerConfigService.CreateViewer(키)` → `Load` → `RestoreViewPositionWhenReady`.
+- 위치(`MarkdownViewPosition`): 블록 편집기는 화면 맨 위 블록(`BlockPanel.GetTopAnchor`)에서 그 위 가장 가까운 제목 id(`MarkdownViewSwitch.HeadingIdAbove`, GitHub 규칙·중복 `-1`)와
+  줄 번호(`LineOfBlock` — `BlockMarkdown.Serialize`한 글 기준이라 정리 안 된 원문과는 몇 줄 어긋날 수 있음). Markdown 뷰어는 페이지 `app.getViewPosition()`:
+  미리보기·분할은 화면 맨 위(그 위 포함) 제목 id, 원문 편집은 맨 위 줄 번호(`wrap=off`라 줄 높이로 계산, `PreferLine`).
+  되돌릴 때 블록 편집기는 `ToBlock`(제목 → 줄 번호, 원문 편집에서 온 위치는 줄 번호 먼저, `BlockAtLine` 이분 탐색), Markdown 뷰어는 `app.open` 직후 `app.setViewPosition(제목, 줄)`
+  (미리보기는 제목, 원문 편집은 줄, 분할은 둘 다). 미리보기는 제목 단위라 제목 아래 깊이 내려가 있던 위치는 제목으로 올라간다.
+- 기억(`MarkdownViewSettings`, `%LOCALAPPDATA%\Folderss\markdown-view.json`): `defaultView`(설정 > 뷰어 ".md 탭을 처음 열 때": `mapping`(기본, 동작 변화 없음)·`blocks`·`preview`)와
+  `files`(전환 버튼으로 고른 파일별 마지막 보기, 최근 200개 — Markdown 뷰어 `localStorage` 모드 기억과 같은 방식). `ViewerHost.OpenFile`이 `MarkdownViewSwitch.ChooseViewerKey`
+  (파일별 기억 → 기본 보기 → 매핑)로 뷰어를 골라 세션 복원(`ResolveDockContent`)·새 탭 모두 같은 규칙. 설정 저장은 `TrySave`(".md 기본 보기"), 전환 때 기억 저장 실패는 전환을 막지 않고 디버그 출력에만 남긴다.
+  Markdown 뷰어 안의 편집/분할/미리보기 모드 기억(`localStorage`)은 그대로 따로 동작한다.
+- 테스트: `MarkdownViewSwitchTests`(뷰어 고르기, 제목 id·`FindHeading` 왕복, 줄 번호 왕복, 파일별 기억 200개·파일 왕복·깨진 값).
 
 ### 뷰어 미저장 표시 · 닫기 확인
 - `ViewerHost.IsModified`가 뷰어의 `ModifiedChanged`를 따라간다. `MainWindow.SetDocumentTitle`은 잠금 접두사(🔒)와 별개로

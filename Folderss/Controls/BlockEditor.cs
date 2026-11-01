@@ -192,6 +192,7 @@ namespace Folderss.Controls
 
         public string GetMarkdown()
         {
+            CommitFrontMatterEditing();
             return BlockMarkdown.Serialize(_blocks);
         }
 
@@ -472,7 +473,17 @@ namespace Folderss.Controls
 
         private bool IsEditable(int index)
         {
-            return IsVisibleIndex(index) && _blocks[index].Kind != BlockKind.Divider && _blocks[index].Kind != BlockKind.Toc;
+            var kind = IsVisibleIndex(index) ? _blocks[index].Kind : BlockKind.Divider;
+            return IsVisibleIndex(index) && kind != BlockKind.Divider && kind != BlockKind.Toc && kind != BlockKind.FrontMatter;
+        }
+
+        /// <summary>
+        /// 문서 맨 앞 front matter를 [start, end) 이동으로 옮기거나 그 위에 다른 블록을 놓게 되는지. front matter는 맨 앞에 있어야
+        /// 다시 읽을 때도 front matter이므로 옮기지 않는다.
+        /// </summary>
+        private bool MovesFrontMatter(int start, int insertAt)
+        {
+            return _blocks.Count > 0 && _blocks[0].Kind == BlockKind.FrontMatter && (start == 0 || insertAt <= 0);
         }
 
         private int NextEditable(int from, int direction)
@@ -1061,7 +1072,7 @@ namespace Folderss.Controls
         /// <summary>[first, last] 블록(자식 포함)을 형제 하나만큼 위·아래로 옮긴다.</summary>
         private void MoveBlocks(int first, int last, int direction)
         {
-            if (first < 0)
+            if (first < 0 || MovesFrontMatter(first, direction < 0 ? first - 1 : first + 1))
                 return;
             var end = BlockOperations.ExtendToSubtrees(_blocks, first, last + 1);
             var caret = _focusedRow != null ? _focusedRow.Editor.CaretIndex : 0;
@@ -1513,6 +1524,7 @@ namespace Folderss.Controls
         private void OnEditorBlurred(BlockRow row)
         {
             row.UpdatePlaceholder();
+            ScheduleFrontMatterTable(row);
             if (_slashRow != row)
                 return;
             Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
@@ -1579,6 +1591,7 @@ namespace Folderss.Controls
         private void PasteBlocks(BlockRow row, string markdown)
         {
             var parsed = BlockMarkdown.Parse(markdown);
+            PastedFrontMatterAsRaw(parsed);
             if (parsed.Count == 0)
                 return;
 
@@ -1905,6 +1918,7 @@ namespace Folderss.Controls
             }
             var end = BlockOperations.ExtendToSubtrees(_blocks, last, last + 1);
             var parsed = BlockMarkdown.Parse(text);
+            PastedFrontMatterAsRaw(parsed);
             if (parsed.Count == 0)
                 return;
             var indent = _blocks[last].Indent;

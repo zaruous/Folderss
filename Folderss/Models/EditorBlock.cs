@@ -38,6 +38,11 @@ namespace Folderss.Models
         Bookmark,
         /// <summary>다른 문서(페이지 = <c>.md</c> 파일)로 가는 링크 카드(<c>[📄 제목](경로.md)</c>). 제목은 <see cref="EditorBlock.Text"/>, 경로는 <see cref="EditorBlock.Source"/>.</summary>
         Page,
+        /// <summary>
+        /// 문서 맨 앞 YAML front matter(<c>---</c> … <c>---</c>). <see cref="EditorBlock.Text"/>에 구분 줄까지 원문을 담고 저장할 때 그대로 쓴다(<see cref="Raw"/>와 같음).
+        /// 화면에는 속성 표(키 | 값)로 보이고, 편집은 <c>Services/FrontMatter</c>로 그 속성 줄만 다시 쓴다. 원문 편집으로 바꾸면 잠시 <see cref="Raw"/>가 된다.
+        /// </summary>
+        FrontMatter,
     }
 
     /// <summary>
