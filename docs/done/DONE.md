@@ -9,6 +9,26 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## v1.9.0 (2026-11-01)
+
+### 블록 편집기 Notion 수준 완성도 묶음 (#79)
+
+- **편집 조작 (#75)**: 글자 끌기 → 블록 선택 전환, 빈 여백 영역 선택, `Shift+클릭` 범위, 여러 블록 함께 옮기기, `Ctrl+Home/End`·`PageUp/Down`. `Ctrl+F`/`Ctrl+H` 찾기·바꾸기(모델 검색, 서식 블록은 보이는 글자 기준), 외부 변경 감지(Markdown 뷰어처럼 항상 확인), 링크 `Ctrl+클릭`. 표 셀 메뉴(행·열 삽입·삭제·정렬)·열 너비 드래그·행열 끌어 옮기기·머리글 표시 끄기. `docs/items/block-editor-stage1-*.md`
+- **글자 서식 WYSIWYG (#76)**: 줄 안 서식을 표식 없이 표시·편집(서식 입력란 RichTextBox 하나를 편집 행으로 옮겨 붙임), 떠 있는 서식 도구막대, `Ctrl+B/I/U/E/Shift+S/K`, 입력 중 서식 단축, 대기 서식, 링크 팝업, HTML/RTF 붙여넣기 변환. 밑줄·글자 색·형광펜은 사이드카 `marks`(보이는 글자 오프셋 + 해시). `docs/items/block-editor-stage2-*.md`
+- **사이드카 파일 작업 (#78)**: 메인 패널 복사·이동·삭제·이름 바꾸기에서 `문서.md.meta.json`을 함께 처리, `Ctrl+Z` 한 번에 함께 되돌림(`JournalItem.CompanionOf`). `docs/items/block-sidecar-file-ops.md`
+- **뷰어 전환·기본 보기 (#81)**: `.md` 탭 `블록 편집`/`미리보기` 전환(위치 유지, 파일별 기억), front matter 속성 표, 최소 변경 저장(바꾼 블록만 다시 쓰고 나머지는 원문 바이트 그대로), 설정 `.md 탭을 처음 열 때` 기본값 `블록 편집`(예전 `markdown-view.json` version 1의 `mapping`은 무시). `docs/items/block-editor-viewer-switch.md`, `block-editor-front-matter.md`, `block-editor-minimal-diff-save.md`
+- 사이드카 키 추가: `colwidths`, `noheader`, `marks`
+
+### Monaco 뷰어 언어 (#82)
+
+- 번들 92개 언어를 Monaco 등록 정보로 자동 연결, 탭 툴바 언어 선택(파일별 기억), 설정 > 뷰어 확장자·파일 이름·패턴 → 언어 지정(`monaco-language.json`). `docs/items/monaco-language.md`
+
+### 설정 창
+
+- 뷰어 패널을 스크롤 영역으로, 확장자 매핑 표 고정 높이(항목이 늘어 기본 창 높이에서 표가 거의 안 보이던 문제)
+
+---
+
 ## v1.8.8
 
 ### Git 창 브랜치 탭: 요약 그래프 + 현재 브랜치 대비 ↑↓ (2026-10-20)
