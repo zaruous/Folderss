@@ -61,13 +61,26 @@ namespace Folderss.Controls
             // .md·.markdown은 파일별로 기억한 보기 → 설정의 처음 열 때 기본 보기 → 확장자 매핑 순서로 고른다(#81).
             var ext = Path.GetExtension(filePath);
             var settings = MarkdownViewSettings.Shared;
+            // 블록 편집기가 열 수 없는 큰 파일은 블록 편집을 골랐어도 미리보기로 연다(기본 보기가 블록 편집이라도 빈 안내 화면이 뜨지 않게).
             var viewerKey = MarkdownViewSwitch.ChooseViewerKey(ext, _viewerConfig.GetMappingKey(ext),
-                settings.GetRemembered(filePath), settings.DefaultView);
+                settings.GetRemembered(filePath), settings.DefaultView, IsTooLargeForBlocks(filePath));
             var viewer = ViewerConfigService.CreateViewer(viewerKey);
             if (viewer == null)
                 return;
 
             AttachViewer(filePath, viewer, viewerKey);
+        }
+
+        private static bool IsTooLargeForBlocks(string filePath)
+        {
+            try
+            {
+                return new FileInfo(filePath).Length > BlockEditorViewer.MaxFileBytes;
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException || ex is ArgumentException || ex is NotSupportedException)
+            {
+                return false;   // 크기를 모르면 고른 대로 연다(뷰어가 읽기 오류를 알린다)
+            }
         }
 
         private void AttachViewer(string filePath, IFileViewer viewer, string viewerKey)

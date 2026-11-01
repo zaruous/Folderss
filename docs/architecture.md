@@ -92,6 +92,7 @@ Folderss/
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
 │   ├── ViewerConfigService.cs      — 확장자 ↔ 뷰어 매핑 (viewer-config.json 저장)
 │   ├── BlockMarkdown.cs            — 블록 목록 ↔ Markdown 변환(CommonMark 목록 중첩, <details> 토글, > [!NOTE] 콜아웃, 원문 보존), 입력 단축 판별 (순수 로직)
+│   ├── BlockMarkdown.Source.cs     — 최소 변경 저장 `MarkdownSource`: 읽을 때 블록별 원문 줄 범위·형식을 기억, 저장 때 바뀐 블록만 정규형으로 다시 씀 (순수 로직, #81)
 │   ├── BlockOperations.cs          — 블록 구조 연산: 하위 트리, 들여쓰기 규칙·정규화, 형제 단위 이동, 번호 표시, 접힘, 여러 열 정리·만들기·옮기기(`ColumnLayout`) (순수 로직)
 │   ├── BlockSidecar.cs             — Markdown 밖 블록 속성을 문서 옆 `문서.md.meta.json`에 저장·다시 붙이기(#78, 순수 로직)
 │   ├── BlockSidecarFiles.cs        — 파일 작업에서 문서와 사이드카 짝짓기(동반 파일 찾기·중복 제거·대상 이름, #78, 순수 로직)
@@ -638,7 +639,20 @@ Folderss/
   이어진 행이 한 표이고 첫 행이 머리글·정렬 보관), 이미지는 `Image`(캡션 = `Text`, 경로 = `Source`). 구조 연산은 `BlockOperations`(WPF 없음, 단위 테스트).
 - Markdown 변환 `BlockMarkdown`: 목록 자식은 부모 항목의 내용 시작 열만큼 들여써 읽고 쓴다. 토글 `<details [open]><summary>`, 콜아웃 `> [!TYPE]`,
   GFM 표(구분 행에 `|`가 있고 셀 수가 머리글과 같을 때만), 이미지만 있는 줄 → `Image`. 문서 맨 앞 front matter는 `FrontMatter`(원문 그대로 보관·저장), HTML·구분 행 없는 표는 `Raw`로 원문 보존.
-  저장하면 형식이 정규화되므로 `BlockMarkdownTests.NormalizedDocument_RoundTripsUnchanged`가 정규형 문서의 왕복 불변을 지킨다.
+  `Serialize`는 정규형으로 쓰고 `BlockMarkdownTests.NormalizedDocument_RoundTripsUnchanged`가 정규형 문서의 왕복 불변을 지킨다. 파일 저장은 아래 최소 변경 저장을 거친다.
+- 최소 변경 저장 `MarkdownSource`(`BlockMarkdown.Source.cs`, #81 3단계): `BlockEditor.SetMarkdown`이 `MarkdownSource.Parse`로 읽으며 블록마다 원문 줄 범위와 쓰던 형식
+  (`BlockSourceInfo`: 첫 줄 열, 목록 표식 `*`·`+`·`)`, 표식 뒤 공백, 목록 첫 항목 번호, 내용 열, Setext 밑줄)을 블록 `Id` 기준으로 기억하고, 그 블록들을 정규형으로 쓴 조각 해시도 함께 기억한다.
+  - 조각: 블록 하나가 차지한 원문 줄(목록 항목은 이어지는 줄 포함, 표 머리글은 구분 행 포함, 표 행은 한 줄씩, 토글은 여는 줄+summary / `</details>` 두 조각). 조각 사이 줄(빈 줄 등)은 구분자.
+  - 저장(`GetMarkdown` → `MarkdownSource.Save`): `BlockMarkdown.WritePieces`가 `Serialize`와 같은 순서로 쓰며 조각마다 `PieceWriter.Piece`를 부른다. 그 조각을 문맥(번호·열·표 열 수) 속에서 쓴 정규형이
+    읽을 때와 같으면(번호 목록 두 번째 항목부터는 번호 숫자 제외) 원문 줄을 그대로, 다르면 정규형(파일 줄 끝으로). 구분자는 앞뒤 조각이 원문에서 바로 이웃이면 원문, 아니면 정규형.
+    다시 쓰는 블록은 원래 형식(목록 표식·시작 번호·들여쓰기·Setext)을, 새 목록 항목은 같은 목록 앞 항목 형식을 따른다(`*` 목록 사이에 `-`가 끼어 목록이 갈라지지 않게). 원문 그대로 쓴 목록 항목의 자식은 원문 내용 열을 기준으로 들여쓴다.
+  - 조각 순서·해시가 읽을 때와 모두 같으면 원문 글자열을 그대로 돌려준다(무편집 저장 바이트 동일 — 실행 취소로 되돌린 경우 포함, `Clone`은 `Id`를 유지). 사이드카 속성(색·`marks`)은 Markdown 밖이라 판정에 들지 않는다.
+  - 줄 끝: 원문에 `\r\n`이 있으면 CRLF(다시 쓴 조각도), 끝 줄바꿈 유무는 원문을 따름. BOM은 뷰어가 인코딩으로 지킨다. 원문 글자열은 뷰어의 `_diskText`와 같은 객체를 참조한다.
+  - 안전장치: 결과를 `Parse`해 블록 구조(`SameStructure` — 종류·상대 들여쓰기·본문·체크·접힘·언어·경로·머리글 정렬)가 저장할 블록 또는 정규형을 다시 읽은 것과 같은지 본다. 다르면(예: 목록 가운데 항목을 문단으로 바꿔
+    원문 구분자로는 앞 항목에 붙는 경우) 바뀐 조각이 든 최상위 묶음(이어진 최상위 목록·표, 최상위 블록과 그 자식) 전체를 정규형으로(`Mode` 2), 그래도 다르면 문서 전체 정규형(`Mode` 3).
+  - 결과 `MarkdownSaveResult.BlockLines`(블록별 시작 줄)는 뷰어 전환 위치 계산이 쓴다(디스크 원문 줄과 일치). 기준은 읽은 시점 원문이며 저장해도 바꾸지 않는다(외부 변경 다시 읽기 때 `SetMarkdown`이 새로 잡음).
+  - 비용(Debug, 1만 줄·4,216블록): 열기 Parse 17.9ms → Parse+기억 27.5ms, 저장 무편집 9.8ms·한 블록 편집 26.6ms(검증 Parse 포함, 정규형 `Serialize`만은 2.9ms), 추가 메모리 약 0.7MB(블록 객체 0.6MB 대비). 글자 입력 경로는 바뀌지 않음.
+  - 테스트: `MinimalDiffSaveTests`(무편집 바이트 동일 15종, 블록 종류별 한 블록 편집 diff 범위, CRLF·끝 줄바꿈, 되돌리기, 안전장치, 무작위 편집 300회 구조 보존, 사이드카 재부착, `BlockLines`, 성능).
 - 가상화 `BlockPanel`(ScrollViewer의 IScrollInfo, `CanContentScroll=true`): 보이는 블록 + 위·아래 여유(`RealizeBuffer` 화면의 0.25 — 한 화면 넘게 점프한 직후에는 `JumpRealizeBuffer` 0.1,
   다음 스크롤에 보통 여유로)만 `BlockRow`를 만들고, 나머지는 종류·글자 수로 높이를 추정하며(서식 블록·표 셀은 표식·링크 주소를 뺀 대강의 보이는 글자로) 측정한 높이는 (내용·폭이 같으면) 기억한다.
   풀에서 꺼내 다시 묶은 행은 안쪽의 측정 무효 요소부터 행 뿌리까지 무효로 표시한다(`InvalidateDirtyChains` — 안 하면 패널이 이전 블록 높이를 읽고 레이아웃 뒤 크기 변경 알림마다 패널 측정이 다시 돌았다). 블록 위치는 높이 누적(`_tops`, 구조·높이가 바뀔 때만 O(n) 재계산). 스크롤 위치는 "블록 Id + 그 안 오프셋"(앵커)이라
@@ -763,13 +777,13 @@ Folderss/
 - 전환: 위치 잡기(`CaptureViewPositionAsync`) → 파일별 보기 기록 → `DetachCurrentViewer`(이전 뷰어 `Dispose` — Markdown 뷰어는 `WebView2.Dispose`, 블록 편집기는 감시자 정지)
   → `ViewerConfigService.CreateViewer(키)` → `Load` → `RestoreViewPositionWhenReady`.
 - 위치(`MarkdownViewPosition`): 블록 편집기는 화면 맨 위 블록(`BlockPanel.GetTopAnchor`)에서 그 위 가장 가까운 제목 id(`MarkdownViewSwitch.HeadingIdAbove`, GitHub 규칙·중복 `-1`)와
-  줄 번호(`LineOfBlock` — `BlockMarkdown.Serialize`한 글 기준이라 정리 안 된 원문과는 몇 줄 어긋날 수 있음). Markdown 뷰어는 페이지 `app.getViewPosition()`:
+  줄 번호(최소 변경 저장 결과 `MarkdownSaveResult.BlockLines` — 실제 저장되는 글 기준이라 디스크 원문 줄과 맞음. 문서 전체 정규형으로 되돌아간 경우만 `LineOfBlock`). Markdown 뷰어는 페이지 `app.getViewPosition()`:
   미리보기·분할은 화면 맨 위(그 위 포함) 제목 id, 원문 편집은 맨 위 줄 번호(`wrap=off`라 줄 높이로 계산, `PreferLine`).
-  되돌릴 때 블록 편집기는 `ToBlock`(제목 → 줄 번호, 원문 편집에서 온 위치는 줄 번호 먼저, `BlockAtLine` 이분 탐색), Markdown 뷰어는 `app.open` 직후 `app.setViewPosition(제목, 줄)`
+  되돌릴 때 블록 편집기는 `ToBlock`(제목 → 줄 번호, 원문 편집에서 온 위치는 줄 번호 먼저, `BlockLines` 표에서 `BlockAtLine` 이분 탐색), Markdown 뷰어는 `app.open` 직후 `app.setViewPosition(제목, 줄)`
   (미리보기는 제목, 원문 편집은 줄, 분할은 둘 다). 미리보기는 제목 단위라 제목 아래 깊이 내려가 있던 위치는 제목으로 올라간다.
-- 기억(`MarkdownViewSettings`, `%LOCALAPPDATA%\Folderss\markdown-view.json`): `defaultView`(설정 > 뷰어 ".md 탭을 처음 열 때": `mapping`(기본, 동작 변화 없음)·`blocks`·`preview`)와
+- 기억(`MarkdownViewSettings`, `%LOCALAPPDATA%\Folderss\markdown-view.json`): `defaultView`(설정 > 뷰어 ".md 탭을 처음 열 때": `blocks`(값이 없을 때 기본 — `DefaultViewWhenUnset`, #81 3단계)·`preview`·`mapping`. 저장한 값이 있으면 그대로)와
   `files`(전환 버튼으로 고른 파일별 마지막 보기, 최근 200개 — Markdown 뷰어 `localStorage` 모드 기억과 같은 방식). `ViewerHost.OpenFile`이 `MarkdownViewSwitch.ChooseViewerKey`
-  (파일별 기억 → 기본 보기 → 매핑)로 뷰어를 골라 세션 복원(`ResolveDockContent`)·새 탭 모두 같은 규칙. 설정 저장은 `TrySave`(".md 기본 보기"), 전환 때 기억 저장 실패는 전환을 막지 않고 디버그 출력에만 남긴다.
+  (파일별 기억 → 기본 보기 → 매핑, 블록 편집기 최대 크기 `BlockEditorViewer.MaxFileBytes`(32MB)를 넘는 파일은 블록 편집 대신 미리보기)로 뷰어를 골라 세션 복원(`ResolveDockContent`)·새 탭 모두 같은 규칙. 설정 저장은 `TrySave`(".md 기본 보기"), 전환 때 기억 저장 실패는 전환을 막지 않고 디버그 출력에만 남긴다.
   Markdown 뷰어 안의 편집/분할/미리보기 모드 기억(`localStorage`)은 그대로 따로 동작한다.
 - 테스트: `MarkdownViewSwitchTests`(뷰어 고르기, 제목 id·`FindHeading` 왕복, 줄 번호 왕복, 파일별 기억 200개·파일 왕복·깨진 값).
 

@@ -130,6 +130,11 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
   `EditorBlock.Attributes`에 키를 두고 문서 옆 사이드카(`문서.md.meta.json`, `Services/BlockSidecar`)로 저장한다.
 - 새 키를 쓰면 `BlockSidecarTests`에 왕복(저장 → 다시 읽기 → 같은 블록에 붙음) 테스트를 추가하고, `docs/architecture.md` 블록 편집기 절의 키 목록을 갱신한다.
 
+### 블록 편집기 저장은 최소 변경 (#81)
+- 파일 저장은 `BlockEditor.GetMarkdown` → `MarkdownSource.Save`(`Services/BlockMarkdown.Source.cs`): 바뀐 블록만 정규형, 나머지는 원문 줄 그대로. `BlockMarkdown.Serialize`(정규형)를 파일 저장에 직접 쓰지 않는다.
+- 새 블록 종류·읽기 규칙을 추가하면 `BlockMarkdown.ParseCore`에서 `Track(블록, 시작 줄, 끝 줄, 열)`로 원문 범위를 기록하고(안 하면 그 블록은 늘 정규형), `BlockMarkdown.Write`의 조각 알림(`writer.Piece`)이 그 블록 출력 전체를 감싸는지 확인한다.
+  `MinimalDiffSaveTests`에 무편집 바이트 동일·한 블록 편집 diff 사례를 추가한다.
+
 ### 이벤트 원본에서 조상 찾기
 마우스·드래그 이벤트의 `e.OriginalSource`는 `TextBlock` 안의 `Run`/`Span`(ContentElement)일 수 있다. 이것을 `VisualTreeHelper.GetParent`에 넘기면 `InvalidOperationException`으로 앱이 종료된다(블록 편집기 수식 클릭 크래시).
 조상을 찾을 때는 직접 루프를 쓰지 말고 `Controls/ElementTree.FindAncestor<T>` / `ElementTree.GetParent`를 쓴다.

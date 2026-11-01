@@ -35,8 +35,14 @@ namespace Folderss.Services
         /// <summary>미리보기 = Markdown 뷰어(<c>builtin:markdown</c>).</summary>
         public const string ViewPreview = "preview";
 
-        /// <summary>설정 > 뷰어 "처음 열 때 기본 보기"의 기본값: 확장자 매핑을 따른다(동작 변화 없음).</summary>
+        /// <summary>설정 > 뷰어 "처음 열 때 기본 보기"의 선택지: 확장자 매핑을 따른다(<c>.md</c> 매핑 = Markdown 뷰어).</summary>
         public const string DefaultFollowMapping = "mapping";
+
+        /// <summary>
+        /// 처음 열 때 기본 보기를 저장한 적이 없을 때의 값(#81 3단계): 블록 편집. <c>markdown-view.json</c>에 <c>defaultView</c>가 저장돼 있으면 그 값을 쓴다
+        /// (예전 기본값 <c>mapping</c>을 저장한 사용자는 그대로 Markdown 뷰어).
+        /// </summary>
+        public const string DefaultViewWhenUnset = ViewBlocks;
 
         /// <summary>전환 버튼을 보이는 확장자(<c>.md</c>·<c>.markdown</c>).</summary>
         public static bool IsMarkdownExtension(string extension)
@@ -76,9 +82,18 @@ namespace Folderss.Services
         /// </summary>
         public static string ChooseViewerKey(string extension, string mappingKey, string rememberedView, string defaultView)
         {
+            return ChooseViewerKey(extension, mappingKey, rememberedView, defaultView, false);
+        }
+
+        /// <param name="blocksUnavailable">블록 편집기로 열 수 없는 파일(너무 큼 — <c>BlockEditorViewer.MaxFileBytes</c>)이면 true: 블록 편집으로 고른 경우 미리보기로 연다.</param>
+        public static string ChooseViewerKey(string extension, string mappingKey, string rememberedView, string defaultView, bool blocksUnavailable)
+        {
             if (!IsMarkdownExtension(extension) || !IsSwitchableKey(mappingKey))
                 return mappingKey;
-            return ToViewerKey(rememberedView) ?? ToViewerKey(defaultView) ?? mappingKey;
+            var key = ToViewerKey(rememberedView) ?? ToViewerKey(defaultView) ?? mappingKey;
+            if (blocksUnavailable && string.Equals(key, ViewerConfigService.BuiltInBlocksKey, StringComparison.OrdinalIgnoreCase))
+                return ViewerConfigService.BuiltInMarkdownKey;
+            return key;
         }
 
         // ── 위치 대응 ──────────────────────────────────────────────────────
@@ -155,22 +170,45 @@ namespace Folderss.Services
             return low;
         }
 
+        /// <summary>
+        /// 블록별 시작 줄 표(<see cref="MarkdownSaveResult.BlockLines"/> — 실제로 저장되는 글 기준)에서 <paramref name="line"/>을 담은 블록(이분 탐색). 표가 비었으면 -1.
+        /// </summary>
+        public static int BlockAtLine(IReadOnlyList<int> blockLines, int line)
+        {
+            if (blockLines == null || blockLines.Count == 0)
+                return -1;
+            if (line <= 1)
+                return 0;
+            int low = 0, high = blockLines.Count - 1;
+            while (low < high)
+            {
+                var mid = (low + high + 1) / 2;
+                if (blockLines[mid] <= line)
+                    low = mid;
+                else
+                    high = mid - 1;
+            }
+            return low;
+        }
+
         /// <summary>블록 편집기에서 잡은 위치: 화면 맨 위 블록의 제목 앵커와 줄 번호.</summary>
-        public static MarkdownViewPosition FromBlock(IList<EditorBlock> blocks, int index)
+        /// <param name="blockLines">블록별 시작 줄(실제 저장 글 기준). null이면 정규형(<see cref="LineOfBlock"/>)으로 센다.</param>
+        public static MarkdownViewPosition FromBlock(IList<EditorBlock> blocks, int index, IReadOnlyList<int> blockLines = null)
         {
             if (blocks == null || index < 0 || index >= blocks.Count)
                 return null;
             return new MarkdownViewPosition
             {
                 HeadingId = HeadingIdAbove(blocks as IReadOnlyList<EditorBlock> ?? blocks.ToList(), index),
-                Line = LineOfBlock(blocks, index),
+                Line = blockLines != null && blockLines.Count == blocks.Count ? blockLines[index] : LineOfBlock(blocks, index),
             };
         }
 
         /// <summary>
         /// 블록 편집기에서 돌아갈 블록. 원문 편집 화면에서 잡은 위치(<see cref="MarkdownViewPosition.PreferLine"/>)는 줄 번호, 아니면 제목 → 줄 번호 순서. 없으면 -1.
         /// </summary>
-        public static int ToBlock(IList<EditorBlock> blocks, MarkdownViewPosition position)
+        /// <param name="blockLines">블록별 시작 줄(실제 저장 글 기준). null이면 정규형으로 센다.</param>
+        public static int ToBlock(IList<EditorBlock> blocks, MarkdownViewPosition position, IReadOnlyList<int> blockLines = null)
         {
             if (blocks == null || blocks.Count == 0 || position == null)
                 return -1;
@@ -181,7 +219,7 @@ namespace Folderss.Services
                     return heading;
             }
             if (position.Line > 0)
-                return BlockAtLine(blocks, position.Line);
+                return blockLines != null && blockLines.Count == blocks.Count ? BlockAtLine(blockLines, position.Line) : BlockAtLine(blocks, position.Line);
             if (!string.IsNullOrEmpty(position.HeadingId))
                 return BlockFind.FindHeading(blocks as IReadOnlyList<EditorBlock> ?? blocks.ToList(), position.HeadingId);
             return -1;
@@ -205,7 +243,7 @@ namespace Folderss.Services
         private readonly string _path;
         // 오래된 것부터 최근 순서(끝이 가장 최근).
         private readonly List<KeyValuePair<string, string>> _files = new List<KeyValuePair<string, string>>();
-        private string _defaultView = MarkdownViewSwitch.DefaultFollowMapping;
+        private string _defaultView = MarkdownViewSwitch.DefaultViewWhenUnset;
 
         /// <summary>앱 전체가 함께 쓰는 설정(처음 쓸 때 파일에서 읽음).</summary>
         public static MarkdownViewSettings Shared => _shared ?? (_shared = new MarkdownViewSettings(null));
@@ -287,7 +325,7 @@ namespace Folderss.Services
                 using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
                 {
                     writer.WriteStartObject();
-                    writer.WriteNumber("version", 1);
+                    writer.WriteNumber("version", 2);
                     writer.WriteString("defaultView", _defaultView);
                     writer.WriteStartArray("files");
                     foreach (var kv in _files)
@@ -308,7 +346,8 @@ namespace Folderss.Services
         public void Parse(string json)
         {
             _files.Clear();
-            _defaultView = MarkdownViewSwitch.DefaultFollowMapping;
+            // 저장한 값이 없으면(파일 없음·항목 없음·깨진 JSON) 새 기본값, 있으면 그 값(알 수 없는 값은 "매핑을 따름").
+            _defaultView = MarkdownViewSwitch.DefaultViewWhenUnset;
             if (string.IsNullOrWhiteSpace(json))
                 return;
             try
@@ -319,8 +358,16 @@ namespace Folderss.Services
                     if (root.ValueKind != JsonValueKind.Object)
                         return;
                     JsonElement value;
+                    // version 1(#81 1단계)은 사용자가 고르지 않아도 기본값 "mapping"을 함께 저장했다.
+                    // 그 "mapping"은 고른 값으로 보지 않고 새 기본값(블록 편집)을 쓴다(사용자 결정, 2026-11-01). version 2부터는 저장된 값을 그대로 존중.
+                    JsonElement version;
+                    var legacy = !root.TryGetProperty("version", out version) || version.ValueKind != JsonValueKind.Number || version.GetInt32() < 2;
                     if (root.TryGetProperty("defaultView", out value) && value.ValueKind == JsonValueKind.String)
-                        _defaultView = NormalizeDefault(value.GetString());
+                    {
+                        var saved = NormalizeDefault(value.GetString());
+                        if (!(legacy && saved == MarkdownViewSwitch.DefaultFollowMapping))
+                            _defaultView = saved;
+                    }
                     if (!root.TryGetProperty("files", out value) || value.ValueKind != JsonValueKind.Array)
                         return;
                     foreach (var item in value.EnumerateArray())
