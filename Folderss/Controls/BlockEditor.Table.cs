@@ -125,7 +125,10 @@ namespace Folderss.Controls
             if (index < 0)
                 return;
             var wasOnlyRow = !IsSameTable(index, index - 1) && !IsSameTable(index, index + 1);
-            _blocks.RemoveAt(index);
+            int start, end;
+            GetTableRange(index, out start, out end);
+            // 첫 행(머리글)을 지우면 정렬·열 너비·머리글 표시를 다음 행으로 옮긴다
+            BlockTable.DeleteRow(_blocks, start, end, index);
             if (_blocks.Count == 0)
                 _blocks.Add(new EditorBlock(BlockKind.Paragraph));
             SyncRows();
@@ -152,18 +155,8 @@ namespace Folderss.Controls
         {
             int start, end;
             GetTableRange(index, out start, out end);
-            var columns = index < _tableColumns.Length ? _tableColumns[index] : 1;
-            for (var i = start; i < end; i++)
-            {
-                var cells = BlockMarkdown.SplitCells(_blocks[i].Text).ToList();
-                while (cells.Count < columns + 1)
-                    cells.Add(string.Empty);
-                _blocks[i].Text = BlockMarkdown.JoinCells(cells);
-            }
-            var aligns = (_blocks[start].TableAlign ?? string.Empty).Split(',').ToList();
-            while (aligns.Count < columns + 1)
-                aligns.Add(string.Empty);
-            _blocks[start].TableAlign = string.Join(",", aligns);
+            var columns = BlockTable.ColumnCount(_blocks, start, end);
+            BlockTable.InsertColumn(_blocks, start, end, columns);
             SyncRows();
             FocusRow(index, 0, columns);
             RecordChange();
@@ -174,16 +167,9 @@ namespace Folderss.Controls
         {
             int start, end;
             GetTableRange(index, out start, out end);
-            var columns = index < _tableColumns.Length ? _tableColumns[index] : 1;
-            if (columns <= 1)
+            var columns = BlockTable.ColumnCount(_blocks, start, end);
+            if (!BlockTable.DeleteColumn(_blocks, start, end, columns - 1))
                 return;
-            for (var i = start; i < end; i++)
-            {
-                var cells = BlockMarkdown.SplitCells(_blocks[i].Text).Take(columns - 1);
-                _blocks[i].Text = BlockMarkdown.JoinCells(cells);
-            }
-            var aligns = (_blocks[start].TableAlign ?? string.Empty).Split(',').Take(columns - 1);
-            _blocks[start].TableAlign = string.Join(",", aligns);
             SyncRows();
             FocusRow(index, int.MaxValue, columns - 2);
             RecordChange();

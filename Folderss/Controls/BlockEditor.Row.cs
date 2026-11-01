@@ -70,7 +70,9 @@ namespace Folderss.Controls
             private readonly List<TextBox> _cells = new List<TextBox>();
             private int _tableColumns;
             private bool _tableHeader;
+            private bool _tableFirst;
             private string _tableAlign = string.Empty;
+            private string _tableWidths = string.Empty;
 
             // 이미지
             private Grid _imageHost;
@@ -1516,23 +1518,30 @@ namespace Folderss.Controls
 
             // ── 표 ─────────────────────────────────────────────────────────
 
-            /// <summary>표 정보(열 수·머리글 여부·열 정렬·표의 마지막 행인지)를 받는다.</summary>
-            public void SetTable(int columns, bool header, string align, bool last)
+            /// <summary>
+            /// 표 정보(열 수·표의 첫 행인지·머리글 모양으로 그릴지·열 정렬·마지막 행인지·열 너비)를 받는다.
+            /// 머리글 표시를 끈 표(<c>noheader</c>)는 첫 행이어도 <paramref name="header"/>가 false.
+            /// </summary>
+            public void SetTable(int columns, bool first, bool header, string align, bool last, string widths)
             {
                 if (Block.Kind != BlockKind.TableRow)
                     return;
                 align = align ?? string.Empty;
+                widths = widths ?? string.Empty;
                 if (last != _tableLast)
                 {
                     _tableLast = last;
                     EnsureTableGrid();
                     _addRowButton.Visibility = last ? Visibility.Visible : Visibility.Collapsed;
                 }
-                if (columns == _tableColumns && header == _tableHeader && align == _tableAlign && _cellHosts.Count == Math.Max(1, Math.Max(columns, BlockMarkdown.CountCells(Block.Text))))
+                if (columns == _tableColumns && first == _tableFirst && header == _tableHeader && align == _tableAlign && widths == _tableWidths &&
+                    _cellHosts.Count == Math.Max(1, Math.Max(columns, BlockMarkdown.CountCells(Block.Text))))
                     return;
                 _tableColumns = columns;
+                _tableFirst = first;
                 _tableHeader = header;
                 _tableAlign = align;
+                _tableWidths = widths;
                 _owner._suppressTextChanged = true;
                 try
                 {
@@ -1641,8 +1650,13 @@ namespace Folderss.Controls
                 }
 
                 var aligns = _tableAlign.Split(',');
+                var widths = BlockTable.ParseWidths(_tableWidths, _cellHosts.Count);
                 for (var i = 0; i < _cellHosts.Count; i++)
                 {
+                    // 열 너비(colwidths): 정한 열은 px, 나머지는 남은 폭을 나눈다
+                    var length = widths[i] > 0 ? new GridLength(widths[i]) : new GridLength(1, GridUnitType.Star);
+                    if (grid.ColumnDefinitions[i].Width != length)
+                        grid.ColumnDefinitions[i].Width = length;
                     var value = i < values.Length ? values[i] : string.Empty;
                     var display = _cellDisplays[i];
                     if (display.Text != value)
@@ -1657,7 +1671,7 @@ namespace Folderss.Controls
                     if (editor != null)
                         StyleCell(editor, i);
                     var border = (Border)_cellHosts[i].Parent;
-                    border.BorderThickness = new Thickness(i == 0 ? 1 : 0, _tableHeader ? 1 : 0, 1, 1);
+                    border.BorderThickness = new Thickness(i == 0 ? 1 : 0, _tableFirst ? 1 : 0, 1, 1);
                     if (_tableHeader)
                         border.SetResourceReference(Border.BackgroundProperty, "SurfaceBackground");
                     else
@@ -1685,7 +1699,135 @@ namespace Folderss.Controls
                 {
                     if (_owner._dragRow == null)
                         EnsureCellEditor(_cellHosts.IndexOf(host));
+                    SetCellGripsShown(host, _owner._dragRow == null && !_owner.IsTableDragging);
                 };
+                host.MouseLeave += (s, e) => SetCellGripsShown(host, false);
+                // 셀 오른쪽 클릭: 표 메뉴(행·열 삽입·삭제, 열 정렬, 머리글). TextBox 기본 메뉴(잘라내기 등) 대신 띄운다.
+                host.PreviewMouseRightButtonUp += (s, e) =>
+                {
+                    e.Handled = true;
+                    _owner.ShowTableCellMenu(this, Math.Max(0, _cellHosts.IndexOf(host)), host);
+                };
+            }
+
+            // 셀 손잡이(셀에 마우스를 처음 올릴 때 만든다 — 행 추가 비용을 늘리지 않게):
+            // 오른쪽 경계 = 열 너비 조절, 위쪽 가운데 = 열 끌어 옮기기, 첫 셀 왼쪽 가운데 = 행 끌어 옮기기.
+            private const string GripTag = "table-grip";
+
+            private void SetCellGripsShown(Grid host, bool shown)
+            {
+                if (shown)
+                    EnsureCellGrips(host);
+                foreach (var child in host.Children.OfType<Border>())
+                {
+                    if (!Equals(child.Tag, GripTag))
+                        continue;
+                    // 너비 조절 경계는 늘 투명(커서만 바뀜), 옮기기 손잡이는 마우스를 올렸을 때만 보인다
+                    if (child.Cursor != Cursors.SizeWE)
+                        child.Opacity = shown ? 1 : 0;
+                }
+            }
+
+            private void EnsureCellGrips(Grid host)
+            {
+                if (host.Children.OfType<Border>().Any(b => Equals(b.Tag, GripTag)))
+                    return;
+                var column = _cellHosts.IndexOf(host);
+
+                var resize = new Border
+                {
+                    Tag = GripTag,
+                    Width = 6,
+                    HorizontalAlignment = HorizontalAlignment.Right,
+                    Background = Brushes.Transparent,
+                    Cursor = Cursors.SizeWE,
+                    ToolTip = "끌기: 열 너비 조절\n두 번 클릭: 자동 너비",
+                };
+                AddGrip(host, resize, BlockEditor.TableDragKind.Resize);
+
+                var columnGrip = CreateMoveGrip("끌기: 열 옮기기", 18, 7);
+                columnGrip.HorizontalAlignment = HorizontalAlignment.Center;
+                columnGrip.VerticalAlignment = VerticalAlignment.Top;
+                columnGrip.Margin = new Thickness(0, 1, 0, 0);
+                AddGrip(host, columnGrip, BlockEditor.TableDragKind.Column);
+
+                if (column == 0)
+                {
+                    var rowGrip = CreateMoveGrip("끌기: 행 옮기기", 7, 18);
+                    rowGrip.HorizontalAlignment = HorizontalAlignment.Left;
+                    rowGrip.VerticalAlignment = VerticalAlignment.Center;
+                    rowGrip.Margin = new Thickness(1, 0, 0, 0);
+                    AddGrip(host, rowGrip, BlockEditor.TableDragKind.Row);
+                }
+            }
+
+            private static Border CreateMoveGrip(string tooltip, double width, double height)
+            {
+                var grip = new Border
+                {
+                    Tag = GripTag,
+                    Width = width,
+                    Height = height,
+                    CornerRadius = new CornerRadius(2),
+                    Cursor = Cursors.SizeAll,
+                    ToolTip = tooltip,
+                    Opacity = 0,
+                };
+                grip.SetResourceReference(Border.BackgroundProperty, "SecondaryText");
+                return grip;
+            }
+
+            private void AddGrip(Grid host, Border grip, BlockEditor.TableDragKind kind)
+            {
+                System.Windows.Controls.Panel.SetZIndex(grip, 2);   // 나중에 붙는 셀 입력란(TextBox)보다 위
+                host.Children.Add(grip);
+                grip.MouseLeftButtonDown += (s, e) =>
+                {
+                    e.Handled = true;
+                    var column = _cellHosts.IndexOf(host);
+                    if (kind == BlockEditor.TableDragKind.Resize && e.ClickCount == 2)
+                        _owner.ResetTableColumnWidth(this, column);
+                    else
+                        _owner.BeginTableDrag(this, column, grip, kind, e);
+                };
+                grip.MouseMove += (s, e) => _owner.ContinueTableDrag(grip, e);
+                grip.MouseLeftButtonUp += (s, e) =>
+                {
+                    e.Handled = true;
+                    _owner.EndTableDrag(grip, true);
+                };
+                grip.LostMouseCapture += (s, e) => _owner.EndTableDrag(grip, false);
+            }
+
+            /// <summary>셀 <paramref name="column"/>의 실제 너비(테두리 포함). 없으면 0.</summary>
+            public double CellWidth(int column)
+            {
+                return column >= 0 && column < _cellHosts.Count ? ((FrameworkElement)_cellHosts[column].Parent).ActualWidth : 0;
+            }
+
+            /// <summary><paramref name="x"/>(이 행 좌표)가 놓인 셀 번호. 입력란을 만들지 않는다.</summary>
+            public int ColumnAtX(double x)
+            {
+                for (var i = 0; i < _cellHosts.Count; i++)
+                {
+                    var border = (FrameworkElement)_cellHosts[i].Parent;
+                    var right = border.TranslatePoint(new Point(border.ActualWidth, 0), Root).X;
+                    if (x < right)
+                        return i;
+                }
+                return _cellHosts.Count - 1;
+            }
+
+            /// <summary>끌어 놓을 자리 표시: <paramref name="column"/>번 셀(-1이면 행 전체, null이면 지움).</summary>
+            public void SetCellDropHint(int? column)
+            {
+                for (var i = 0; i < _cellHosts.Count; i++)
+                {
+                    if (column.HasValue && (column.Value < 0 || column.Value == i))
+                        _cellHosts[i].SetResourceReference(System.Windows.Controls.Panel.BackgroundProperty, "SelectionBrush");
+                    else
+                        _cellHosts[i].Background = Brushes.Transparent;
+                }
             }
 
             /// <summary><paramref name="index"/>번 셀의 입력란. 없으면 지금 셀 값으로 만든다(화면에 붙이기 전에 내용을 넣음).</summary>
