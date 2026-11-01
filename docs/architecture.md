@@ -22,11 +22,11 @@ Folderss/
 │   ├── BlockEditor.Table.cs        — 표 셀 키(Tab·Enter 행 추가)·행/열 추가·삭제·엑셀 붙여넣기, /표·/이미지, 이미지 경로 해석
 │   ├── BlockImageLoader.cs         — 로컬·원격(http/https) 이미지 비동기 디코딩(화면 폭으로 줄임)·LRU 캐시·원본 크기 기억, 북마크 메타데이터 조회
 │   ├── BlockEditor.Media.cs        — 클립보드 이미지·복사한 파일 붙여넣기(`images/` 저장), 탐색기/폴더 패널 파일 드롭, 파일/북마크/페이지 블록 추가 대화상자(`BlockPageDialog`), 페이지 열기·만들기, 원본 크기 보기 창(`BlockImagePreviewWindow`), 순수 C# 수식 렌더러(`BlockMathRenderer`)
-│   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색"
+│   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색", 줄 안 글자 색·형광펜 리소스(테마 따라 바꿈)
 │   ├── BlockEditor.Find.cs         — 찾기·바꾸기 막대(Ctrl+F/H, F3), 제목 앵커 이동, 다시 읽은 뒤 스크롤 앵커 복원, 링크 Ctrl+클릭(#75)
 │   ├── BlockEditor.ViewSwitch.cs   — 블록 편집 ↔ 미리보기 전환 때 화면 맨 위 블록 → 제목·줄 번호 잡기, 받은 위치로 스크롤(#81)
 │   ├── BlockEditor.FrontMatter.cs  — front matter 속성 표(키 | 값) 표시·칸 편집·속성 추가/삭제·원문 편집 전환(#81)
-│   ├── BlockEditor.Inline.cs       — 줄 안 서식(#76): 서식 입력란 하나 옮겨 붙이기, Ctrl+B/I/E/Shift+S·링크 팝업(Ctrl+K)·서식 도구막대·입력 중 서식 단축·HTML/RTF 붙여넣기
+│   ├── BlockEditor.Inline.cs       — 줄 안 서식(#76): 서식 입력란 하나 옮겨 붙이기, Ctrl+B/I/E/Shift+S/U·링크 팝업(Ctrl+K)·서식 도구막대(밑줄·글자 색·배경색 포함)·입력 중 서식 단축·HTML/RTF 붙여넣기, 줄 안 범위의 나누기·합치기·복사·붙여넣기
 │   ├── BlockInlineRenderer.cs      — 줄 안 서식 조각 ↔ WPF Inline(표시용 TextBlock·편집용 RichTextBox), 표시 글자 위치 → 편집 커서
 │   ├── BlockTextInput.cs           — 블록 입력란 공통 모양 IBlockInput, 원문 입력란 BlockTextBox, 서식 입력란 RichBlockBox(보이는 글자 기준 위치·줄 API)
 │   ├── ElementTree.cs              — 입력 이벤트 `OriginalSource`에서 조상 찾기(`Run` 등 ContentElement는 논리 부모로 건너감 — `VisualTreeHelper.GetParent` 예외 방지)
@@ -98,7 +98,8 @@ Folderss/
 │   ├── MarkdownViewSwitch.cs       — `.md` 블록 편집 ↔ 미리보기: 열 뷰어 고르기, 블록 ↔ 제목·줄 번호 대응, 파일별 마지막 보기·기본 보기(`markdown-view.json`, #81)
 │   ├── FrontMatter.cs              — 블록 편집기 front matter 속성 표 해석·속성 줄 단위 편집(YAML 라이브러리 없음, #81, 순수 로직)
 │   ├── InlineMarkdown.cs           — 줄 안 Markdown ↔ 조각 목록(굵게·기울임·취소선·코드·링크, 원문·수식 보존), 보이는 글자 기준 편집 연산·입력 단축(#76, 순수 로직)
-│   ├── ClipboardMarkdown.cs        — 붙여넣기 HTML → Markdown(줄 안 서식·문단·제목·목록)(#76, 순수 로직)
+│   ├── ClipboardMarkdown.cs        — 붙여넣기 HTML → Markdown(줄 안 서식·문단·제목·목록) + 줄마다 밑줄·글자 색·형광펜 범위(#76, 순수 로직)
+│   ├── TextMarks.cs                — 줄 안 밑줄·글자 색·형광펜 범위(사이드카 `marks`): 값 형식·보이는 글자 해시 검증, 본문 변경에 따른 범위 이동·나누기·합치기, 조각 ↔ 범위(#76 9번, 순수 로직)
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
@@ -665,7 +666,21 @@ Folderss/
   - 도구막대는 선택이 생기고 마우스를 뗀 뒤 선택 위 Popup(버튼은 포커스를 가져가지 않음), 스크롤·선택 해제·포커스 잃음에 닫힌다. 붙여넣기는 편집기 형식(`Folderss.InlineMarkdown`) → HTML(`ClipboardMarkdown`) → RTF(WPF로 읽어 서식 조각) → 글자(Markdown으로 읽음) 순.
     여러 줄이면 블록으로(`PasteBlocks`). 복사·잘라내기는 선택 글자의 줄 안 Markdown을 글자·편집기 형식으로 넣는다.
   - 측정(1만 1천 줄, Debug, 화면 밖 하네스): 서식 입력란 진입 약 10ms(TextBox 새로 만들기 약 60ms), 글자 입력 중앙 약 16ms, 표 행 추가 약 62ms, 큰 폭 스크롤 약 62ms(모든 표 셀에 서식이 든 문서는 약 91ms). 근거는 `docs/items/block-editor-stage2-inline-format.md`.
-  - 밑줄·글자 색·형광펜(사이드카 범위 속성 `marks`)은 설계만 있고 미구현 — 같은 문서 "남은 일".
+  - 밑줄·글자 색·형광펜(#76 9번, 순수 로직 `Services/TextMarks` — `TextMarksTests`·`BlockSidecarTests`, 근거 `docs/items/block-editor-stage2-text-marks.md`): Markdown으로 나타낼 수 없어
+    블록 속성 `marks` 하나에 범위를 담아 사이드카에 둔다(Markdown에는 아무 표식도 없음). 값 `해시|범위;…` — `u:시작-끝`(밑줄), `c=색:시작-끝`(글자 색), `h=색:시작-끝`(배경색),
+    위치는 편집기 **보이는 글자**(`InlineMarkdown.ToPlain` — 표식 뺀 글자, 줄 안 수식은 원문 `$…$`, UTF-16) 기준, 해시는 그 보이는 글자의 SHA-256 앞 8자. 색 이름은 블록 색과 같은 9가지.
+    해시가 본문과 다르면 범위를 통째로 버린다(사이드카를 다시 붙일 때 `BlockSidecar.Apply`가 버리고 "붙이지 못한 속성"으로 세어 상태 줄에 알림, 표시·입력란은 칠하지 않음).
+    - 본문이 바뀌는 모든 경로는 `EditorBlock.Text` 설정자가 이전·새 보이는 글자를 비교해 범위를 옮긴다(`TextMarks.Adjust` — 앞뒤 같은 글자를 뺀 한 구간: 앞은 그대로, 뒤는 밀고, 지운 글자 범위는 줄임.
+      새 글자는 같은 길이 바꾸기면 글자마다 그대로, 바꾼 글자가 있으면 그 첫 글자, 끼워 넣기면 바로 앞 글자(끝에서 입력하면 이어짐), 줄 처음이면 바로 뒤 글자의 범위). 그래서 찾아 바꾸기·`/` 명령·날짜 넣기·블록 전환은 따로 고치지 않았다
+      (`BlockFind.ReplaceAll`만 범위가 있는 블록을 뒤에서부터 하나씩 바꿈). `Kind`가 대상이 아닌 종류(코드·원문·수식·표 행 등)로 바뀌면 지운다.
+    - 글자가 블록 사이로 옮겨 가는 경로는 편집기가 따로 정한다: 나누기(앞 블록은 위 규칙으로 잘리고 뒤 블록은 `TailMarks`), 합치기·여러 줄 붙여넣기(`JoinBlock` — 뒤 글자는 앞 글자 범위를 따르지 않고 제 범위).
+      블록 복제·이동·실행 취소는 속성이 `Clone`·`SameContent`에 들어 있어 그대로 따라간다.
+    - 조각(`InlineRun`)에 `Underline`·`TextColor`·`Highlight`가 있고 `Serialize`·`Equivalent`는 무시한다(범위 경계에서 나뉜 코드·원문 조각도 다시 이어 씀). 서식 입력란은 범위를 조각에 실어 그리고(`SetMarkdown(md, marks)`),
+      입력할 때마다 본문과 함께 조각에서 범위를 읽어 넣는다(`SetBlockFromRich` → `TextMarks.SetText` — 자동 이동 없이 입력란 그대로). 밑줄은 글자 장식(링크 Hyperlink의 밑줄 제외), 색은 Run.Tag 원형(새로 생긴 Run은 물려받은 지역 색 값을 팔레트와 맞춰 읽음).
+    - 표시·입력란 모두 색은 편집기 리소스(`BlockMarkText.<색>`·`BlockMarkBack.<색>`, `UpdateTextMarkBrushes`)를 DynamicResource로 참조 — 테마를 바꾸면 리소스만 바꿔 다시 그리지 않는다. 범위가 없는 블록은 비용이 그대로(속성 조회 하나).
+    - UI: 도구막대 `U`(밑줄, `Ctrl+U`)·`A▾`(색 고르기 — 글자 색 줄·배경색 줄 각 기본 + 9가지, "글자 색·배경색 지우기"). 블록 메뉴 > 색(블록 전체)과 따로. 표 셀은 대상 외(셀 편집은 원문 TextBox이고 셀 단위 범위·셀 이동 규칙까지 늘어남).
+    - 클립보드: 편집기 형식 `Folderss.TextMarks`(첫 줄 Markdown 글자 해시 + 블록마다 `marks` 값) — 서식 입력란 복사·블록 복사(`CopyBlocks`)가 넣고 붙여넣기가 읽는다. 바깥에는 Markdown 글자만.
+      HTML 붙여넣기는 `u`·`ins`·`text-decoration: underline`·`color`·`<font color>`·`mark`·`background-color`를 가장 가까운 9가지 색 범위로(검정·흰색·투명은 버림).
 - 표 조작(#75 "표", `BlockEditor.TableOps.cs` + 순수 로직 `Services/BlockTable`): 셀 오른쪽 클릭 메뉴(위·아래 행 삽입, 왼쪽·오른쪽 열 삽입, 행·열 삭제, 열 정렬, 머리글 행 켜기·끄기),
   열 경계 끌기로 너비 조절(두 번 클릭은 자동), 셀 위쪽 손잡이로 열·첫 셀 왼쪽 손잡이로 행 끌어 옮기기. **표 전체 속성은 표의 첫 행 블록에 둔다**:
   정렬 `TableAlign`(Markdown 구분 행), 열 너비 `colwidths`(px 쉼표 목록, 빈 값은 자동)·머리글 끄기 `noheader`(`true`, Markdown은 그대로 첫 행이 머리글)는 사이드카.
@@ -691,7 +706,8 @@ Folderss/
 - 측정(약 1만 1천 줄, 블록 9,862개, 표 행 8,301개, 이미지 60개, Debug): 열기 0.13~0.17초, 글자 입력 약 15ms, 표 Enter 행 추가 50~65ms(편집기 키 처리 5~6ms, 나머지는
   새 TextBox 포커스 후 WPF 그리기·입력기 처리), 실행 취소 약 25ms, 한 화면씩 이동 약 30ms, 큰 폭 점프 30~70ms, 구조 재계산·기록 비교·위치 계산 각 1~2ms.
   그 밖에 처음 겪은 성능 문제: 세로 스크롤바 `Auto`의 이중 측정(→ `Visible`), UI Automation 전체 트리 갱신(→ `OnCreateAutomationPeer`로 화면에 보이는 블록만).
-- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`, 표 첫 행의 `colwidths`·`noheader`)은 `EditorBlock.Attributes`에 두고
+- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`, 표 첫 행의 `colwidths`·`noheader`,
+  줄 안 밑줄·글자 색·형광펜 `marks`(#76 9번 — 값 `해시|u:0-4;c=red:5-7;h=yellow:6-11`, 보이는 글자 기준, 해시가 다르면 버림))은 `EditorBlock.Attributes`에 두고
   문서 옆 `문서.md.meta.json`(`BlockSidecar`)에 저장한다 — Markdown 파일은 순수하게 남는다. 속성은 "Markdown에 쓰인 블록 순번 + (종류·본문) 해시 + 앞 블록 해시"로
   붙인다: 문서 전체 해시가 같으면 순번으로, 다른 도구에서 고쳤으면 같은 내용의 블록을 순서대로 찾아(같은 내용이 여럿이면 앞 블록까지 맞는 쪽) 붙이고,
   본문이 바뀐 블록의 속성은 버리고 개수를 상태 줄에 알린다. 속성이 없으면 사이드카를 지우고, 읽지 못한 사이드카는 덮어쓰기 전에 `.bak`로 보관한다.

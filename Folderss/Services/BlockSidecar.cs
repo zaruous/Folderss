@@ -85,6 +85,9 @@ namespace Folderss.Services
                 var block = written[i];
                 if (block.Attributes == null || block.Attributes.Count == 0)
                     continue;
+                var attrs = AnchoredAttributes(block, anchors[i]);
+                if (attrs.Count == 0)
+                    continue;
                 entries.Add(new SidecarEntry
                 {
                     Index = i,
@@ -92,9 +95,11 @@ namespace Folderss.Services
                     Hash = hashes[i],
                     Before = i > 0 ? hashes[i - 1] : string.Empty,
                     Preview = Preview(anchors[i].Text),
-                    Attrs = new SortedDictionary<string, string>(block.Attributes, StringComparer.Ordinal),
+                    Attrs = attrs,
                 });
             }
+            if (entries.Count == 0)
+                return null;
             return JsonSerializer.Serialize(new SidecarDocument
             {
                 Version = Version,
@@ -160,9 +165,32 @@ namespace Folderss.Services
                 }
                 foreach (var pair in entry.Attrs)
                     written[target].SetAttribute(pair.Key, pair.Value);
+                // 줄 안 범위(marks)는 보이는 글자 해시까지 맞아야 붙인다 — 맞지 않으면 버리고 붙이지 못한 속성으로 센다(엉뚱한 글자에 칠하지 않음).
+                if (TextMarks.DropIfInvalid(written[target]))
+                    unmatched++;
                 from = target + 1;
             }
             return unmatched;
+        }
+
+        /// <summary>
+        /// 저장할 속성. 줄 안 범위(marks)는 다시 읽었을 때의 블록(<paramref name="anchor"/>) 글자 기준으로 맞춘다 — 저장하며 공백 정리 등으로 보이는 글자가 달라졌으면 그만큼 옮긴다.
+        /// </summary>
+        private static SortedDictionary<string, string> AnchoredAttributes(EditorBlock block, EditorBlock anchor)
+        {
+            var attrs = new SortedDictionary<string, string>(block.Attributes, StringComparer.Ordinal);
+            if (!attrs.ContainsKey(TextMarks.Attribute))
+                return attrs;
+            var plain = TextMarks.PlainOf(block);
+            var marks = TextMarks.Get(block, plain);
+            var anchorPlain = ReferenceEquals(anchor, block) ? plain : TextMarks.PlainOf(anchor);
+            var value = marks.Count == 0 || !TextMarks.IsTarget(anchor.Kind) ? null
+                : TextMarks.Format(anchorPlain == plain ? marks : TextMarks.Adjust(marks, plain, anchorPlain), anchorPlain);
+            if (value == null)
+                attrs.Remove(TextMarks.Attribute);
+            else
+                attrs[TextMarks.Attribute] = value;
+            return attrs;
         }
 
         /// <summary>블록을 알아보는 해시: 종류 + 본문(줄 끝 공백·줄바꿈 형식 무시)의 SHA-256 앞 16자.</summary>

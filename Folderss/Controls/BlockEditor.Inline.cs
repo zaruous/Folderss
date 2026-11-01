@@ -25,6 +25,12 @@ namespace Folderss.Controls
         /// <summary>편집기 안 복사·붙여넣기용 클립보드 형식(선택 글자의 줄 안 Markdown).</summary>
         private const string InlineMarkdownFormat = "Folderss.InlineMarkdown";
 
+        /// <summary>
+        /// 편집기 안 복사·붙여넣기용 줄 안 범위(밑줄·색, #76 9번) 클립보드 형식. 첫 줄은 함께 담은 Markdown 글자의 해시(<see cref="TextMarks.Hash"/> — 다른 프로그램이
+        /// 글자만 바꿔 넣었으면 쓰지 않음), 그 뒤로 Markdown 블록마다 한 줄씩 <c>marks</c> 값(없으면 빈 줄). 바깥 프로그램에는 Markdown 글자만 간다.
+        /// </summary>
+        private const string TextMarksFormat = "Folderss.TextMarks";
+
         private RichBlockBox _rich;
         private BlockRow _richRow;
         private bool _applyingInlineEdit;
@@ -230,6 +236,227 @@ namespace Folderss.Controls
             return row.UsesRich ? InlineMarkdown.SourceToPlain(row.Block.Text, offset) : offset;
         }
 
+        // ── 줄 안 범위(밑줄·글자 색·형광펜, #76 9번) ─────────────────────────
+
+        /// <summary>보이는 글자와 그 기준 범위(나누기·합치기·붙여넣기에서 블록 사이로 옮길 때).</summary>
+        private sealed class MarkedPlain
+        {
+            public List<TextMark> Marks = new List<TextMark>();
+            public string Plain;
+        }
+
+        /// <summary>서식 입력란 내용(Markdown + 조각의 범위)을 블록에 넣는다(범위는 본문 변경으로 옮기지 않고 입력란 그대로).</summary>
+        private static void SetBlockFromRich(EditorBlock block, RichBlockBox rich)
+        {
+            var runs = rich.Runs;
+            List<TextMark> marks = null;
+            foreach (var r in runs)
+            {
+                if (r.HasMarks)
+                {
+                    marks = TextMarks.FromRuns(runs);
+                    break;
+                }
+            }
+            TextMarks.SetText(block, rich.Markdown, marks, rich.Text);
+        }
+
+        /// <summary>입력란 범위가 블록 범위와 다른지(되돌리기·외부 변경 뒤 입력란을 다시 채울지).</summary>
+        private static bool RichMarksDiffer(RichBlockBox rich, EditorBlock block)
+        {
+            var runs = rich.Runs;
+            var hasRunMarks = runs.Any(r => r.HasMarks);
+            if (!hasRunMarks && block.GetAttribute(TextMarks.Attribute) == null)
+                return false;
+            var plain = rich.Text;
+            return !TextMarks.SameMarks(TextMarks.FromRuns(runs), TextMarks.Get(block, plain), plain.Length);
+        }
+
+        /// <summary>블록 본문에서 선택 [start, start+length)를 지운 뒤 커서 뒤 글자의 범위(나누기·여러 줄 붙여넣기에서 뒤 블록으로 가는 것).</summary>
+        private static MarkedPlain TailMarks(EditorBlock block, int start, int length)
+        {
+            var result = new MarkedPlain();
+            if (!TextMarks.IsTarget(block.Kind) || block.GetAttribute(TextMarks.Attribute) == null)
+                return result;
+            var plain = TextMarks.PlainOf(block);
+            var marks = TextMarks.Get(block, plain);
+            start = Math.Max(0, Math.Min(start, plain.Length));
+            var end = Math.Max(start, Math.Min(start + Math.Max(0, length), plain.Length));
+            var rest = plain.Remove(start, end - start);
+            var remaining = TextMarks.Edit(marks, plain.Length, start, end - start, 0);
+            result.Marks = TextMarks.Slice(remaining, start, rest.Length);
+            result.Plain = rest.Substring(start);
+            return result;
+        }
+
+        /// <summary>
+        /// 블록 끝에 본문을 잇고(<see cref="JoinText"/>) 범위도 잇는다 — 뒤 글자는 앞 글자 범위를 따르지 않고 제 범위(<paramref name="tailMarks"/>, 기준 글자 <paramref name="tailPlain"/>)를 가진다.
+        /// </summary>
+        private static void JoinBlock(EditorBlock target, string tailText, IList<TextMark> tailMarks, string tailPlain)
+        {
+            var hasTail = tailMarks != null && tailMarks.Count > 0;
+            if (!TextMarks.IsTarget(target.Kind) || (!hasTail && target.GetAttribute(TextMarks.Attribute) == null))
+            {
+                target.Text = JoinText(target, tailText);
+                return;
+            }
+            var headPlain = TextMarks.PlainOf(target);
+            var headMarks = TextMarks.Get(target, headPlain);
+            target.Text = JoinText(target, tailText);
+            tailPlain = tailPlain ?? InlineMarkdown.ToPlain(tailText);
+            TextMarks.Set(target, TextMarks.Concat(headMarks, headPlain.Length, tailMarks, tailPlain.Length), headPlain + tailPlain);
+        }
+
+        /// <summary>붙여넣은 블록(방금 Markdown에서 읽음)에 블록별 범위 값을 붙인다. 블록 수가 다르면 붙이지 않고, 본문과 맞지 않는 값은 버린다.</summary>
+        private static void ApplyPastedMarks(IList<EditorBlock> parsed, IList<string> blockMarks)
+        {
+            if (blockMarks == null || blockMarks.All(string.IsNullOrEmpty))
+                return;
+            var written = parsed.Where(BlockMarkdown.IsWritten).ToList();
+            if (written.Count != blockMarks.Count)
+                return;
+            for (var i = 0; i < written.Count; i++)
+            {
+                if (string.IsNullOrEmpty(blockMarks[i]))
+                    continue;
+                written[i].SetAttribute(TextMarks.Attribute, blockMarks[i]);
+                TextMarks.DropIfInvalid(written[i]);
+            }
+        }
+
+        /// <summary>복사할 블록들의 범위를 클립보드 자료에 더한다(범위가 하나도 없으면 더하지 않음).</summary>
+        private static void SetClipboardMarks(IDataObject data, string markdown, IList<EditorBlock> blocks)
+        {
+            var values = blocks.Where(BlockMarkdown.IsWritten).Select(b => b.GetAttribute(TextMarks.Attribute) != null ? TextMarks.Format(TextMarks.Get(b), TextMarks.PlainOf(b)) : null).ToList();
+            SetClipboardMarks(data, markdown, values);
+        }
+
+        private static void SetClipboardMarks(IDataObject data, string markdown, IList<string> values)
+        {
+            if (values.All(string.IsNullOrEmpty))
+                return;
+            try
+            {
+                data.SetData(TextMarksFormat, TextMarks.Hash(markdown) + "\n" + string.Join("\n", values.Select(v => v ?? string.Empty)));
+            }
+            catch (InvalidOperationException)
+            {
+            }
+        }
+
+        /// <summary>클립보드의 블록별 범위 값(편집기에서 복사한 것이고 글자가 <paramref name="markdown"/>과 같을 때만). 없으면 null.</summary>
+        private static List<string> ClipboardBlockMarks(IDataObject data, string markdown)
+        {
+            try
+            {
+                if (data == null || markdown == null || !data.GetDataPresent(TextMarksFormat))
+                    return null;
+                var value = data.GetData(TextMarksFormat) as string;
+                if (string.IsNullOrEmpty(value))
+                    return null;
+                var lines = value.Replace("\r\n", "\n").Split('\n');
+                if (lines[0] != TextMarks.Hash(markdown) && lines[0] != TextMarks.Hash(markdown.Replace("\r\n", "\n")))
+                    return null;
+                return lines.Skip(1).Select(l => l.Length == 0 ? null : l).ToList();
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                return null;
+            }
+        }
+
+        private static List<string> ClipboardBlockMarks(string markdown)
+        {
+            try
+            {
+                return ClipboardBlockMarks(Clipboard.GetDataObject(), markdown);
+            }
+            catch (System.Runtime.InteropServices.ExternalException)
+            {
+                return null;
+            }
+        }
+
+        /// <summary>
+        /// 밑줄(<c>Ctrl+U</c>·도구막대 U): 선택이 모두 밑줄이면 끄고 아니면 켠다. 선택이 없으면 다음에 입력할 글자의 밑줄을 바꾼다. 실행 취소 한 단계.
+        /// </summary>
+        private bool ToggleUnderline(BlockRow row)
+        {
+            var box = row?.Rich;
+            if (box == null)
+                return false;
+            var start = box.SelectionStart;
+            var length = box.SelectionLength;
+            var runs = box.Runs;
+            var plainLength = InlineMarkdown.ToPlain(runs).Length;
+            var marks = TextMarks.FromRuns(runs);
+            if (length == 0)
+            {
+                var before = InlineMarkdown.RunAt(runs, start, true);
+                var on = !(before != null && before.Underline);
+                ApplySpringDecoration(box, TextDecorationLocation.Underline, on);
+                UpdateFormatBarSoon();
+                return true;
+            }
+            var turnOn = !TextMarks.Covers(marks, plainLength, TextMarkKind.Underline, start, start + length);
+            ApplyMarks(row, box, TextMarks.Apply(marks, plainLength, TextMarkKind.Underline, turnOn ? string.Empty : null, start, start + length), start, length);
+            return true;
+        }
+
+        /// <summary>선택 글자의 글자 색(<paramref name="highlight"/>면 배경색)을 바꾼다(null이면 지움). 선택이 없으면 하지 않는다. 실행 취소 한 단계.</summary>
+        private bool SetTextMarkColor(BlockRow row, bool highlight, string name)
+        {
+            var box = row?.Rich;
+            if (box == null || box.SelectionLength == 0)
+                return false;
+            var start = box.SelectionStart;
+            var length = box.SelectionLength;
+            var runs = box.Runs;
+            var plainLength = InlineMarkdown.ToPlain(runs).Length;
+            var marks = TextMarks.Apply(TextMarks.FromRuns(runs), plainLength, highlight ? TextMarkKind.Highlight : TextMarkKind.Color, name, start, start + length);
+            ApplyMarks(row, box, marks, start, length);
+            return true;
+        }
+
+        /// <summary>선택 글자의 글자 색·배경색을 모두 지운다(밑줄은 그대로).</summary>
+        private bool ClearTextMarkColors(BlockRow row)
+        {
+            var box = row?.Rich;
+            if (box == null || box.SelectionLength == 0)
+                return false;
+            var start = box.SelectionStart;
+            var length = box.SelectionLength;
+            var runs = box.Runs;
+            var plainLength = InlineMarkdown.ToPlain(runs).Length;
+            var marks = TextMarks.Apply(TextMarks.FromRuns(runs), plainLength, TextMarkKind.Color, null, start, start + length);
+            marks = TextMarks.Apply(marks, plainLength, TextMarkKind.Highlight, null, start, start + length);
+            ApplyMarks(row, box, marks, start, length);
+            return true;
+        }
+
+        private void ApplyMarks(BlockRow row, RichBlockBox box, IList<TextMark> marks, int selectionStart, int selectionLength)
+        {
+            ApplyRuns(row, box, TextMarks.ApplyToRuns(TextMarks.Strip(box.Runs), marks), selectionStart, selectionLength);
+        }
+
+        /// <summary>선택 없이 밑줄·취소선 키: 다음 입력 글자의 글자 장식(다른 장식은 그대로 둠).</summary>
+        private static void ApplySpringDecoration(RichBlockBox box, TextDecorationLocation location, bool on)
+        {
+            var selection = box.Selection;
+            var current = selection.GetPropertyValue(Inline.TextDecorationsProperty) as TextDecorationCollection;
+            var result = new TextDecorationCollection();
+            if (current != null)
+            {
+                foreach (var d in current)
+                    if (d.Location != location)
+                        result.Add(d);
+            }
+            if (on)
+                result.Add(location == TextDecorationLocation.Underline ? TextDecorations.Underline[0] : TextDecorations.Strikethrough[0]);
+            result.Freeze();
+            selection.ApplyPropertyValue(Inline.TextDecorationsProperty, result);
+        }
+
         // ── 서식 적용 ─────────────────────────────────────────────────────
 
         /// <summary>
@@ -268,7 +495,7 @@ namespace Folderss.Controls
                     selection.ApplyPropertyValue(TextElement.FontStyleProperty, on ? FontStyles.Italic : FontStyles.Normal);
                     break;
                 case InlineFormat.Strike:
-                    selection.ApplyPropertyValue(Inline.TextDecorationsProperty, on ? TextDecorations.Strikethrough : new TextDecorationCollection());
+                    ApplySpringDecoration(box, TextDecorationLocation.Strikethrough, on);
                     break;
                 case InlineFormat.Code:
                     if (on)
@@ -298,10 +525,10 @@ namespace Folderss.Controls
             {
                 _applyingInlineEdit = false;
             }
-            // SetRuns의 TextChanged가 본문을 갱신하고 기록했다. 다음 입력은 새 단계로.
-            if (row.Block.Text != box.Markdown)
+            // SetRuns의 TextChanged가 본문(과 줄 안 범위)을 갱신하고 기록했다. 다음 입력은 새 단계로.
+            if (row.Block.Text != box.Markdown || RichMarksDiffer(box, row.Block))
             {
-                row.Block.Text = box.Markdown;
+                SetBlockFromRich(row.Block, box);
                 RecordChange();
             }
             _typingRow = null;
@@ -355,19 +582,24 @@ namespace Folderss.Controls
         /// </summary>
         private void OnRichPasting(BlockRow row, RichBlockBox box, DataObjectPastingEventArgs e)
         {
-            var markdown = ClipboardToMarkdown(e.DataObject);
+            List<string> blockMarks;
+            var markdown = ClipboardToMarkdown(e.DataObject, out blockMarks);
             e.CancelCommand();
             if (string.IsNullOrEmpty(markdown))
                 return;
             markdown = markdown.Replace("\r\n", "\n").Replace('\r', '\n');
             if (markdown.IndexOf('\n') >= 0)
             {
-                PasteBlocks(row, markdown);
+                PasteBlocks(row, markdown, blockMarks);
                 return;
             }
             var start = box.SelectionStart;
             var end = start + box.SelectionLength;
             var inserted = InlineMarkdown.ParseForEditing(markdown);
+            // 붙여넣는 글자는 제 범위(편집기에서 복사한 밑줄·색, HTML의 u·color·mark)만 가진다 — 앞 글자 범위를 따르지 않음.
+            List<TextMark> insertedMarks;
+            if (blockMarks != null && blockMarks.Count == 1 && TextMarks.TryParse(blockMarks[0], InlineMarkdown.ToPlain(inserted), out insertedMarks))
+                inserted = TextMarks.ApplyToRuns(inserted, insertedMarks);
             var runs = InlineMarkdown.Replace(box.Runs, start, end, inserted);
             ApplyRuns(row, box, runs, start + InlineMarkdown.ToPlain(inserted).Length, 0);
         }
@@ -375,18 +607,37 @@ namespace Folderss.Controls
         /// <summary>클립보드 내용을 Markdown으로(서식 우선). 없으면 null.</summary>
         internal static string ClipboardToMarkdown(IDataObject data)
         {
+            List<string> ignored;
+            return ClipboardToMarkdown(data, out ignored);
+        }
+
+        /// <summary>
+        /// 클립보드 내용을 Markdown으로(서식 우선). 없으면 null. <paramref name="blockMarks"/>는 Markdown 블록마다 줄 안 범위 값(편집기에서 복사한 범위,
+        /// HTML의 밑줄·색·형광펜) — 없으면 null.
+        /// </summary>
+        internal static string ClipboardToMarkdown(IDataObject data, out List<string> blockMarks)
+        {
+            blockMarks = null;
             try
             {
                 if (data.GetDataPresent(InlineMarkdownFormat))
-                    return data.GetData(InlineMarkdownFormat) as string;
+                {
+                    var inline = data.GetData(InlineMarkdownFormat) as string;
+                    blockMarks = ClipboardBlockMarks(data, inline);
+                    return inline;
+                }
                 if (data.GetDataPresent(DataFormats.Html))
                 {
                     var html = data.GetData(DataFormats.Html) as string;
                     if (!string.IsNullOrWhiteSpace(html))
                     {
-                        var converted = ClipboardMarkdown.FromHtml(html);
+                        var lineMarks = new List<string>();
+                        var converted = ClipboardMarkdown.FromHtml(html, lineMarks);
                         if (converted.Length > 0)
+                        {
+                            blockMarks = lineMarks.Any(v => v != null) ? lineMarks : null;
                             return converted;
+                        }
                     }
                 }
                 if (data.GetDataPresent(DataFormats.Rtf))
@@ -397,7 +648,11 @@ namespace Folderss.Controls
                         return converted;
                 }
                 if (data.GetDataPresent(DataFormats.UnicodeText))
-                    return data.GetData(DataFormats.UnicodeText) as string;
+                {
+                    var text = data.GetData(DataFormats.UnicodeText) as string;
+                    blockMarks = ClipboardBlockMarks(data, text);
+                    return text;
+                }
                 if (data.GetDataPresent(DataFormats.Text))
                     return data.GetData(DataFormats.Text) as string;
             }
@@ -499,7 +754,8 @@ namespace Folderss.Controls
             if (box == null || e.IsDragDrop)
                 return;
             var start = box.SelectionStart;
-            var markdown = InlineMarkdown.Serialize(InlineMarkdown.Slice(box.Runs, start, start + box.SelectionLength));
+            var slice = InlineMarkdown.Slice(box.Runs, start, start + box.SelectionLength);
+            var markdown = InlineMarkdown.Serialize(slice);
             try
             {
                 e.DataObject.SetData(DataFormats.UnicodeText, markdown);
@@ -508,6 +764,14 @@ namespace Folderss.Controls
             }
             catch (InvalidOperationException)
             {
+            }
+            // 밑줄·색은 편집기 안에서만(바깥에는 Markdown 글자 그대로). 범위 값은 붙일 때 다시 읽는 보이는 글자 기준.
+            var marks = TextMarks.FromRuns(slice);
+            if (marks.Count > 0)
+            {
+                var basis = InlineMarkdown.ToPlain(slice);
+                var plain = InlineMarkdown.ToPlain(markdown);
+                SetClipboardMarks(e.DataObject, markdown, new[] { TextMarks.Format(basis == plain ? marks : TextMarks.Adjust(marks, basis, plain), plain) });
             }
         }
 
@@ -703,6 +967,12 @@ namespace Folderss.Controls
             int ls, le;
             InlineRun link;
             SetButtonActive(_linkButton, InlineMarkdown.LinkRange(runs, start, out ls, out le, out link));
+            var marks = TextMarks.FromRuns(runs);
+            var plainLength = InlineMarkdown.ToPlain(runs).Length;
+            SetButtonActive(_underlineButton, TextMarks.Covers(marks, plainLength, TextMarkKind.Underline, start, end));
+            SetButtonActive(_colorButton, _colorPalette.Visibility == Visibility.Visible ||
+                TextMarks.Covers(marks, plainLength, TextMarkKind.Color, start, end) || TextMarks.Covers(marks, plainLength, TextMarkKind.Highlight, start, end));
+            UpdateColorPalette(marks, plainLength, start, end);
             Rect rect;
             try
             {
@@ -731,8 +1001,16 @@ namespace Folderss.Controls
         private void HideFormatBar()
         {
             if (_formatBar != null && _formatBar.IsOpen)
+            {
                 _formatBar.IsOpen = false;
+                _colorPalette.Visibility = Visibility.Collapsed;
+            }
         }
+
+        private Border _underlineButton;
+        private Border _colorButton;
+        private StackPanel _colorPalette;
+        private readonly List<Tuple<Border, string, bool>> _colorSwatches = new List<Tuple<Border, string, bool>>();
 
         private void EnsureFormatBar()
         {
@@ -741,10 +1019,20 @@ namespace Folderss.Controls
             var panel = new StackPanel { Orientation = Orientation.Horizontal };
             _formatButtons[InlineFormat.Bold] = FormatButton(panel, "B", "굵게 (Ctrl+B)", b => b.FontWeight = FontWeights.Bold, () => ToggleInlineFormat(_richRow, InlineFormat.Bold));
             _formatButtons[InlineFormat.Italic] = FormatButton(panel, "I", "기울임 (Ctrl+I)", b => b.FontStyle = FontStyles.Italic, () => ToggleInlineFormat(_richRow, InlineFormat.Italic));
+            _underlineButton = FormatButton(panel, "U", "밑줄 (Ctrl+U)", b => b.TextDecorations = TextDecorations.Underline, () => ToggleUnderline(_richRow));
             _formatButtons[InlineFormat.Strike] = FormatButton(panel, "S", "취소선 (Ctrl+Shift+S)", b => b.TextDecorations = TextDecorations.Strikethrough, () => ToggleInlineFormat(_richRow, InlineFormat.Strike));
             _formatButtons[InlineFormat.Code] = FormatButton(panel, "<>", "코드 (Ctrl+E)", b => b.FontFamily = BlockInlineRenderer.CodeFont, () => ToggleInlineFormat(_richRow, InlineFormat.Code));
             _linkButton = FormatButton(panel, "🔗", "링크 (Ctrl+K)", null, () => ShowLinkEditor(_richRow));
-            var frame = new Border { CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Padding = new Thickness(3), Child = panel };
+            _colorButton = FormatButton(panel, "A▾", "글자 색·배경색 (선택한 글자만 — 블록 전체 색은 블록 메뉴 > 색)", b => b.TextDecorations = TextDecorations.Underline, () =>
+            {
+                _colorPalette.Visibility = _colorPalette.Visibility == Visibility.Visible ? Visibility.Collapsed : Visibility.Visible;
+                UpdateFormatBar();
+            });
+            _colorPalette = CreateColorPalette();
+            var layout = new StackPanel();
+            layout.Children.Add(panel);
+            layout.Children.Add(_colorPalette);
+            var frame = new Border { CornerRadius = new CornerRadius(6), BorderThickness = new Thickness(1), Padding = new Thickness(3), Child = layout };
             frame.SetResourceReference(Border.BackgroundProperty, "SurfaceBackground");
             frame.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
             frame.SetResourceReference(TextElement.FontFamilyProperty, "AppFontFamily");
@@ -761,6 +1049,101 @@ namespace Folderss.Controls
                 if (e.VerticalChange != 0)
                     HideFormatBar();
             };
+        }
+
+        /// <summary>도구막대 아래 색 고르기: 글자 색 줄(기본 + 9가지), 배경색 줄(기본 + 9가지), 모두 지우기. 선택한 글자에만 칠한다.</summary>
+        private StackPanel CreateColorPalette()
+        {
+            var palette = new StackPanel { Visibility = Visibility.Collapsed, Margin = new Thickness(2, 4, 2, 2) };
+            palette.Children.Add(PaletteRow("글자 색", false));
+            palette.Children.Add(PaletteRow("배경색", true));
+            var clear = new TextBlock { Text = "글자 색·배경색 지우기", FontSize = 12, Margin = new Thickness(6, 3, 6, 3) };
+            clear.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryText");
+            var clearButton = new Border { CornerRadius = new CornerRadius(4), Cursor = Cursors.Hand, Background = Brushes.Transparent, Child = clear, Margin = new Thickness(0, 2, 0, 0), HorizontalAlignment = HorizontalAlignment.Left, Focusable = false };
+            clearButton.MouseEnter += (s, e) => clearButton.SetResourceReference(Border.BackgroundProperty, "ControlHoverBrush");
+            clearButton.MouseLeave += (s, e) => clearButton.Background = Brushes.Transparent;
+            clearButton.MouseLeftButtonDown += (s, e) =>
+            {
+                e.Handled = true;
+                ClearTextMarkColors(_richRow);
+            };
+            palette.Children.Add(clearButton);
+            return palette;
+        }
+
+        private StackPanel PaletteRow(string title, bool highlight)
+        {
+            var row = new StackPanel { Orientation = Orientation.Horizontal, Margin = new Thickness(0, 1, 0, 1) };
+            var label = new TextBlock { Text = title, FontSize = 11, Width = 44, VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 2, 0) };
+            label.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+            row.Children.Add(label);
+            row.Children.Add(ColorSwatch(null, highlight, "기본"));
+            for (var i = 0; i < BlockColorNames.Length; i++)
+                row.Children.Add(ColorSwatch(BlockColorNames[i], highlight, BlockColorLabels[i] + (highlight ? " 배경" : "")));
+            return row;
+        }
+
+        /// <summary>색 견본 하나(글자 색은 그 색의 "A", 배경색은 그 바탕의 "A"). 누르면 선택 글자에 칠한다(<paramref name="name"/>이 null이면 그 종류를 지움).</summary>
+        private Border ColorSwatch(string name, bool highlight, string tip)
+        {
+            var letter = new TextBlock { Text = "A", FontSize = 12, FontWeight = FontWeights.SemiBold, HorizontalAlignment = HorizontalAlignment.Center, VerticalAlignment = VerticalAlignment.Center };
+            var swatch = new Border
+            {
+                Width = 20,
+                Height = 20,
+                Margin = new Thickness(1),
+                CornerRadius = new CornerRadius(3),
+                BorderThickness = new Thickness(1),
+                Cursor = Cursors.Hand,
+                ToolTip = tip,
+                Focusable = false,
+                Child = letter,
+            };
+            swatch.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            swatch.MouseLeftButtonDown += (s, e) =>
+            {
+                e.Handled = true;
+                SetTextMarkColor(_richRow, highlight, name);
+            };
+            _colorSwatches.Add(Tuple.Create(swatch, name, highlight));
+            return swatch;
+        }
+
+        /// <summary>견본 색을 지금 테마로 칠하고, 선택 글자가 모두 그 색이면 테두리를 강조한다(도구막대는 편집기 리소스 밖이라 직접 칠함).</summary>
+        private void UpdateColorPalette(IList<TextMark> marks, int plainLength, int start, int end)
+        {
+            if (_colorPalette == null || _colorPalette.Visibility != Visibility.Visible)
+                return;
+            foreach (var item in _colorSwatches)
+            {
+                var swatch = item.Item1;
+                var name = item.Item2;
+                var highlight = item.Item3;
+                var letter = (TextBlock)swatch.Child;
+                if (highlight)
+                {
+                    letter.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryText");
+                    if (name == null)
+                        swatch.SetResourceReference(Border.BackgroundProperty, "PanelBackground");
+                    else
+                        swatch.Background = BlockColorBrush(name, true);
+                }
+                else
+                {
+                    swatch.SetResourceReference(Border.BackgroundProperty, "PanelBackground");
+                    if (name == null)
+                        letter.SetResourceReference(TextBlock.ForegroundProperty, "PrimaryText");
+                    else
+                        letter.Foreground = BlockColorBrush(name, false);
+                }
+                var kind = highlight ? TextMarkKind.Highlight : TextMarkKind.Color;
+                var active = name != null && TextMarks.Covers(marks, plainLength, kind, start, end, name);
+                swatch.BorderThickness = new Thickness(active ? 2 : 1);
+                if (active)
+                    swatch.SetResourceReference(Border.BorderBrushProperty, "AccentBrush");
+                else
+                    swatch.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
+            }
         }
 
         private static Border FormatButton(Panel panel, string text, string tip, Action<TextBlock> style, Action click)

@@ -80,6 +80,7 @@
     <Compile Include="..\..\Folderss\Services\FrontMatter.cs" Link="Linked\FrontMatter.cs" />
     <Compile Include="..\..\Folderss\Services\InlineMarkdown.cs" Link="Linked\InlineMarkdown.cs" />
     <Compile Include="..\..\Folderss\Services\ClipboardMarkdown.cs" Link="Linked\ClipboardMarkdown.cs" />
+    <Compile Include="..\..\Folderss\Services\TextMarks.cs" Link="Linked\TextMarks.cs" />
     <Compile Include="..\..\Folderss\Services\ZipEntryNameEncoding.cs" Link="Linked\ZipEntryNameEncoding.cs" />
     <Compile Include="..\..\Folderss\Services\ZipArchiveService.cs" Link="Linked\ZipArchiveService.cs" />
     <Compile Include="..\..\Folderss\Services\ZipTempStore.cs" Link="Linked\ZipTempStore.cs" />

@@ -143,7 +143,7 @@ namespace Folderss.Controls
                 try
                 {
                     box.Tag = this;
-                    box.SetMarkdown(Block.Text);
+                    box.SetMarkdown(Block.Text, Block.GetAttribute(TextMarks.Attribute));
                 }
                 finally
                 {
@@ -409,8 +409,8 @@ namespace Folderss.Controls
                         UpdateDisplayContent();
                         if (_rich != null && !UsesRich)
                             _owner.ReleaseRich();
-                        if (_rich != null && _rich.Markdown != Block.Text)
-                            _rich.SetMarkdown(Block.Text);
+                        if (_rich != null && (_rich.Markdown != Block.Text || RichMarksDiffer(_rich, Block)))
+                            _rich.SetMarkdown(Block.Text, Block.GetAttribute(TextMarks.Attribute));
                         if (_mainEditor != null && _mainEditor.Text != Block.Text)
                             _mainEditor.Text = Block.Text;
                     }
@@ -447,7 +447,8 @@ namespace Folderss.Controls
 
                 _display.TextAlignment = TextAlignment.Left;
                 // 줄 안 서식(#76)·줄 안 수식은 표식 없이 그린다. 원문 블록·캡션은 글자 그대로.
-                BlockInlineRenderer.PopulateDisplay(_display, text, FontSizeOf(Block), EditorBlock.HasInlineFormatting(Block.Kind));
+                BlockInlineRenderer.PopulateDisplay(_display, text, FontSizeOf(Block), EditorBlock.HasInlineFormatting(Block.Kind),
+                    UsesRich ? Block.GetAttribute(TextMarks.Attribute) : null);
             }
 
             private string MetaValue()

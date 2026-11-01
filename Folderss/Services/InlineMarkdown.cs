@@ -60,6 +60,18 @@ namespace Folderss.Services
         public int CodeFence;
         public bool CodePad;
 
+        /// <summary>범위 속성(#76 9번, Markdown 밖 — 사이드카 <c>marks</c>): 밑줄. 직렬화(<see cref="InlineMarkdown.Serialize"/>)는 무시한다.</summary>
+        public bool Underline;
+
+        /// <summary>범위 속성: 글자 색 이름(<see cref="TextMarks.ColorNames"/>). 없으면 null.</summary>
+        public string TextColor;
+
+        /// <summary>범위 속성: 배경색(형광펜) 이름. 없으면 null.</summary>
+        public string Highlight;
+
+        /// <summary>범위 속성(밑줄·글자 색·배경색)이 하나라도 있는지.</summary>
+        public bool HasMarks => Underline || TextColor != null || Highlight != null;
+
         public bool Has(InlineFormat f) => (Format & f) == f;
 
         /// <summary>열 링크 주소(<c>&lt;&gt;</c> 벗김, 자동 링크 메일은 mailto:).</summary>
@@ -86,6 +98,7 @@ namespace Folderss.Services
         {
             return other != null && Kind == other.Kind && Format == other.Format && Link == other.Link && LinkTitle == other.LinkTitle &&
                    Autolink == other.Autolink && BareUrl == other.BareUrl && LinkOuter == other.LinkOuter &&
+                   Underline == other.Underline && TextColor == other.TextColor && Highlight == other.Highlight &&
                    (!Has(InlineFormat.Bold) || BoldMarker == other.BoldMarker) &&
                    (!Has(InlineFormat.Italic) || ItalicMarker == other.ItalicMarker) &&
                    (!Has(InlineFormat.Strike) || StrikeMarker == other.StrikeMarker) &&
@@ -804,6 +817,9 @@ namespace Folderss.Services
         /// <summary>조각 목록을 줄 안 Markdown으로 쓴다. 다시 읽었을 때 같은 서식이 되도록 필요한 글자만 이스케이프한다.</summary>
         public static string Serialize(IList<InlineRun> runs)
         {
+            // 범위 속성(밑줄·색)은 Markdown에 쓰지 않는다 — 빼고, 범위 경계에서 나뉜 조각(코드 포함)을 다시 잇는다.
+            if (runs.Any(r => r != null && r.HasMarks))
+                runs = JoinSplitPieces(TextMarks.Strip(runs.Where(r => r != null)));
             var normalized = Normalize(runs);
             if (normalized.Count == 0)
                 return string.Empty;
@@ -839,6 +855,23 @@ namespace Folderss.Services
                 _escapeEmphasisSet = true;
                 _escapeEmphasisValue = value;
             }
+        }
+
+        /// <summary>범위 경계에서 나뉜 같은 모양 조각(코드·원문 포함)을 잇는다.</summary>
+        private static List<InlineRun> JoinSplitPieces(List<InlineRun> runs)
+        {
+            var result = new List<InlineRun>(runs.Count);
+            foreach (var run in runs)
+            {
+                var last = result.Count > 0 ? result[result.Count - 1] : null;
+                if (last != null && last.Kind == run.Kind && run.Kind != InlineRunKind.Math && !last.Autolink && !run.Autolink && last.SameStyle(run))
+                {
+                    last.Text += run.Text;
+                    continue;
+                }
+                result.Add(run.Clone());
+            }
+            return result;
         }
 
         /// <summary>서식 경계의 공백을 서식 밖으로 빼고(<c>**a **</c>는 닫히지 않으므로) 이웃 조각을 합친다.</summary>
@@ -1241,6 +1274,9 @@ namespace Folderss.Services
                 c.CodePad = false;
                 c.Autolink = false;
                 c.LinkOuter = InlineFormat.None;
+                c.Underline = false;
+                c.TextColor = null;
+                c.Highlight = null;
                 if (c.BareUrl)
                 {
                     c.BareUrl = false;

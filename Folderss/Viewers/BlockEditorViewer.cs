@@ -29,7 +29,7 @@ namespace Folderss.Viewers
             "Esc 블록 선택(Shift+↑↓ 확장, Del 삭제, Ctrl+C Markdown 복사)\n" +
             "Ctrl+Shift+↑↓ 블록 이동 · Ctrl+D 복제 · Ctrl+Enter 체크·접기\n" +
             "Ctrl+Alt+0~8 전환(텍스트·제목1~3·할 일·글머리·번호·토글·코드)\n" +
-            "Ctrl+B 굵게 · Ctrl+I 기울임 · Ctrl+E 코드 · Ctrl+Shift+S 취소선 · Ctrl+K 링크 주소 · 글자 선택 시 서식 도구막대\n" +
+            "Ctrl+B 굵게 · Ctrl+I 기울임 · Ctrl+U 밑줄 · Ctrl+E 코드 · Ctrl+Shift+S 취소선 · Ctrl+K 링크 주소 · 글자 선택 시 서식 도구막대(글자 색·형광펜 A▾)\n" +
             "**글** *글* ~~글~~ `코드` $수식$ [글](주소) 입력 시 서식으로 변환(Ctrl+Z로 표식 글자로)\n" +
             "Ctrl+F 찾기 · Ctrl+H 바꾸기 · F3/Shift+F3 다음·이전 · Ctrl+클릭 링크 열기(#제목·파일.md#제목 이동)\n" +
             "Ctrl+Z/Ctrl+Y 실행 취소·다시 실행 · Ctrl+S 저장";

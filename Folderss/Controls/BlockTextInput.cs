@@ -117,11 +117,17 @@ namespace Folderss.Controls
         /// <summary>지금 내용의 줄 안 Markdown.</summary>
         public string Markdown => _markdown ?? (_markdown = InlineMarkdown.Serialize(Runs));
 
-        /// <summary>내용을 줄 안 Markdown으로 바꾼다(TextChanged는 한 번).</summary>
-        public void SetMarkdown(string markdown)
+        /// <summary>
+        /// 내용을 줄 안 Markdown으로 바꾼다(TextChanged는 한 번). <paramref name="marks"/>는 줄 안 범위 속성 값(밑줄·글자 색·형광펜, <see cref="TextMarks"/>) —
+        /// 보이는 글자와 맞지 않으면 칠하지 않는다.
+        /// </summary>
+        public void SetMarkdown(string markdown, string marks = null)
         {
             markdown = markdown ?? string.Empty;
             var runs = InlineMarkdown.ParseForEditing(markdown);
+            List<TextMark> parsed;
+            if (marks != null && TextMarks.TryParse(marks, InlineMarkdown.ToPlain(runs), out parsed))
+                runs = TextMarks.ApplyToRuns(runs, parsed);
             Rebuild(runs);
             _markdown = markdown;
         }
