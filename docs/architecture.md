@@ -23,6 +23,7 @@ Folderss/
 │   ├── BlockImageLoader.cs         — 로컬·원격(http/https) 이미지 비동기 디코딩(화면 폭으로 줄임)·LRU 캐시·원본 크기 기억, 북마크 메타데이터 조회
 │   ├── BlockEditor.Media.cs        — 클립보드 이미지·복사한 파일 붙여넣기(`images/` 저장), 탐색기/폴더 패널 파일 드롭, 파일/북마크/페이지 블록 추가 대화상자(`BlockPageDialog`), 페이지 열기·만들기, 원본 크기 보기 창(`BlockImagePreviewWindow`), 순수 C# 수식 렌더러(`BlockMathRenderer`)
 │   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색"
+│   ├── BlockEditor.Find.cs         — 찾기·바꾸기 막대(Ctrl+F/H, F3), 제목 앵커 이동, 다시 읽은 뒤 스크롤 앵커 복원, 링크 Ctrl+클릭(#75)
 │   ├── ElementTree.cs              — 입력 이벤트 `OriginalSource`에서 조상 찾기(`Run` 등 ContentElement는 논리 부모로 건너감 — `VisualTreeHelper.GetParent` 예외 방지)
 │   └── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 ├── Viewers/
@@ -30,6 +31,7 @@ Folderss/
 │   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기
 │   ├── TextViewer.xaml/.cs         — 읽기 전용 텍스트 뷰어
 │   ├── BlockEditorViewer.cs        — Markdown 파일을 BlockEditor로 편집하는 뷰어 (`builtin:blocks`, 인코딩·줄바꿈 유지 저장, 이미지 기준 폴더)
+│   ├── BlockEditorViewer.External.cs — 블록 편집기 외부 변경 감시·반영(문서+사이드카, 자기 저장 무시, 앵커 유지), 링크 열기(#75)
 │   ├── ViewerTheme.cs              — 웹 뷰어(마크다운·텍스트)에 넘길 테마 색(JSON)·WebView 바탕색을 테마 XAML 색에서 만듦
 │   └── IFileViewer.cs              — 뷰어 인터페이스 + ViewerCapabilities/ExportFormat enum
 ├── Models/
@@ -84,6 +86,7 @@ Folderss/
 │   ├── BlockMarkdown.cs            — 블록 목록 ↔ Markdown 변환(CommonMark 목록 중첩, <details> 토글, > [!NOTE] 콜아웃, 원문 보존), 입력 단축 판별 (순수 로직)
 │   ├── BlockOperations.cs          — 블록 구조 연산: 하위 트리, 들여쓰기 규칙·정규화, 형제 단위 이동, 번호 표시, 접힘, 여러 열 정리·만들기·옮기기(`ColumnLayout`) (순수 로직)
 │   ├── BlockSidecar.cs             — Markdown 밖 블록 속성을 문서 옆 `문서.md.meta.json`에 저장·다시 붙이기(#78, 순수 로직)
+│   ├── BlockFind.cs                — 블록 편집기 찾기·바꾸기 매칭, 제목 슬러그·앵커, 다시 읽은 뒤 스크롤 앵커 대응, 링크 해석(#75, 순수 로직)
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
@@ -631,26 +634,51 @@ Folderss/
   TextBox를 만든 행(`HasEditors`)은 재사용 풀에 넣지 않는다. 종류가 바뀌어도 TextBox는 그대로 두고 모양만 바꾼다(입력 중 포커스·IME 조합 유지).
   표 행은 [셀 | 오른쪽 끝 열 추가 `+`] / [마지막 행에만 아래 행 추가 `+`] 영역이고, 버튼 자리는 늘 잡아 두고 행에 마우스를 올렸을 때만 보인다(레이아웃이 흔들리지 않게).
   마지막 행 여부(`_tableLast`)는 높이 기억의 조건에도 들어간다(`TableShapeAt`).
+- 표 조작(#75 "표", `BlockEditor.TableOps.cs` + 순수 로직 `Services/BlockTable`): 셀 오른쪽 클릭 메뉴(위·아래 행 삽입, 왼쪽·오른쪽 열 삽입, 행·열 삭제, 열 정렬, 머리글 행 켜기·끄기),
+  열 경계 끌기로 너비 조절(두 번 클릭은 자동), 셀 위쪽 손잡이로 열·첫 셀 왼쪽 손잡이로 행 끌어 옮기기. **표 전체 속성은 표의 첫 행 블록에 둔다**:
+  정렬 `TableAlign`(Markdown 구분 행), 열 너비 `colwidths`(px 쉼표 목록, 빈 값은 자동)·머리글 끄기 `noheader`(`true`, Markdown은 그대로 첫 행이 머리글)는 사이드카.
+  첫 행이 바뀌는 연산(첫 행 위 삽입·첫 행 삭제·행 이동)은 `BlockTable.TransferHeader`로 이 속성을 새 첫 행으로 옮기고, 열 삽입·삭제·이동은 셀·정렬·너비를 함께 옮긴다.
+  연산마다 `SyncRows` → `RecordChange` 한 번(실행 취소 한 단계). 너비 끌기 중에는 화면에 만든 그 표의 행만 다시 그리고 놓을 때 기록한다.
+  셀 손잡이는 셀에 처음 마우스를 올릴 때 만든다(행 추가 비용에 넣지 않음).
 - 이미지 `BlockImageLoader`: 파일 읽기·디코딩은 스레드 풀에서(화면 폭 × DPI로 `DecodePixelWidth`, 400px 단위), Freeze한 결과를 UI 스레드로. 최근 64개 LRU,
   원본 픽셀 크기를 기억해 행을 만들기 전 높이 추정에 쓴다. 클립보드 이미지 붙여넣기(`images/<문서이름>-<시각>.png`), 탐색기/폴더 패널 파일 드래그 앤 드롭(외부 폴더 이미지는 `BlockImageDropDialog`), 우측 핸들 폭 조절(`width`), 정렬(`align`), 원본 크기 보기(`BlockImagePreviewWindow`), 수동 원격 이미지 로드(`이번만 불러오기`, `RemoteContentPolicy`·`NetworkSettingsService` 인증서 검증)를 지원한다. 수식(`Math`, `$$...$$` 및 인라인 `$...$`)은 순수 C# WPF 수식 렌더러(`BlockMathRenderer`)로 그리며, 목차(`Toc`, `[TOC]`/`<!-- toc -->`), 파일 첨부(`File`, `[📎 이름](경로)`), 북마크(`Bookmark`, `[🔖 제목](URL)`), 토글 제목 1~3(`Toggle` + `heading`), 콜아웃 아이콘 선택기(`Callout` + `icon`)를 지원한다.
   페이지 링크(`Page`, `[📄 제목](경로.md)`, #77 Phase 2): 페이지 = `.md` 파일. 카드 제목을 누르면 `PageOpenRequested` → 뷰어 `IFileOpenRequester.FileOpenRequested`로 새 탭에서 연다(파일이 없으면 만들지 묻는다).
   `/페이지`의 `BlockPageDialog`는 하위 페이지(문서 옆 `문서이름/제목.md`, 제목 한 줄)를 새로 만들거나 기존 문서를 연결한다. 백링크·이동 경로는 #74. 파일·북마크·페이지는 `EditorBlock.IsLinkCard`로 같이 다룬다.
 - 키: `OnPreviewKeyDown` 한 곳에서 처리(Ctrl+S/Z/Y → 블록 선택 모드 → `/` 메뉴 → 표 셀(`HandleTableKey`) → 입력란). 한글 조합 중 Enter(`Key.ImeProcessed`)는 조합이 끝난 뒤
   블록을 나눈다(표 셀이면 행 추가). 자동 변환·`/` 감지는 `TextChanged` 시점의 커서 대신 `TextChange` 위치로 판단한다.
+- 선택·이동(#75, `BlockEditor.Selection.cs`·`BlockEditor.Panel.Selection.cs`, 계산은 WPF 없는 `BlockSelection` — `BlockSelectionTests`): 블록 선택은 기존과 같이
+  연속 범위(`_selAnchor`~`_selActive` + 자식) 하나다. 빈 여백 누르기(`Panel_MouseLeftButtonDown`)는 `BeginMarquee`로 패널이 마우스를 잡고, 4px 넘게 끌면 내용 y 구간에 걸친 블록을
+  선택(`SpanRange`, 열 묶음은 통째로, 사각형은 패널 `AdornerLayer`의 `MarqueeAdorner`), 끌지 않고 떼면 예전 클릭 동작(`ClickAt`). 글자를 끄는 중(마우스를 TextBox가 잡음) 행 밖
+  다른 블록으로 넘어가면 `PreviewMouseMove`에서 캡처를 패널로 옮기고 블록 선택으로 바꾼다. 위치는 높이 누적(`_tops`)으로만 찾아 행을 새로 만들지 않고, 끄는 동안 선택 표시는
+  화면에 있는 행만 바꾼다. 가장자리 자동 스크롤은 40ms 타이머. `Shift+클릭`은 편집 중 블록(또는 선택 시작)부터 누른 블록까지(같은 블록 안이면 TextBox 글자 선택).
+  선택한 블록의 손잡이를 끌면 선택 전체를 `MoveRangeTo`로 한 번에 옮겨 실행 취소 한 단계(가장 얕은 블록을 놓을 자리 수준에 맞춤), 손잡이 메뉴도 선택 전체에 적용.
+  `Ctrl+Home/End`·`PageUp/Down`은 `OnPreviewKeyDown`에서 블록 선택 처리보다 먼저(`HandleNavigationKey`), 편집 중이면 그 블록에 커서, 선택 중이면 선택을 옮기고 Shift는 넓힌다.
 - 실행 취소(`HistoryEntry`): 마지막 기록 시점 문서의 동결 사본(`_committed`)을 두고, 바뀐 구간(앞뒤 같은 사본 제외)의 이전 블록만 기록한다. 글자 입력은 그 블록 하나만
   바꾸므로 문서를 훑지 않고, 같은 블록 연속 입력은 1.5초 안이면 한 단계로 묶는다. 저장(`MarkSaved`)하면 묶음을 끊어 버전 번호로 미수정 여부를 판단한다.
   되돌린 블록은 Id가 같아 화면에 있던 행을 그대로 다시 쓴다. 토글 접기·펴기는 저장할 변경으로 세지 않는다.
 - 측정(약 1만 1천 줄, 블록 9,862개, 표 행 8,301개, 이미지 60개, Debug): 열기 0.13~0.17초, 글자 입력 약 15ms, 표 Enter 행 추가 50~65ms(편집기 키 처리 5~6ms, 나머지는
   새 TextBox 포커스 후 WPF 그리기·입력기 처리), 실행 취소 약 25ms, 한 화면씩 이동 약 30ms, 큰 폭 점프 30~70ms, 구조 재계산·기록 비교·위치 계산 각 1~2ms.
   그 밖에 처음 겪은 성능 문제: 세로 스크롤바 `Auto`의 이중 측정(→ `Visible`), UI Automation 전체 트리 갱신(→ `OnCreateAutomationPeer`로 화면에 보이는 블록만).
-- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`)은 `EditorBlock.Attributes`에 두고
+- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`, 표 첫 행의 `colwidths`·`noheader`)은 `EditorBlock.Attributes`에 두고
   문서 옆 `문서.md.meta.json`(`BlockSidecar`)에 저장한다 — Markdown 파일은 순수하게 남는다. 속성은 "Markdown에 쓰인 블록 순번 + (종류·본문) 해시 + 앞 블록 해시"로
   붙인다: 문서 전체 해시가 같으면 순번으로, 다른 도구에서 고쳤으면 같은 내용의 블록을 순서대로 찾아(같은 내용이 여럿이면 앞 블록까지 맞는 쪽) 붙이고,
   본문이 바뀐 블록의 속성은 버리고 개수를 상태 줄에 알린다. 속성이 없으면 사이드카를 지우고, 읽지 못한 사이드카는 덮어쓰기 전에 `.bak`로 보관한다.
   속성은 `SameContent`·`Clone`에 들어가 실행 취소·수정 표시와 함께 움직인다. 색은 이름만 저장하고 실제 색은 테마 밝기로 고른다(`RefreshTheme`).
   남은 일: Folderss 파일 작업(이름 바꾸기·이동·복사·삭제·실행 취소 기록)에서 사이드카를 함께 처리(#78).
 - 뷰어: 인코딩은 `MarkdownViewer.DetectEncoding`(BOM·CP949 판별)을 함께 쓰고, 저장은 읽은 인코딩·CRLF/LF로 `SettingsFile.WriteAllText`(임시 파일 후 교체).
-  `BaseDirectory`에 문서 폴더를 넘겨 이미지 상대 경로를 푼다. 32MB 넘는 파일만 열지 않는다. `↻ 다시 읽기` 때 미저장 변경이 있으면 확인한다. 외부 변경 감시·문서 내 검색은 아직 없다.
+  `BaseDirectory`에 문서 폴더를 넘겨 이미지 상대 경로를 푼다. 32MB 넘는 파일만 열지 않는다. `↻ 다시 읽기` 때 미저장 변경이 있으면 확인한다.
+- 찾기·바꾸기(#75, `BlockEditor.Find.cs`, 순수 로직 `Services/BlockFind`): 가상화라 화면이 아니라 모델(`_blocks`)에서 찾는다(구분선·목차 제외, 표 행은 셀 경계를 넘는 일치 제외).
+  결과 목록은 (검색어·대소문자·문서 버전 `_version`)이 같으면 다시 쓰고, 찾기 막대가 열린 동안은 400ms 타이머가 입력이 300ms 멈췄을 때만 다시 센다 — 글자 입력 경로에는 비용이 없다.
+  지금 결과만 그 행의 입력란 선택으로 강조한다(`EnsureRealized` → 표 행은 `CellOffset`으로 셀 입력란, `IsInactiveSelectionHighlightEnabled`로 찾기 입력란에 포커스가 있어도 보임).
+  다른 결과는 칠하지 않는다(그 행들에 TextBox를 만들지 않게). 접힌 토글 안 결과는 감싼 토글을 편다(보기 상태라 저장할 변경 아님).
+  바꾸기는 블록 모델을 고친 뒤 `SyncRows` + `RecordChange()` 한 번 — 모두 바꾸기도 바뀐 첫·끝 블록 구간만 한 단계로 기록된다. 표 행 바꿀 글자의 탭·줄바꿈은 공백으로.
+  키는 `OnPreviewKeyDown` 맨 앞 `HandleFindKey`(Ctrl+F/H, F3, 찾기 막대 안 Enter·Esc). 찾기 막대는 `InitializeFind`가 스크롤 영역 위에 겹친 Grid로 감싸 넣는다. 전역 `ShowSearch`(Ctrl+F)는 `BlockEditorViewer.HandleShortcut`이 가로챈다.
+- 링크 Ctrl+클릭: `PreviewMouseLeftButtonDown`에서 `ElementTree.FindAncestor<TextBox>`로 행 입력란을 찾아 글자 위치의 링크(`BlockFind.LinkAt`: `[글자](주소)`·`<url>`·맨 URL)를 `LinkOpenRequested`로 알린다.
+  뷰어(`BlockEditorViewer.OpenLink`)가 Markdown 뷰어와 같은 규칙으로 연다: `#제목`은 `ScrollToHeading`(GitHub 앵커 규칙 `BlockFind.Slugify`, 중복 `-1`), 로컬 `.md#제목`은 `MarkdownViewer.PendingAnchors`(두 뷰어가 공유)에 넣고 `FileOpenRequested`,
+  실행 파일은 확인 뒤 실행, 그 밖의 로컬 파일은 뷰어 탭, 폴더는 탐색기, http/https/mailto는 셸. 열린·활성화된 블록 편집기는 `PendingAnchors`를 꺼내 그 제목으로 간다.
+- 외부 변경(`BlockEditorViewer.External.cs`): `FileSystemWatcher` 하나로 문서와 사이드카 두 파일을 감시(`Filters`), 400ms 디바운스, 비활성 탭은 `SetActive(true)` 때. 디스크 Markdown·사이드카가
+  마지막으로 읽거나 저장한 글자(`_diskText`·`_diskSidecar`)와 같으면 무시 — 자기 저장(`Save`가 쓴 직후 갱신)도 이렇게 걸러진다. 미저장 변경이 없으면 바로 다시 읽고, 있으면 묻는다(기본 아니요, 거부한 같은 내용은 다시 묻지 않음, owner 지정 MessageBox, 확인 뒤 최신 내용 다시 읽기).
+  다시 읽을 때 화면 맨 위 블록(`BlockPanel.GetTopAnchor`)의 복사본·위치·오프셋을 잡아 두었다가 새 문서에서 종류·본문이 같은 가장 가까운 블록(`BlockFind.MapAnchor`)으로 `ScrollToAnchor` — 새 블록은 Id가 달라 앵커를 내용으로 다시 찾는다.
 
 ### 뷰어 미저장 표시 · 닫기 확인
 - `ViewerHost.IsModified`가 뷰어의 `ModifiedChanged`를 따라간다. `MainWindow.SetDocumentTitle`은 잠금 접두사(🔒)와 별개로

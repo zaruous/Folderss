@@ -99,6 +99,15 @@ namespace Folderss.Models
         /// <summary>열 묶음 첫 블록에만 두는 열 너비 비율(예: <c>1:2</c>). 없으면 같은 너비.</summary>
         public const string AttrColumnRatio = "colratio";
 
+        /// <summary>
+        /// 표 열 너비(px, 열마다 쉼표 구분, 빈 값은 자동 — 예: <c>120,,200</c>). 표의 첫 행(머리글, <see cref="TableAlign"/>과 같은 블록)에만 둔다.
+        /// 규칙은 <c>BlockTable</c>.
+        /// </summary>
+        public const string AttrColWidths = "colwidths";
+
+        /// <summary>표 머리글 행 표시 끄기(<c>true</c>). Markdown 표는 머리글이 필수라 첫 행은 그대로 머리글로 저장하고 화면에서만 일반 행처럼 그린다. 표의 첫 행에만 둔다.</summary>
+        public const string AttrNoHeader = "noheader";
+
         /// <summary>토글 제목 단계(1~3). 일반 토글이나 다른 블록이면 0.</summary>
         public int GetToggleHeadingLevel()
         {

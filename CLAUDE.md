@@ -19,12 +19,12 @@ dotnet build .\Folderss.sln -c Debug
 
 ### 작업 전 반드시 확인
 - `docs/architecture.md` — 연관 파일 목록과 확장 포인트
-- `docs/dev-log.md` — 최근 변경 이력과 결정 사항
+- `docs/items/` — 관련 아이템 문서(최근 변경·결정 사항·검증 결과)
 
 ### 작업 후 반드시 수행
 1. 빌드 성공 확인 (`Exit: 0`)
 2. 아래 체크리스트 해당 항목 통과
-3. `docs/dev-log.md`에 작업 로그 추가
+3. `docs/items/<작업>.md`에 작업 기록(구현·결정·검증) 추가
 4. README.md 관련 섹션 업데이트 (기능 추가/변경 시)
 
 ---
@@ -148,19 +148,17 @@ WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍�
 ```
 docs/
 ├── architecture.md   — 파일 구조, 서비스 역할, 확장 포인트 상세
-├── todo/TODO.md      — 미완료 개발 요청 목록
-└── done/DONE.md      — 완료된 작업 아카이브 (버전별)
+├── items/<작업>.md   — 작업 아이템별 기록(상태·구현·결정·검증). 현재 진행 상태의 기준
+├── project-todo.md   — GitHub Project에서 내려받은 할 일 목록
+└── done/DONE.md      — 릴리스(태그)별 완료 이력 요약
 ```
 
 ### 개발 요청 처리 워크플로
 
-1. **요청 접수 시** → `docs/todo/TODO.md`에 항목 추가
-   ```markdown
-   - [ ] <작업 제목> — <간략한 설명>
-   ```
+1. **요청 접수·착수 시** → `docs/items/<작업>.md` 작성(GitHub 이슈가 있으면 번호 기재)
 
-2. **작업 완료 시** → `docs/todo/TODO.md`에서 `[x]`로 체크 후 `docs/done/DONE.md`로 이동
-   - DONE.md는 버전 섹션(`## vX.Y.Z`) 아래에 기술 형식으로 기록
+2. **작업 완료 시** → item 문서에 구현·결정·검증 결과를 기록하고 상태를 `Ready for Verification`으로 둔다
+   - 릴리스(태그) 시 `docs/done/DONE.md`의 버전 섹션(`## vX.Y.Z`)에 요약을 옮긴다
    - 주요 결정이나 주의사항이 있으면 한두 줄 추가
 
 3. **작업 중 놓친 연관 파일이 있었다면** → `CLAUDE.md` 체크리스트 해당 항목에 추가

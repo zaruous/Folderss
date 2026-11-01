@@ -36,7 +36,7 @@ namespace Folderss.Controls
         /// 실제 위치·폭은 열마다 쌓은 <see cref="_rowTop"/>·<see cref="_rowX"/>·<see cref="_rowW"/>에 둔다. 묶음 높이는 가장 긴 열.</item>
         /// </list>
         /// </summary>
-        private sealed class BlockPanel : Panel, IScrollInfo
+        private sealed partial class BlockPanel : Panel, IScrollInfo
         {
             private const double TopMargin = 28;
             private const double BottomPad = 160;
@@ -544,6 +544,29 @@ namespace Folderss.Controls
                     SetVerticalOffset(Math.Min(top - 24, bottom - _viewport.Height + 24));
             }
 
+            /// <summary>화면 맨 위에 걸친 블록 위치와 그 블록 위쪽에서 화면 위쪽까지의 거리(외부 변경으로 다시 읽을 때 보던 곳 유지). 블록이 없으면 -1.</summary>
+            public int GetTopAnchor(out double delta)
+            {
+                EnsureTops();
+                delta = 0;
+                var index = IndexAtY(_offset - TopMargin);
+                if (index < 0)
+                    return -1;
+                delta = _offset - TopMargin - _tops[index];
+                return index;
+            }
+
+            /// <summary>블록 <paramref name="index"/>의 위쪽에서 <paramref name="delta"/>만큼 내려간 곳을 화면 맨 위로(다음 측정 때 실제 높이로 위치를 정함).</summary>
+            public void ScrollToAnchor(int index, double delta)
+            {
+                if (index < 0 || index >= _owner._blocks.Count)
+                    return;
+                _anchorId = _owner._blocks[index].Id;
+                _anchorDelta = delta;
+                InvalidateMeasure();
+                ScrollOwner?.InvalidateScrollInfo();
+            }
+
             // ── 레이아웃 ───────────────────────────────────────────────────
 
             protected override Size MeasureOverride(Size availableSize)
@@ -725,10 +748,16 @@ namespace Folderss.Controls
             private void Panel_MouseLeftButtonDown(object sender, MouseButtonEventArgs e)
             {
                 // 행 밖(좌우 여백·문서 아래·열 사이)을 누른 경우만 온다. 행 안은 행이 처리한다.
+                // 끌면 사각 영역 선택, 끌지 않고 떼면 ClickAt(BlockEditor.Selection.cs).
                 e.Handled = true;
+                _owner.BeginMarquee(e.GetPosition(this));
+            }
+
+            /// <summary>빈 여백을 끌지 않고 눌렀다 뗐을 때: 그 자리 블록에 커서(문서 아래면 끝 블록으로).</summary>
+            public void ClickAt(Point position)
+            {
                 EnsureTops();
                 var n = _owner._blocks.Count;
-                var position = e.GetPosition(this);
                 var contentY = position.Y + _offset - TopMargin;
                 if (n == 0 || contentY >= _tops[n])
                 {

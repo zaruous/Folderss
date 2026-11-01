@@ -108,9 +108,36 @@ FolderBrowser에서 `ApplicationCommands` CommandBinding으로 등록:
 Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)는 WebView2 내에서 자체 처리.
 단, `Ctrl+F`는 전역 `ShowSearch`와 겹치므로 `HandleShortcut`에서 가로채 `app.openFind()`로 전달한다 (MarkdownViewer와 동일한 패턴).
 
+### BlockEditorViewer (블록 편집기, `builtin:blocks`)
+
+편집 단축키 전체는 README 블록 편집기 절과 뷰어 툴바 `단축키 ⓘ` 참고. 아래는 찾기·링크(#75).
+
+| 키 | 동작 | 비고 |
+|----|------|------|
+| `Ctrl+F` | 찾기 막대 열기 (선택한 한 줄 글자를 검색어로) | KeyBindingService `ShowSearch` 매핑 사용(`BlockEditorViewer.HandleShortcut`). 매핑을 바꿔도 편집기 안 `Ctrl+F`는 `BlockEditor.HandleFindKey`가 연다 |
+| `Ctrl+H` | 찾기 + 바꾸기 줄 열기 | `BlockEditor.Find.cs` 하드코딩 |
+| `F3` / `Shift+F3` | 다음 / 이전 결과 (찾기 막대가 닫혀 있어도) | 〃 |
+| `Enter` / `Shift+Enter` | 찾기 입력란: 다음 / 이전 | 〃 |
+| `Enter` / `Ctrl+Alt+Enter` | 바꾸기 입력란: 지금 결과 바꾸기 / 모두 바꾸기(실행 취소 한 단계) | 〃 |
+| `Esc` | 찾기 막대 닫기, 지금 결과 입력란으로 커서 | 찾기 막대에 포커스가 있을 때만(편집기 `Esc` 블록 선택과 겹치지 않음) |
+| `Ctrl+클릭` | 본문 링크 열기(`#제목`·`파일.md#제목` 이동, 실행 파일은 확인) | `BlockEditor.OnLinkPreviewMouseDown` → `BlockEditorViewer.OpenLink` |
+
+찾기 막대 입력란에서 누른 키는 `Ctrl+S`(저장)를 빼고 편집기 키 처리(`Ctrl+Z` 실행 취소 등)로 넘기지 않는다 — 입력란 자체의 글자 되돌리기가 동작한다.
+
 ### TextViewer
 
 자체 키보드 핸들러 없음.
+
+### BlockEditor (블록 편집기)
+
+블록 편집기 키는 `Controls/BlockEditor.cs` `OnPreviewKeyDown` 한 곳에서 하드코딩으로 처리한다(전체 목록은 README 블록 편집기 절). 아래는 #75 "선택·이동"에서 추가한 키.
+
+| 키 | 동작 | 처리 위치 |
+|----|------|------|
+| `Ctrl+Home` / `Ctrl+End` | 문서 첫·마지막 블록으로(편집 중이면 커서, 블록 선택 중이면 선택 이동) | `BlockEditor.Selection.cs` `HandleNavigationKey` |
+| `PageUp` / `PageDown` | 한 화면(뷰포트 90%) 떨어진 블록으로, 화면도 같이 넘김 | 같음 |
+| `Shift+` 위 키 | 지금 블록(선택 시작)부터 블록 선택 확장 | 같음 |
+| `Shift+클릭` | 지금 블록부터 누른 블록까지 블록 선택(같은 블록 안이면 글자 선택) | `OnShiftClickPreview` |
 
 ---
 
