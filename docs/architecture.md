@@ -694,7 +694,7 @@ Folderss/
   뷰어(`BlockEditorViewer.OpenLink`)가 Markdown 뷰어와 같은 규칙으로 연다: `#제목`은 `ScrollToHeading`(GitHub 앵커 규칙 `BlockFind.Slugify`, 중복 `-1`), 로컬 `.md#제목`은 `MarkdownViewer.PendingAnchors`(두 뷰어가 공유)에 넣고 `FileOpenRequested`,
   실행 파일은 확인 뒤 실행, 그 밖의 로컬 파일은 뷰어 탭, 폴더는 탐색기, http/https/mailto는 셸. 열린·활성화된 블록 편집기는 `PendingAnchors`를 꺼내 그 제목으로 간다.
 - 외부 변경(`BlockEditorViewer.External.cs`): `FileSystemWatcher` 하나로 문서와 사이드카 두 파일을 감시(`Filters`), 400ms 디바운스, 비활성 탭은 `SetActive(true)` 때. 디스크 Markdown·사이드카가
-  마지막으로 읽거나 저장한 글자(`_diskText`·`_diskSidecar`)와 같으면 무시 — 자기 저장(`Save`가 쓴 직후 갱신)도 이렇게 걸러진다. 미저장 변경이 없으면 바로 다시 읽고, 있으면 묻는다(기본 아니요, 거부한 같은 내용은 다시 묻지 않음, owner 지정 MessageBox, 확인 뒤 최신 내용 다시 읽기).
+  마지막으로 읽거나 저장한 글자(`_diskText`·`_diskSidecar`)와 같으면 무시 — 자기 저장(`Save`가 쓴 직후 갱신)도 이렇게 걸러진다. Markdown 뷰어처럼 항상 묻는다 — 미저장 변경이 없으면 질문·기본 예, 있으면 경고·기본 아니요(거부한 같은 내용은 다시 묻지 않음, owner 지정 MessageBox, 확인 뒤 최신 내용 다시 읽기).
   다시 읽을 때 화면 맨 위 블록(`BlockPanel.GetTopAnchor`)의 복사본·위치·오프셋을 잡아 두었다가 새 문서에서 종류·본문이 같은 가장 가까운 블록(`BlockFind.MapAnchor`)으로 `ScrollToAnchor` — 새 블록은 Id가 달라 앵커를 내용으로 다시 찾는다.
 
 ### 블록 편집 ↔ 미리보기 전환 (ViewerHost.ViewSwitch / MarkdownViewSwitch, #81)

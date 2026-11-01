@@ -67,12 +67,12 @@
 ## 검증
 
 - [x] `dotnet build .\Folderss.sln -c Debug` 오류 0, `dotnet build tests/Folderss.SearchTests` 오류 0
-- [ ] 단위 테스트 `dotnet test tests/Folderss.SearchTests --filter MarkdownViewSwitchTests` (병합 후 일괄)
+- [x] 단위 테스트 `dotnet test tests/Folderss.SearchTests --filter MarkdownViewSwitchTests` — 병합 후 전체 735개 중 통과 731·건너뜀 4·실패 0
   - 뷰어 고르기: 매핑을 따름(동작 변화 없음), 기억 > 기본 보기 > 매핑, 다른 매핑(Monaco)·다른 확장자는 그대로
   - 제목 id: 가장 가까운 위 제목·중복 `-1`·서식 제거, `FindHeading`과 왕복
   - 줄 번호: 정리된 문서에서 블록별 시작 줄, `BlockAtLine`(빈 줄·끝 넘음·빈 문서), 큰 문서(제목·여러 줄 문단·코드) 왕복, `ToBlock`/`FromBlock` 우선순위
   - 기억: 파일 없음 기본값, 저장·다시 읽기 왕복(대소문자 무시 덮어쓰기), 최근 200개(다시 쓰면 남음), 깨진 JSON·모르는 값 무시
-- [ ] WPF 하네스(병합 후 일괄) — 검사 목록:
+- [x] WPF 하네스(병합 후 일괄, 결과는 아래 "병합 후 검증 결과") — 검사 목록:
   1. `.md`(매핑 Markdown) 탭: 툴바에 `블록 편집`·`미리보기` 표시, `미리보기`가 눌린 상태. `.json` 탭·`.md`를 Monaco로 매핑한 탭에는 버튼 없음
   2. `블록 편집` 클릭 → `CurrentView == "blocks"`, 콘텐츠가 `BlockEditorViewer`, 이전 `MarkdownViewer`가 `Dispose`됨(WebView2 `IsDisposed`/`CoreWebView2` 접근 시 예외, 브라우저 자식 프로세스 수가 늘지 않음 — 10번 왕복 후 비교)
   3. 같은 탭(`LayoutDocument` 참조 동일), ContentId 그대로, 잠근 탭이면 전환 후에도 `CanClose == false`·제목 `🔒 ` 접두사 유지, 탭 순서·`+ 새 패널` 끝 유지
@@ -89,6 +89,37 @@
   14. 성능: 1만 줄 문서 블록 → 미리보기 전환 위치 계산(`FromBlock`) 시간, 미리보기 → 블록(`ToBlock` 줄 번호 경로, Serialize 이분 탐색) 시간 기록(목표: 각 100ms 이하). 블록 편집기 글자 입력 중앙 ≤ 20ms 유지(입력 경로는 바뀌지 않음)
 - 사람이 직접 볼 것: 토글 버튼 모양(밝은·어두운 테마), 확인창 문구, 미리보기에서 이미지·Mermaid가 늦게 그려질 때 위치가 밀리는 정도.
 
+### 병합 후 검증 결과 (2026-11-01)
+
+스크래치 WPF 하네스(화면 밖 창 -20000, InputManager로 마우스·키 주입, 커서·키 상태는 하네스 프로세스 안에서만 흉내, 확인창은 하네스 UI 스레드의 메시지 상자만 찾아 답하고 아이콘(`STM_GETICON`)·기본 버튼(`DM_GETDEFID`)을 기록).
+MainWindow 전체는 띄우지 않았다 — 실제 `%LOCALAPPDATA%\Folderss`의 세션·레이아웃·잠금 파일을 읽고 쓰기 때문. 대신 AvalonDock `DockingManager`에 `[A.md, B.md, + 새 패널]` 문서 탭을 만들어 `ViewerHost`를 넣고,
+MainWindow의 탭 제목·잠금 규칙(`SetDocumentTitle`·`FormatDocumentTitle`·`GetPanelLockKey`·`IsPanelLocked`)은 리플렉션으로 같은 코드를 불렀다. 잠금은 `PanelLockService` 메모리 집합에만 넣었다(파일 저장 없음).
+`markdown-view.json`·`viewer-config.json`은 하네스 폴더 경로로 바꿨고(`MarkdownViewSettings._shared`·`ViewerConfigService(path)`), WebView2 사용자 데이터 폴더도 환경 변수 `WEBVIEW2_USER_DATA_FOLDER`로 하네스 전용.
+**WebView2(Markdown 뷰어)는 화면 밖 창에서도 초기화·문서 열기·스크립트 실행이 됨**(위치 검사는 `app.getViewPosition()`으로 직접 확인). 시험 문서: 정리된 형식 8,276줄·블록 6,282개(제목 330여 개, 중복 `## 설치`, 접힌 토글 안 `###` 제목).
+결과 53개 **모두 통과**, 기능 수정 없음.
+
+| # | 검사 | 결과 |
+|---|---|---|
+| 1 | `.md`(매핑 Markdown) 탭: 버튼 표시·`미리보기` 눌림·`CurrentView` preview / `.json` 탭·`.md`를 Monaco로 매핑한 탭은 버튼 없음 | 통과 |
+| 2 | `블록 편집` 클릭 → blocks·`BlockEditorViewer`, 이전 `MarkdownViewer._disposed`, 해제된 WebView2의 `CoreWebView2` 접근 → `ObjectDisposedException` / 10번 왕복 모두 전환·해제, **WebView2 자식 프로세스 6개 → 10번 왕복 뒤 6개**(늘지 않음) | 통과 |
+| 3 | 같은 `LayoutDocument`·같은 `ViewerHost`, ContentId 그대로, 잠근 탭 `CanClose=false`·제목 `🔒 A.md` 유지, 탭 순서 `A, B, + 새 패널` | 통과 |
+| 4 | 블록 편집기 입력 → ` *` / `미리보기` → "보기 전환" 확인창(Question·기본 취소): 취소 → 블록 편집기·` *`·파일 그대로·버튼 상태 유지, 확인 → 디스크 = `GetMarkdown`·미리보기·` *` 사라짐(🔒 유지) | 통과 |
+| 5 | Markdown 뷰어 원문 편집에서 수정(` *`) → `블록 편집` → 확인 → 디스크 = `app.currentContent()`·블록 편집기가 그 내용 / 읽기 전용 파일 → "저장 오류" 창·전환 안 됨·` *` 유지·버튼 다시 사용 가능. 블록 편집기 쪽 저장 실패도 같음 | 통과 |
+| 6 | 블록 편집기 맨 위 = `## 섹션 200` 아래 3번째 블록 → 미리보기 `heading` = `섹션-200` / 두 번째 `## 설치` 아래 → `설치-1` | 통과 |
+| 7 | 미리보기를 `섹션-300`으로 → 블록 편집기 맨 위 = 그 제목 블록 / 미리보기에서 펼친 토글 안 제목 → 블록 편집기 토글 펴짐·그 제목이 맨 위·수정 아님 / 닫힌 토글 안 제목이 맨 위 제목으로 잘못 잡히지 않음 | 통과 |
+| 8 | 원문 편집 500번째 줄(`line` 499) → 블록 편집기 맨 위 블록 줄 499 → 다시 `미리보기`(원문 편집 모드 기억) → 맨 위 줄 498 (각 ±3 안) | 통과 |
+| 9 | A를 블록 편집으로 바꾸고 탭 닫기(`ViewerHost.Dispose`) → 다시 열면 블록 편집기, B는 매핑대로, `markdown-view.json`에 A만 | 통과 |
+| 10 | 재시작 흉내(설정 파일을 새로 읽고 새 탭에서 `OpenFile` — `ResolveDockContent`와 같은 경로): A 블록 편집기·B Markdown 뷰어, A 잠금(같은 잠금 키) 유지 | 통과 |
+| 11 | 기본 보기 `블록 편집` → 기억 없는 C는 블록 편집기, A·B는 기억대로 / `매핑을 따름` → C는 미리보기 / 읽기 전용 `markdown-view.json` → `SettingsWindow.TrySave` 실패 목록에 `.md 기본 보기 (markdown-view.json)` / 설정 창 콤보 3개·선택값 = 저장값 | 통과 |
+| 12 | 미리보기 → 블록 연타(입력 사이 처리 없이 두 번) → 진행 중 버튼 비활성, 새 뷰어 1번만 / 확인창이 떠 있는 동안 탭 닫기(`Dispose`)·같은 호스트가 다른 파일 열기 → 예외 없음·전환 안 함 | 통과 |
+| 13 | 블록 편집으로 바꾼 직후 외부 수정 → 새 블록 편집기만 물음(1번)·반영, 미리보기로 바꾼 뒤 외부 수정 → Markdown 뷰어만 물음(1번) / `A.md#섹션-150` 대기 앵커로 열면 블록 편집기에서 그 제목이 맨 위, `B.md#b-제목`은 미리보기가 소비 | 통과 |
+| 14 | 성능(아래) | 통과 |
+
+- 성능(Debug, 6,282블록): `FromBlock` 중간 블록 중앙 2.7ms·끝 블록 5.7ms, `ToBlock` 제목 경로 0.1ms, **`ToBlock` 줄 번호 경로(끝 근처) 중앙 65~73ms(최대 106ms)** — 목표 100ms 안이지만 이분 탐색마다 앞부분을 두 번 `Serialize`하므로
+  문서 크기에 비례해 늘어난다(더 큰 문서·느린 PC에서 100ms를 넘을 수 있음 — 한 번 `Serialize`로 블록별 시작 줄을 모두 구하는 방식이 후보). 뷰어 안 블록 편집기 문단 글자 입력 중앙 3.1ms(단독 실행. 같은 날 다른 프로그램 부하가 생긴 뒤 재측정에서는 이 경로와 무관한 기준 측정까지 모두 약 16ms로 올라감 — `block-editor-front-matter.md` 검증 9의 A/B 참고, 둘 다 20ms 안).
+- 관찰(설계 판단, 고치지 않음): 확인창이 떠 있는 동안 탭이 닫혀도 `확인`을 누르면 저장은 된다(전환만 안 함). 사용자가 "저장 후 전환"을 고른 것이라 저장 자체는 의도에 맞다고 보고 그대로 둠.
+- 하네스로 확인하지 못한 것(사람이 볼 것): 실제 MainWindow에서 패널 잠금 파일(`panel-locks.xml`)·`session.xml`을 거친 재시작 복원, 토글 버튼 모양(밝은·어두운 테마), 실제 마우스로 누를 때의 버튼 반응, 확인창이 앱 앞에 뜨는지,
+  미리보기 이미지·Mermaid가 늦게 그려질 때 위치가 밀리는 정도.
 ## 3. 기본 뷰어 전환 검토 — 판단 자료 (구현 안 함)
 
 이번 작업으로 `.md` 기본 매핑을 바꾸지 않고도 사용자가 고를 수 있게 됐다: 설정 ".md 탭을 처음 열 때 = 블록 편집"으로 사실상 기본 뷰어를 블록 편집기로 쓸 수 있고, 탭마다 `미리보기`로 언제든 Markdown 뷰어를 쓴다.
@@ -126,3 +157,4 @@
 ## 변경 이력
 
 - 2026-11-01: 구현, 앱·테스트 프로젝트 빌드 확인(오류 0). 단위 테스트·하네스 실행은 병합 후 일괄 진행.
+- 2026-11-01: 병합 후 하네스 53개·단위 테스트 735개(실패 0) 통과, 기능 수정 없음 (Ready for Verification, 사용자 확인 대기)
