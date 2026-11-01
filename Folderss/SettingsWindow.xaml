@@ -187,9 +187,6 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
-                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0"
@@ -209,137 +206,142 @@
                         </TextBlock.Style>
                     </TextBlock>
 
-                    <!-- Monaco 언어 연결(#82): 확장자·파일 이름·패턴 → Monaco 언어 id. 맨 아래 줄(Grid.Row 5)에 보인다.
-                         우선순위: 탭에서 고른 파일별 언어 → 이 표(위에서부터 첫 일치) → 예외 사전 → Monaco 등록 정보 → plaintext. monaco-language.json -->
-                    <StackPanel Grid.Row="5" Margin="0,16,0,0">
-                        <TextBlock Text="Monaco 언어 연결" FontWeight="SemiBold"/>
-                        <TextBlock Text="Monaco 뷰어로 여는 파일의 구문 강조 언어를 확장자(.inc)·파일 이름(Makefile)·패턴(Dockerfile.*)으로 정합니다. 위에서부터 처음 맞는 줄을 씁니다. 탭 툴바에서 파일마다 고른 언어가 이 표보다 먼저입니다."
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Margin="0,2,0,6"
-                                   Foreground="{DynamicResource SecondaryText}"/>
-                        <ListView x:Name="MonacoLanguageMappingList"
-                                  Height="120"
-                                  SelectionMode="Single"
-                                  BorderThickness="1"
-                                  BorderBrush="{DynamicResource BorderBrush}">
-                            <ListView.View>
-                                <GridView>
-                                    <GridViewColumn Header="확장자·파일 이름" Width="150" DisplayMemberBinding="{Binding Pattern}"/>
-                                    <GridViewColumn Header="언어" Width="230">
-                                        <GridViewColumn.CellTemplate>
-                                            <DataTemplate>
-                                                <ComboBox ItemsSource="{Binding DataContext.MonacoLanguageOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                          SelectedValue="{Binding Language, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                          SelectedValuePath="Key"
-                                                          DisplayMemberPath="DisplayName"
-                                                          MinWidth="200"
-                                                          Margin="0"
-                                                          Padding="7,4"/>
-                                            </DataTemplate>
-                                        </GridViewColumn.CellTemplate>
-                                    </GridViewColumn>
-                                    <GridViewColumn Header="" Width="64">
-                                        <GridViewColumn.CellTemplate>
-                                            <DataTemplate>
-                                                <Button Content="삭제"
-                                                        Click="RemoveMonacoLanguage_Click"
-                                                        Padding="8,3"
-                                                        Margin="0"/>
-                                            </DataTemplate>
-                                        </GridViewColumn.CellTemplate>
-                                    </GridViewColumn>
-                                </GridView>
-                            </ListView.View>
-                        </ListView>
-                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
-                            <TextBox x:Name="NewMonacoPatternBox" Width="120" Margin="0,0,8,0"
-                                     VerticalContentAlignment="Center"
-                                     BorderBrush="{DynamicResource BorderBrush}"
-                                     Background="{DynamicResource ControlBackground}"
-                                     Foreground="{DynamicResource PrimaryText}"
-                                     ToolTip="확장자(.inc), 파일 이름(Makefile) 또는 * ? 패턴(Dockerfile.*)"
-                                     Text=".ext"/>
-                            <ComboBox x:Name="NewMonacoLanguageCombo"
-                                      Width="220"
-                                      Margin="0,0,8,0"
-                                      IsTextSearchEnabled="True"
-                                      SelectedValuePath="Key"
-                                      DisplayMemberPath="DisplayName"/>
-                            <Button Content="추가" Click="AddMonacoLanguage_Click" Padding="12,4"/>
+                    <!-- 항목이 늘어 창 높이에 따라 매핑 표가 눌리지 않게 제목 아래 전체를 스크롤한다. 표는 고정 높이. -->
+                    <ScrollViewer Grid.Row="2" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+                        <StackPanel Margin="0,0,4,0">
+                            <ListView x:Name="ViewerMappingList"
+                                      Height="240"
+                                      SelectionMode="Single"
+                                      BorderThickness="1"
+                                      BorderBrush="{DynamicResource BorderBrush}">
+                                <ListView.View>
+                                    <GridView>
+                                        <GridViewColumn Header="확장자" Width="90" DisplayMemberBinding="{Binding Extension}"/>
+                                        <GridViewColumn Header="기본값" Width="120" DisplayMemberBinding="{Binding DefaultViewerDisplayName}"/>
+                                        <GridViewColumn Header="뷰어" Width="180">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <ComboBox ItemsSource="{Binding DataContext.ViewerOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                              SelectedValue="{Binding ViewerKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                              SelectedValuePath="Key"
+                                                              DisplayMemberPath="DisplayName"
+                                                              MinWidth="150"
+                                                              Margin="0"
+                                                              Padding="7,4"/>
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
+                                        <GridViewColumn Header="" Width="64">
+                                            <GridViewColumn.CellTemplate>
+                                                <DataTemplate>
+                                                    <Button Content="삭제"
+                                                            Tag="{Binding Extension}"
+                                                            Click="RemoveViewer_Click"
+                                                            Padding="8,3"
+                                                            Margin="0"/>
+                                                </DataTemplate>
+                                            </GridViewColumn.CellTemplate>
+                                        </GridViewColumn>
+                                    </GridView>
+                                </ListView.View>
+                            </ListView>
+
+                            <StackPanel Orientation="Horizontal" Margin="0,10,0,0">
+                                <TextBox x:Name="NewExtBox" Width="80" Margin="0,0,8,0"
+                                         VerticalContentAlignment="Center"
+                                         BorderBrush="{DynamicResource BorderBrush}"
+                                         Background="{DynamicResource ControlBackground}"
+                                         Foreground="{DynamicResource PrimaryText}"
+                                         Text=".ext"/>
+                                <ComboBox x:Name="NewViewerCombo"
+                                          Width="160"
+                                          Margin="0,0,8,0"
+                                          ItemsSource="{Binding ViewerOptions}"
+                                          SelectedValuePath="Key"
+                                          DisplayMemberPath="DisplayName"/>
+                                <Button Content="추가" Click="AddViewer_Click" Padding="12,4"/>
+                            </StackPanel>
+
+                            <!-- .md 탭 처음 열 때 기본 보기(#81). 탭의 블록 편집/미리보기 버튼으로 바꾸면 파일별로 기억한다(markdown-view.json). -->
+                            <StackPanel Margin="0,14,0,0">
+                                <StackPanel Orientation="Horizontal">
+                                    <TextBlock Text=".md 탭을 처음 열 때"
+                                               VerticalAlignment="Center"
+                                               Margin="0,0,8,0"/>
+                                    <ComboBox x:Name="MarkdownDefaultViewCombo"
+                                              Width="220"
+                                              SelectedValuePath="Key"
+                                              DisplayMemberPath="DisplayName"/>
+                                </StackPanel>
+                                <TextBlock Text="블록 편집·미리보기 중 무엇으로 열지 정합니다(.md·.markdown이 Markdown 또는 Block Editor로 매핑된 경우, 기본값 블록 편집). 탭 위 전환 버튼으로 바꾸면 그 파일은 마지막 보기로 열립니다. 블록 편집기로 열 수 없는 큰 파일(32MB 초과)은 미리보기로 열립니다. 블록 편집기는 고친 블록만 다시 쓰고 나머지는 원문 그대로 저장합니다."
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Margin="0,4,0,0"
+                                           Foreground="{DynamicResource SecondaryText}"/>
+                            </StackPanel>
+
+                            <!-- Monaco 언어 연결(#82): 확장자·파일 이름·패턴 → Monaco 언어 id. 뷰어 설정 스크롤 영역 맨 아래에 보인다.
+                                 우선순위: 탭에서 고른 파일별 언어 → 이 표(위에서부터 첫 일치) → 예외 사전 → Monaco 등록 정보 → plaintext. monaco-language.json -->
+                            <StackPanel Margin="0,16,0,0">
+                                <TextBlock Text="Monaco 언어 연결" FontWeight="SemiBold"/>
+                                <TextBlock Text="Monaco 뷰어로 여는 파일의 구문 강조 언어를 확장자(.inc)·파일 이름(Makefile)·패턴(Dockerfile.*)으로 정합니다. 위에서부터 처음 맞는 줄을 씁니다. 탭 툴바에서 파일마다 고른 언어가 이 표보다 먼저입니다."
+                                           FontSize="11"
+                                           TextWrapping="Wrap"
+                                           Margin="0,2,0,6"
+                                           Foreground="{DynamicResource SecondaryText}"/>
+                                <ListView x:Name="MonacoLanguageMappingList"
+                                          Height="120"
+                                          SelectionMode="Single"
+                                          BorderThickness="1"
+                                          BorderBrush="{DynamicResource BorderBrush}">
+                                    <ListView.View>
+                                        <GridView>
+                                            <GridViewColumn Header="확장자·파일 이름" Width="150" DisplayMemberBinding="{Binding Pattern}"/>
+                                            <GridViewColumn Header="언어" Width="230">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <ComboBox ItemsSource="{Binding DataContext.MonacoLanguageOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                                  SelectedValue="{Binding Language, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                                  SelectedValuePath="Key"
+                                                                  DisplayMemberPath="DisplayName"
+                                                                  MinWidth="200"
+                                                                  Margin="0"
+                                                                  Padding="7,4"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                            <GridViewColumn Header="" Width="64">
+                                                <GridViewColumn.CellTemplate>
+                                                    <DataTemplate>
+                                                        <Button Content="삭제"
+                                                                Click="RemoveMonacoLanguage_Click"
+                                                                Padding="8,3"
+                                                                Margin="0"/>
+                                                    </DataTemplate>
+                                                </GridViewColumn.CellTemplate>
+                                            </GridViewColumn>
+                                        </GridView>
+                                    </ListView.View>
+                                </ListView>
+                                <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                    <TextBox x:Name="NewMonacoPatternBox" Width="120" Margin="0,0,8,0"
+                                             VerticalContentAlignment="Center"
+                                             BorderBrush="{DynamicResource BorderBrush}"
+                                             Background="{DynamicResource ControlBackground}"
+                                             Foreground="{DynamicResource PrimaryText}"
+                                             ToolTip="확장자(.inc), 파일 이름(Makefile) 또는 * ? 패턴(Dockerfile.*)"
+                                             Text=".ext"/>
+                                    <ComboBox x:Name="NewMonacoLanguageCombo"
+                                              Width="220"
+                                              Margin="0,0,8,0"
+                                              IsTextSearchEnabled="True"
+                                              SelectedValuePath="Key"
+                                              DisplayMemberPath="DisplayName"/>
+                                    <Button Content="추가" Click="AddMonacoLanguage_Click" Padding="12,4"/>
+                                </StackPanel>
+                            </StackPanel>
                         </StackPanel>
-                    </StackPanel>
-
-                    <ListView x:Name="ViewerMappingList"
-                              Grid.Row="2"
-                              SelectionMode="Single"
-                              BorderThickness="1"
-                              BorderBrush="{DynamicResource BorderBrush}">
-                        <ListView.View>
-                            <GridView>
-                                <GridViewColumn Header="확장자" Width="100" DisplayMemberBinding="{Binding Extension}"/>
-                                <GridViewColumn Header="기본값" Width="140" DisplayMemberBinding="{Binding DefaultViewerDisplayName}"/>
-                                <GridViewColumn Header="뷰어" Width="180">
-                                    <GridViewColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <ComboBox ItemsSource="{Binding DataContext.ViewerOptions, RelativeSource={RelativeSource AncestorType=Window}}"
-                                                      SelectedValue="{Binding ViewerKey, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                                                      SelectedValuePath="Key"
-                                                      DisplayMemberPath="DisplayName"
-                                                      MinWidth="150"
-                                                      Margin="0"
-                                                      Padding="7,4"/>
-                                        </DataTemplate>
-                                    </GridViewColumn.CellTemplate>
-                                </GridViewColumn>
-                                <GridViewColumn Header="" Width="64">
-                                    <GridViewColumn.CellTemplate>
-                                        <DataTemplate>
-                                            <Button Content="삭제"
-                                                    Tag="{Binding Extension}"
-                                                    Click="RemoveViewer_Click"
-                                                    Padding="8,3"
-                                                    Margin="0"/>
-                                        </DataTemplate>
-                                    </GridViewColumn.CellTemplate>
-                                </GridViewColumn>
-                            </GridView>
-                        </ListView.View>
-                    </ListView>
-
-                    <StackPanel Grid.Row="3" Orientation="Horizontal" Margin="0,10,0,0">
-                        <TextBox x:Name="NewExtBox" Width="80" Margin="0,0,8,0"
-                                 VerticalContentAlignment="Center"
-                                 BorderBrush="{DynamicResource BorderBrush}"
-                                 Background="{DynamicResource ControlBackground}"
-                                 Foreground="{DynamicResource PrimaryText}"
-                                 Text=".ext"/>
-                        <ComboBox x:Name="NewViewerCombo"
-                                  Width="160"
-                                  Margin="0,0,8,0"
-                                  ItemsSource="{Binding ViewerOptions}"
-                                  SelectedValuePath="Key"
-                                  DisplayMemberPath="DisplayName"/>
-                        <Button Content="추가" Click="AddViewer_Click" Padding="12,4"/>
-                    </StackPanel>
-
-                    <!-- .md 탭 처음 열 때 기본 보기(#81). 탭의 블록 편집/미리보기 버튼으로 바꾸면 파일별로 기억한다(markdown-view.json). -->
-                    <StackPanel Grid.Row="4" Margin="0,14,0,0">
-                        <StackPanel Orientation="Horizontal">
-                            <TextBlock Text=".md 탭을 처음 열 때"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,8,0"/>
-                            <ComboBox x:Name="MarkdownDefaultViewCombo"
-                                      Width="220"
-                                      SelectedValuePath="Key"
-                                      DisplayMemberPath="DisplayName"/>
-                        </StackPanel>
-                        <TextBlock Text="블록 편집·미리보기 중 무엇으로 열지 정합니다(.md·.markdown이 Markdown 또는 Block Editor로 매핑된 경우, 기본값 블록 편집). 탭 위 전환 버튼으로 바꾸면 그 파일은 마지막 보기로 열립니다. 블록 편집기로 열 수 없는 큰 파일(32MB 초과)은 미리보기로 열립니다. 블록 편집기는 고친 블록만 다시 쓰고 나머지는 원문 그대로 저장합니다."
-                                   FontSize="11"
-                                   TextWrapping="Wrap"
-                                   Margin="0,4,0,0"
-                                   Foreground="{DynamicResource SecondaryText}"/>
-                    </StackPanel>
+                    </ScrollViewer>
                 </Grid>
 
                 <!-- OpenWith panel -->
