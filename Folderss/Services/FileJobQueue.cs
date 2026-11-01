@@ -182,23 +182,40 @@ namespace Folderss.Services
             try
             {
                 job.SetState(FileJobState.Preparing);
-                if (job.Kind == FileJobKind.Copy || job.Kind == FileJobKind.Move)
-                    Measure(job);
+                // 블록 편집기 사이드카(문서.md.meta.json)는 문서에 붙여 함께 처리한다(#78). 둘 다 골랐으면 한 항목으로 센다.
+                var entries = BlockSidecarFiles.Pair(job.Sources);
+                if (entries.Count != job.Sources.Count)
+                    job.SetTotalItems(entries.Count);
+                var delete = job.Kind == FileJobKind.Delete || job.Kind == FileJobKind.DeletePermanently;
+                if (!delete)
+                    Measure(job, entries.Select(entry => entry.Path));
 
                 op = BeginHistory(job);
                 job.SetState(FileJobState.Running);
                 var policy = new ConflictPolicy();
-                for (var index = 0; index < job.Sources.Count; index++)
+                for (var index = 0; index < entries.Count; index++)
                 {
                     job.Checkpoint();
-                    var source = Path.TrimEndingDirectorySeparator(job.Sources[index]);
+                    var source = entries[index].Path;
                     JournalItem item;
-                    if (job.Kind == FileJobKind.Delete || job.Kind == FileJobKind.DeletePermanently)
+                    if (delete)
                         item = DeleteItem(job, source);
                     else
-                        item = TransferItem(job, source, policy, job.Sources.Count - index - 1);
+                        item = TransferItem(job, source, policy, entries.Count - index - 1);
                     if (item != null)
                         op = Record(job, op, item);
+
+                    // 동반 파일은 문서의 결과를 따른다 — 문서가 건너뜀·실패면 그대로 두고, 성공하면 같은 작업 기록에 넣어 한 번에 실행 취소된다.
+                    // 문서 직후 취소 확인 없이 처리해, 취소가 문서와 사이드카 사이에 끼어 문서만 가는 일이 없게 한다.
+                    var companion = entries[index].Companion;
+                    if (companion != null && item != null && item.Succeeded)
+                    {
+                        var companionItem = delete
+                            ? DeleteCompanion(job, companion, source)
+                            : TransferCompanion(job, companion, source, item.Destination);
+                        if (companionItem != null)
+                            op = Record(job, op, companionItem);
+                    }
                 }
             }
             catch (OperationCanceledException)
@@ -217,11 +234,11 @@ namespace Folderss.Services
         }
 
         /// <summary>복사·이동할 파일 수와 크기. 같은 드라이브 안의 이동은 이름만 바뀌므로 세지 않는다.</summary>
-        private void Measure(FileJob job)
+        private void Measure(FileJob job, IEnumerable<string> sources)
         {
             var files = 0;
             long bytes = 0;
-            foreach (var source in job.Sources)
+            foreach (var source in sources)
             {
                 job.Checkpoint();
                 if (job.Kind == FileJobKind.Move && SameVolume(source, job.Destination))
@@ -580,6 +597,91 @@ namespace Folderss.Services
             }
         }
 
+        // ── 동반 파일(블록 편집기 사이드카, #78) ───────────────────────────
+
+        /// <summary>
+        /// 문서를 복사·이동한 뒤 그 사이드카를 문서가 간 이름(<c>새이름.md.meta.json</c>)으로 복사·이동한다.
+        /// 대상 자리에 이미 사이드카가 있으면 그것은 그 자리 문서(바꾸기로 휴지통에 간 옛 문서)나 주인 없는 파일의 것이므로 휴지통으로 보내고 바꾼다
+        /// (실행 취소하면 되살아난다). 실패해도 문서 작업은 성공으로 두고 경고만 남긴다(사이드카는 원래 자리에 그대로 — 잃는 데이터 없음).
+        /// 성공하면 기록할 항목, 아니면 null. 진행률 수치(파일 수·바이트)에는 넣지 않는다(작은 파일).
+        /// </summary>
+        private JournalItem TransferCompanion(FileJob job, string source, string documentSource, string documentTarget)
+        {
+            var move = job.Kind == FileJobKind.Move;
+            var target = BlockSidecarFiles.TargetFor(documentTarget);
+            var item = new JournalItem { Source = source, CompanionOf = documentSource };
+            try
+            {
+                if (SamePath(source, target))
+                    return null;
+                if (Exists(target))
+                {
+                    var blocked = ReplaceBlockedReason(source, target);
+                    if (blocked != null)
+                        throw new IOException(blocked);
+                    item.RecycledUtc = _recycleBin.Send(target);
+                    item.ReplacedPath = target;
+                }
+                try
+                {
+                    if (move)
+                        File.Move(source, target);
+                    else
+                        File.Copy(source, target);
+                }
+                catch (Exception ex)
+                {
+                    // 다른 드라이브 이동이 복사만 하고 원본 지우기에서 실패했으면 복사본을 지워 이동 전으로 돌린다.
+                    if (File.Exists(source))
+                        Cleanup(target);
+                    RestoreReplaced(item, ex);
+                    throw;
+                }
+                item.Destination = target;
+                item.Succeeded = true;
+                FileOperationJournal.CaptureFacts(item, target);
+                return item;
+            }
+            catch (Exception ex) when (IsItemError(ex))
+            {
+                job.AddError(CompanionWarning(job.Kind, source, ex.Message));
+                return null;
+            }
+        }
+
+        /// <summary>문서를 지운 뒤 그 사이드카도 같은 방식(휴지통·영구)으로 지운다. 실패하면 경고만 남긴다.</summary>
+        private JournalItem DeleteCompanion(FileJob job, string path, string documentSource)
+        {
+            var item = new JournalItem { Source = path, CompanionOf = documentSource };
+            try
+            {
+                if (job.Kind == FileJobKind.DeletePermanently)
+                {
+                    FileCopier.DeletePath(path);
+                }
+                else
+                {
+                    if (!_recycleBin.CanSend(path))
+                        throw new IOException("휴지통을 쓸 수 없는 위치(네트워크·이동식 드라이브 또는 긴 경로)라 지우지 않았습니다.");
+                    item.RecycledUtc = _recycleBin.Send(path);
+                }
+                item.Succeeded = true;
+                return item;
+            }
+            catch (Exception ex) when (IsItemError(ex))
+            {
+                job.AddError(CompanionWarning(job.Kind, path, ex.Message));
+                return null;
+            }
+        }
+
+        /// <summary>사이드카만 처리하지 못했을 때 오류 목록에 남길 문구(문서 작업은 성공으로 센다).</summary>
+        internal static string CompanionWarning(FileJobKind kind, string sidecar, string reason)
+        {
+            return string.Format("{0}: 블록 속성 파일을 문서와 함께 {1}하지 못했습니다(문서는 {1}됨, 속성 파일은 원래 자리에 남음) — {2}",
+                Path.GetFileName(sidecar), FileJobFormat.Verb(kind), reason);
+        }
+
         private void RunUndo(FileJob job)
         {
             job.SetState(FileJobState.Running);
@@ -674,21 +776,62 @@ namespace Folderss.Services
         // ── 바로 끝나는 작업(부르는 스레드에서 실행 + 기록) ─────────────────
 
         /// <summary>이름을 바꾸고 기록한다. 바꾸기 실패는 예외, 기록 실패는 경고 문구를 돌려준다(이름은 바뀜).</summary>
+        /// <remarks>
+        /// 블록 편집기 문서(<c>X.md</c>)면 옆의 사이드카도 <c>새이름.md.meta.json</c>으로 바꾸고 같은 기록에 넣는다(한 번에 실행 취소, #78).
+        /// 사이드카 이름을 바꾸지 못하면(새 이름 자리에 이미 다른 파일이 있음 등) 문서 이름은 바뀐 채로 두고 경고 문구에 더한다.
+        /// </remarks>
         public string Rename(string path, string newName, out string historyWarning)
         {
             var isDirectory = Directory.Exists(path);
+            var companion = isDirectory ? null : BlockSidecarFiles.CompanionOf(path);
             var destination = FileOperationService.Rename(path, newName);
-            var item = new JournalItem { Source = Path.TrimEndingDirectorySeparator(path), Destination = destination, IsDirectory = isDirectory, Succeeded = true };
+            var source = Path.TrimEndingDirectorySeparator(path);
+            var item = new JournalItem { Source = source, Destination = destination, IsDirectory = isDirectory, Succeeded = true };
             FileOperationJournal.CaptureFacts(item, destination);
-            historyWarning = RecordSingle(JournalOperationKind.Rename, item);
+            var items = new List<JournalItem> { item };
+            string companionWarning = null;
+            if (companion != null)
+            {
+                var companionItem = RenameCompanion(companion, source, destination, out companionWarning);
+                if (companionItem != null)
+                    items.Add(companionItem);
+            }
+            var recordWarning = RecordSingle(JournalOperationKind.Rename, items);
+            historyWarning = companionWarning == null ? recordWarning
+                : recordWarning == null ? companionWarning
+                : companionWarning + Environment.NewLine + recordWarning;
             return destination;
+        }
+
+        private static JournalItem RenameCompanion(string sidecar, string documentSource, string documentDestination, out string warning)
+        {
+            warning = null;
+            var target = BlockSidecarFiles.TargetFor(documentDestination);
+            try
+            {
+                if (string.Equals(sidecar, target, StringComparison.Ordinal))
+                    return null;
+                // 대소문자만 바뀐 이름은 같은 파일이다. 다른 파일이 그 이름을 차지하고 있으면 건드리지 않는다.
+                if (Exists(target) && !SamePath(sidecar, target))
+                    throw new IOException("새 이름의 블록 속성 파일이 이미 있습니다: " + Path.GetFileName(target));
+                File.Move(sidecar, target);
+                var item = new JournalItem { Source = sidecar, Destination = target, Succeeded = true, CompanionOf = documentSource };
+                FileOperationJournal.CaptureFacts(item, target);
+                return item;
+            }
+            catch (Exception ex) when (IsItemError(ex))
+            {
+                warning = string.Format("{0}: 블록 속성 파일의 이름을 문서와 함께 바꾸지 못했습니다(문서 이름은 바뀜, 속성 파일은 옛 이름으로 남음) — {1}",
+                    Path.GetFileName(sidecar), ex.Message);
+                return null;
+            }
         }
 
         public string CreateFolder(string parent, string name, out string historyWarning)
         {
             var path = FileOperationService.CreateDirectory(parent, name);
             historyWarning = RecordSingle(JournalOperationKind.CreateFolder,
-                new JournalItem { Source = path, Destination = path, IsDirectory = true, Succeeded = true });
+                new[] { new JournalItem { Source = path, Destination = path, IsDirectory = true, Succeeded = true } });
             return path;
         }
 
@@ -697,18 +840,20 @@ namespace Folderss.Services
             var path = FileOperationService.CreateFile(parent, name);
             var item = new JournalItem { Source = path, Destination = path, Succeeded = true };
             FileOperationJournal.CaptureFacts(item, path);
-            historyWarning = RecordSingle(JournalOperationKind.CreateFile, item);
+            historyWarning = RecordSingle(JournalOperationKind.CreateFile, new[] { item });
             return path;
         }
 
-        private string RecordSingle(JournalOperationKind kind, JournalItem item)
+        /// <summary>바로 끝난 작업 하나를 기록한다. 항목이 여럿이면(문서 + 사이드카) 한 작업이라 한 번에 실행 취소된다.</summary>
+        private string RecordSingle(JournalOperationKind kind, IReadOnlyList<JournalItem> items)
         {
             try
             {
                 lock (_journalLock)
                 {
-                    var op = _journal.Begin(kind, new[] { item.Source });
-                    _journal.AddItem(op, item);
+                    var op = _journal.Begin(kind, new[] { items[0].Source });
+                    foreach (var item in items)
+                        _journal.AddItem(op, item);
                     _journal.End(op);
                 }
                 return null;
@@ -789,7 +934,8 @@ namespace Folderss.Services
 
         public static string DescribeOperation(JournalOperation op)
         {
-            var ok = op.Items.Where(item => item.Succeeded).ToList();
+            // 문서와 함께 처리한 사이드카는 따로 세지 않는다("'X.md'"가 "2개"로 보이지 않게).
+            var ok = op.Items.Where(item => item.Succeeded && item.CompanionOf == null).ToList();
             var first = ok.FirstOrDefault();
             var what = ok.Count == 1 && first != null
                 ? "'" + Path.GetFileName(first.Source) + "'"
@@ -817,7 +963,8 @@ namespace Folderss.Services
                 case JournalOperationKind.Delete:
                     return "휴지통에서 되살림: " + item.Source;
                 case JournalOperationKind.Rename:
-                    return "이름 되돌림: " + Path.GetFileName(item.Destination) + " → " + Path.GetFileName(item.Source);
+                    return "이름 되돌림: " + Path.GetFileName(item.Destination) + " → " + Path.GetFileName(item.Source) +
+                           (item.CompanionOf != null ? " (블록 속성 파일)" : string.Empty);
                 case JournalOperationKind.CreateFolder:
                     return "빈 폴더 지움: " + item.Destination;
                 default:

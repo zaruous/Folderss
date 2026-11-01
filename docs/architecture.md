@@ -91,6 +91,7 @@ Folderss/
 │   ├── BlockMarkdown.cs            — 블록 목록 ↔ Markdown 변환(CommonMark 목록 중첩, <details> 토글, > [!NOTE] 콜아웃, 원문 보존), 입력 단축 판별 (순수 로직)
 │   ├── BlockOperations.cs          — 블록 구조 연산: 하위 트리, 들여쓰기 규칙·정규화, 형제 단위 이동, 번호 표시, 접힘, 여러 열 정리·만들기·옮기기(`ColumnLayout`) (순수 로직)
 │   ├── BlockSidecar.cs             — Markdown 밖 블록 속성을 문서 옆 `문서.md.meta.json`에 저장·다시 붙이기(#78, 순수 로직)
+│   ├── BlockSidecarFiles.cs        — 파일 작업에서 문서와 사이드카 짝짓기(동반 파일 찾기·중복 제거·대상 이름, #78, 순수 로직)
 │   ├── BlockFind.cs                — 블록 편집기 찾기·바꾸기 매칭, 제목 슬러그·앵커, 다시 읽은 뒤 스크롤 앵커 대응, 링크 해석(#75, 순수 로직)
 │   ├── MarkdownViewSwitch.cs       — `.md` 블록 편집 ↔ 미리보기: 열 뷰어 고르기, 블록 ↔ 제목·줄 번호 대응, 파일별 마지막 보기·기본 보기(`markdown-view.json`, #81)
 │   ├── FrontMatter.cs              — 블록 편집기 front matter 속성 표 해석·속성 줄 단위 편집(YAML 라이브러리 없음, #81, 순수 로직)
@@ -253,6 +254,11 @@ Folderss/
 - 이력: `%LOCALAPPDATA%\Folderss\file-history\*.jsonl`(폴더 비교 창 `compare-history`와 분리 — 비교 창 이력 패널과 메인 창 `Ctrl+Z`가 서로의 작업을 되돌리지 않게).
   작업 시작 때 `FileOperationJournal.Begin`, 최상위 항목마다 `AddItem`, 끝에 `End`. 이력을 못 쓰면 작업은 하되 "실행 취소할 수 없음"을 알린다(비교 창은 실행 거부).
   이름 변경·새 폴더·새 파일은 UI 스레드에서 바로 실행하고 같은 이력에 기록(`Rename`/`CreateFolder`/`CreateFile`). 이력 객체 접근은 모두 `_journalLock`.
+- 블록 편집기 사이드카(#78, `BlockSidecarFiles`, `docs/items/block-sidecar-file-ops.md`): `Run`이 작업 목록을 `Pair`로 (항목, 동반 `X.md.meta.json`)으로 묶고
+  (문서와 사이드카를 둘 다 골랐으면 사이드카는 문서에 붙여 한 항목), 문서가 성공하면 바로 뒤에 사이드카를 문서가 간 이름(`a (2).md` → `a (2).md.meta.json`)으로 복사·이동·삭제한다.
+  충돌은 따로 묻지 않고 문서 결과를 따른다(건너뜀 → 그대로, 대상 자리 사이드카는 휴지통으로 바꿈). 사이드카만 실패하면 문서는 성공, 오류 목록에 경고.
+  사이드카 결과는 같은 작업 기록의 별도 `JournalItem`(`CompanionOf` = 문서 원래 경로, 기록 줄 `"of"`)이라 실행 취소 한 단계로 함께 되돌아가고, 새 `JournalOperationKind`는 없다.
+  `Rename`도 사이드카 이름을 바꿔 한 작업으로 기록한다. 사이드카 안 `file` 필드는 고치지 않는다(`BlockSidecar.Apply`가 쓰지 않음). 폴더 비교 창·zip 꺼내기는 적용 안 됨.
 - 실행 취소(`Ctrl+Z` = `UndoFileOperation`, ⋯ 메뉴 `실행 취소: …`): 대기열이 비어 있을 때만. 메뉴 머리글은 파일을 보지 않는 `PeekUndo`로 채운다.
   `PlanUndo`(백그라운드 — 항목이 많으면 파일·휴지통 확인이 오래 걸림)가 최근 되돌릴 작업과 항목별 막힘(`ItemProblems`: 그 사이 바뀜·원래 자리 점유·
   휴지통에 없음·휴지통 없는 위치의 복사본·내용이 생긴 새 폴더/파일)을 계산하고, 확인 창(`CompareConfirmDialog`)이 막힌 항목이 있으면 확인 체크를 요구한다.
@@ -264,7 +270,7 @@ Folderss/
 - `Delete`: 휴지통에 보낼 수 없는 항목(`WindowsRecycleBin.IsRecyclable` — 네트워크·이동식·260자 이상)이 섞이면 영구 삭제 경고 + 확인 체크 후 따로 영구 삭제 작업으로 넣는다. `Shift+Delete`도 확인 체크.
 - 종료(`Window_Closing`): 대기열에 작업이 있으면 묻고, 종료하면 모두 취소한 뒤 최대 5초 메시지를 돌리며 기다린다(진행 중 항목 되돌리기).
 - 테스트: `tests/Folderss.SearchTests/FileJobQueueTests.cs`(진행 수치, 충돌 선택·적용, 바꾸기와 되돌리기, 일시정지·FIFO, 대기 취소, 복사 도중 취소, 잠긴 파일, 긴 경로, 휴지통 없음,
-  부분 되돌리기, 넘기기, 이름 변경·새 항목, 중단된 작업, 이력 쓰기 실패, 속도·문구). 진행률 창·대화상자는 WPF라 실제 실행으로 확인한다.
+  부분 되돌리기, 넘기기, 이름 변경·새 항목, 중단된 작업, 이력 쓰기 실패, 속도·문구), 사이드카 동반 처리는 같은 클래스의 `FileJobQueueSidecarTests.cs`. 진행률 창·대화상자는 WPF라 실제 실행으로 확인한다.
 
 ### KeyBindingService
 - 기본 단축키 매핑을 코드에서 정의
@@ -671,7 +677,7 @@ Folderss/
   붙인다: 문서 전체 해시가 같으면 순번으로, 다른 도구에서 고쳤으면 같은 내용의 블록을 순서대로 찾아(같은 내용이 여럿이면 앞 블록까지 맞는 쪽) 붙이고,
   본문이 바뀐 블록의 속성은 버리고 개수를 상태 줄에 알린다. 속성이 없으면 사이드카를 지우고, 읽지 못한 사이드카는 덮어쓰기 전에 `.bak`로 보관한다.
   속성은 `SameContent`·`Clone`에 들어가 실행 취소·수정 표시와 함께 움직인다. 색은 이름만 저장하고 실제 색은 테마 밝기로 고른다(`RefreshTheme`).
-  남은 일: Folderss 파일 작업(이름 바꾸기·이동·복사·삭제·실행 취소 기록)에서 사이드카를 함께 처리(#78).
+  메인 패널 파일 작업(이름 바꾸기·이동·복사·삭제·실행 취소)은 사이드카를 문서와 함께 처리한다(`BlockSidecarFiles`, 위 FileJobQueue 절). 폴더 비교 창 작업은 아직 따라가지 않는다.
 - front matter 속성 표(#81, `BlockEditor.FrontMatter.cs`, 순수 로직 `Services/FrontMatter` — `FrontMatterTests`): `FrontMatter` 블록은 `Text`에 `---` 줄까지 원문을 담고 `Raw`와 똑같이 쓰므로
   열고 저장하면 front matter가 바이트 단위로 같다. 화면은 Notion 페이지 속성처럼 키 | 값 행: 한 줄 스칼라(따옴표 값 포함)·단순 목록(`[a, b]`, `- a`)은 값·칩으로,
   중첩 맵·블록 스칼라(`|`·`>`)·앵커/별칭/태그·흐름 맵·사이 빈 줄 있는 목록은 `Complex`로 키 뒤 원문을 보여 주고(누르면 원문 편집), 최상위가 `key: value`가 아니면 전체 원문 표시.

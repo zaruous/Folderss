@@ -12,7 +12,7 @@ namespace Folderss.SearchTests
     /// 메인 패널 파일 작업 대기열: 복사·이동·삭제 실행(진행 수치·충돌 선택·일시정지·취소), 이력 기록과 실행 취소,
     /// 이름 변경·새 폴더·새 파일 기록. 임시 폴더의 실제 파일과 가짜 휴지통으로 확인한다.
     /// </summary>
-    public sealed class FileJobQueueTests : IDisposable
+    public sealed partial class FileJobQueueTests : IDisposable
     {
         private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 

@@ -295,6 +295,12 @@ namespace Folderss.Services
             lock (_sync) _currentItem = text;
         }
 
+        /// <summary>최상위 항목 수를 고친다(문서와 함께 고른 사이드카를 문서에 붙여 한 항목으로 셀 때).</summary>
+        internal void SetTotalItems(int count)
+        {
+            lock (_sync) _totalItems = count;
+        }
+
         internal void SetTotals(int files, long bytes)
         {
             lock (_sync)

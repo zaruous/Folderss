@@ -57,6 +57,11 @@ namespace Folderss.Services
         public bool Succeeded { get; set; }
         public string Error { get; set; }
         public bool Reverted { get; set; }
+        /// <summary>
+        /// 문서와 함께 처리한 동반 파일(블록 편집기 사이드카 <c>문서.md.meta.json</c>, #78)이면 그 문서의 원래 경로. 보통 항목은 null(기록하지 않음).
+        /// 같은 작업 기록에 들어가 문서와 한 번에 실행 취소되고, 작업 설명의 항목 수에서는 빠진다.
+        /// </summary>
+        public string CompanionOf { get; set; }
     }
 
     public sealed class JournalOperation
@@ -620,7 +625,8 @@ namespace Folderss.Services
                         Size = line.Size,
                         ModifiedUtc = line.Mtime,
                         Succeeded = line.Ok ?? false,
-                        Error = line.Err
+                        Error = line.Err,
+                        CompanionOf = line.Of
                     });
                     break;
                 case "end":
@@ -663,7 +669,8 @@ namespace Folderss.Services
             Size = item.Size,
             Mtime = item.ModifiedUtc,
             Ok = item.Succeeded,
-            Err = item.Error
+            Err = item.Error,
+            Of = item.CompanionOf
         };
 
         private static IEnumerable<JournalItem> Pending(JournalOperation op) => op.Items.Where(item => item.Succeeded && !item.Reverted);
@@ -717,6 +724,8 @@ namespace Folderss.Services
             [JsonPropertyName("mtime")] public DateTime? Mtime { get; set; }
             [JsonPropertyName("ok")] public bool? Ok { get; set; }
             [JsonPropertyName("err")] public string Err { get; set; }
+            /// <summary>동반 파일(사이드카)이면 그 문서의 원래 경로(#78). 옛 기록에는 없다.</summary>
+            [JsonPropertyName("of")] public string Of { get; set; }
         }
     }
 }
