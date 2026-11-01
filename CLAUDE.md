@@ -61,6 +61,14 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `Viewers/Resources/` — HTML/JS/CSS 리소스 추가 시 `.csproj` `<Content>` 항목도 추가
 - [ ] `docs/architecture.md` — 뷰어 목록 업데이트
 
+### Monaco 언어·예외 추가 / Monaco 업그레이드 시 (#82)
+언어는 편집기 안(`monaco-app.html` `detectLanguage`)이 `monaco.languages.getLanguages()`로 고르고, C#은 강제 언어(파일별 선택 → 사용자 연결 → 예외 사전)만 넘긴다.
+- [ ] Monaco 기본과 다르게 열어야 하는 확장자만 `Services/MonacoLanguages.cs` `ExceptionOverrides`에 추가(등록 정보로 이미 맞는 것은 넣지 않음)
+- [ ] 새 언어를 JS로 등록하면(`monaco-jsonl.js`처럼) `MonacoLanguages.LanguageTable`에도 같은 순서로 추가 — 설정 창 언어 목록·테스트가 이 표를 쓴다
+- [ ] 언어 고르는 규칙을 바꾸면 `detectLanguage`(JS)와 `MonacoLanguages.MatchRegistry`(C#)를 함께 고친다
+- [ ] `dotnet test tests/Folderss.SearchTests --filter MonacoLanguageTests` — 번들 등록 파일과 정적 표 비교(Monaco 업그레이드 후 실패하면 표 재생성, `docs/items/monaco-language.md`)
+- [ ] `TextViewer.ExtToLanguage`는 highlight.js 이름이라 따로 관리한다
+
 ### 새 서비스/컨트롤 추가 시
 - [ ] `docs/architecture.md` — 서비스·컨트롤 목록 업데이트
 - [ ] `README.md` — 아키텍처 요약 업데이트

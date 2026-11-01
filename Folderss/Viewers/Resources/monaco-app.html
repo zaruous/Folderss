@@ -30,6 +30,8 @@ var currentTheme = 'vs-dark';
 var pending = null;
 var modified = false;
 var suppressChange = false;
+var currentFileName = null;
+var currentHuge = false;
 
 require.config({ paths: { vs: 'monaco/vs' } });
 require(['vs/editor/editor.main'], function() {
@@ -75,6 +77,9 @@ require(['vs/editor/editor.main'], function() {
 
   jsonlTools.addJsonlActions(editor);
 
+  // 탭 툴바 언어 목록(#82): 런타임에 등록된 언어 전체를 C#에 알린다.
+  postLanguages();
+
   editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, function() {
     window.chrome.webview.postMessage({
       type: 'save-request',
@@ -89,7 +94,8 @@ require(['vs/editor/editor.main'], function() {
       pending.theme,
       pending.readonly,
       pending.largeFileMode,
-      pending.hugeFileMode
+      pending.hugeFileMode,
+      pending.fileName
     );
     pending = null;
   }
@@ -99,7 +105,79 @@ function themeName(theme) {
   return (theme === 'light' || theme === 'github') ? 'folderss-light' : 'folderss-dark';
 }
 
-function openDocument(content, language, theme, readonly, largeFileMode, hugeFileMode) {
+// ── 언어 결정(#82) ───────────────────────────────────────────────
+// C#은 강제 언어(파일별 선택 → 사용자 지정 → 예외 사전)만 넘기고, 없으면 여기서 Monaco 등록 정보로 고른다.
+// 규칙(대소문자 무시): filenames 일치 → filenamePatterns(glob) → extensions(이름 끝이 같은 것 중 가장 긴 것, 같으면 먼저 등록된 언어) → plaintext.
+// Services/MonacoLanguages.MatchRegistry가 같은 규칙을 정적 표로 흉내 낸다(단위 테스트). 둘을 함께 고친다.
+function globToRegExp(pattern) {
+  var escaped = String(pattern).replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.');
+  return new RegExp('^' + escaped + '$', 'i');
+}
+
+function detectLanguage(fileName) {
+  if (!fileName || !window.monaco) return 'plaintext';
+  var name = String(fileName);
+  var slash = Math.max(name.lastIndexOf('\\'), name.lastIndexOf('/'));
+  if (slash >= 0) name = name.substring(slash + 1);
+  var lower = name.toLowerCase();
+  var langs = monaco.languages.getLanguages();
+  var i, j, list;
+  for (i = 0; i < langs.length; i++) {
+    list = langs[i].filenames || [];
+    for (j = 0; j < list.length; j++)
+      if (String(list[j]).toLowerCase() === lower) return langs[i].id;
+  }
+  for (i = 0; i < langs.length; i++) {
+    list = langs[i].filenamePatterns || [];
+    for (j = 0; j < list.length; j++) {
+      try { if (globToRegExp(list[j]).test(name)) return langs[i].id; } catch (e) { }
+    }
+  }
+  var best = null, bestLength = 0;
+  for (i = 0; i < langs.length; i++) {
+    list = langs[i].extensions || [];
+    for (j = 0; j < list.length; j++) {
+      var ext = String(list[j]).toLowerCase();
+      if (ext.length > bestLength && lower.length >= ext.length &&
+          lower.substring(lower.length - ext.length) === ext) {
+        best = langs[i].id;
+        bestLength = ext.length;
+      }
+    }
+  }
+  return best || 'plaintext';
+}
+
+function isRegistered(id) {
+  if (!id || !window.monaco) return false;
+  var langs = monaco.languages.getLanguages();
+  for (var i = 0; i < langs.length; i++)
+    if (langs[i].id === id) return true;
+  return false;
+}
+
+function postLanguages() {
+  if (!window.monaco || !window.chrome || !window.chrome.webview) return;
+  var langs = monaco.languages.getLanguages();
+  var items = [];
+  for (var i = 0; i < langs.length; i++) {
+    var aliases = langs[i].aliases || [];
+    items.push({ id: langs[i].id, name: aliases.length > 0 && aliases[0] ? aliases[0] : langs[i].id });
+  }
+  window.chrome.webview.postMessage({ type: 'languages', items: items });
+}
+
+function postCurrentLanguage(auto) {
+  if (!model || !window.chrome || !window.chrome.webview) return;
+  window.chrome.webview.postMessage({
+    type: 'language',
+    id: model.getLanguageId(),
+    auto: auto === true,
+    huge: currentHuge === true
+  });
+}
+
+function openDocument(content, language, theme, readonly, largeFileMode, hugeFileMode, fileName) {
   if (!editor || !window.monaco) {
     pending = {
       content: content,
@@ -107,10 +185,17 @@ function openDocument(content, language, theme, readonly, largeFileMode, hugeFil
       theme: theme,
       readonly: readonly,
       largeFileMode: largeFileMode,
-      hugeFileMode: hugeFileMode
+      hugeFileMode: hugeFileMode,
+      fileName: fileName
     };
     return;
   }
+
+  currentFileName = fileName || null;
+  currentHuge = hugeFileMode === true;
+  // 초대용량은 토큰화 비용 때문에 항상 plaintext. 강제 언어가 등록되지 않은 id면 자동으로 돌아간다.
+  var auto = !(language && isRegistered(language));
+  var resolved = hugeFileMode ? 'plaintext' : (auto ? detectLanguage(fileName) : language);
 
   currentTheme = themeName(theme);
   monaco.editor.setTheme(currentTheme);
@@ -121,7 +206,7 @@ function openDocument(content, language, theme, readonly, largeFileMode, hugeFil
 
   suppressChange = true;
   modified = false;
-  model = monaco.editor.createModel(content || '', hugeFileMode ? 'plaintext' : (language || 'plaintext'));
+  model = monaco.editor.createModel(content || '', resolved);
   model.onDidChangeContent(function() {
     if (suppressChange) {
       return;
@@ -142,11 +227,22 @@ function openDocument(content, language, theme, readonly, largeFileMode, hugeFil
     wordBasedSuggestions: largeFileMode === true || hugeFileMode === true ? 'off' : 'matchingDocuments'
   });
   suppressChange = false;
+  postCurrentLanguage(auto);
 }
 
 var app = {
-  open: function(content, language, theme, readonly, largeFileMode, hugeFileMode) {
-    openDocument(content, language, theme, readonly, largeFileMode, hugeFileMode);
+  // language: C#이 정한 강제 언어(없으면 null → fileName으로 자동 결정)
+  open: function(content, language, theme, readonly, largeFileMode, hugeFileMode, fileName) {
+    openDocument(content, language, theme, readonly, largeFileMode, hugeFileMode, fileName);
+  },
+
+  // 탭 툴바에서 언어를 바꿀 때(#82). id가 비면 "자동"(파일 이름으로 다시 고름). 초대용량은 plaintext 유지.
+  setLanguage: function(id) {
+    if (!model || !window.monaco) return;
+    if (currentHuge) { postCurrentLanguage(false); return; }
+    var auto = !(id && isRegistered(id));
+    monaco.editor.setModelLanguage(model, auto ? detectLanguage(currentFileName) : id);
+    postCurrentLanguage(auto);
   },
 
   setTheme: function(theme) {
