@@ -88,7 +88,7 @@ namespace Folderss.Services
                 entries.Add(new SidecarEntry
                 {
                     Index = i,
-                    Kind = anchors[i].Kind.ToString(),
+                    Kind = HashKind(anchors[i].Kind).ToString(),
                     Hash = hashes[i],
                     Before = i > 0 ? hashes[i - 1] : string.Empty,
                     Preview = Preview(anchors[i].Text),
@@ -170,8 +170,17 @@ namespace Folderss.Services
         {
             var text = string.Join("\n", (block.Text ?? string.Empty).Replace("\r\n", "\n").Split('\n').Select(line => line.TrimEnd())).Trim();
             var hasSource = block.Kind == BlockKind.Image || EditorBlock.IsLinkCard(block.Kind);
-            var input = block.Kind + "\n" + text + (hasSource ? "\n" + block.Source : string.Empty);
+            var input = HashKind(block.Kind) + "\n" + text + (hasSource ? "\n" + block.Source : string.Empty);
             return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(input))).Substring(0, 16).ToLowerInvariant();
+        }
+
+        /// <summary>
+        /// 해시에 쓰는 종류 이름. front matter는 예전에 <see cref="BlockKind.Raw"/>로 읽었으므로 같은 이름으로 해시해
+        /// 그때 저장한 사이드카(문서 해시·앞 블록 해시)가 그대로 맞게 한다.
+        /// </summary>
+        private static BlockKind HashKind(BlockKind kind)
+        {
+            return kind == BlockKind.FrontMatter ? BlockKind.Raw : kind;
         }
 
         /// <summary>문서 전체 해시(블록 해시를 이어 붙인 것의 해시). 문서가 그대로인지 판단한다.</summary>

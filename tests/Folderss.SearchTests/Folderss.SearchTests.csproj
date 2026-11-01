@@ -77,6 +77,7 @@
     <Compile Include="..\..\Folderss\Services\BlockTable.cs" Link="Linked\BlockTable.cs" />
     <Compile Include="..\..\Folderss\Services\BlockFind.cs" Link="Linked\BlockFind.cs" />
     <Compile Include="..\..\Folderss\Services\MarkdownViewSwitch.cs" Link="Linked\MarkdownViewSwitch.cs" />
+    <Compile Include="..\..\Folderss\Services\FrontMatter.cs" Link="Linked\FrontMatter.cs" />
     <Compile Include="..\..\Folderss\Services\ZipEntryNameEncoding.cs" Link="Linked\ZipEntryNameEncoding.cs" />
     <Compile Include="..\..\Folderss\Services\ZipArchiveService.cs" Link="Linked\ZipArchiveService.cs" />
     <Compile Include="..\..\Folderss\Services\ZipTempStore.cs" Link="Linked\ZipTempStore.cs" />

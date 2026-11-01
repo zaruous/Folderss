@@ -25,6 +25,7 @@ Folderss/
 │   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색"
 │   ├── BlockEditor.Find.cs         — 찾기·바꾸기 막대(Ctrl+F/H, F3), 제목 앵커 이동, 다시 읽은 뒤 스크롤 앵커 복원, 링크 Ctrl+클릭(#75)
 │   ├── BlockEditor.ViewSwitch.cs   — 블록 편집 ↔ 미리보기 전환 때 화면 맨 위 블록 → 제목·줄 번호 잡기, 받은 위치로 스크롤(#81)
+│   ├── BlockEditor.FrontMatter.cs  — front matter 속성 표(키 | 값) 표시·칸 편집·속성 추가/삭제·원문 편집 전환(#81)
 │   ├── ElementTree.cs              — 입력 이벤트 `OriginalSource`에서 조상 찾기(`Run` 등 ContentElement는 논리 부모로 건너감 — `VisualTreeHelper.GetParent` 예외 방지)
 │   ├── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 │   └── ViewerHost.ViewSwitch.cs    — `.md` 탭 툴바 `블록 편집`/`미리보기` 전환(저장 확인·위치 유지·파일별 기억, #81)
@@ -92,6 +93,7 @@ Folderss/
 │   ├── BlockSidecar.cs             — Markdown 밖 블록 속성을 문서 옆 `문서.md.meta.json`에 저장·다시 붙이기(#78, 순수 로직)
 │   ├── BlockFind.cs                — 블록 편집기 찾기·바꾸기 매칭, 제목 슬러그·앵커, 다시 읽은 뒤 스크롤 앵커 대응, 링크 해석(#75, 순수 로직)
 │   ├── MarkdownViewSwitch.cs       — `.md` 블록 편집 ↔ 미리보기: 열 뷰어 고르기, 블록 ↔ 제목·줄 번호 대응, 파일별 마지막 보기·기본 보기(`markdown-view.json`, #81)
+│   ├── FrontMatter.cs              — 블록 편집기 front matter 속성 표 해석·속성 줄 단위 편집(YAML 라이브러리 없음, #81, 순수 로직)
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
@@ -623,7 +625,7 @@ Folderss/
 - 문서 모델: `EditorBlock`의 평면 목록. 중첩은 `Indent`로만 나타낸다(블록 i 바로 뒤의 더 깊은 블록들이 자식). 표는 행마다 블록(`TableRow`, 셀은 탭 구분, 같은 들여쓰기로
   이어진 행이 한 표이고 첫 행이 머리글·정렬 보관), 이미지는 `Image`(캡션 = `Text`, 경로 = `Source`). 구조 연산은 `BlockOperations`(WPF 없음, 단위 테스트).
 - Markdown 변환 `BlockMarkdown`: 목록 자식은 부모 항목의 내용 시작 열만큼 들여써 읽고 쓴다. 토글 `<details [open]><summary>`, 콜아웃 `> [!TYPE]`,
-  GFM 표(구분 행에 `|`가 있고 셀 수가 머리글과 같을 때만), 이미지만 있는 줄 → `Image`. front matter·HTML·구분 행 없는 표는 `Raw`로 원문 보존.
+  GFM 표(구분 행에 `|`가 있고 셀 수가 머리글과 같을 때만), 이미지만 있는 줄 → `Image`. 문서 맨 앞 front matter는 `FrontMatter`(원문 그대로 보관·저장), HTML·구분 행 없는 표는 `Raw`로 원문 보존.
   저장하면 형식이 정규화되므로 `BlockMarkdownTests.NormalizedDocument_RoundTripsUnchanged`가 정규형 문서의 왕복 불변을 지킨다.
 - 가상화 `BlockPanel`(ScrollViewer의 IScrollInfo, `CanContentScroll=true`): 보이는 블록 + 위·아래 반 화면만 `BlockRow`를 만들고, 나머지는 종류·글자 수로 높이를 추정하며
   측정한 높이는 (내용·폭이 같으면) 기억한다. 블록 위치는 높이 누적(`_tops`, 구조·높이가 바뀔 때만 O(n) 재계산). 스크롤 위치는 "블록 Id + 그 안 오프셋"(앵커)이라
@@ -670,6 +672,16 @@ Folderss/
   본문이 바뀐 블록의 속성은 버리고 개수를 상태 줄에 알린다. 속성이 없으면 사이드카를 지우고, 읽지 못한 사이드카는 덮어쓰기 전에 `.bak`로 보관한다.
   속성은 `SameContent`·`Clone`에 들어가 실행 취소·수정 표시와 함께 움직인다. 색은 이름만 저장하고 실제 색은 테마 밝기로 고른다(`RefreshTheme`).
   남은 일: Folderss 파일 작업(이름 바꾸기·이동·복사·삭제·실행 취소 기록)에서 사이드카를 함께 처리(#78).
+- front matter 속성 표(#81, `BlockEditor.FrontMatter.cs`, 순수 로직 `Services/FrontMatter` — `FrontMatterTests`): `FrontMatter` 블록은 `Text`에 `---` 줄까지 원문을 담고 `Raw`와 똑같이 쓰므로
+  열고 저장하면 front matter가 바이트 단위로 같다. 화면은 Notion 페이지 속성처럼 키 | 값 행: 한 줄 스칼라(따옴표 값 포함)·단순 목록(`[a, b]`, `- a`)은 값·칩으로,
+  중첩 맵·블록 스칼라(`|`·`>`)·앵커/별칭/태그·흐름 맵·사이 빈 줄 있는 목록은 `Complex`로 키 뒤 원문을 보여 주고(누르면 원문 편집), 최상위가 `key: value`가 아니면 전체 원문 표시.
+  편집은 그 속성의 줄만 다시 쓴다(`SetValue`·`SetItems`·`RenameKey`·`AddEntry`·`RemoveEntry`, 속성 순번 + 키가 맞을 때만): 값의 원래 따옴표 형식·콜론 뒤 공백·줄 끝 주석 유지,
+  일반 값으로 못 쓰는 글자면 큰따옴표, 목록의 원래 항목은 원문 토큰 그대로·블록 목록 들여쓰기 유지. 다른 줄(주석·빈 줄·순서·다른 키 따옴표)은 건드리지 않는다.
+  표는 행이 만들어질 때만 그리고 본문이 바뀔 때만 다시 그린다. 입력란은 누른 칸 하나에만(Tag 없음 — 편집기 키 처리 대상 아님), Enter 적용·Esc 취소·Tab 다음 칸, 포커스를 잃으면 적용,
+  `GetMarkdown`(저장) 전에도 적용. 적용은 `ApplyFrontMatterEdit` → 그 블록만 `RecordChange(row)`(한 단계, 앞뒤 입력과 묶지 않음). `원문 편집`은 블록 종류를 잠시 `Raw`로 바꾸고
+  입력란을 벗어나면(맨 앞·front matter 모양일 때) 다시 `FrontMatter` — 보기 전환이라 기록하지 않고 `_committed` 사본 종류만 맞춘다(수정 표시 없음).
+  front matter는 맨 앞 고정: 손잡이를 숨기고, 화살표 이동·포커스 대상에서 빼며(`IsEditable`), 옮기기·끌어 놓기로 그 위에 놓거나 옮기지 못하게 하고(`MovesFrontMatter`), 붙여넣은 front matter는 `Raw`로 둔다.
+  찾기 대상에서 뺀다(결과를 입력란 선택으로 보여 줄 수 없음). 사이드카 해시는 `FrontMatter`를 예전처럼 `Raw`로 계산해 기존 사이드카가 그대로 맞는다.
 - 뷰어: 인코딩은 `MarkdownViewer.DetectEncoding`(BOM·CP949 판별)을 함께 쓰고, 저장은 읽은 인코딩·CRLF/LF로 `SettingsFile.WriteAllText`(임시 파일 후 교체).
   `BaseDirectory`에 문서 폴더를 넘겨 이미지 상대 경로를 푼다. 32MB 넘는 파일만 열지 않는다. `↻ 다시 읽기` 때 미저장 변경이 있으면 확인한다.
 - 찾기·바꾸기(#75, `BlockEditor.Find.cs`, 순수 로직 `Services/BlockFind`): 가상화라 화면이 아니라 모델(`_blocks`)에서 찾는다(구분선·목차 제외, 표 행은 셀 경계를 넘는 일치 제외).
