@@ -799,8 +799,9 @@ namespace Folderss.Viewers
         /// <summary>
         /// 다른 문서의 "파일#제목" 링크로 열 때 이동할 제목. 키는 대상 파일 전체 경로.
         /// 링크를 누른 뷰어가 넣고, 그 파일을 새로 열거나 이미 열린 탭을 활성화한 뷰어가 꺼낸다.
+        /// 블록 편집기 뷰어(<see cref="BlockEditorViewer"/>)도 같은 표를 쓴다(어느 뷰어로 열리든 제목으로 이동).
         /// </summary>
-        private static readonly Dictionary<string, string> PendingAnchors =
+        internal static readonly Dictionary<string, string> PendingAnchors =
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
 
         private async System.Threading.Tasks.Task ConsumePendingAnchorAsync()
@@ -989,7 +990,7 @@ namespace Folderss.Viewers
             }
         }
 
-        private static string ReadAllTextAllowingWriters(string filePath, Encoding encoding)
+        internal static string ReadAllTextAllowingWriters(string filePath, Encoding encoding)
         {
             using (var fs = new FileStream(filePath, FileMode.Open, FileAccess.Read,
                 FileShare.ReadWrite | FileShare.Delete))

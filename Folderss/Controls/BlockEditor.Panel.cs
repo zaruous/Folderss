@@ -544,6 +544,29 @@ namespace Folderss.Controls
                     SetVerticalOffset(Math.Min(top - 24, bottom - _viewport.Height + 24));
             }
 
+            /// <summary>화면 맨 위에 걸친 블록 위치와 그 블록 위쪽에서 화면 위쪽까지의 거리(외부 변경으로 다시 읽을 때 보던 곳 유지). 블록이 없으면 -1.</summary>
+            public int GetTopAnchor(out double delta)
+            {
+                EnsureTops();
+                delta = 0;
+                var index = IndexAtY(_offset - TopMargin);
+                if (index < 0)
+                    return -1;
+                delta = _offset - TopMargin - _tops[index];
+                return index;
+            }
+
+            /// <summary>블록 <paramref name="index"/>의 위쪽에서 <paramref name="delta"/>만큼 내려간 곳을 화면 맨 위로(다음 측정 때 실제 높이로 위치를 정함).</summary>
+            public void ScrollToAnchor(int index, double delta)
+            {
+                if (index < 0 || index >= _owner._blocks.Count)
+                    return;
+                _anchorId = _owner._blocks[index].Id;
+                _anchorDelta = delta;
+                InvalidateMeasure();
+                ScrollOwner?.InvalidateScrollInfo();
+            }
+
             // ── 레이아웃 ───────────────────────────────────────────────────
 
             protected override Size MeasureOverride(Size availableSize)
