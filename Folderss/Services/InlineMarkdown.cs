@@ -112,6 +112,7 @@ namespace Folderss.Services
         private static readonly Regex UriAutolink = new Regex(@"\G<([A-Za-z][A-Za-z0-9+.-]{1,31}:[^\s<>]*)>", RegexOptions.Compiled);
         private static readonly Regex EmailAutolink = new Regex(@"\G<([A-Za-z0-9.!#$%&'*+/=?^_`{|}~-]+@[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?(?:\.[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?)*)>", RegexOptions.Compiled);
         private static readonly Regex Entity = new Regex(@"\G&(?:[A-Za-z][A-Za-z0-9]{1,31}|#[0-9]{1,7}|#[xX][0-9a-fA-F]{1,6});", RegexOptions.Compiled);
+        private static readonly Regex LinkInput = new Regex(@"(?<![!\\])\[([^\[\]\n]+)\]\(([^()\s]+)\)$", RegexOptions.Compiled);
         private static readonly Regex BareUrlPattern = new Regex(@"(?:https?://|www\.)[^\s<>()\[\]""']+", RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
         public static bool IsPunctuation(char c)
@@ -1225,6 +1226,51 @@ namespace Folderss.Services
             return IsPlain(markdown) ? markdown ?? string.Empty : ToPlain(ParseForEditing(markdown));
         }
 
+        /// <summary>
+        /// 보이는 글자 위치 → 원문 위치 대응(길이 = 보이는 글자 수 + 1, 마지막은 원문 길이). 보이는 글자를 원문에서 차례로 찾는 근사라
+        /// 표식과 같은 글자를 이스케이프 없이 쓴 드문 경우에는 한두 글자 어긋날 수 있다(찾기 결과 표시용).
+        /// </summary>
+        public static int[] PlainToSourceMap(string markdown)
+        {
+            markdown = markdown ?? string.Empty;
+            var plain = ToPlain(markdown);
+            var map = new int[plain.Length + 1];
+            if (plain == markdown)
+            {
+                for (var i = 0; i <= plain.Length; i++)
+                    map[i] = i;
+                return map;
+            }
+            var j = 0;
+            for (var i = 0; i < plain.Length; i++)
+            {
+                var k = j < markdown.Length ? markdown.IndexOf(plain[i], j) : -1;
+                if (k < 0)
+                    k = Math.Min(j, markdown.Length);
+                map[i] = k;
+                j = Math.Min(markdown.Length, k + 1);
+            }
+            map[plain.Length] = markdown.Length;
+            return map;
+        }
+
+        /// <summary>원문 위치를 보이는 글자 위치로(그 앞에 있는 보이는 글자 수).</summary>
+        public static int SourceToPlain(string markdown, int sourceOffset)
+        {
+            var map = PlainToSourceMap(markdown);
+            var count = 0;
+            while (count < map.Length - 1 && map[count] < sourceOffset)
+                count++;
+            return count;
+        }
+
+        /// <summary>보이는 글자 위치를 원문 위치로.</summary>
+        public static int PlainToSource(string markdown, int plainOffset)
+        {
+            var map = PlainToSourceMap(markdown);
+            return map[Math.Max(0, Math.Min(plainOffset, map.Length - 1))];
+        }
+
         /// <summary>보이는 글자 [start, end) 구간의 조각 사본.</summary>
         public static List<InlineRun> Slice(IList<InlineRun> runs, int start, int end)
         {
@@ -1443,6 +1489,28 @@ namespace Folderss.Services
             if (caret <= 1 || caret > plain.Length)
                 return false;
             var last = plain[caret - 1];
+            if (last == '$')
+            {
+                // $수식$ → 줄 안 수식(원문 조각 — 표시할 때 수식으로 그림)
+                var open = caret >= 2 ? plain.LastIndexOf('$', caret - 2) : -1;
+                int close;
+                if (open < 0 || !TryMath(plain, open, out close) || close != caret - 1 || !AllPlainText(runs, open, caret))
+                    return false;
+                result = Replace(runs, open, caret, new[] { new InlineRun { Kind = InlineRunKind.Raw, Text = plain.Substring(open, caret - open) } });
+                newCaret = caret;
+                return true;
+            }
+            if (last == ')')
+            {
+                // [글자](주소) → 링크
+                var m = LinkInput.Match(plain.Substring(0, caret));
+                if (!m.Success || !AllPlainText(runs, m.Index, caret))
+                    return false;
+                var label = m.Groups[1].Value;
+                result = Replace(runs, m.Index, caret, new[] { new InlineRun { Text = label, Link = m.Groups[2].Value } });
+                newCaret = m.Index + label.Length;
+                return true;
+            }
             string[] markers;
             switch (last)
             {

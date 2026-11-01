@@ -33,7 +33,9 @@ namespace Folderss.Controls
             private readonly Border _body;
             private readonly Grid _bodyGrid;
             private readonly TextBlock _display;
-            private TextBox _mainEditor;
+            private BlockTextBox _mainEditor;      // 원문 입력란(코드·원문·수식·캡션·카드 제목)
+            private RichBlockBox _rich;            // 서식 입력란 — 편집기에 하나뿐, 이 행에 붙어 있을 때만(#76)
+            private int _lastCaret;                // 서식 입력란을 다른 행으로 보낼 때의 커서(보이는 글자 기준)
             private bool _editing;
             private StackPanel _gutter;
             private double _gutterTop = 2;
@@ -67,7 +69,7 @@ namespace Folderss.Controls
             private bool _tableLast;
             private readonly List<Grid> _cellHosts = new List<Grid>();
             private readonly List<TextBlock> _cellDisplays = new List<TextBlock>();
-            private readonly List<TextBox> _cells = new List<TextBox>();
+            private readonly List<BlockTextBox> _cells = new List<BlockTextBox>();
             private int _tableColumns;
             private bool _tableHeader;
             private bool _tableFirst;
@@ -88,14 +90,90 @@ namespace Folderss.Controls
             public EditorBlock Block { get; private set; }
             public Grid Root { get; }
 
-            /// <summary>입력란. 없으면 만든다. 표 행은 마지막으로 포커스를 받은 셀, 이미지는 캡션.</summary>
-            public TextBox Editor
+            /// <summary>
+            /// 입력란. 없으면 만든다. 표 행은 마지막으로 포커스를 받은 셀, 이미지는 캡션, 서식 블록은 편집기의 서식 입력란을 이 행으로 가져온다
+            /// (다른 행에서 떼어 옴 — 포커스·커서를 확인만 할 때는 <see cref="IsEditorFocused"/>·<see cref="CurrentCaret"/>).
+            /// </summary>
+            public IBlockInput Editor
             {
                 get
                 {
                     EnsureEditing();
-                    return Block.Kind == BlockKind.TableRow && _cellHosts.Count > 0 ? EnsureCellEditor(Math.Min(ActiveColumn, _cellHosts.Count - 1)) : _mainEditor;
+                    if (Block.Kind == BlockKind.TableRow && _cellHosts.Count > 0)
+                        return EnsureCellEditor(Math.Min(ActiveColumn, _cellHosts.Count - 1));
+                    if (UsesRich)
+                        return _owner.AttachRich(this);
+                    return _mainEditor;
                 }
+            }
+
+            /// <summary>본문을 서식 입력란(RichBlockBox)으로 편집하는 종류인지.</summary>
+            public bool UsesRich => EditorBlock.HasInlineFormatting(Block.Kind) && Block.Kind != BlockKind.TableRow;
+
+            /// <summary>지금 이 행에 붙은 서식 입력란(없으면 null).</summary>
+            public RichBlockBox Rich => _rich;
+
+            /// <summary>입력란(셀 포함)에 키보드 포커스가 있는지. 입력란을 새로 만들거나 가져오지 않는다.</summary>
+            public bool IsEditorFocused =>
+                (_rich != null && _rich.IsKeyboardFocusWithin) || (_mainEditor != null && _mainEditor.IsKeyboardFocused) ||
+                _cells.Any(c => c != null && c.IsKeyboardFocused);
+
+            /// <summary>입력란의 커서 위치(보이는 글자 기준). 입력란이 없거나 서식 입력란을 다른 행에 보냈으면 마지막 위치.</summary>
+            public int CurrentCaret
+            {
+                get
+                {
+                    if (Block.Kind == BlockKind.TableRow)
+                    {
+                        var column = Math.Min(ActiveColumn, _cells.Count - 1);
+                        return column >= 0 && _cells[column] != null ? _cells[column].CaretIndex : 0;
+                    }
+                    if (_rich != null)
+                        return _rich.CaretIndex;
+                    if (UsesRich)
+                        return _lastCaret;
+                    return _mainEditor != null ? _mainEditor.CaretIndex : 0;
+                }
+            }
+
+            /// <summary>서식 입력란을 이 행에 붙인다(편집기가 부름). 내용은 화면에 붙이기 전에 넣는다(붙은 뒤 넣으면 입력기와 잠금을 주고받음).</summary>
+            public void AttachRich(RichBlockBox box)
+            {
+                _owner._suppressTextChanged = true;
+                try
+                {
+                    box.Tag = this;
+                    box.SetMarkdown(Block.Text);
+                }
+                finally
+                {
+                    _owner._suppressTextChanged = false;
+                }
+                _rich = box;
+                Grid.SetColumn(box, 1);
+                Grid.SetRow(box, 1);
+                _bodyGrid.Children.Add(box);
+                if (_mainEditor != null)
+                    _mainEditor.Visibility = Visibility.Collapsed;
+                ApplyTextStyle(box);
+                _appliedTextColor = null;
+                SyncEditors();
+                RefreshState();
+            }
+
+            /// <summary>서식 입력란을 뗀다(다른 행으로 가거나 행을 거둘 때). 표시용 글자를 지금 본문으로 다시 그린다.</summary>
+            public void DetachRich()
+            {
+                var box = _rich;
+                if (box == null)
+                    return;
+                try { _lastCaret = box.CaretIndex; } catch (InvalidOperationException) { _lastCaret = 0; }
+                _rich = null;
+                _bodyGrid.Children.Remove(box);
+                box.Tag = null;
+                UpdateDisplayContent();
+                SyncEditors();
+                UpdatePlaceholder();
             }
 
             /// <summary>표 행에서 마지막으로 포커스를 받은 셀 번호.</summary>
@@ -103,11 +181,12 @@ namespace Folderss.Controls
 
             public int CellCount => _cellHosts.Count;
 
-            /// <summary>입력란(TextBox)을 만든 행. 입력기에 등록돼 있어 다른 블록에 다시 묶어 쓰지 않는다.</summary>
-            public bool HasEditors => _editing;
+            /// <summary>입력란(TextBox)을 만든 행. 입력기에 등록돼 있어 다른 블록에 다시 묶어 쓰지 않는다(서식 입력란은 떼어 내므로 상관없음).</summary>
+            public bool HasEditors => _editing && (_mainEditor != null || _metaBox != null || _cells.Any(c => c != null));
 
             /// <summary>접근성 트리에 내보낼 요소. 입력란을 새로 만들지 않는다.</summary>
-            public UIElement AutomationTarget => _editing && _mainEditor != null && _mainEditor.Visibility == Visibility.Visible ? _mainEditor : (UIElement)Root;
+            public UIElement AutomationTarget => _rich != null ? _rich
+                : _editing && _mainEditor != null && _mainEditor.Visibility == Visibility.Visible ? _mainEditor : (UIElement)Root;
 
             public BlockRow(BlockEditor owner, EditorBlock block)
             {
@@ -157,9 +236,9 @@ namespace Folderss.Controls
                 SyncFromBlock();
             }
 
-            private TextBox CreateTextBox(string text)
+            private BlockTextBox CreateTextBox(string text)
             {
-                var box = new TextBox
+                var box = new BlockTextBox
                 {
                     TextWrapping = TextWrapping.Wrap,
                     AcceptsReturn = true,
@@ -245,10 +324,19 @@ namespace Folderss.Controls
                 if (e.Handled)
                     return;
                 e.Handled = true;
+                if (_owner._forwardingMouse)
+                    return;
                 var index = _owner.IndexOf(this);
                 if (Block.Kind == BlockKind.Divider || Block.Kind == BlockKind.Toc)
                 {
                     _owner.SelectBlocks(index, index);
+                }
+                else if (UsesRich && _rich == null && ReferenceEquals(sender, _display) && e.ClickCount == 1)
+                {
+                    // 표시 글자를 누름: 서식 입력란을 이 행에 붙이고 누른 자리에 커서를 둔 뒤, 같은 누르기를 입력란에 넘겨 끌어 선택이 이어지게 한다.
+                    var caret = BlockInlineRenderer.DisplayOffsetAt(_display, e.GetPosition(_display));
+                    _owner.FocusRow(index, caret < 0 ? int.MaxValue : caret, 0);
+                    _owner.ForwardMouseDown(_rich, e);
                 }
                 else
                 {
@@ -280,6 +368,8 @@ namespace Folderss.Controls
             {
                 if (block.Id != Block.Id)
                 {
+                    if (_rich != null)
+                        _owner.ReleaseRich();
                     ActiveColumn = 0;
                     _imageKey = null;
                     _allowRemoteOnce = false;
@@ -309,6 +399,10 @@ namespace Folderss.Controls
                     else
                     {
                         UpdateDisplayContent();
+                        if (_rich != null && !UsesRich)
+                            _owner.ReleaseRich();
+                        if (_rich != null && _rich.Markdown != Block.Text)
+                            _rich.SetMarkdown(Block.Text);
                         if (_mainEditor != null && _mainEditor.Text != Block.Text)
                             _mainEditor.Text = Block.Text;
                     }
@@ -337,23 +431,15 @@ namespace Folderss.Controls
                 var text = Block.Text ?? string.Empty;
                 if (Block.Kind == BlockKind.Math)
                 {
+                    _display.Tag = null;
                     _display.TextAlignment = TextAlignment.Center;
                     BlockMathRenderer.PopulateInlines(_display.Inlines, string.IsNullOrWhiteSpace(text) ? "\\text{(클릭하여 수식 입력)}" : text, 16);
                     return;
                 }
 
                 _display.TextAlignment = TextAlignment.Left;
-                if (!EditorBlock.IsVerbatim(Block.Kind) && BlockMathRenderer.ContainsInlineMath(text))
-                {
-                    BlockMathRenderer.PopulateMixedInlines(_display.Inlines, text, FontSizeOf(Block));
-                    return;
-                }
-
-                if (_display.Inlines.Count > 1 || _display.Text != text)
-                {
-                    _display.Inlines.Clear();
-                    _display.Text = text;
-                }
+                // 줄 안 서식(#76)·줄 안 수식은 표식 없이 그린다. 원문 블록·캡션은 글자 그대로.
+                BlockInlineRenderer.PopulateDisplay(_display, text, FontSizeOf(Block), EditorBlock.HasInlineFormatting(Block.Kind));
             }
 
             private string MetaValue()
@@ -419,6 +505,21 @@ namespace Folderss.Controls
                     _display.Visibility = Visibility.Collapsed;
                     if (_mainEditor != null)
                         _mainEditor.Visibility = Visibility.Collapsed;
+                    return;
+                }
+
+                if (UsesRich)
+                {
+                    // 서식 블록: 서식 입력란이 붙어 있을 때만 입력란, 아니면 표시용 글자(마우스를 올려도 입력란을 만들지 않음).
+                    if (_mainEditor != null)
+                        _mainEditor.Visibility = Visibility.Collapsed;
+                    _display.Visibility = _rich != null ? Visibility.Collapsed : Visibility.Visible;
+                    if (_rich != null)
+                    {
+                        _rich.Visibility = Visibility.Visible;
+                        ApplyTextStyle(_rich);
+                    }
+                    _appliedTextColor = null;
                     return;
                 }
 
@@ -682,6 +783,8 @@ namespace Folderss.Controls
                 var targets = new List<FrameworkElement> { _display };
                 if (_mainEditor != null)
                     targets.Add(_mainEditor);
+                if (_rich != null)
+                    targets.Add(_rich);
                 targets.AddRange(_cellDisplays);
                 targets.AddRange(_cells.Where(c => c != null));
                 foreach (var target in targets)
@@ -1493,7 +1596,7 @@ namespace Folderss.Controls
             {
                 var kind = Block.Kind;
                 var show = kind != BlockKind.Divider && kind != BlockKind.Toc && kind != BlockKind.TableRow && Block.Text.Length == 0 &&
-                           (Block.GetHeadingLevel() > 0 || (_mainEditor != null && _mainEditor.IsKeyboardFocused));
+                           (Block.GetHeadingLevel() > 0 || (_mainEditor != null && _mainEditor.IsKeyboardFocused) || (_rich != null && _rich.IsKeyboardFocusWithin));
                 if (!show)
                 {
                     if (_placeholder != null)
@@ -1659,8 +1762,7 @@ namespace Folderss.Controls
                         grid.ColumnDefinitions[i].Width = length;
                     var value = i < values.Length ? values[i] : string.Empty;
                     var display = _cellDisplays[i];
-                    if (display.Text != value)
-                        display.Text = value;
+                    BlockInlineRenderer.PopulateDisplay(display, value, 14, true);
                     var editor = _cells[i];
                     if (editor != null && editor.Text != value)
                         editor.Text = value;
@@ -1831,7 +1933,7 @@ namespace Folderss.Controls
             }
 
             /// <summary><paramref name="index"/>번 셀의 입력란. 없으면 지금 셀 값으로 만든다(화면에 붙이기 전에 내용을 넣음).</summary>
-            private TextBox EnsureCellEditor(int index)
+            private BlockTextBox EnsureCellEditor(int index)
             {
                 if (index < 0 || index >= _cellHosts.Count)
                     return null;
@@ -1869,7 +1971,7 @@ namespace Folderss.Controls
                 DataObject.AddPastingHandler(cell, (s, e) => _owner.OnCellPasting(this, Math.Max(0, _cells.IndexOf(cell)), e));
             }
 
-            private void StyleCell(TextBox cell, int index)
+            private void StyleCell(BlockTextBox cell, int index)
             {
                 var aligns = _tableAlign.Split(',');
                 var a = index < aligns.Length ? aligns[index] : string.Empty;
@@ -1890,20 +1992,20 @@ namespace Folderss.Controls
             }
 
             /// <summary>표 행은 <paramref name="column"/>번 셀(범위를 넘으면 마지막 셀), 그 밖은 입력란. 없으면 만든다.</summary>
-            public TextBox EditorForColumn(int column)
+            public IBlockInput EditorForColumn(int column)
             {
                 EnsureEditing();
                 if (Block.Kind != BlockKind.TableRow || _cellHosts.Count == 0)
-                    return _mainEditor;
+                    return Editor;
                 return EnsureCellEditor(Math.Max(0, Math.Min(column, _cellHosts.Count - 1)));
             }
 
             /// <summary>위·아래 이동 때 가로 위치 <paramref name="x"/>(패널 좌표)에 있는 입력란. 표 행이면 그 위치의 셀.</summary>
-            public TextBox EditorAtPanelX(double x, Visual panel)
+            public IBlockInput EditorAtPanelX(double x, Visual panel)
             {
                 EnsureEditing();
                 if (Block.Kind != BlockKind.TableRow || _cellHosts.Count == 0)
-                    return _mainEditor;
+                    return Editor;
                 for (var i = 0; i < _cellHosts.Count; i++)
                 {
                     var border = (FrameworkElement)_cellHosts[i].Parent;

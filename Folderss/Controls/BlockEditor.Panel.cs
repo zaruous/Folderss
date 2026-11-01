@@ -202,6 +202,8 @@ namespace Folderss.Controls
                     _realized.Remove(row.Block.Id);
                 if (ReferenceEquals(_owner._slashRow, row))
                     _owner.CloseSlash();
+                if (ReferenceEquals(_owner._richRow, row))
+                    _owner.ReleaseRich();   // 서식 입력란은 하나뿐 — 거두는 행에서 떼어 둔다(#76)
                 row.Root.Visibility = Visibility.Collapsed;
                 row.ResetTransient();
                 // 입력란(TextBox)을 만든 행은 입력기(TSF)에 등록돼 있어 다시 쓰면 내용 바꿀 때 멈출 수 있으므로 버린다.
