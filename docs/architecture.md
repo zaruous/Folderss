@@ -34,7 +34,9 @@ Folderss/
 │   └── ViewerHost.ViewSwitch.cs    — `.md` 탭 툴바 `블록 편집`/`미리보기` 전환(저장 확인·위치 유지·파일별 기억, #81)
 ├── Viewers/
 │   ├── MarkdownViewer.xaml/.cs     — Markdown 미리보기·편집·내보내기 + 활성 탭 중심 파일 변경 감시
-│   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기
+│   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기 (강제 언어만 넘기고 언어 결정은 편집기 안, #82)
+│   ├── MonacoLanguagePicker.xaml/.cs — Monaco 탭 툴바 언어 선택(찾기 칸 + 목록, `자동`/파일별 기억, #82)
+│   ├── IViewerToolbarProvider.cs   — 뷰어 전용 탭 툴바 요소를 `ViewerHost`의 `ViewerToolbarSlot`에 넣는 인터페이스
 │   ├── TextViewer.xaml/.cs         — 읽기 전용 텍스트 뷰어
 │   ├── BlockEditorViewer.cs        — Markdown 파일을 BlockEditor로 편집하는 뷰어 (`builtin:blocks`, 인코딩·줄바꿈 유지 저장, 이미지 기준 폴더)
 │   ├── BlockEditorViewer.External.cs — 블록 편집기 외부 변경 감시·반영(문서+사이드카, 자기 저장 무시, 앵커 유지), 링크 열기(#75)
@@ -91,6 +93,7 @@ Folderss/
 │   ├── DiskUsageService.cs         — `DriveInfo.GetDrives()` 기반 준비된 드라이브 사용량 조회
 │   ├── KeybindingManager.cs        — 단축키 매핑 및 커스터마이징
 │   ├── ViewerConfigService.cs      — 확장자 ↔ 뷰어 매핑 (viewer-config.json 저장)
+│   ├── MonacoLanguages.cs          — Monaco 언어: 번들 등록 정적 표·예외 사전·우선순위(`MonacoLanguages`), 사용자 연결·파일별 언어(`MonacoLanguageSettings`, `monaco-language.json`, #82)
 │   ├── BlockMarkdown.cs            — 블록 목록 ↔ Markdown 변환(CommonMark 목록 중첩, <details> 토글, > [!NOTE] 콜아웃, 원문 보존), 입력 단축 판별 (순수 로직)
 │   ├── BlockOperations.cs          — 블록 구조 연산: 하위 트리, 들여쓰기 규칙·정규화, 형제 단위 이동, 번호 표시, 접힘, 여러 열 정리·만들기·옮기기(`ColumnLayout`) (순수 로직)
 │   ├── BlockSidecar.cs             — Markdown 밖 블록 속성을 문서 옆 `문서.md.meta.json`에 저장·다시 붙이기(#78, 순수 로직)
@@ -346,6 +349,25 @@ Folderss/
   `.txt → Text` 같은 매핑이 저장은 되지만 다음 실행 때 사라졌다(버그).
 - 뷰어 매핑은 `ReplaceMappings`로 전체를 한 번에 교체하고 파일을 한 번만 쓴다
   (과거에는 행마다 `RemoveMapping`/`SetMapping`이 각각 파일을 다시 써 저장 한 번에 수십 번 덮어썼다).
+
+### Monaco 언어 결정 (MonacoLanguages / MonacoLanguagePicker, #82)
+- **우선순위**: 탭에서 고른 파일별 언어 → 설정 > 뷰어 `Monaco 언어 연결`(위에서부터 첫 일치) → 예외 사전(`MonacoLanguages.ExceptionOverrides`, 지금은 `.h → cpp`)
+  → Monaco 등록 정보 → `plaintext`. 초대용량(50MB 초과)은 항상 `plaintext`(대용량 20MB 초과는 언어 유지, 부가 기능만 끔 — 이전과 같음).
+- **어디서 정하나**: C#(`MonacoLanguageSettings.ResolveForced`)은 앞 세 단계의 "강제 언어"만 구해 `app.open(…, language, …, fileName)`에 넘긴다(없으면 null).
+  null이면 `monaco-app.html`의 `detectLanguage(fileName)`이 런타임 `monaco.languages.getLanguages()`로 고른다:
+  `filenames` 일치 → `filenamePatterns`(glob) → `extensions`(이름 끝이 같은 것 중 가장 긴 것, 같으면 먼저 등록된 언어). 모두 대소문자 무시.
+  강제 언어가 등록되지 않은 id면 자동으로 돌아간다. 결정 결과는 `{type:'language', id, huge}` 메시지로 C#에 알려 툴바에 표시한다.
+- **정적 표**: `MonacoLanguages.Languages`는 번들 등록 정보(`basic-languages/monaco.contribution.js` + json + plaintext + `monaco-jsonl.js`의 jsonl, 런타임 순서·총 92개)를 옮긴 것이다.
+  설정 창 언어 목록(편집기가 없는 곳)과 단위 테스트(`MatchRegistry`가 JS와 같은 규칙)에 쓴다. 툴바 목록은 편집기가 보낸 런타임 목록(`{type:'languages'}`)을 쓴다.
+  `MonacoLanguageTests.StaticTable_MatchesBundledBasicLanguages`가 번들 파일을 정규식으로 읽어 표와 비교하므로 Monaco를 올려 등록이 바뀌면 테스트가 알려 준다.
+- **탭 툴바**: `ViewerHost`는 뷰어가 `IViewerToolbarProvider`면 `ToolbarContent`를 `ViewerToolbarSlot`(오른쪽 단추 줄 맨 앞)에 넣는다. Monaco는 `MonacoLanguagePicker`
+  (현재 언어 + ` ▾`, 파일별로 고른 언어면 ` ●`). 고르면 `MonacoLanguageSettings.RememberAndSave`(실패는 Trace, 이번 탭엔 적용) 후 `app.setLanguage(id)` → `monaco.editor.setModelLanguage`.
+  `자동`은 기억을 지우고 사용자 연결·예외 사전부터 다시 따진다. 세션 복원·다시 읽기·다시 열기는 `Load`가 매번 `ResolveForced`를 부르므로 따로 처리가 없다.
+- **저장**: `%LOCALAPPDATA%\Folderss\monaco-language.json` `{version:1, mappings:[{pattern, language}], files:[{path, language}]}`(파일별 최근 200개).
+  설정 창은 `TrySave("Monaco 언어", "monaco-language.json", …)`(`SettingsWindow.MonacoLanguage.cs`), 쓰기는 `SettingsFile.WriteAllText`, 깨진 JSON은 기본값으로 읽는다.
+- **확장자 없는 파일**: 언어 결정은 파일 이름(`Dockerfile`, `Gemfile`, `.editorconfig`)도 보지만, 어떤 뷰어로 열지는 여전히 `ViewerConfigService`의 확장자 매핑이라
+  확장자 없는 파일(`Dockerfile`, `Makefile`)은 Monaco 탭으로 열리지 않는다(기존 한계, `docs/items/monaco-language.md`).
+- `TextViewer.ExtToLanguage`는 highlight.js 언어 이름(`.sh → bash` 등)이라 공유하지 않는다.
 
 ### PluginManager / PluginPackage (플러그인)
 - 계약: 솔루션의 `Folderss.PluginContract` 프로젝트(`IFolderssPlugin`, `IPluginManager`, `IFolderPanel`, `IPluginSettingsPage`).

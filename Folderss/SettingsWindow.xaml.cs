@@ -180,6 +180,7 @@ namespace Folderss
             ConsoleProfileShellKindCombo.SelectedIndex = 0;
             ClearConsoleProfileForm();
             ClearOpenWithForm();
+            InitializeMonacoLanguageSettings();
 
             _initializingTheme = true;
             BuildThemeList();
@@ -762,6 +763,7 @@ namespace Folderss
             TrySave(failures, "캡쳐", "capture-settings.xml", () => CaptureSettingsService.Save(_workingCapture));
             TrySave(failures, "네트워크", "network-settings.xml", () => NetworkSettingsService.Save(_workingNetwork));
             TrySave(failures, "경로 복사", "path-copy-settings.xml", () => PathCopySettingsService.Save(_workingPathCopy));
+            TrySave(failures, "Monaco 언어", "monaco-language.json", SaveMonacoLanguageSettings);
             foreach (var page in _pluginPages.Where(p => p.Page != null && p.ViewCreated))
                 TrySave(failures, "플러그인: " + page.Title, page.PluginId, page.Page.Save);
             SavedGitSettings = _workingGit.Clone();

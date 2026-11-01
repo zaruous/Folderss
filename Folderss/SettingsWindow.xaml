@@ -189,6 +189,7 @@
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0"
@@ -207,6 +208,67 @@
                             </Style>
                         </TextBlock.Style>
                     </TextBlock>
+
+                    <!-- Monaco 언어 연결(#82): 확장자·파일 이름·패턴 → Monaco 언어 id. 맨 아래 줄(Grid.Row 5)에 보인다.
+                         우선순위: 탭에서 고른 파일별 언어 → 이 표(위에서부터 첫 일치) → 예외 사전 → Monaco 등록 정보 → plaintext. monaco-language.json -->
+                    <StackPanel Grid.Row="5" Margin="0,16,0,0">
+                        <TextBlock Text="Monaco 언어 연결" FontWeight="SemiBold"/>
+                        <TextBlock Text="Monaco 뷰어로 여는 파일의 구문 강조 언어를 확장자(.inc)·파일 이름(Makefile)·패턴(Dockerfile.*)으로 정합니다. 위에서부터 처음 맞는 줄을 씁니다. 탭 툴바에서 파일마다 고른 언어가 이 표보다 먼저입니다."
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,2,0,6"
+                                   Foreground="{DynamicResource SecondaryText}"/>
+                        <ListView x:Name="MonacoLanguageMappingList"
+                                  Height="120"
+                                  SelectionMode="Single"
+                                  BorderThickness="1"
+                                  BorderBrush="{DynamicResource BorderBrush}">
+                            <ListView.View>
+                                <GridView>
+                                    <GridViewColumn Header="확장자·파일 이름" Width="150" DisplayMemberBinding="{Binding Pattern}"/>
+                                    <GridViewColumn Header="언어" Width="230">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <ComboBox ItemsSource="{Binding DataContext.MonacoLanguageOptions, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                          SelectedValue="{Binding Language, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+                                                          SelectedValuePath="Key"
+                                                          DisplayMemberPath="DisplayName"
+                                                          MinWidth="200"
+                                                          Margin="0"
+                                                          Padding="7,4"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                    <GridViewColumn Header="" Width="64">
+                                        <GridViewColumn.CellTemplate>
+                                            <DataTemplate>
+                                                <Button Content="삭제"
+                                                        Click="RemoveMonacoLanguage_Click"
+                                                        Padding="8,3"
+                                                        Margin="0"/>
+                                            </DataTemplate>
+                                        </GridViewColumn.CellTemplate>
+                                    </GridViewColumn>
+                                </GridView>
+                            </ListView.View>
+                        </ListView>
+                        <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                            <TextBox x:Name="NewMonacoPatternBox" Width="120" Margin="0,0,8,0"
+                                     VerticalContentAlignment="Center"
+                                     BorderBrush="{DynamicResource BorderBrush}"
+                                     Background="{DynamicResource ControlBackground}"
+                                     Foreground="{DynamicResource PrimaryText}"
+                                     ToolTip="확장자(.inc), 파일 이름(Makefile) 또는 * ? 패턴(Dockerfile.*)"
+                                     Text=".ext"/>
+                            <ComboBox x:Name="NewMonacoLanguageCombo"
+                                      Width="220"
+                                      Margin="0,0,8,0"
+                                      IsTextSearchEnabled="True"
+                                      SelectedValuePath="Key"
+                                      DisplayMemberPath="DisplayName"/>
+                            <Button Content="추가" Click="AddMonacoLanguage_Click" Padding="12,4"/>
+                        </StackPanel>
+                    </StackPanel>
 
                     <ListView x:Name="ViewerMappingList"
                               Grid.Row="2"

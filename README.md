@@ -43,6 +43,7 @@ Folderss/
 ├── Viewers/
 │   ├── MarkdownViewer      — Markdown 미리보기·편집·검색·내보내기, 외부 변경 감시
 │   ├── MonacoViewer        — Monaco Editor 기반 코드/텍스트 편집기, 외부 변경 감시
+│   ├── MonacoLanguagePicker — Monaco 탭 툴바 언어 선택(검색, 자동/파일별 기억)
 │   ├── TextViewer          — 읽기 전용 텍스트 뷰어
 │   ├── BlockEditorViewer   — Markdown 파일을 BlockEditor로 편집하는 뷰어 (`builtin:blocks`)
 │   ├── IFileViewer         — 뷰어 공통 인터페이스
@@ -96,6 +97,7 @@ Folderss/
 │   ├── KeyBindingService       — 단축키 기본값·사용자 설정 저장
 │   ├── SearchService           — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 접근 거부·순환 링크 내성 순회)
 │   ├── ViewerConfigService     — 확장자별 내장 뷰어 매핑
+│   ├── MonacoLanguages         — Monaco 언어 결정(번들 등록 정적 표·예외 사전·우선순위)과 언어 설정(`monaco-language.json`)
 │   ├── BlockMarkdown           — 블록 편집기 문서 ↔ Markdown 변환, 입력 단축(`# `, `- ` 등) 판별
 │   ├── BlockOperations         — 블록 목록 구조 연산 (하위 트리, 들여쓰기 규칙, 이동, 번호 표시, 접힘)
 │   ├── BlockTable              — 블록 편집기 표 연산 (행·열 삽입·삭제·이동, 열 정렬·너비, 머리글 표시) (순수 로직)
@@ -286,6 +288,10 @@ tests/
 
 - 매핑되지 않은 확장자는 Windows 기본 프로그램으로 열립니다. `.cs`, `.py`, `.txt` 등은 설정에서 Monaco 또는 Text 뷰어에 추가로 매핑할 수 있습니다.
 - 뷰어 탭 툴바의 `다시 읽기` 버튼으로 디스크 내용을 다시 불러올 수 있습니다.
+- **Monaco 언어(구문 강조)**: Monaco에 번들된 약 90개 언어가 확장자·파일 이름으로 자동 연결됩니다(`.go`, `.rs`, `.kt`, `.rb`, `.php`, `.scss`, `.ini`, `.lua`, `.vb`, `.cshtml`, `.tf`, `Dockerfile`, `.editorconfig` 등 — 대소문자 무시). 설정에서 아무 확장자나 Monaco로 매핑하면 그 확장자의 언어로 바로 강조됩니다.
+  - 탭 툴바의 언어 단추(예: `Go ▾`)로 이 파일의 언어를 바꿉니다. 이름·id·확장자(`.go`)로 찾을 수 있고, 고른 언어는 파일별로 기억해(` ●` 표시) 다시 열 때·세션을 복원할 때 그대로 씁니다. `자동`을 고르면 기억을 지웁니다.
+  - `설정 > 뷰어`의 `Monaco 언어 연결`에서 확장자(`.inc` → PHP)·파일 이름(`Makefile` → Shell)·패턴(`Dockerfile.*`, `*.conf`)을 언어에 연결합니다(위에서부터 첫 일치).
+  - 우선순위: 탭에서 고른 파일별 언어 → `Monaco 언어 연결` → 내장 예외(`.h` → C++) → Monaco 등록 정보 → plaintext. 50MB를 넘는 초대용량 파일은 항상 plaintext(언어 단추 사용 안 함)입니다.
 - **블록 편집 ↔ 미리보기 전환**: `.md`·`.markdown` 탭(Markdown 뷰어나 블록 편집기로 열린 경우) 툴바의 `블록 편집`/`미리보기` 버튼으로 같은 탭을 블록 편집기 ↔ Markdown 뷰어로 바꿉니다. 확장자 매핑은 그대로이고 이 탭만 바뀝니다(패널 잠금도 유지). 저장하지 않은 변경이 있으면 저장한 뒤 전환할지 묻고, 취소하면 그대로 남습니다. 보던 위치는 제목 기준으로(원문 편집 화면은 줄 번호로) 이어지고, 고른 보기는 파일별로 기억해 다음에 열 때·앱을 다시 시작해 세션을 복원할 때 그 보기로 엽니다. HTML/PDF 내보내기·인쇄·다른 이름으로 저장·공유는 미리보기로 전환해서 씁니다.
 - `설정 > 뷰어`의 `.md 탭을 처음 열 때`에서 기억한 보기가 없는 `.md` 파일을 `확장자 매핑을 따름`(기본, 지금과 같음)·`블록 편집`·`미리보기 (Markdown 뷰어)` 중 무엇으로 열지 고릅니다.
 - Markdown·Monaco 뷰어와 블록 편집기에서 편집 후 저장하지 않으면 탭 제목 끝에 ` *`가 붙습니다. 그 상태로 탭을 닫으면 변경을 버릴지 묻고, 앱을 종료할 때도 미저장 문서 수를 알려 확인합니다. 저장은 뷰어 안에서 `Ctrl+S`입니다.
@@ -560,6 +566,7 @@ Folderss\Themes\Controls.xaml
 | `keybindings.xml` | 사용자 단축키 |
 | `viewer-config.json` | 확장자별 뷰어 매핑 (`version` 2 형식, 기본값과 다른 재정의만 저장) |
 | `markdown-view.json` | `.md` 탭 처음 열 때 기본 보기(`defaultView`: `mapping`·`blocks`·`preview`)와 파일별 마지막 보기(블록 편집/미리보기, 최근 200개) |
+| `monaco-language.json` | Monaco 언어 연결(`mappings`: 확장자·파일 이름·패턴 → 언어 id)과 탭에서 고른 파일별 언어(`files`, 최근 200개) |
 | `open-with.xml` | 사용자 지정 열기 프로그램 |
 | `console-settings.xml` | 콘솔 설정(기본 프로필, 사용자 정의 프로필 등) |
 | `git-settings.xml` | Git 설정(git 경로, 기준 폴더 규칙, pull 방식, 탐색, 로그) |
