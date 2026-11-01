@@ -135,7 +135,6 @@ namespace Folderss.Controls
 
         private void Rebuild(IList<InlineRun> runs)
         {
-            var oldPlain = _plain ?? Text;
             BeginChange();
             try
             {
@@ -311,7 +310,6 @@ namespace Folderss.Controls
         {
             if (block is Paragraph paragraph)
             {
-                var runs = new List<InlineRun>();
                 var length = 0;
                 CountLength(paragraph.Inlines, ref length);
                 return length;

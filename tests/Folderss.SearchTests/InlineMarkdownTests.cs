@@ -251,6 +251,48 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
+        public void InputRule_MathAndLink()
+        {
+            List<InlineRun> result;
+            int newCaret;
+            var math = new List<InlineRun> { T("값 $x^2$") };
+            Assert.True(InlineMarkdown.TryInputRule(math, 7, out result, out newCaret));
+            Assert.Equal("값 $x^2$", InlineMarkdown.Serialize(result));
+            Assert.Equal(InlineRunKind.Raw, result.Last().Kind);
+            var link = new List<InlineRun> { T("보기 [문서](a.md)") };
+            Assert.True(InlineMarkdown.TryInputRule(link, 13, out result, out newCaret));
+            Assert.Equal("보기 [문서](a.md)", InlineMarkdown.Serialize(result));
+            Assert.Equal("a.md", result.Last().Link);
+            Assert.Equal(5, newCaret);
+            Assert.False(InlineMarkdown.TryInputRule(new List<InlineRun> { T("금액 $5 ~ $") }, 10, out result, out newCaret));
+        }
+
+        [Theory]
+        [InlineData("앞 **굵게** 뒤", 2, 4)]   // '굵' → 원문 4
+        [InlineData("앞 **굵게** 뒤", 4, 8)]   // 굵게 뒤 → 닫는 표식 앞(원문 8)이 아니라 다음 글자 ' '(원문 8)
+        [InlineData("평문", 1, 1)]
+        [InlineData("\\*별\\*", 1, 2)]
+        public void PlainToSource_MapsVisibleOffsets(string markdown, int plain, int source)
+        {
+            Assert.Equal(source, InlineMarkdown.PlainToSource(markdown, plain));
+            Assert.Equal(plain, InlineMarkdown.SourceToPlain(markdown, source));
+        }
+
+        [Theory]
+        [InlineData("<b>굵게</b> 그리고 <i>기울임</i>", "**굵게** 그리고 *기울임*")]
+        [InlineData("<strong>a</strong><em>b</em><del>c</del><code>d*e</code>", "**a***b*~~c~~`d*e`")]
+        [InlineData("<a href=\"https://a.com/?x=1&amp;y=2\">링크</a>", "[링크](https://a.com/?x=1&y=2)")]
+        [InlineData("<span style=\"font-weight:700\">구글 굵게</span>", "**구글 굵게**")]
+        [InlineData("<p>첫 문단</p><p>둘째 <b>문단</b></p>", "첫 문단\n\n둘째 **문단**")]
+        [InlineData("<h2>제목</h2><ul><li>하나</li><li>둘</li></ul>", "## 제목\n\n- 하나\n\n- 둘")]
+        [InlineData("2 * 3 &lt;tag&gt;", "2 * 3 \\<tag>")]
+        [InlineData("Version:0.9\r\nStartHTML:0\r\n<html><body><!--StartFragment--><b>조각</b><!--EndFragment--></body></html>", "**조각**")]
+        public void ClipboardHtml_ToMarkdown(string html, string expected)
+        {
+            Assert.Equal(expected, ClipboardMarkdown.FromHtml(html));
+        }
+
+        [Fact]
         public void BareUrl_DetectedOnlyForDisplay()
         {
             var display = InlineMarkdown.Parse("주소 https://a.com/x. 끝", bareUrls: true);

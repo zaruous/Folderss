@@ -314,6 +314,9 @@ namespace Folderss.Controls
         {
             if (_applyingInlineEdit || box.IsComposing)
                 return;
+            var text = box.Text;
+            if (caret < 2 || caret > text.Length || "*_~`$)".IndexOf(text[caret - 1]) < 0)
+                return;   // 닫는 표식이 아니면(대부분의 입력) 조각을 훑지 않는다
             List<InlineRun> result;
             int newCaret;
             if (!InlineMarkdown.TryInputRule(box.Runs, caret, out result, out newCaret))
@@ -417,7 +420,6 @@ namespace Folderss.Controls
                 var lines = new List<string>();
                 foreach (var block in document.Blocks)
                 {
-                    var single = new FlowDocument();
                     if (block is Paragraph paragraph)
                     {
                         var runs = new List<InlineRun>();

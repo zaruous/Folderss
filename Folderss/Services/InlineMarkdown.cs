@@ -797,11 +797,38 @@ namespace Folderss.Services
             var normalized = Normalize(runs);
             if (normalized.Count == 0)
                 return string.Empty;
+            // 이스케이프는 필요한 만큼만: 없이 → 강조 표식(* _ ~) 말고 나머지 특수 글자만 → 전부. 다시 읽어 같은 서식이 되는 첫 결과.
             var minimal = Write(normalized, false);
             if (Equivalent(Parse(minimal), normalized))
                 return minimal;
-            var full = Write(normalized, true);
-            return full;
+            try
+            {
+                _escapeEmphasis = false;
+                var partial = Write(normalized, true);
+                if (Equivalent(Parse(partial), normalized))
+                    return partial;
+            }
+            finally
+            {
+                _escapeEmphasis = true;
+            }
+            return Write(normalized, true);
+        }
+
+        [ThreadStatic]
+        private static bool _escapeEmphasisSet;
+        [ThreadStatic]
+        private static bool _escapeEmphasisValue;
+
+        /// <summary>전부 이스케이프할 때 강조 표식(* _ ~)도 이스케이프할지(기본 true).</summary>
+        private static bool _escapeEmphasis
+        {
+            get => !_escapeEmphasisSet || _escapeEmphasisValue;
+            set
+            {
+                _escapeEmphasisSet = true;
+                _escapeEmphasisValue = value;
+            }
         }
 
         /// <summary>서식 경계의 공백을 서식 밖으로 빼고(<c>**a **</c>는 닫히지 않으므로) 이웃 조각을 합친다.</summary>
@@ -1129,7 +1156,11 @@ namespace Folderss.Services
                 {
                     switch (c)
                     {
-                        case '*': case '_': case '~': case '`': case '[': case ']': case '<': case '&': case '$':
+                        case '*': case '_': case '~':
+                            if (_escapeEmphasis)
+                                sb.Append('\\');
+                            break;
+                        case '`': case '[': case ']': case '<': case '&': case '$':
                             sb.Append('\\');
                             break;
                         case '!':

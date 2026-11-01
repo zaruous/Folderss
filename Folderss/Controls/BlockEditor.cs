@@ -21,7 +21,7 @@ namespace Folderss.Controls
     /// <item>입력: Enter 블록 나누기, Backspace(맨 앞) 텍스트로 전환·내어쓰기·앞 블록에 합치기, Tab/Shift+Tab 들여쓰기, ↑↓←→ 블록 사이 이동.</item>
     /// <item>문단 맨 앞 Markdown 표식(<c># </c>, <c>- </c>, <c>1. </c>, <c>[] </c>, <c>&gt; </c>, <c>```</c>, <c>---</c>)은 블록 종류로 바뀐다(<see cref="BlockMarkdown.TryMatchShortcut"/>).</item>
     /// <item><c>/</c> 명령 메뉴, 왼쪽 <c>+</c>·<c>⋮⋮</c> 손잡이(끌어 옮기기·블록 메뉴), Esc 블록 선택(Shift+↑↓ 확장, Del 삭제, Ctrl+C Markdown 복사).</item>
-    /// <item>Ctrl+Shift+↑↓ 블록 이동, Ctrl+D 복제, Ctrl+Alt+0~8 블록 전환, Ctrl+Enter 할 일 체크·토글 접기, Ctrl+B/I/E/K 줄 안 서식(Markdown 표식으로 감쌈).</item>
+    /// <item>Ctrl+Shift+↑↓ 블록 이동, Ctrl+D 복제, Ctrl+Alt+0~8 블록 전환, Ctrl+Enter 할 일 체크·토글 접기, Ctrl+B/I/E/Shift+S 줄 안 서식 적용·해제, Ctrl+K 링크 주소 팝업(서식 블록 — <c>BlockEditor.Inline.cs</c>, 표 셀은 Markdown 표식으로 감쌈).</item>
     /// <item>표는 행마다 블록(셀 입력란, Tab·Enter로 셀 이동·행 추가, 엑셀 붙여넣기), 이미지는 백그라운드에서 화면 폭에 맞춰 디코딩한다.</item>
     /// </list>
     /// 큰 문서용 구조:
@@ -854,8 +854,6 @@ namespace Folderss.Controls
         {
             if (row.Rich != null)
                 return ToggleInlineFormat(row, format);
-            if (row.Block.Kind == BlockKind.Image || EditorBlock.IsLinkCard(row.Block.Kind))
-                return false;
             return WrapSelection(row, marker);
         }
 
