@@ -34,10 +34,10 @@ namespace Folderss.Services
     /// </summary>
     public static class BlockFind
     {
-        /// <summary>찾을 수 있는 블록인지. 구분선·목차는 본문이 없다.</summary>
+        /// <summary>찾을 수 있는 블록인지. 구분선·목차는 본문이 없고, front matter는 속성 표라 결과를 입력란 선택으로 보여 줄 수 없다.</summary>
         public static bool IsSearchable(BlockKind kind)
         {
-            return kind != BlockKind.Divider && kind != BlockKind.Toc;
+            return kind != BlockKind.Divider && kind != BlockKind.Toc && kind != BlockKind.FrontMatter;
         }
 
         /// <summary>

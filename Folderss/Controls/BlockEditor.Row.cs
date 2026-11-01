@@ -27,7 +27,7 @@ namespace Folderss.Controls
         /// </para>
         /// 종류가 바뀌어도 TextBox는 그대로 두고 모양만 바꾼다 — 입력 중 포커스·IME 조합이 끊기지 않게.
         /// </summary>
-        private sealed class BlockRow
+        private sealed partial class BlockRow
         {
             private readonly BlockEditor _owner;
             private readonly Border _body;
@@ -137,12 +137,16 @@ namespace Folderss.Controls
 
                 Root.MouseEnter += (s, e) =>
                 {
-                    EnsureGutter().Opacity = 1;
+                    // front matter는 맨 앞에 고정이라 손잡이(옮기기·블록 메뉴)를 보이지 않는다.
+                    if (Block.Kind != BlockKind.FrontMatter)
+                        EnsureGutter().Opacity = 1;
+                    else if (_gutter != null)
+                        _gutter.Opacity = 0;
                     SetTableButtonsShown(true);
                     SetImageControlsShown(true);
                     // 누르기 전에 입력란을 만들어 두어 첫 클릭·끌어 선택이 TextBox에 그대로 간다.
                     // 단, 수식(Math)은 마우스를 올렸을 때 렌더링된 수식이 유지되도록 클릭할 때만 편집 모드로 들어간다.
-                    if (Block.Kind != BlockKind.Divider && Block.Kind != BlockKind.Toc && Block.Kind != BlockKind.Math && _owner._dragRow == null)
+                    if (Block.Kind != BlockKind.Divider && Block.Kind != BlockKind.Toc && Block.Kind != BlockKind.Math && Block.Kind != BlockKind.FrontMatter && _owner._dragRow == null)
                         EnsureEditing();
                 };
                 Root.MouseLeave += (s, e) =>
@@ -246,7 +250,7 @@ namespace Folderss.Controls
                     return;
                 e.Handled = true;
                 var index = _owner.IndexOf(this);
-                if (Block.Kind == BlockKind.Divider || Block.Kind == BlockKind.Toc)
+                if (Block.Kind == BlockKind.Divider || Block.Kind == BlockKind.Toc || Block.Kind == BlockKind.FrontMatter)
                 {
                     _owner.SelectBlocks(index, index);
                 }
@@ -305,6 +309,10 @@ namespace Folderss.Controls
                     else if (Block.Kind == BlockKind.Toc)
                     {
                         RebuildTocContent();
+                    }
+                    else if (Block.Kind == BlockKind.FrontMatter)
+                    {
+                        RebuildFrontMatter();
                     }
                     else
                     {
@@ -368,7 +376,7 @@ namespace Folderss.Controls
             /// <summary>이 행을 편집할 수 있게 입력란(TextBox)을 만든다. 한 번 만들면 행이 거둬질 때까지 둔다.</summary>
             public void EnsureEditing()
             {
-                if (Block.Kind == BlockKind.Divider || Block.Kind == BlockKind.Toc)
+                if (Block.Kind == BlockKind.Divider || Block.Kind == BlockKind.Toc || Block.Kind == BlockKind.FrontMatter)
                     return;
                 if (_editing)
                     return;
@@ -385,7 +393,7 @@ namespace Folderss.Controls
                 var showMeta = kind == BlockKind.Code || kind == BlockKind.Image || EditorBlock.IsLinkCard(kind);
                 if (!_editing)
                 {
-                    _display.Visibility = kind == BlockKind.Divider || kind == BlockKind.Toc || kind == BlockKind.TableRow ? Visibility.Collapsed : Visibility.Visible;
+                    _display.Visibility = kind == BlockKind.Divider || kind == BlockKind.Toc || kind == BlockKind.FrontMatter || kind == BlockKind.TableRow ? Visibility.Collapsed : Visibility.Visible;
                     if (_metaDisplay != null)
                         _metaDisplay.Visibility = showMeta ? Visibility.Visible : Visibility.Collapsed;
                     return;
@@ -414,7 +422,7 @@ namespace Folderss.Controls
                     return;
                 }
 
-                if (kind == BlockKind.Divider || kind == BlockKind.Toc)
+                if (kind == BlockKind.Divider || kind == BlockKind.Toc || kind == BlockKind.FrontMatter)
                 {
                     _display.Visibility = Visibility.Collapsed;
                     if (_mainEditor != null)
@@ -441,8 +449,10 @@ namespace Folderss.Controls
                 Grid.SetRow(_mainEditor, editorRow);
                 ApplyTextStyle(_mainEditor);
                 _mainEditor.AcceptsTab = EditorBlock.IsVerbatim(kind);
-                _mainEditor.ToolTip = kind == BlockKind.Raw
-                    ? "블록 편집기가 해석하지 않는 Markdown 원문(front matter·HTML 등). 그대로 저장됩니다."
+                _mainEditor.ToolTip = kind == BlockKind.Raw && IsFrontMatterSource()
+                    ? "front matter 원문 편집. 입력란을 벗어나면 속성 표로 돌아갑니다."
+                    : kind == BlockKind.Raw
+                    ? "블록 편집기가 해석하지 않는 Markdown 원문(HTML 등). 그대로 저장됩니다."
                     : kind == BlockKind.Math
                         ? "LaTeX 수식 입력 (예: \\frac{a}{b}, \\sqrt{x^2 + y^2}, \\sum_{i=1}^{n} x_i)"
                         : null;
@@ -547,6 +557,17 @@ namespace Folderss.Controls
                     _tocPanel.Visibility = Visibility.Collapsed;
                 }
 
+                if (kind == BlockKind.FrontMatter)
+                {
+                    EnsureFrontMatterPanel().Visibility = Visibility.Visible;
+                    _fmRendered = null;
+                }
+                else if (_fmPanel != null)
+                {
+                    _fmPanel.Visibility = Visibility.Collapsed;
+                    CloseFrontMatterEditor();
+                }
+
                 if (EditorBlock.IsLinkCard(kind))
                 {
                     EnsureMediaCard().Visibility = Visibility.Visible;
@@ -595,7 +616,7 @@ namespace Folderss.Controls
                     : headingLevel == 2 ? new Thickness(0, 16, 0, 2)
                     : headingLevel == 3 ? new Thickness(0, 10, 0, 1)
                     : kind == BlockKind.TableRow ? new Thickness(0)
-                    : verbatim || kind == BlockKind.Callout || kind == BlockKind.Image || kind == BlockKind.Toc || EditorBlock.IsLinkCard(kind) ? new Thickness(0, 4, 0, 4)
+                    : verbatim || kind == BlockKind.Callout || kind == BlockKind.Image || kind == BlockKind.Toc || kind == BlockKind.FrontMatter || EditorBlock.IsLinkCard(kind) ? new Thickness(0, 4, 0, 4)
                     : new Thickness(0, 1, 0, 1);
                 _gutterTop = headingLevel == 1 ? 9 : headingLevel == 2 ? 5 : verbatim || kind == BlockKind.Callout || kind == BlockKind.Toc || EditorBlock.IsLinkCard(kind) ? 8 : 2;
                 if (_gutter != null)
@@ -638,6 +659,7 @@ namespace Folderss.Controls
                         _body.Padding = new Thickness(14, 8, 14, 10);
                         break;
                     case BlockKind.Toc:
+                    case BlockKind.FrontMatter:
                         _body.SetResourceReference(Border.BackgroundProperty, "SurfaceBackground");
                         _body.SetResourceReference(Border.BorderBrushProperty, "BorderBrush");
                         _body.BorderThickness = new Thickness(1);
@@ -1492,7 +1514,7 @@ namespace Folderss.Controls
             public void UpdatePlaceholder()
             {
                 var kind = Block.Kind;
-                var show = kind != BlockKind.Divider && kind != BlockKind.Toc && kind != BlockKind.TableRow && Block.Text.Length == 0 &&
+                var show = kind != BlockKind.Divider && kind != BlockKind.Toc && kind != BlockKind.FrontMatter && kind != BlockKind.TableRow && Block.Text.Length == 0 &&
                            (Block.GetHeadingLevel() > 0 || (_mainEditor != null && _mainEditor.IsKeyboardFocused));
                 if (!show)
                 {

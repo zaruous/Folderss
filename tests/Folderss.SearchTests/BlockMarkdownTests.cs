@@ -72,7 +72,7 @@ namespace Folderss.SearchTests
 
             Assert.Equal(new[]
             {
-                BlockKind.Raw, BlockKind.Heading1, BlockKind.Paragraph, BlockKind.Heading2,
+                BlockKind.FrontMatter, BlockKind.Heading1, BlockKind.Paragraph, BlockKind.Heading2,
                 BlockKind.Bulleted, BlockKind.Bulleted, BlockKind.Bulleted, BlockKind.Todo, BlockKind.Todo,
                 BlockKind.Numbered, BlockKind.Numbered, BlockKind.Bulleted,
                 BlockKind.Quote, BlockKind.Callout, BlockKind.Code, BlockKind.Divider, BlockKind.TableRow, BlockKind.TableRow,

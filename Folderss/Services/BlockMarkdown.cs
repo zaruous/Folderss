@@ -12,7 +12,8 @@ namespace Folderss.Services
     /// <list type="bullet">
     /// <item>목록 중첩은 CommonMark 규칙(자식은 부모 항목의 내용 시작 열만큼 들여씀)으로 읽고 쓴다.</item>
     /// <item>토글은 GitHub이 그리는 <c>&lt;details&gt;&lt;summary&gt;</c>, 콜아웃은 GitHub 알림 <c>&gt; [!NOTE]</c>로 저장한다.</item>
-    /// <item>front matter·표·HTML 블록처럼 편집기가 해석하지 않는 부분은 <see cref="BlockKind.Raw"/>로 원문을 보존한다.</item>
+    /// <item>문서 맨 앞 front matter는 <see cref="BlockKind.FrontMatter"/>(원문 그대로 보관·저장, 화면은 속성 표), 구분 행 없는 표·HTML 블록처럼
+    /// 편집기가 해석하지 않는 부분은 <see cref="BlockKind.Raw"/>로 원문을 보존한다.</item>
     /// <item>저장하면 형식이 정규화된다(글머리 기호 <c>-</c>, 번호 다시 매김, 블록 사이 빈 줄 하나, 빈 문단은 쓰지 않음).</item>
     /// </list>
     /// </summary>
@@ -84,7 +85,7 @@ namespace Folderss.Services
                         var close = FindFrontMatterEnd(1);
                         if (close > 0)
                         {
-                            output.Add(new EditorBlock(BlockKind.Raw, string.Join("\n", _lines, 0, close + 1)));
+                            output.Add(new EditorBlock(BlockKind.FrontMatter, string.Join("\n", _lines, 0, close + 1)));
                             i = close;
                             Close();
                             continue;
@@ -680,6 +681,7 @@ namespace Folderss.Services
                         break;
 
                     case BlockKind.Raw:
+                    case BlockKind.FrontMatter:
                         foreach (var line in SplitLines(block.Text))
                             sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
                         break;

@@ -417,6 +417,13 @@ namespace Folderss.Controls
                         return EstimateLines(block.Text, 13.5, width - 30, true) * 18 + 52;
                     case BlockKind.Raw:
                         return EstimateLines(block.Text, 13, width - 30, true) * 17.3 + 34;
+                    case BlockKind.FrontMatter:
+                        // 속성 표: 머리글 + (구분 줄 두 줄을 뺀) 줄마다 한 행
+                        var fmLines = 1;
+                        foreach (var ch in block.Text)
+                            if (ch == '\n')
+                                fmLines++;
+                        return Math.Max(1, fmLines - 2) * 26 + 50;
                     case BlockKind.Callout:
                         return EstimateLines(block.Text, 15, width - 60, false) * 20 + 36;
                     case BlockKind.Quote:

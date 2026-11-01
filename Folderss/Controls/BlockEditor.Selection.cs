@@ -305,7 +305,7 @@ namespace Folderss.Controls
         {
             int start, end;
             GetDragRange(row, out start, out end);
-            if (start < 0 || !CanDrop(start, end, drop))
+            if (start < 0 || !CanDrop(start, end, drop) || MovesFrontMatter(start, drop.Index))
                 return;
             var keepSelection = _dragSelection && HasBlockSelection;
             var count = end - start;
