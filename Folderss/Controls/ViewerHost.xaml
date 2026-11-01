@@ -10,6 +10,11 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right"
                             Orientation="Horizontal">
+                    <!-- 뷰어 전용 툴바 칸(IViewerToolbarProvider) — 예: Monaco 언어 선택(#82) -->
+                    <ContentControl x:Name="ViewerToolbarSlot"
+                                    VerticalAlignment="Center"
+                                    Focusable="False"
+                                    Margin="0,0,8,0"/>
                     <!-- .md·.markdown 탭: 블록 편집 ↔ 미리보기(Markdown 뷰어) 전환(#81). 확장자 매핑은 바꾸지 않고 이 탭만 바꾼다. -->
                     <StackPanel x:Name="ViewSwitchPanel"
                                 Orientation="Horizontal"

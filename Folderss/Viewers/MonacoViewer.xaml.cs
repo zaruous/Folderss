@@ -12,7 +12,7 @@ using System.Windows.Threading;
 
 namespace Folderss.Viewers
 {
-    public partial class MonacoViewer : UserControl, IFileViewer, IViewerShortcutHandler, IDisposable
+    public partial class MonacoViewer : UserControl, IFileViewer, IViewerShortcutHandler, IViewerToolbarProvider, IDisposable
     {
         private const long LargeFileBytes = 20L * 1024 * 1024;
         private const long HugeFileBytes = 50L * 1024 * 1024;
@@ -21,33 +21,8 @@ namespace Folderss.Viewers
             AppDomain.CurrentDomain.BaseDirectory,
             "Viewers", "Resources");
 
-        private static readonly Dictionary<string, string> ExtToLanguage =
-            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
-            {
-                { ".cs",    "csharp"     },
-                { ".js",    "javascript" },
-                { ".ts",    "typescript" },
-                { ".json",  "json"       },
-                { ".jsonl", "jsonl"      }, // monaco-jsonl.js가 등록하는 줄 단위 JSON 언어
-                { ".xml",   "xml"        },
-                { ".xaml",  "xml"        },
-                { ".html",  "html"       },
-                { ".css",   "css"        },
-                { ".py",    "python"     },
-                { ".java",  "java"       },
-                { ".cpp",   "cpp"        },
-                { ".c",     "c"          },
-                { ".h",     "cpp"        },
-                { ".sh",    "shell"      },
-                { ".bat",   "bat"        },
-                { ".ps1",   "powershell" },
-                { ".yaml",  "yaml"       },
-                { ".yml",   "yaml"       },
-                { ".sql",   "sql"        },
-                { ".md",    "markdown"   },
-                { ".log",   "plaintext"  },
-                { ".txt",   "plaintext"  },
-            };
+        // 언어 결정은 편집기 안(monaco-app.html detectLanguage)이 Monaco 등록 정보로 하고, C#은 강제 언어만 넘긴다(#82).
+        // 강제 언어 = 파일별 선택 → 설정의 사용자 지정 → 예외 사전(MonacoLanguages.ResolveForced). 초대용량은 plaintext.
 
         private ThemeInfo _currentTheme = ThemeManager.CurrentTheme;
         private bool _webViewReady;
@@ -65,6 +40,7 @@ namespace Folderss.Viewers
         private bool _reloadPromptOpen;
         private WebViewIdleSaver _idleSaver;
         private string _pageTheme;
+        private readonly MonacoLanguagePicker _languagePicker;
 
         public UIElement View => this;
         public ViewerCapabilities Capabilities => ViewerCapabilities.Edit;
@@ -72,9 +48,14 @@ namespace Folderss.Viewers
         public event EventHandler<string> TitleChanged;
         public event EventHandler<bool> ModifiedChanged;
 
+        /// <summary>탭 툴바의 언어 선택(#82).</summary>
+        public UIElement ToolbarContent => _languagePicker;
+
         public MonacoViewer()
         {
             InitializeComponent();
+            _languagePicker = new MonacoLanguagePicker();
+            _languagePicker.LanguagePicked += OnLanguagePicked;
             _fileReloadTimer = new DispatcherTimer
             {
                 Interval = TimeSpan.FromMilliseconds(300)
@@ -180,6 +161,16 @@ namespace Folderss.Viewers
                         if (content != null)
                             Save(content);
                         break;
+                    case "languages":
+                        OnLanguagesReceived(message);
+                        break;
+                    case "language":
+                        JsonElement flag;
+                        // "자동" 표시는 이 파일에 고른 언어(파일별 기억)가 없을 때. 사용자 지정·예외 사전으로 정해진 언어도 자동으로 본다.
+                        _languagePicker.SetCurrent(GetJsonString(message, "id"),
+                            MonacoLanguageSettings.Shared.GetRemembered(_filePath) == null,
+                            message.TryGetProperty("huge", out flag) && flag.ValueKind == JsonValueKind.True);
+                        break;
                 }
             }
         }
@@ -206,7 +197,7 @@ namespace Folderss.Viewers
 
             var content = File.ReadAllText(filePath, _encoding);
             _lastLoadedContent = content;
-            var language = _hugeFileMode ? "plaintext" : GetLanguage(filePath);
+            var language = _hugeFileMode ? MonacoLanguages.PlainText : GetForcedLanguage(filePath);
 
             TitleChanged?.Invoke(this, Path.GetFileName(filePath));
             StartFileWatcher(filePath);
@@ -236,13 +227,14 @@ namespace Folderss.Viewers
             _pageTheme = ThemeName(_currentTheme);
 
             var script = string.Format(
-                "app.open({0},{1},{2},{3},{4},{5})",
+                "app.open({0},{1},{2},{3},{4},{5},{6})",
                 JsonString(content),
                 JsonString(language),
                 JsonString(ThemeName(_currentTheme)),
                 _hugeFileMode ? "true" : "false",
                 _largeFileMode ? "true" : "false",
-                _hugeFileMode ? "true" : "false");
+                _hugeFileMode ? "true" : "false",
+                JsonString(_filePath == null ? null : Path.GetFileName(_filePath)));
             await WebView.CoreWebView2.ExecuteScriptAsync(script);
         }
 
@@ -405,7 +397,7 @@ namespace Folderss.Viewers
                 _modified = false;
                 ModifiedChanged?.Invoke(this, false);
 
-                var language = _hugeFileMode ? "plaintext" : GetLanguage(_filePath);
+                var language = _hugeFileMode ? MonacoLanguages.PlainText : GetForcedLanguage(_filePath);
                 await CallAppOpen(content, language);
             }
             catch (IOException)
@@ -458,11 +450,51 @@ namespace Folderss.Viewers
             return new UTF8Encoding(false);
         }
 
-        private static string GetLanguage(string filePath)
+        /// <summary>편집기에 넘길 강제 언어(파일별 선택 → 사용자 지정 → 예외 사전). null이면 편집기가 파일 이름으로 고른다.</summary>
+        private static string GetForcedLanguage(string filePath)
         {
-            var ext = Path.GetExtension(filePath);
-            string lang;
-            return ExtToLanguage.TryGetValue(ext, out lang) ? lang : "plaintext";
+            return MonacoLanguageSettings.Shared.ResolveForced(filePath);
+        }
+
+        private void OnLanguagesReceived(JsonElement message)
+        {
+            JsonElement items;
+            if (!message.TryGetProperty("items", out items) || items.ValueKind != JsonValueKind.Array)
+                return;
+            var languages = new List<KeyValuePair<string, string>>();
+            foreach (var item in items.EnumerateArray())
+            {
+                if (item.ValueKind != JsonValueKind.Object)
+                    continue;
+                var id = GetJsonString(item, "id");
+                if (!string.IsNullOrWhiteSpace(id))
+                    languages.Add(new KeyValuePair<string, string>(id, GetJsonString(item, "name")));
+            }
+            if (languages.Count > 0)
+                _languagePicker.SetLanguages(languages);
+        }
+
+        // 탭 툴바에서 언어를 골랐다(null = 자동). 편집기에 바로 적용하고 파일별로 기억한다(자동이면 기억 삭제).
+        private void OnLanguagePicked(object sender, string languageId)
+        {
+            if (_disposed || _filePath == null)
+                return;
+            try
+            {
+                MonacoLanguageSettings.Shared.RememberAndSave(_filePath, languageId);
+            }
+            catch (Exception ex) when (ex is IOException || ex is UnauthorizedAccessException)
+            {
+                // 파일별 언어 기억은 편의 기능이라 저장하지 못해도 이번 탭에는 적용한다(다음에 열 때 기억만 빠짐). 원인은 디버그 출력에 남긴다.
+                System.Diagnostics.Trace.WriteLine("monaco-language.json 저장 실패: " + ex);
+            }
+
+            if (!_webViewReady || WebView.CoreWebView2 == null || _hugeFileMode)
+                return;
+            // 자동이면 사용자 지정·예외 사전까지 다시 따진다(파일별 선택만 지운 상태).
+            var language = languageId ?? GetForcedLanguage(_filePath);
+            var _ = WebView.CoreWebView2.ExecuteScriptAsync(
+                string.Format("app.setLanguage({0})", JsonString(language)));
         }
 
         // monaco-app.html의 편집기 테마 배경(folderss-dark #0e1013, folderss-light #ffffff)과 같은 색

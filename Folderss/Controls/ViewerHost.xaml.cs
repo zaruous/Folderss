@@ -99,6 +99,8 @@ namespace Folderss.Controls
             if (activationAware != null)
                 activationAware.SetActive(_isActive);
             HostContent.Content = viewer.View;
+            var toolbarProvider = viewer as IViewerToolbarProvider;
+            ViewerToolbarSlot.Content = toolbarProvider != null ? toolbarProvider.ToolbarContent : null;
             FilePathText.Text = filePath;
             UpdateViewSwitchButtons();
         }
@@ -150,6 +152,7 @@ namespace Folderss.Controls
             if (disposable != null)
                 disposable.Dispose();
             HostContent.Content = null;
+            ViewerToolbarSlot.Content = null;
             _currentViewer = null;
             _currentViewerKey = null;
             _isModified = false;

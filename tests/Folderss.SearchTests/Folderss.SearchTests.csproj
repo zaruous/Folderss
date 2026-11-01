@@ -87,11 +87,19 @@
     <Compile Include="..\..\Folderss\Services\ZipEntryNameEncoding.cs" Link="Linked\ZipEntryNameEncoding.cs" />
     <Compile Include="..\..\Folderss\Services\ZipArchiveService.cs" Link="Linked\ZipArchiveService.cs" />
     <Compile Include="..\..\Folderss\Services\ZipTempStore.cs" Link="Linked\ZipTempStore.cs" />
+    <Compile Include="..\..\Folderss\Services\MonacoLanguages.cs" Link="Linked\MonacoLanguages.cs" />
   </ItemGroup>
 
   <!-- ThemeFileTests: 테마 XAML을 출력 폴더에 복사해 키 구성을 검사한다 -->
   <ItemGroup>
     <None Include="..\..\Folderss\Themes\*.xaml" Link="Themes\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <!-- MonacoLanguageTests: 번들 Monaco 언어 등록 파일과 C# 정적 표(MonacoLanguages)가 어긋나지 않는지 검사한다(#82) -->
+  <ItemGroup>
+    <None Include="..\..\Folderss\Viewers\Resources\monaco\vs\basic-languages\monaco.contribution.js" Link="Monaco\basic-languages\monaco.contribution.js" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Folderss\Viewers\Resources\monaco\vs\monaco.contribution-*.js" Link="Monaco\%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\Folderss\Viewers\Resources\monaco-jsonl.js" Link="Monaco\monaco-jsonl.js" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
