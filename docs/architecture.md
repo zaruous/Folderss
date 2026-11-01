@@ -637,6 +637,13 @@ Folderss/
   `/페이지`의 `BlockPageDialog`는 하위 페이지(문서 옆 `문서이름/제목.md`, 제목 한 줄)를 새로 만들거나 기존 문서를 연결한다. 백링크·이동 경로는 #74. 파일·북마크·페이지는 `EditorBlock.IsLinkCard`로 같이 다룬다.
 - 키: `OnPreviewKeyDown` 한 곳에서 처리(Ctrl+S/Z/Y → 블록 선택 모드 → `/` 메뉴 → 표 셀(`HandleTableKey`) → 입력란). 한글 조합 중 Enter(`Key.ImeProcessed`)는 조합이 끝난 뒤
   블록을 나눈다(표 셀이면 행 추가). 자동 변환·`/` 감지는 `TextChanged` 시점의 커서 대신 `TextChange` 위치로 판단한다.
+- 선택·이동(#75, `BlockEditor.Selection.cs`·`BlockEditor.Panel.Selection.cs`, 계산은 WPF 없는 `BlockSelection` — `BlockSelectionTests`): 블록 선택은 기존과 같이
+  연속 범위(`_selAnchor`~`_selActive` + 자식) 하나다. 빈 여백 누르기(`Panel_MouseLeftButtonDown`)는 `BeginMarquee`로 패널이 마우스를 잡고, 4px 넘게 끌면 내용 y 구간에 걸친 블록을
+  선택(`SpanRange`, 열 묶음은 통째로, 사각형은 패널 `AdornerLayer`의 `MarqueeAdorner`), 끌지 않고 떼면 예전 클릭 동작(`ClickAt`). 글자를 끄는 중(마우스를 TextBox가 잡음) 행 밖
+  다른 블록으로 넘어가면 `PreviewMouseMove`에서 캡처를 패널로 옮기고 블록 선택으로 바꾼다. 위치는 높이 누적(`_tops`)으로만 찾아 행을 새로 만들지 않고, 끄는 동안 선택 표시는
+  화면에 있는 행만 바꾼다. 가장자리 자동 스크롤은 40ms 타이머. `Shift+클릭`은 편집 중 블록(또는 선택 시작)부터 누른 블록까지(같은 블록 안이면 TextBox 글자 선택).
+  선택한 블록의 손잡이를 끌면 선택 전체를 `MoveRangeTo`로 한 번에 옮겨 실행 취소 한 단계(가장 얕은 블록을 놓을 자리 수준에 맞춤), 손잡이 메뉴도 선택 전체에 적용.
+  `Ctrl+Home/End`·`PageUp/Down`은 `OnPreviewKeyDown`에서 블록 선택 처리보다 먼저(`HandleNavigationKey`), 편집 중이면 그 블록에 커서, 선택 중이면 선택을 옮기고 Shift는 넓힌다.
 - 실행 취소(`HistoryEntry`): 마지막 기록 시점 문서의 동결 사본(`_committed`)을 두고, 바뀐 구간(앞뒤 같은 사본 제외)의 이전 블록만 기록한다. 글자 입력은 그 블록 하나만
   바꾸므로 문서를 훑지 않고, 같은 블록 연속 입력은 1.5초 안이면 한 단계로 묶는다. 저장(`MarkSaved`)하면 묶음을 끊어 버전 번호로 미수정 여부를 판단한다.
   되돌린 블록은 Id가 같아 화면에 있던 행을 그대로 다시 쓴다. 토글 접기·펴기는 저장할 변경으로 세지 않는다.

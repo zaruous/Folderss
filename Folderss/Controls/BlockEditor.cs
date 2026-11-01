@@ -124,6 +124,7 @@ namespace Folderss.Controls
                     CloseSlash();
             };
             Content = _scroll;
+            InitializeSelection();
 
             AllowDrop = true;
             PreviewDragOver += OnPreviewFileDragOver;
@@ -633,6 +634,13 @@ namespace Folderss.Controls
             if ((mods == ModifierKeys.Control && key == Key.Y) || (mods == (ModifierKeys.Control | ModifierKeys.Shift) && key == Key.Z))
             {
                 Redo();
+                e.Handled = true;
+                return;
+            }
+
+            // Ctrl+Home/End·PageUp/Down: 편집 중·블록 선택 중 모두(BlockEditor.Selection.cs)
+            if (HandleNavigationKey(key, mods))
+            {
                 e.Handled = true;
                 return;
             }
@@ -1941,6 +1949,7 @@ namespace Folderss.Controls
         private void HandleMouseDown(BlockRow row, UIElement handle, MouseButtonEventArgs e)
         {
             _dragRow = row;
+            _dragSelection = IsInBlockSelection(IndexOf(row));   // 선택한 블록의 손잡이면 선택 전체를 함께 끈다
             _dragStart = e.GetPosition(_panel);
             _dragging = false;
             _drop = null;
@@ -1995,10 +2004,10 @@ namespace Folderss.Controls
 
         private void UpdateDropIndicator(Point position)
         {
-            var start = IndexOf(_dragRow);
-            var end = BlockOperations.SubtreeEnd(_blocks, start);
+            int start, end;
+            GetDragRange(_dragRow, out start, out end);
             var drop = _panel.DropTargetAt(position);
-            if (!CanDrop(start, end, drop))
+            if (start < 0 || !CanDrop(start, end, drop))
             {
                 _drop = null;
                 _panel.HideDropLine();
@@ -2018,35 +2027,14 @@ namespace Folderss.Controls
 
         private void DropBlock(BlockRow row, DropTarget drop)
         {
-            var start = IndexOf(row);
-            if (start < 0)
-                return;
-            var end = BlockOperations.SubtreeEnd(_blocks, start);
-            if (!CanDrop(start, end, drop))
-                return;
-
-            var moving = _blocks.GetRange(start, end - start);
-            _blocks.RemoveRange(start, end - start);
-            var insertAt = drop.Index > start ? drop.Index - (end - start) : drop.Index;
-            var targetIndent = insertAt < _blocks.Count ? _blocks[insertAt].Indent : 0;
-            var delta = targetIndent - moving[0].Indent;
-            foreach (var block in moving)
-            {
-                block.Indent = Math.Max(0, block.Indent + delta);
-                block.SetAttribute(EditorBlock.AttrColumn, drop.Column);   // 놓은 열로(묶음 밖이면 묶음에서 뺌)
-            }
-            _blocks.InsertRange(insertAt, moving);
-            BlockOperations.NormalizeIndents(_blocks);
-            _selAnchor = _selActive = -1;
-            SyncRows();
-            FocusRow(insertAt, int.MaxValue);
-            RecordChange();
+            MoveDraggedBlocks(row, drop);
         }
 
         private void ShowBlockMenu(BlockRow row, UIElement target)
         {
             var index = IndexOf(row);
-            SelectBlocks(index, index);
+            if (!IsInBlockSelection(index))   // 선택한 여러 블록 중 하나면 메뉴가 선택 전체에 적용
+                SelectBlocks(index, index);
 
             var menu = new ContextMenu { PlacementTarget = target, Placement = PlacementMode.Bottom };
             Func<int> first = () => Math.Min(_selAnchor, _selActive);

@@ -112,6 +112,17 @@ Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)
 
 자체 키보드 핸들러 없음.
 
+### BlockEditor (블록 편집기)
+
+블록 편집기 키는 `Controls/BlockEditor.cs` `OnPreviewKeyDown` 한 곳에서 하드코딩으로 처리한다(전체 목록은 README 블록 편집기 절). 아래는 #75 "선택·이동"에서 추가한 키.
+
+| 키 | 동작 | 처리 위치 |
+|----|------|------|
+| `Ctrl+Home` / `Ctrl+End` | 문서 첫·마지막 블록으로(편집 중이면 커서, 블록 선택 중이면 선택 이동) | `BlockEditor.Selection.cs` `HandleNavigationKey` |
+| `PageUp` / `PageDown` | 한 화면(뷰포트 90%) 떨어진 블록으로, 화면도 같이 넘김 | 같음 |
+| `Shift+` 위 키 | 지금 블록(선택 시작)부터 블록 선택 확장 | 같음 |
+| `Shift+클릭` | 지금 블록부터 누른 블록까지 블록 선택(같은 블록 안이면 글자 선택) | `OnShiftClickPreview` |
+
 ---
 
 ## 5. 버그 및 불일치 사항 (리뷰 결과)
