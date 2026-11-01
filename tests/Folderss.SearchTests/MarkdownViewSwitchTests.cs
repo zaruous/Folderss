@@ -208,13 +208,38 @@ namespace Folderss.SearchTests
         public void Settings_SavedDefaultViewIsRespected_MissingUsesNewDefault()
         {
             var settings = new MarkdownViewSettings(TempPath());
-            settings.Parse("{\"version\":1,\"defaultView\":\"mapping\",\"files\":[]}");   // 예전 기본값을 저장한 기존 사용자
+            // version 1은 고르지 않아도 "mapping"을 저장했으므로 그 값은 무시하고 새 기본값(블록 편집)
+            settings.Parse("{\"version\":1,\"defaultView\":\"mapping\",\"files\":[]}");
+            Assert.Equal(MarkdownViewSwitch.ViewBlocks, settings.DefaultView);
+            settings.Parse("{\"defaultView\":\"mapping\"}");   // 버전 없음도 예전 파일
+            Assert.Equal(MarkdownViewSwitch.ViewBlocks, settings.DefaultView);
+            // version 2부터 저장한 "mapping"은 사용자가 고른 값 → 존중
+            settings.Parse("{\"version\":2,\"defaultView\":\"mapping\",\"files\":[]}");
             Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
             settings.Parse("{\"version\":1,\"defaultView\":\"preview\"}");
             Assert.Equal(MarkdownViewSwitch.ViewPreview, settings.DefaultView);
             settings.Parse("{\"version\":1,\"files\":[{\"path\":\"C:\\\\a.md\",\"view\":\"preview\"}]}");   // defaultView 항목 없음
             Assert.Equal(MarkdownViewSwitch.ViewBlocks, settings.DefaultView);
             Assert.Equal("preview", settings.GetRemembered(@"C:\a.md"));
+        }
+
+        [Fact]
+        public void Settings_MappingChosenInNewVersion_SurvivesReload()
+        {
+            // 새 버전에서 사용자가 "매핑을 따름"을 고르면 다시 읽어도 유지(예전 파일의 mapping 무시 규칙에 걸리지 않음)
+            var path = TempPath();
+            try
+            {
+                var settings = new MarkdownViewSettings(path);
+                settings.SaveDefaultView(MarkdownViewSwitch.DefaultFollowMapping);
+                var reloaded = new MarkdownViewSettings(path);
+                reloaded.Parse(File.ReadAllText(path));
+                Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, reloaded.DefaultView);
+            }
+            finally
+            {
+                Directory.Delete(Path.GetDirectoryName(path), true);
+            }
         }
 
         [Fact]
@@ -247,7 +272,7 @@ namespace Folderss.SearchTests
             var settings = new MarkdownViewSettings(TempPath());
             settings.Parse("{ not json");
             Assert.Equal(MarkdownViewSwitch.DefaultViewWhenUnset, settings.DefaultView);   // 읽을 수 없으면 저장한 값이 없는 것과 같음
-            settings.Parse("{\"version\":1,\"defaultView\":\"monaco\",\"files\":[{\"path\":\"C:\\\\a.md\",\"view\":\"edit\"},{\"path\":\"C:\\\\b.md\",\"view\":\"Blocks\"},{\"view\":\"preview\"}]}");
+            settings.Parse("{\"version\":2,\"defaultView\":\"monaco\",\"files\":[{\"path\":\"C:\\\\a.md\",\"view\":\"edit\"},{\"path\":\"C:\\\\b.md\",\"view\":\"Blocks\"},{\"view\":\"preview\"}]}");
             Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
             Assert.Null(settings.GetRemembered(@"C:\a.md"));
             Assert.Equal("blocks", settings.GetRemembered(@"C:\b.md"));

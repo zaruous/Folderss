@@ -325,7 +325,7 @@ namespace Folderss.Services
                 using (var writer = new Utf8JsonWriter(stream, new JsonWriterOptions { Indented = true }))
                 {
                     writer.WriteStartObject();
-                    writer.WriteNumber("version", 1);
+                    writer.WriteNumber("version", 2);
                     writer.WriteString("defaultView", _defaultView);
                     writer.WriteStartArray("files");
                     foreach (var kv in _files)
@@ -358,8 +358,16 @@ namespace Folderss.Services
                     if (root.ValueKind != JsonValueKind.Object)
                         return;
                     JsonElement value;
+                    // version 1(#81 1단계)은 사용자가 고르지 않아도 기본값 "mapping"을 함께 저장했다.
+                    // 그 "mapping"은 고른 값으로 보지 않고 새 기본값(블록 편집)을 쓴다(사용자 결정, 2026-11-01). version 2부터는 저장된 값을 그대로 존중.
+                    JsonElement version;
+                    var legacy = !root.TryGetProperty("version", out version) || version.ValueKind != JsonValueKind.Number || version.GetInt32() < 2;
                     if (root.TryGetProperty("defaultView", out value) && value.ValueKind == JsonValueKind.String)
-                        _defaultView = NormalizeDefault(value.GetString());
+                    {
+                        var saved = NormalizeDefault(value.GetString());
+                        if (!(legacy && saved == MarkdownViewSwitch.DefaultFollowMapping))
+                            _defaultView = saved;
+                    }
                     if (!root.TryGetProperty("files", out value) || value.ValueKind != JsonValueKind.Array)
                         return;
                     foreach (var item in value.EnumerateArray())
