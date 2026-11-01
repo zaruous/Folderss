@@ -590,7 +590,7 @@ namespace Folderss.Controls
             if (e.Handled || Keyboard.Modifiers != ModifierKeys.Control)
                 return;
             var source = e.OriginalSource as DependencyObject;
-            if (source == null || (_findBar != null && _findBar.IsAncestorOf(source)))
+            if (source == null || (_findBar != null && ElementTree.IsWithin(source, _findBar)))
                 return;
 
             string link = null;

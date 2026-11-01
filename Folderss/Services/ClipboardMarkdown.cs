@@ -42,6 +42,7 @@ namespace Folderss.Services
         {
             public string Name;
             public InlineFormat Format;
+            public InlineFormat Clear;   // style로 끈 서식(예: Google 문서가 전체를 감싸는 <b style="font-weight:normal">)
             public string Link;
             public bool Ignore;
         }
@@ -170,7 +171,12 @@ namespace Folderss.Services
                 }
                 var style = Style.Match(attrs);
                 if (style.Success)
-                    element.Format |= FromStyle(style.Groups[1].Success ? style.Groups[1].Value : style.Groups[2].Value);
+                {
+                    InlineFormat off;
+                    element.Format |= FromStyle(style.Groups[1].Success ? style.Groups[1].Value : style.Groups[2].Value, out off);
+                    element.Format &= ~off;
+                    element.Clear = off;
+                }
                 stack.Add(element);
             }
             if (pos < html.Length)
@@ -179,9 +185,10 @@ namespace Folderss.Services
             return string.Join("\n\n", lines);
         }
 
-        private static InlineFormat FromStyle(string css)
+        private static InlineFormat FromStyle(string css, out InlineFormat off)
         {
             var format = InlineFormat.None;
+            off = InlineFormat.None;
             foreach (var part in css.Split(';'))
             {
                 var kv = part.Split(new[] { ':' }, 2);
@@ -192,8 +199,12 @@ namespace Folderss.Services
                 int weight;
                 if (key == "font-weight" && (value == "bold" || value == "bolder" || int.TryParse(value, out weight) && weight >= 600))
                     format |= InlineFormat.Bold;
+                else if (key == "font-weight" && (value == "normal" || value == "lighter" || int.TryParse(value, out weight) && weight < 600))
+                    off |= InlineFormat.Bold;
                 else if (key == "font-style" && (value == "italic" || value == "oblique"))
                     format |= InlineFormat.Italic;
+                else if (key == "font-style" && value == "normal")
+                    off |= InlineFormat.Italic;
                 else if ((key == "text-decoration" || key == "text-decoration-line") && value.Contains("line-through"))
                     format |= InlineFormat.Strike;
                 else if (key == "font-family" && (value.Contains("monospace") || value.Contains("consolas") || value.Contains("courier") || value.Contains("mono")))
@@ -206,7 +217,7 @@ namespace Folderss.Services
         {
             var f = InlineFormat.None;
             foreach (var e in stack)
-                f |= e.Format;
+                f = (f | e.Format) & ~e.Clear;
             return f;
         }
 

@@ -776,8 +776,10 @@ namespace Folderss.Services
                 if (run == null || string.IsNullOrEmpty(run.Text) && run.Kind == InlineRunKind.Text && !run.Has(InlineFormat.Code))
                     continue;
                 var last = result.Count > 0 ? result[result.Count - 1] : null;
+                // 붙은 코드 조각도 잇는다 — 코드 안에서 입력하면 새 Run이 생겨 조각이 나뉘는데, 따로 쓰면(`a``b`) 다시 읽을 때
+                // 한 코드로 합쳐져 글자가 바뀐다. 읽기로는 붙은 코드 조각이 생기지 않으므로(`a``b`는 코드 하나) 울타리 모양만 무시하고 잇는다.
                 if (last != null && last.Kind == InlineRunKind.Text && run.Kind == InlineRunKind.Text && !run.Autolink && !last.Autolink &&
-                    !run.Has(InlineFormat.Code) && last.SameStyle(run))
+                    (run.Has(InlineFormat.Code) ? last.Has(InlineFormat.Code) && SameIgnoringCodeFence(last, run) : last.SameStyle(run)))
                 {
                     var merged = last.Clone();
                     merged.Text = last.Text + run.Text;
@@ -787,6 +789,14 @@ namespace Folderss.Services
                 result.Add(run.Clone());
             }
             return result;
+        }
+
+        private static bool SameIgnoringCodeFence(InlineRun a, InlineRun b)
+        {
+            var c = b.Clone();
+            c.CodeFence = a.CodeFence;
+            c.CodePad = a.CodePad;
+            return a.SameStyle(c);
         }
 
         // ── 쓰기 ──────────────────────────────────────────────────────────

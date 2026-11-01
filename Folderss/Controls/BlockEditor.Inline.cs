@@ -62,6 +62,10 @@ namespace Folderss.Controls
             }
             _richRow = row;
             row.AttachRich(box);
+            // 포커스를 가진 채 다른 행으로 옮겨 붙이면 GotKeyboardFocus가 다시 오지 않는다 — 포커스 행을 직접 맞춘다
+            // (그대로 두면 이전 행이 포커스 행으로 남아 스크롤 때 지금 행이 거둬져 포커스를 잃고, 실행 취소 커서도 이전 행으로 감).
+            if (box.IsKeyboardFocusWithin)
+                _focusedRow = row;
             return box;
         }
 
@@ -423,7 +427,7 @@ namespace Folderss.Controls
                     if (block is Paragraph paragraph)
                     {
                         var runs = new List<InlineRun>();
-                        CollectRtfRuns(paragraph.Inlines, runs);
+                        CollectRtfRuns(paragraph.Inlines, runs, HasStrike(paragraph.TextDecorations));
                         var md = InlineMarkdown.Serialize(runs).Trim();
                         if (md.Length > 0)
                             lines.Add(md);
@@ -447,7 +451,13 @@ namespace Folderss.Controls
             }
         }
 
-        private static void CollectRtfRuns(InlineCollection inlines, List<InlineRun> runs)
+        private static bool HasStrike(TextDecorationCollection decorations)
+        {
+            return decorations != null && decorations.Any(d => d.Location == TextDecorationLocation.Strikethrough);
+        }
+
+        // TextDecorations는 상속되지 않아 RTF 읽기가 취소선을 감싼 Span·문단에 두면 Run에서 보이지 않는다 — 위에서 물려받은 취소선을 함께 넘긴다.
+        private static void CollectRtfRuns(InlineCollection inlines, List<InlineRun> runs, bool strike)
         {
             foreach (var inline in inlines)
             {
@@ -460,8 +470,7 @@ namespace Folderss.Controls
                         r.Format |= InlineFormat.Bold;
                     if (run.FontStyle == FontStyles.Italic || run.FontStyle == FontStyles.Oblique)
                         r.Format |= InlineFormat.Italic;
-                    var decorations = run.TextDecorations;
-                    if (decorations != null && decorations.Any(d => d.Location == TextDecorationLocation.Strikethrough))
+                    if (strike || HasStrike(run.TextDecorations))
                         r.Format |= InlineFormat.Strike;
                     var family = run.FontFamily?.Source ?? string.Empty;
                     if (family.IndexOf("Mono", StringComparison.OrdinalIgnoreCase) >= 0 || family.IndexOf("Consolas", StringComparison.OrdinalIgnoreCase) >= 0 ||
@@ -478,7 +487,7 @@ namespace Folderss.Controls
                 }
                 else if (inline is Span span)
                 {
-                    CollectRtfRuns(span.Inlines, runs);
+                    CollectRtfRuns(span.Inlines, runs, strike || HasStrike(span.TextDecorations));
                 }
             }
         }

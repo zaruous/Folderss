@@ -19,6 +19,17 @@ namespace Folderss.Controls
                 ?? (element is ContentElement content ? ContentOperations.GetParent(content) : null);
         }
 
+        /// <summary><paramref name="element"/>가 <paramref name="ancestor"/> 자신이거나 그 아래에 있는지(<c>Visual.IsAncestorOf</c>는 Run에서 예외).</summary>
+        public static bool IsWithin(DependencyObject element, DependencyObject ancestor)
+        {
+            for (; element != null; element = GetParent(element))
+            {
+                if (ReferenceEquals(element, ancestor))
+                    return true;
+            }
+            return false;
+        }
+
         public static T FindAncestor<T>(DependencyObject element) where T : DependencyObject
         {
             for (; element != null; element = GetParent(element))

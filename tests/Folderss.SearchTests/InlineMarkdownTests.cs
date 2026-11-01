@@ -283,6 +283,8 @@ namespace Folderss.SearchTests
         [InlineData("<strong>a</strong><em>b</em><del>c</del><code>d*e</code>", "**a***b*~~c~~`d*e`")]
         [InlineData("<a href=\"https://a.com/?x=1&amp;y=2\">링크</a>", "[링크](https://a.com/?x=1&y=2)")]
         [InlineData("<span style=\"font-weight:700\">구글 굵게</span>", "**구글 굵게**")]
+        [InlineData("<b style=\"font-weight:normal;\" id=\"docs-internal-guid-1\"><span style=\"font-weight:700;\">굵게</span><span style=\"font-weight:400;\"> 보통</span></b>", "**굵게** 보통")]
+        [InlineData("<i><span style=\"font-style:normal\">바로</span> 기울임</i>", "바로 *기울임*")]
         [InlineData("<p>첫 문단</p><p>둘째 <b>문단</b></p>", "첫 문단\n\n둘째 **문단**")]
         [InlineData("<h2>제목</h2><ul><li>하나</li><li>둘</li></ul>", "## 제목\n\n- 하나\n\n- 둘")]
         [InlineData("2 * 3 &lt;tag&gt;", "2 * 3 \\<tag>")]
@@ -290,6 +292,22 @@ namespace Folderss.SearchTests
         public void ClipboardHtml_ToMarkdown(string html, string expected)
         {
             Assert.Equal(expected, ClipboardMarkdown.FromHtml(html));
+        }
+
+        [Fact]
+        public void Merge_JoinsAdjacentCodeRuns_FromEditing()
+        {
+            // 서식 입력란에서 코드 안에 입력하면 조각이 나뉜다(울타리 정보가 없는 새 조각). 따로 쓰면 `a``b`가 되어 다시 읽을 때 글자가 바뀐다.
+            var runs = new List<InlineRun>
+            {
+                new InlineRun { Text = "코드 ", Format = InlineFormat.Code, CodeFence = 1 },
+                new InlineRun { Text = "**a**", Format = InlineFormat.Code },
+                new InlineRun { Text = "안", Format = InlineFormat.Code, CodeFence = 1 },
+                new InlineRun { Text = " 끝" },
+            };
+            var markdown = InlineMarkdown.Serialize(runs);
+            Assert.Equal("`코드 **a**안` 끝", markdown);
+            Assert.Equal("코드 **a**안 끝", InlineMarkdown.ToPlain(markdown));
         }
 
         [Fact]
