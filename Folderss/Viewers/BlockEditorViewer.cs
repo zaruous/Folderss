@@ -13,7 +13,7 @@ namespace Folderss.Viewers
     /// Markdown 파일을 Notion식 블록 편집기(<see cref="BlockEditor"/>)로 편집하는 뷰어(<c>builtin:blocks</c>).
     /// 읽은 인코딩·줄바꿈(CRLF/LF)으로 저장하고, 저장할 때 Markdown 형식은 <see cref="BlockMarkdown"/> 규칙으로 정리된다.
     /// </summary>
-    public sealed class BlockEditorViewer : UserControl, IFileViewer, IViewerShortcutHandler, IFileOpenRequester
+    public sealed partial class BlockEditorViewer : UserControl, IFileViewer, IViewerShortcutHandler, IFileOpenRequester, IViewerActivationAware, IDisposable
     {
         /// <summary>
         /// 편집기는 화면에 보이는 블록만 입력란을 만들므로(가상화) 블록 수 제한은 없다. 이 크기는 해석·메모리 상한일 뿐이다
@@ -30,6 +30,7 @@ namespace Folderss.Viewers
             "Ctrl+Shift+↑↓ 블록 이동 · Ctrl+D 복제 · Ctrl+Enter 체크·접기\n" +
             "Ctrl+Alt+0~8 전환(텍스트·제목1~3·할 일·글머리·번호·토글·코드)\n" +
             "Ctrl+B 굵게 · Ctrl+I 기울임 · Ctrl+E 코드 · Ctrl+Shift+S 취소선 · Ctrl+K 링크\n" +
+            "Ctrl+F 찾기 · Ctrl+H 바꾸기 · F3/Shift+F3 다음·이전 · Ctrl+클릭 링크 열기(#제목·파일.md#제목 이동)\n" +
             "Ctrl+Z/Ctrl+Y 실행 취소·다시 실행 · Ctrl+S 저장";
 
         private readonly BlockEditor _editor = new BlockEditor();
@@ -104,6 +105,9 @@ namespace Folderss.Viewers
             };
             _editor.SaveRequested += (s, e) => Save();
             _editor.PageOpenRequested += (s, path) => FileOpenRequested?.Invoke(this, path);
+            _editor.LinkOpenRequested += (s, link) => OpenLink(link);
+            _fileReloadTimer = new System.Windows.Threading.DispatcherTimer { Interval = TimeSpan.FromMilliseconds(400) };
+            _fileReloadTimer.Tick += OnFileReloadTimerTick;
 
             Loaded += (s, e) => NetworkSettingsService.Changed += OnNetworkSettingsChanged;
             Unloaded += (s, e) => NetworkSettingsService.Changed -= OnNetworkSettingsChanged;
@@ -122,6 +126,8 @@ namespace Folderss.Viewers
                     "블록 편집기", MessageBoxButton.YesNo, MessageBoxImage.Warning, MessageBoxResult.No) != MessageBoxResult.Yes)
                 return;
 
+            StopFileWatcher();
+            _reloadNote = null;
             _filePath = filePath;
             TitleChanged?.Invoke(this, Path.GetFileName(filePath));
 
@@ -135,17 +141,35 @@ namespace Folderss.Viewers
             _encoding = MarkdownViewer.DetectEncoding(filePath);
             var content = File.ReadAllText(filePath, _encoding);
 
+            // Markdown 밖 속성(블록 색 등)은 문서 옆 사이드카(문서.md.meta.json)에 있다(#78).
+            var sidecarPath = BlockSidecar.PathFor(filePath);
+            var sidecar = File.Exists(sidecarPath) ? File.ReadAllText(sidecarPath, Encoding.UTF8) : null;
+            ApplyContent(content, sidecar, false);
+            StartFileWatcher(filePath);
+            ConsumePendingAnchorLater();
+        }
+
+        /// <summary>읽은 Markdown·사이드카를 편집기에 넣는다. <paramref name="keepScroll"/>면 보던 블록(앵커)으로 돌아간다(외부 변경 반영).</summary>
+        private void ApplyContent(string content, string sidecar, bool keepScroll)
+        {
             _tooLarge = false;
             _crlf = content.Contains("\r\n");
             _notice.Visibility = Visibility.Collapsed;
             _editor.Visibility = Visibility.Visible;
-            _editor.DocumentPath = filePath;
-            _editor.BaseDirectory = Path.GetDirectoryName(filePath);
+            _editor.DocumentPath = _filePath;
+            _editor.BaseDirectory = Path.GetDirectoryName(_filePath);
 
-            // Markdown 밖 속성(블록 색 등)은 문서 옆 사이드카(문서.md.meta.json)에 있다(#78).
-            var sidecarPath = BlockSidecar.PathFor(filePath);
-            var sidecar = File.Exists(sidecarPath) ? File.ReadAllText(sidecarPath, Encoding.UTF8) : null;
+            Models.EditorBlock anchor = null;
+            double delta = 0;
+            var anchorIndex = keepScroll ? _editor.CaptureScrollAnchor(out anchor, out delta) : -1;
             _editor.SetMarkdown(content, sidecar);
+            if (keepScroll)
+                _editor.RestoreScrollAnchor(anchor, anchorIndex, delta);
+            // 자기 저장·이미 반영한 내용은 외부 변경으로 보지 않는다(BlockEditorViewer.External.cs).
+            _diskText = content;
+            _diskSidecar = sidecar;
+            _promptedText = _promptedSidecar = null;
+
             _sidecarUnreadable = _editor.UnmatchedAttributes == BlockSidecar.Unreadable;
             _sidecarNote = _sidecarUnreadable ? "속성 파일을 읽지 못함(저장하면 .bak로 보관)"
                 : _editor.UnmatchedAttributes > 0 ? string.Format("속성 {0}개를 붙이지 못함(다른 곳에서 본문이 바뀜)", _editor.UnmatchedAttributes)
@@ -176,6 +200,7 @@ namespace Folderss.Viewers
             {
                 // 임시 파일에 쓴 뒤 교체한다(쓰기 도중 실패해도 원본이 남음).
                 SettingsFile.WriteAllText(_filePath, text, _encoding);
+                _diskText = text;   // 이 저장으로 생긴 파일 감시 이벤트는 무시한다
             }
             catch (Exception ex)
             {
@@ -194,6 +219,7 @@ namespace Folderss.Viewers
                     SettingsFile.WriteAllText(sidecarPath, sidecar, new UTF8Encoding(false));
                 else if (File.Exists(sidecarPath))
                     File.Delete(sidecarPath);   // 속성이 모두 지워졌으면 속성 파일도 남기지 않는다
+                _diskSidecar = sidecar;
             }
             catch (Exception ex)
             {
@@ -203,6 +229,7 @@ namespace Folderss.Viewers
                 return;
             }
             _sidecarNote = null;
+            _reloadNote = null;
             _editor.MarkSaved();
             UpdateStatus();
         }
@@ -214,10 +241,11 @@ namespace Folderss.Viewers
                 _status.Text = "읽지 않음";
                 return;
             }
-            _status.Text = string.Format("{0}{1} · {2} · {3}{4}",
+            _status.Text = string.Format("{0}{1} · {2} · {3}{4}{5}",
                 _encoding.WebName.ToUpperInvariant(), _encoding.GetPreamble().Length > 0 ? " BOM" : string.Empty,
                 _crlf ? "CRLF" : "LF", _editor.IsModified ? "수정됨" : "저장됨",
-                _sidecarNote != null ? " · " + _sidecarNote : string.Empty);
+                _sidecarNote != null ? " · " + _sidecarNote : string.Empty,
+                _reloadNote != null ? " · " + _reloadNote : string.Empty);
         }
 
         public void ApplyTheme(ThemeInfo theme)
@@ -228,8 +256,12 @@ namespace Folderss.Viewers
 
         public bool HandleShortcut(KeyEventArgs e, KeyBindingService kb)
         {
-            // 편집기 단축키는 BlockEditor가 직접 처리한다. 메인 창 단축키(내용 검색 등)는 그대로 둔다.
-            return false;
+            // 편집기 단축키는 BlockEditor가 직접 처리한다. 단 전역 "내용 검색"(기본 Ctrl+F)은 메인 창이 먼저 받으므로
+            // 여기서 가로채 문서 내 찾기를 연다(Markdown·Monaco 뷰어와 같은 방식). 나머지 메인 창 단축키는 그대로 둔다.
+            if (_tooLarge || _filePath == null || !kb.Matches(e, "ShowSearch"))
+                return false;
+            _editor.OpenFind(false);
+            return true;
         }
 
         public void Export(ExportFormat format, string destPath)

@@ -125,6 +125,7 @@ namespace Folderss.Controls
             };
             Content = _scroll;
             InitializeSelection();
+            InitializeFind();   // 찾기 막대(BlockEditor.Find.cs)
 
             AllowDrop = true;
             PreviewDragOver += OnPreviewFileDragOver;
@@ -618,6 +619,10 @@ namespace Folderss.Controls
 
             var key = e.Key == Key.System ? e.SystemKey : e.Key;
             var mods = Keyboard.Modifiers;
+
+            // 찾기·바꾸기(Ctrl+F/H, F3) — 찾기 막대 입력란의 키는 편집기 키 처리로 넘기지 않는다(BlockEditor.Find.cs).
+            if (HandleFindKey(e, key, mods))
+                return;
 
             if (mods == ModifierKeys.Control && key == Key.S)
             {
