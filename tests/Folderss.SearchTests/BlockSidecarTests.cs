@@ -193,5 +193,36 @@ namespace Folderss.SearchTests
             Assert.Equal("Folderss - Dual Pane File Manager", reread[5].GetAttribute(EditorBlock.AttrTitle));
             Assert.Equal("Windows WPF dual-pane file manager.", reread[5].GetAttribute(EditorBlock.AttrDescription));
         }
+
+        /// <summary>#75 표: 열 너비(colwidths)·머리글 끄기(noheader)는 표의 첫 행에 붙어 왕복하고, 정렬은 Markdown 구분 행으로 남는다.</summary>
+        [Fact]
+        public void TableAttributes_RoundTrip_OnFirstRow()
+        {
+            var header = new EditorBlock(BlockKind.TableRow, "이름\t크기\t날짜") { TableAlign = "l,r,c" };
+            BlockTable.SetColumnWidth(header, 3, 0, 180);
+            BlockTable.SetColumnWidth(header, 3, 2, 96);
+            BlockTable.SetHeaderHidden(header, true);
+            var blocks = new List<EditorBlock>
+            {
+                new EditorBlock(BlockKind.Paragraph, "표 앞"),
+                header,
+                new EditorBlock(BlockKind.TableRow, "a.txt\t1 KB\t2026-11-01"),
+                new EditorBlock(BlockKind.TableRow, "b.txt\t2 KB\t2026-11-02"),
+            };
+
+            string sidecar;
+            int unmatched;
+            var reread = SaveAndReload(blocks, out sidecar, out unmatched);
+
+            Assert.Equal(0, unmatched);
+            Assert.DoesNotContain("noheader", BlockMarkdown.Serialize(blocks));
+            Assert.Contains("\"colwidths\": \"180,,96\"", sidecar);
+            Assert.Equal("180,,96", reread[1].GetAttribute(EditorBlock.AttrColWidths));
+            Assert.Equal("true", reread[1].GetAttribute(EditorBlock.AttrNoHeader));
+            Assert.True(BlockTable.IsHeaderHidden(reread[1]));
+            Assert.Equal("l,r,c", reread[1].TableAlign);
+            Assert.Null(reread[2].Attributes);
+            Assert.Null(reread[3].Attributes);
+        }
     }
 }

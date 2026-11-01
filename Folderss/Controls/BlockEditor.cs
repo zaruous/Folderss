@@ -444,7 +444,7 @@ namespace Folderss.Controls
         {
             var block = _blocks[index];
             if (block.Kind == BlockKind.TableRow && index < _tableColumns.Length)
-                row.SetTable(_tableColumns[index], _tableHeader[index], _blocks[_tableStart[index]].TableAlign, _tableLast[index]);
+                ApplyTableContext(row, index);
             row.SetLabel(BlockOperations.FormatListLabel(block, index < _numbers.Length ? _numbers[index] : 0));
             row.ApplyIndent();
             int selStart, selEnd;
