@@ -360,8 +360,11 @@ namespace Folderss.Services
                     JsonElement value;
                     // version 1(#81 1단계)은 사용자가 고르지 않아도 기본값 "mapping"을 함께 저장했다.
                     // 그 "mapping"은 고른 값으로 보지 않고 새 기본값(블록 편집)을 쓴다(사용자 결정, 2026-11-01). version 2부터는 저장된 값을 그대로 존중.
+                    // 손으로 고친 소수·int 범위 밖 값도 예외 없이 읽는다(GetInt32는 FormatException — JsonException이 아니라 생성자 밖으로 나가 .md를 열 때마다 실패).
                     JsonElement version;
-                    var legacy = !root.TryGetProperty("version", out version) || version.ValueKind != JsonValueKind.Number || version.GetInt32() < 2;
+                    double versionNumber;
+                    var legacy = !root.TryGetProperty("version", out version) || version.ValueKind != JsonValueKind.Number ||
+                                 !version.TryGetDouble(out versionNumber) || versionNumber < 2;
                     if (root.TryGetProperty("defaultView", out value) && value.ValueKind == JsonValueKind.String)
                     {
                         var saved = NormalizeDefault(value.GetString());

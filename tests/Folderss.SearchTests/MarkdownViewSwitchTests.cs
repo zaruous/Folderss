@@ -224,6 +224,31 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
+        public void Settings_NonIntegerVersion_DoesNotThrow()
+        {
+            // 손으로 고친 소수·int 범위 밖 version도 예외 없이(예전: GetInt32 FormatException이 생성자 밖으로 나가 .md를 열 때마다 실패)
+            var settings = new MarkdownViewSettings(TempPath());
+            settings.Parse("{\"version\":1.5,\"defaultView\":\"mapping\"}");
+            Assert.Equal(MarkdownViewSwitch.ViewBlocks, settings.DefaultView);
+            settings.Parse("{\"version\":99999999999,\"defaultView\":\"mapping\"}");
+            Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
+            settings.Parse("{\"version\":2.0,\"defaultView\":\"mapping\"}");
+            Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
+
+            var path = TempPath();
+            Directory.CreateDirectory(Path.GetDirectoryName(path));
+            try
+            {
+                File.WriteAllText(path, "{\"version\":1.5,\"defaultView\":\"preview\"}");
+                Assert.Equal(MarkdownViewSwitch.ViewPreview, new MarkdownViewSettings(path).DefaultView);
+            }
+            finally
+            {
+                Directory.Delete(Path.GetDirectoryName(path), true);
+            }
+        }
+
+        [Fact]
         public void Settings_MappingChosenInNewVersion_SurvivesReload()
         {
             // 새 버전에서 사용자가 "매핑을 따름"을 고르면 다시 읽어도 유지(예전 파일의 mapping 무시 규칙에 걸리지 않음)
