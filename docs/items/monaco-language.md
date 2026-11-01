@@ -147,6 +147,32 @@ Monaco 등록 정보로 이미 맞게 열리는 것(`.xaml`/`.csproj`→xml, `.j
 6. **WebView2 오프스크린**: 가려진 Monaco 탭(IdleSaver 일시 중지)에서 테마 전환 후 다시 보기, 백그라운드에서 세션 복원된 탭이 처음 보일 때 언어 표시가 채워지는지(`languages`/`language` 메시지가 늦게 와도 단추가 `…`로 남지 않는지).
 7. **#81 공존**: `.md` 탭(블록 편집/미리보기 단추)에는 언어 단추가 없고, `.md`를 Monaco로 매핑하면 언어 단추만 보이는지.
 
+### 병합 후 하네스 검증 (2026-11-01, `feature/monaco-language` 6c6de95 = master 0d17152 + #82)
+
+화면 밖 WPF 하네스(창 -20000 위치·활성화 안 함, 실제 마우스 메시지 차단, 메시지 상자는 CBT 훅으로 화면 밖 이동·자동 응답, 언어 선택 `Popup`은 열지 않고 찾기 칸·목록만 다룸).
+설정 파일(`monaco-language.json`·`markdown-view.json`·`viewer-config.json`)과 WebView2 사용자 데이터는 하네스 임시 폴더만 썼다. 모드마다 별도 프로세스·시간 제한(`HARNESS_MODE_TIMEOUT_SEC` 300~600초).
+하네스는 저장소 밖(세션 scratchpad `harness82`)에 있다.
+
+| 모드 | 검사 | 결과 |
+|---|---|---|
+| mon-langs (1) | 31개 파일: `.go .rs .kt .rb .php .swift .scss .ini .lua .vb .ps1 .sql .yaml .cs .py .java .cpp .h .jsonl .xaml .cshtml .tf .graphql .proto .sh .ts .txt .log .csproj`, `api.dockerfile`, `.editorconfig` — 모델 언어, 툴바 표시(`Go`·`Rust`·`C#`·`Terraform`… ● 없음), 실제 토큰 색 수(언어 있음 ≥2 / plaintext 1), C# `Resolve`와 런타임 일치 | 124 통과 |
+| mon-pick (2) | `.txt` → 목록 93개(자동 + 92), 찾기 `rust`·`.go`·`C#`·`.md`·`Markdown`, ↓↑, Enter로 markdown → 즉시 강조·`Markdown ●`·`files` 기록, Esc, 닫힌 직후 단추 클릭 → 다시 안 열림, 목록 항목 클릭(MouseUp), ↻ 다시 읽기·외부 변경 다시 읽기(확인창 예)·탭 다시 열기·설정 다시 읽기(재시작) 뒤 유지, `자동` → plaintext·● 사라짐·`files`에서 삭제, `monaco-language.json` 읽기 전용이어도 이번 탭에 적용·예외 없음 | 23 통과 |
+| mon-prio (3·요구 5) | 설정 창 `Monaco 언어 연결`: 언어 콤보 92개(기본 ini), `.inc→php`·`*.conf→ini`·`.h→c` 추가, `.INC` 중복 없음, 잘못된 입력(빈 값·`a\b`·`x/y`·`*`·`.`) 안내·추가 안 함, 줄 삭제. `.md 기본 보기`·`Monaco 언어` TrySave 둘 다 저장(실패 0)·Save_Click 목록에 둘 다 있음, 읽기 전용 → 실패 목록 `Monaco 언어 (monaco-language.json): Access to the path is denied.` 열기: 연결 전 `.conf`/`.toml` plaintext·`.h` cpp(예외), 연결 뒤 `.inc` php·`.conf` ini·`.h` c·`.go` go, 파일별 sql이 php보다 우선 → `자동`이면 php, 손으로 넣은 없는 id → 자동(go). `.go` 매핑 전 Monaco 아님 → 매핑 저장 뒤 go·토큰 색 | 26 통과 |
+| mon-big (4) | 25MB `.json` → json·미니맵 끔·편집 가능·단추 사용(plaintext 선택·자동 복귀 적용), 51MB → plaintext·읽기 전용·미니맵 끔·단추 사용 안 함·툴팁 "초대용량…", 파일별 기억(json)이 있어도 plaintext | 6 통과 (열기 2.4초 / 3.3초) |
+| mon-theme (5) | Black→Light→GitHub→Black: 편집기 `folderss-dark/light`, 팝업 배경=PanelBackground·테두리=BorderBrush·단추 글자=PrimaryText. 설정 창(화면 밖 표시) 연결 목록 배경이 테마 색 | 14 통과 |
+| mon-off (6) | 가려진 채 연 탭(백그라운드 복원)이 처음 보일 때 rust·`Rust`(`…` 아님), 가려진 탭 30초 뒤 일시 중지 → 테마(Light) 전환·언어 선택 → 다시 보기에서 `folderss-light`·`Plain Text ●` | 4 통과 |
+| mon-md (7·#81 공존) | `.md` 블록 편집/미리보기: 전환 단추만·언어 단추 없음, 같은 탭에서 `.cs` → 언어 단추·전환 단추 숨김, 다시 `.md` → 언어 단추 남지 않음, Dispose → 칸 비움. `.md`를 Monaco로 매핑(기본 보기 blocks/mapping/preview, 파일별 preview 기억 있어도) → Monaco·전환 단추 숨김·언어 단추·markdown | 10 통과 |
+| 회귀 smoke·switch·dv81 | 블록 편집기 기본, `.md` 전환 14항목, 기본 보기 신규/기존 사용자 | 18 + 53 + 26 통과 |
+
+합계 새 검사 207 + 회귀 97 통과, 실패 0. 실제 `%LOCALAPPDATA%\Folderss` 파일은 수정 시각이 바뀌지 않았다.
+
+#### 남은 문제·사람이 볼 항목
+
+- **찾기 칸 `md`(점 없음)로는 Markdown이 안 나온다**(`mdx`만). 확장자 찾기가 점을 포함한 완전 일치이고 이름 `Markdown`에 `md`가 없어서다. `.md`·`mark`로는 찾는다. 점 없는 확장자도 받을지는 판단 필요.
+- **목록 표시 이름**: 별칭이 id와 대소문자만 다른 언어는 목록에 id(`go`, `rust`)로, 단추에는 별칭(`Go`, `Rust`)으로 보인다(`SetLanguages`의 Label 규칙). 의도인지 확인.
+- 기억 저장 실패(`monaco-language.json` 읽기 전용) 때 이번 탭 단추는 `●`로 보이지만 파일에는 남지 않는다(설계대로 Trace만). 
+- 하네스에서 하지 못한 것: 실제 팝업 열기·바깥 클릭으로 닫기·팝업 위치/그림(실제 화면에 그려지고 마우스를 잡으므로), 실제 `Save_Click`(다른 설정 파일까지 실제 경로에 씀 — 같은 `TrySave` 호출과 소스 목록으로 대신), MainWindow 세션 복원(설정 다시 읽기 + 새 탭 `Load` 경로로 대신). 실제 앱에서 눈으로 확인할 것: 언어 단추·팝업 모양(밝은/어두운 테마), 설정 창 `Monaco 언어 연결` 영역 배치.
+
 ### Monaco 업그레이드 시
 
 1. `Viewers/Resources/monaco` 교체 후 `dotnet test tests/Folderss.SearchTests --filter MonacoLanguageTests`.
@@ -157,3 +183,4 @@ Monaco 등록 정보로 이미 맞게 열리는 것(`.xaml`/`.csproj`→xml, `.j
 ## 변경 이력
 
 - 2026-11-01: 구현, Ready for Verification.
+- 2026-11-01: master 병합 후 화면 밖 하네스 검증(새 검사 207 + 회귀 97 통과, 코드 수정 없음). 사람 확인 항목은 "검증" 절.
