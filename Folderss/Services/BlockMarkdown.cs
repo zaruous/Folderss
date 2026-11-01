@@ -43,23 +43,37 @@ namespace Folderss.Services
             return ParseCore(markdown, null);
         }
 
-        /// <summary><paramref name="sources"/>가 있으면 블록마다 원문 줄 범위·쓰기 형식(목록 표식 등)을 기록한다(<see cref="MarkdownSource"/>).</summary>
-        internal static List<EditorBlock> ParseCore(string markdown, Dictionary<EditorBlock, BlockSourceInfo> sources)
+        /// <summary>
+        /// <paramref name="record"/>가 있으면 블록마다 원문 줄 범위·쓰기 형식(목록 표식 등)을 기록한다(<see cref="MarkdownSource"/>).
+        /// <paramref name="allowFrontMatter"/>가 false면 첫 줄 <c>---</c>를 front matter로 보지 않는다(문서 중간 구간만 다시 읽어 검증할 때).
+        /// </summary>
+        internal static List<EditorBlock> ParseCore(string markdown, SourceRecord record, bool allowFrontMatter = true)
         {
             var text = (markdown ?? string.Empty).Replace("\r\n", "\n").Replace('\r', '\n');
             if (text.Length > 0 && text[0] == '﻿')
                 text = text.Substring(1);
             var lines = text.Split('\n');
             var blocks = new List<EditorBlock>();
-            new Parser(lines, sources, null).Parse(blocks, 0, true);
+            new Parser(lines, record, null).Parse(blocks, 0, allowFrontMatter);
             BlockOperations.NormalizeIndents(blocks);
             return blocks;
+        }
+
+        /// <summary><see cref="ParseCore"/>가 원문을 읽으며 남기는 기록(<see cref="MarkdownSource"/>).</summary>
+        internal sealed class SourceRecord
+        {
+            /// <summary>블록별 원문 자리·형식.</summary>
+            public readonly Dictionary<EditorBlock, BlockSourceInfo> Infos = new Dictionary<EditorBlock, BlockSourceInfo>();
+
+            /// <summary>맨 바깥에서 닫히지 않은 코드 펜스·수식·토글이 문서 끝까지 이어졌는지(그 뒤에 글을 붙이면 그 블록에 빨려 들어감).</summary>
+            public bool OpenAtEnd;
         }
 
         private sealed class Parser
         {
             private readonly string[] _lines;
             // 원문 범위 기록(없으면 기록하지 않음)과 이 파서의 줄 → 문서 줄 번호(null이면 같음, -1은 원문 줄이 아님 — 토글 닫는 줄 앞 글자)
+            private readonly SourceRecord _record;
             private readonly Dictionary<EditorBlock, BlockSourceInfo> _sources;
             private readonly int[] _lineMap;
 
@@ -68,12 +82,22 @@ namespace Folderss.Services
             private EditorBlock _open;   // 다음 줄이 이어 붙을 수 있는 문단·목록 항목
             private bool _lastWasBlank = true;
             private int _baseLevel;
+            // 맨 바깥 파서에서 빈 줄(또는 문서 처음) 바로 다음, 들여쓰지 않은 줄 — 여기서 시작한 블록은 앞 내용과 상관없이 같은 결과로 읽힌다(SafeStart).
+            private int _safeLine = -1;
 
-            public Parser(string[] lines, Dictionary<EditorBlock, BlockSourceInfo> sources, int[] lineMap)
+            public Parser(string[] lines, SourceRecord record, int[] lineMap)
             {
                 _lines = lines;
-                _sources = sources;
+                _record = record;
+                _sources = record?.Infos;
                 _lineMap = lineMap;
+            }
+
+            /// <summary>맨 바깥 파서에서 블록이 문서 끝까지 닫히지 않았다.</summary>
+            private void MarkOpenAtEnd()
+            {
+                if (_record != null && _lineMap == null)
+                    _record.OpenAtEnd = true;
             }
 
             private int DocLine(int i)
@@ -92,7 +116,7 @@ namespace Folderss.Services
                 var e = DocLine(end - 1);
                 if (s < 0 || e < 0 || e - s != end - 1 - start)
                     return null;
-                var info = new BlockSourceInfo { Start = s, End = e + 1, Column = column };
+                var info = new BlockSourceInfo { Start = s, End = e + 1, Column = column, SafeStart = _lineMap == null && start == _safeLine };
                 _sources[block] = info;
                 return info;
             }
@@ -124,6 +148,8 @@ namespace Folderss.Services
 
                     var indent = CountIndent(line);
                     var content = line.TrimStart(' ', '\t');
+                    if (_sources != null)
+                        _safeLine = _lineMap == null && _lastWasBlank && _open == null && indent == 0 ? i : -1;
 
                     if (allowFrontMatter && i == 0 && content.TrimEnd() == "---")
                     {
@@ -160,6 +186,8 @@ namespace Folderss.Services
                     {
                         var level = LevelForBlock(indent);
                         var end = FindFenceEnd(i + 1, fence);
+                        if (end >= _lines.Length)
+                            MarkOpenAtEnd();
                         var body = new List<string>();
                         for (var k = i + 1; k < end && k < _lines.Length; k++)
                             body.Add(StripIndent(_lines[k], indent));
@@ -190,6 +218,8 @@ namespace Folderss.Services
                         if (trimmedContent == "$$")
                         {
                             var end = FindMathEnd(i + 1);
+                            if (end >= _lines.Length)
+                                MarkOpenAtEnd();
                             var body = new List<string>();
                             for (var k = i + 1; k < end && k < _lines.Length; k++)
                                 body.Add(StripIndent(_lines[k], indent).TrimEnd());
@@ -385,7 +415,7 @@ namespace Folderss.Services
                     if (info != null)
                     {
                         info.ContentColumn = contentColumn;
-                        info.Spacing = spacing.Length == 0 || spacing.Length > 4 ? 1 : spacing.Length;
+                        info.Spacing = (byte)(spacing.Length == 0 || spacing.Length > 4 ? 1 : spacing.Length);
                         if (kind == BlockKind.Bulleted)
                         {
                             info.Bullet = marker[0];
@@ -511,7 +541,10 @@ namespace Folderss.Services
                     }
                 }
                 if (close < 0)
+                {
                     close = _lines.Length;
+                    MarkOpenAtEnd();
+                }
 
                 // 제목: <summary>…</summary>. 같은 줄 또는 바로 아래 줄들에 있다.
                 var title = string.Empty;
@@ -569,7 +602,7 @@ namespace Folderss.Services
                         _sources.Remove(toggle);
                     }
                 }
-                new Parser(inner.ToArray(), _sources, innerMap?.ToArray()).Parse(output, level + 1, false);
+                new Parser(inner.ToArray(), _record, innerMap?.ToArray()).Parse(output, level + 1, false);
                 return Math.Min(close, _lines.Length - 1);
             }
 
@@ -737,7 +770,8 @@ namespace Folderss.Services
             public int Spacing;
         }
 
-        private static void Write(StringBuilder sb, IList<EditorBlock> blocks, int start, int end, int baseIndent, string prefix, PieceWriter writer)
+        /// <summary>블록을 쓰고 나서 쓴 블록이 하나라도 있으면 true(토글 자식 뒤 빈 줄 판단).</summary>
+        private static bool Write(StringBuilder sb, IList<EditorBlock> blocks, int start, int end, int baseIndent, string prefix, PieceWriter writer)
         {
             var contentColumns = new Dictionary<int, int>();   // 수준별 마지막 목록 항목의 내용 시작 열
             var numbers = new Dictionary<int, int>();          // 수준별 번호 목록 카운터
@@ -745,6 +779,7 @@ namespace Folderss.Services
             BlockKind? previous = null;
             var previousLevel = -1;
             var tableColumns = 0;                              // 지금 쓰는 표의 열 수
+            var wroteAny = false;
 
             for (var i = start; i < end; i++)
             {
@@ -754,20 +789,20 @@ namespace Folderss.Services
                 // 빈 문단은 Markdown으로 나타낼 수 없어 쓰지 않는다.
                 if (!IsWritten(block))
                     continue;
+                wroteAny = true;
 
                 // 같은 수준 앞 목록 항목의 내용 열: 이 블록이 그 열 이상으로 들여쓰면 그 항목 안으로 들어가 버린다.
                 int escape;
                 if (!contentColumns.TryGetValue(level, out escape))
                     escape = int.MaxValue;
 
-                foreach (var key in numbers.Keys.Where(k => k > level).ToList())
-                    numbers.Remove(key);
-                foreach (var key in contentColumns.Keys.Where(k => k >= level).ToList())
-                    contentColumns.Remove(key);
-                if (styles != null)
+                RemoveLevels(numbers, level + 1);
+                RemoveLevels(contentColumns, level);
+                if (styles != null && styles.Count > 0)
                 {
-                    foreach (var key in styles.Keys.Where(k => k > level || (k == level && !EditorBlock.IsListItem(block.Kind))).ToList())
-                        styles.Remove(key);
+                    RemoveLevels(styles, level + 1);
+                    if (!EditorBlock.IsListItem(block.Kind))
+                        styles.Remove(level);
                 }
 
                 // 목록 항목 아래 자식은 부모 항목의 내용 시작 열만큼 들여쓴다. 목록이 아닌 부모 아래면 들여쓰지 않는다
@@ -796,190 +831,116 @@ namespace Folderss.Services
                     else if (sibling != null && sibling.Column >= column && sibling.Column <= max)
                         column = sibling.Column;
                 }
-                var indent = prefix + new string(' ', column);
+                string indent = null;   // prefix + 열만큼 공백 — 실제로 쓸 때만 만든다
+                var context = new PieceContext { Indent = prefix.Length + column, Number = -1 };
 
                 var continuesTable = block.Kind == BlockKind.TableRow && previous == BlockKind.TableRow && previousLevel == level;
                 if (previous != null && !continuesTable && !(EditorBlock.IsListItem(previous.Value) && EditorBlock.IsListItem(block.Kind)))
                     sb.Append('\n');
 
-                var pieceStart = sb.Length;
-                var numberLength = 0;   // 번호 목록 두 번째 항목부터: 번호 글자 수(조각 비교에서 번호는 빼고 본다)
+                // 문맥(번호·목록 표식·표 열 수): 조각 글은 블록 내용과 이 문맥만으로 정해진다.
                 ListStyle written = null;
-                switch (block.Kind)
+                string marker = null;
+                var numberLength = 0;   // 번호 목록 두 번째 항목부터: 번호 글자 수(조각 비교에서 번호는 빼고 본다)
+                if (EditorBlock.IsListItem(block.Kind))
                 {
-                    case BlockKind.Heading1:
-                    case BlockKind.Heading2:
-                    case BlockKind.Heading3:
-                        var setext = hint?.Setext;
-                        if (setext != null && block.Kind != BlockKind.Heading3 && setext[0] == (block.Kind == BlockKind.Heading1 ? '=' : '-')
-                            && OneLine(block.Text).Trim().Length > 0)
+                    var spacing = 1;
+                    if (writer != null)
+                    {
+                        written = new ListStyle
                         {
-                            sb.Append(indent).Append(OneLine(block.Text)).Append('\n').Append(indent).Append(setext).Append('\n');
-                            break;
-                        }
-                        var hashes = block.Kind == BlockKind.Heading1 ? "# " : block.Kind == BlockKind.Heading2 ? "## " : "### ";
-                        sb.Append(indent).Append(hashes).Append(OneLine(block.Text)).Append('\n');
-                        break;
-
-                    case BlockKind.Bulleted:
-                    case BlockKind.Numbered:
-                    case BlockKind.Todo:
-                        string marker;
-                        var spacing = 1;
-                        if (writer != null)
+                            Column = column,
+                            Bullet = hint != null && hint.Bullet != '\0' ? hint.Bullet : sibling != null && sibling.Bullet != '\0' ? sibling.Bullet : '-',
+                            Delim = hint != null && hint.Delim != '\0' ? hint.Delim : sibling != null && sibling.Delim != '\0' ? sibling.Delim : '.',
+                            Spacing = hint != null && hint.Spacing > 0 ? hint.Spacing : sibling != null && sibling.Spacing > 0 ? sibling.Spacing : 1,
+                        };
+                        spacing = written.Spacing;
+                    }
+                    if (block.Kind == BlockKind.Numbered)
+                    {
+                        int n;
+                        if (numbers.TryGetValue(level, out n))
                         {
-                            written = new ListStyle
-                            {
-                                Column = column,
-                                Bullet = hint != null && hint.Bullet != '\0' ? hint.Bullet : sibling != null && sibling.Bullet != '\0' ? sibling.Bullet : '-',
-                                Delim = hint != null && hint.Delim != '\0' ? hint.Delim : sibling != null && sibling.Delim != '\0' ? sibling.Delim : '.',
-                                Spacing = hint != null && hint.Spacing > 0 ? hint.Spacing : sibling != null && sibling.Spacing > 0 ? sibling.Spacing : 1,
-                            };
-                            spacing = written.Spacing;
-                        }
-                        if (block.Kind == BlockKind.Numbered)
-                        {
-                            int n;
-                            if (numbers.TryGetValue(level, out n))
-                            {
-                                n++;
-                                numberLength = n.ToString().Length;
-                            }
-                            else
-                            {
-                                n = hint != null && hint.StartNumber >= 0 ? hint.StartNumber : 1;
-                            }
-                            numbers[level] = n;
-                            marker = n + (written != null ? written.Delim.ToString() : ".");
+                            n++;
+                            numberLength = n.ToString().Length;
                         }
                         else
                         {
-                            marker = written != null ? written.Bullet.ToString() : "-";
+                            n = hint != null && hint.StartNumber >= 0 ? hint.StartNumber : 1;
                         }
-                        marker += new string(' ', spacing);
-                        var itemColumn = column + marker.Length;
-                        var first = block.Kind == BlockKind.Todo ? (block.Checked ? "[x] " : "[ ] ") : string.Empty;
-                        AppendLines(sb, indent + marker + first, prefix + new string(' ', itemColumn), block.Text);
-                        contentColumns[level] = itemColumn;
-                        break;
-
-                    case BlockKind.Quote:
-                        foreach (var line in SplitLines(block.Text))
-                            sb.Append(indent).Append(line.Length == 0 ? ">" : "> " + line).Append('\n');
-                        break;
-
-                    case BlockKind.Callout:
-                        sb.Append(indent).Append("> [!").Append(NormalizeCalloutType(block.CalloutType)).Append("]\n");
-                        if (block.Text.Length > 0)
-                            foreach (var line in SplitLines(block.Text))
-                                sb.Append(indent).Append(line.Length == 0 ? ">" : "> " + line).Append('\n');
-                        break;
-
-                    case BlockKind.Code:
-                        var fence = new string('`', Math.Max(3, LongestBacktickRun(block.Text) + 1));
-                        sb.Append(indent).Append(fence).Append(OneLine(block.Language).Trim()).Append('\n');
-                        if (block.Text.Length > 0)
-                            foreach (var line in SplitLines(block.Text))
-                                sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
-                        sb.Append(indent).Append(fence).Append('\n');
-                        break;
-
-                    case BlockKind.Divider:
-                        sb.Append(indent).Append("---\n");
-                        break;
-
-                    case BlockKind.Raw:
-                    case BlockKind.FrontMatter:
-                        foreach (var line in SplitLines(block.Text))
-                            sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
-                        break;
-
-                    case BlockKind.TableRow:
-                        if (!continuesTable)
-                        {
-                            // 표의 첫 행이 머리글. 열 수는 표 전체에서 가장 많은 셀 수.
-                            tableColumns = 0;
-                            for (var k = i; k < end && blocks[k].Kind == BlockKind.TableRow && blocks[k].Indent == block.Indent; k++)
-                                tableColumns = Math.Max(tableColumns, CountCells(blocks[k].Text));
-                            AppendTableRow(sb, indent, SplitCells(block.Text), tableColumns);
-                            var aligns = (block.TableAlign ?? string.Empty).Split(',');
-                            sb.Append(indent).Append('|');
-                            for (var c = 0; c < tableColumns; c++)
-                            {
-                                var a = c < aligns.Length ? aligns[c] : string.Empty;
-                                sb.Append(a == "c" ? " :---: |" : a == "r" ? " ---: |" : a == "l" ? " :--- |" : " --- |");
-                            }
-                            sb.Append('\n');
-                        }
-                        else
-                        {
-                            AppendTableRow(sb, indent, SplitCells(block.Text), tableColumns);
-                        }
-                        break;
-
-                    case BlockKind.Image:
-                        var source = block.Source ?? string.Empty;
-                        if (source.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
-                            source = "<" + source + ">";
-                        sb.Append(indent).Append("![").Append(OneLine(block.Text).Replace("]", "\\]")).Append("](").Append(source).Append(")\n");
-                        break;
-
-                    case BlockKind.Toc:
-                        sb.Append(indent).Append("[TOC]\n");
-                        break;
-
-                    case BlockKind.Math:
-                        sb.Append(indent).Append("$$\n");
-                        if (block.Text.Length > 0)
-                            foreach (var line in SplitLines(block.Text))
-                                sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
-                        sb.Append(indent).Append("$$\n");
-                        break;
-
-                    case BlockKind.File:
-                    case BlockKind.Bookmark:
-                    case BlockKind.Page:
-                        var cardSource = block.Source ?? string.Empty;
-                        if (cardSource.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
-                            cardSource = "<" + cardSource + ">";
-                        var cardLabel = OneLine(block.Text).Replace("]", "\\]");
-                        var cardIcon = LinkCardIcon(block.Kind);
-                        sb.Append(indent).Append(cardLabel.Length > 0 ? "[" + cardIcon + " " + cardLabel + "](" : "[" + cardIcon + "](").Append(cardSource).Append(")\n");
-                        break;
-
-                    case BlockKind.Toggle:
-                        sb.Append(indent).Append(block.Collapsed ? "<details>" : "<details open>").Append('\n');
-                        sb.Append(indent).Append("<summary>").Append(OneLine(block.Text)).Append("</summary>\n");
-                        writer?.Piece(i, block, 0, sb, pieceStart, 0, 0);
-                        sb.Append('\n');
-                        var childEnd = Math.Min(end, BlockOperations.SubtreeEnd(blocks, i));
-                        if (childEnd > i + 1)
-                        {
-                            var before = sb.Length;
-                            Write(sb, blocks, i + 1, childEnd, block.Indent + 1, indent, writer);
-                            if (sb.Length > before)
-                                sb.Append('\n');
-                        }
-                        var tailStart = sb.Length;
-                        sb.Append(indent).Append("</details>\n");
-                        writer?.Piece(i, block, 1, sb, tailStart, 0, 0);
-                        i = childEnd - 1;
-                        break;
-
-                    default:
-                        AppendLines(sb, indent, indent, block.Text);
-                        break;
+                        numbers[level] = n;
+                        context.Marker = written != null ? written.Delim : '.';
+                        context.Number = numberLength > 0 ? -1 : n;
+                        marker = n + context.Marker.ToString();
+                    }
+                    else
+                    {
+                        context.Marker = written != null ? written.Bullet : '-';
+                        marker = context.Marker.ToString();
+                    }
+                    context.Spacing = (byte)spacing;
+                    context.Digits = (byte)numberLength;
+                    marker += new string(' ', spacing);
+                }
+                else if (block.Kind == BlockKind.TableRow)
+                {
+                    if (!continuesTable)
+                    {
+                        // 표의 첫 행이 머리글. 열 수는 표 전체에서 가장 많은 셀 수.
+                        tableColumns = 0;
+                        for (var k = i; k < end && blocks[k].Kind == BlockKind.TableRow && blocks[k].Indent == block.Indent; k++)
+                            tableColumns = Math.Max(tableColumns, CountCells(blocks[k].Text));
+                    }
+                    context.TableColumns = tableColumns;
+                    context.ContinuesTable = continuesTable;
                 }
 
-                if (writer != null && block.Kind != BlockKind.Toggle)
+                var pieceStart = sb.Length;
+                if (block.Kind == BlockKind.Toggle)
                 {
-                    var preserved = writer.Piece(i, block, 0, sb, pieceStart, indent.Length, numberLength);
-                    if (written != null)
+                    indent = prefix + new string(' ', column);
+                    if ((writer?.Begin(i, block, 0, sb, context) ?? PieceWriter.Write) == PieceWriter.Write)
                     {
-                        // 원문 그대로 쓰는 항목은 원문의 내용 열을 자식이 따른다(번호 자릿수 등이 정규형과 달라도).
-                        if (preserved && hint != null && hint.ContentColumn >= 0)
-                            contentColumns[level] = hint.ContentColumn;
-                        styles[level] = written;
+                        RenderToggleHead(sb, indent, block.Collapsed, block.Text);
+                        writer?.Piece(i, block, 0, sb, pieceStart, 0, 0);
+                    }
+                    sb.Append('\n');
+                    var childEnd = Math.Min(end, BlockOperations.SubtreeEnd(blocks, i));
+                    if (childEnd > i + 1 && Write(sb, blocks, i + 1, childEnd, block.Indent + 1, indent, writer))
+                        sb.Append('\n');
+                    var tailStart = sb.Length;
+                    if ((writer?.Begin(i, block, 1, sb, context) ?? PieceWriter.Write) == PieceWriter.Write)
+                    {
+                        sb.Append(indent).Append("</details>\n");
+                        writer?.Piece(i, block, 1, sb, tailStart, 0, 0);
+                    }
+                    i = childEnd - 1;
+                }
+                else
+                {
+                    var action = writer?.Begin(i, block, 0, sb, context) ?? PieceWriter.Write;
+                    bool preserved;
+                    if (action == PieceWriter.Write)
+                    {
+                        indent = prefix + new string(' ', column);
+                        RenderBody(sb, indent, block.Kind, block.Text, block.Checked, ExtraOf(block), hint?.Setext, marker, tableColumns, continuesTable);
+                        preserved = writer != null && writer.Piece(i, block, 0, sb, pieceStart, indent.Length, numberLength);
+                    }
+                    else
+                    {
+                        preserved = action == PieceWriter.SkipPreserved;
+                    }
+
+                    if (marker != null)
+                    {
+                        contentColumns[level] = column + marker.Length;
+                        if (writer != null)
+                        {
+                            // 원문 그대로 쓰는 항목은 원문의 내용 열을 자식이 따른다(번호 자릿수 등이 정규형과 달라도).
+                            if (preserved && hint != null && hint.ContentColumn >= 0)
+                                contentColumns[level] = hint.ContentColumn;
+                            styles[level] = written;
+                        }
                     }
                 }
 
@@ -988,6 +949,159 @@ namespace Folderss.Services
                     numbers.Remove(level);
                 previous = block.Kind;
                 previousLevel = level;
+            }
+            return wroteAny;
+        }
+
+        /// <summary>수준 <paramref name="from"/> 이상의 항목을 지운다.</summary>
+        private static void RemoveLevels<T>(Dictionary<int, T> map, int from)
+        {
+            if (map.Count == 0)
+                return;
+            List<int> remove = null;
+            foreach (var key in map.Keys)
+            {
+                if (key >= from)
+                    (remove ??= new List<int>()).Add(key);
+            }
+            if (remove != null)
+            {
+                foreach (var key in remove)
+                    map.Remove(key);
+            }
+        }
+
+        /// <summary>쓰기에 쓰이는 종류별 속성(코드 언어·콜아웃 종류·이미지/카드 경로·표 머리글 정렬). 그 밖의 종류는 null.</summary>
+        internal static string ExtraOf(EditorBlock block)
+        {
+            switch (block.Kind)
+            {
+                case BlockKind.Code: return block.Language;
+                case BlockKind.Callout: return block.CalloutType;
+                case BlockKind.Image:
+                case BlockKind.File:
+                case BlockKind.Bookmark:
+                case BlockKind.Page: return block.Source;
+                case BlockKind.TableRow: return block.TableAlign;
+                default: return null;
+            }
+        }
+
+        internal static void RenderToggleHead(StringBuilder sb, string indent, bool collapsed, string text)
+        {
+            sb.Append(indent).Append(collapsed ? "<details>" : "<details open>").Append('\n');
+            sb.Append(indent).Append("<summary>").Append(OneLine(text)).Append("</summary>\n");
+        }
+
+        /// <summary>
+        /// 토글이 아닌 블록 하나의 조각 글. <paramref name="extra"/>는 <see cref="ExtraOf"/>, <paramref name="marker"/>는 목록 표식(번호·기호 + 뒤 공백),
+        /// 이어지는 줄은 표식 뒤 열에 맞춘다. 내용과 문맥(<see cref="PieceContext"/>)만으로 정해진다(<see cref="MarkdownSource"/>가 읽을 때 글을 다시 만들 때도 씀).
+        /// </summary>
+        internal static void RenderBody(StringBuilder sb, string indent, BlockKind kind, string text, bool isChecked, string extra, string setext,
+            string marker, int tableColumns, bool continuesTable)
+        {
+            text = text ?? string.Empty;
+            switch (kind)
+            {
+                case BlockKind.Heading1:
+                case BlockKind.Heading2:
+                case BlockKind.Heading3:
+                    if (setext != null && kind != BlockKind.Heading3 && setext[0] == (kind == BlockKind.Heading1 ? '=' : '-')
+                        && OneLine(text).Trim().Length > 0)
+                    {
+                        sb.Append(indent).Append(OneLine(text)).Append('\n').Append(indent).Append(setext).Append('\n');
+                        break;
+                    }
+                    var hashes = kind == BlockKind.Heading1 ? "# " : kind == BlockKind.Heading2 ? "## " : "### ";
+                    sb.Append(indent).Append(hashes).Append(OneLine(text)).Append('\n');
+                    break;
+
+                case BlockKind.Bulleted:
+                case BlockKind.Numbered:
+                case BlockKind.Todo:
+                    var first = kind == BlockKind.Todo ? (isChecked ? "[x] " : "[ ] ") : string.Empty;
+                    AppendLines(sb, indent + marker + first, new string(' ', indent.Length + marker.Length), text);
+                    break;
+
+                case BlockKind.Quote:
+                    foreach (var line in SplitLines(text))
+                        sb.Append(indent).Append(line.Length == 0 ? ">" : "> " + line).Append('\n');
+                    break;
+
+                case BlockKind.Callout:
+                    sb.Append(indent).Append("> [!").Append(NormalizeCalloutType(extra)).Append("]\n");
+                    if (text.Length > 0)
+                        foreach (var line in SplitLines(text))
+                            sb.Append(indent).Append(line.Length == 0 ? ">" : "> " + line).Append('\n');
+                    break;
+
+                case BlockKind.Code:
+                    var fence = new string('`', Math.Max(3, LongestBacktickRun(text) + 1));
+                    sb.Append(indent).Append(fence).Append(OneLine(extra).Trim()).Append('\n');
+                    if (text.Length > 0)
+                        foreach (var line in SplitLines(text))
+                            sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
+                    sb.Append(indent).Append(fence).Append('\n');
+                    break;
+
+                case BlockKind.Divider:
+                    sb.Append(indent).Append("---\n");
+                    break;
+
+                case BlockKind.Raw:
+                case BlockKind.FrontMatter:
+                    foreach (var line in SplitLines(text))
+                        sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
+                    break;
+
+                case BlockKind.TableRow:
+                    AppendTableRow(sb, indent, SplitCells(text), tableColumns);
+                    if (!continuesTable)
+                    {
+                        var aligns = (extra ?? string.Empty).Split(',');
+                        sb.Append(indent).Append('|');
+                        for (var c = 0; c < tableColumns; c++)
+                        {
+                            var a = c < aligns.Length ? aligns[c] : string.Empty;
+                            sb.Append(a == "c" ? " :---: |" : a == "r" ? " ---: |" : a == "l" ? " :--- |" : " --- |");
+                        }
+                        sb.Append('\n');
+                    }
+                    break;
+
+                case BlockKind.Image:
+                    var source = extra ?? string.Empty;
+                    if (source.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
+                        source = "<" + source + ">";
+                    sb.Append(indent).Append("![").Append(OneLine(text).Replace("]", "\\]")).Append("](").Append(source).Append(")\n");
+                    break;
+
+                case BlockKind.Toc:
+                    sb.Append(indent).Append("[TOC]\n");
+                    break;
+
+                case BlockKind.Math:
+                    sb.Append(indent).Append("$$\n");
+                    if (text.Length > 0)
+                        foreach (var line in SplitLines(text))
+                            sb.Append(line.Length == 0 ? string.Empty : indent + line).Append('\n');
+                    sb.Append(indent).Append("$$\n");
+                    break;
+
+                case BlockKind.File:
+                case BlockKind.Bookmark:
+                case BlockKind.Page:
+                    var cardSource = extra ?? string.Empty;
+                    if (cardSource.IndexOfAny(new[] { ' ', '(', ')' }) >= 0)
+                        cardSource = "<" + cardSource + ">";
+                    var cardLabel = OneLine(text).Replace("]", "\\]");
+                    var cardIcon = LinkCardIcon(kind);
+                    sb.Append(indent).Append(cardLabel.Length > 0 ? "[" + cardIcon + " " + cardLabel + "](" : "[" + cardIcon + "](").Append(cardSource).Append(")\n");
+                    break;
+
+                default:
+                    AppendLines(sb, indent, indent, text);
+                    break;
             }
         }
 

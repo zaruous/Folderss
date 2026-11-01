@@ -132,7 +132,8 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
 
 ### 블록 편집기 저장은 최소 변경 (#81)
 - 파일 저장은 `BlockEditor.GetMarkdown` → `MarkdownSource.Save`(`Services/BlockMarkdown.Source.cs`): 바뀐 블록만 정규형, 나머지는 원문 줄 그대로. `BlockMarkdown.Serialize`(정규형)를 파일 저장에 직접 쓰지 않는다.
-- 새 블록 종류·읽기 규칙을 추가하면 `BlockMarkdown.ParseCore`에서 `Track(블록, 시작 줄, 끝 줄, 열)`로 원문 범위를 기록하고(안 하면 그 블록은 늘 정규형), `BlockMarkdown.Write`의 조각 알림(`writer.Piece`)이 그 블록 출력 전체를 감싸는지 확인한다.
+- 새 블록 종류·읽기 규칙을 추가하면 `BlockMarkdown.ParseCore`에서 `Track(블록, 시작 줄, 끝 줄, 열)`로 원문 범위를 기록하고(안 하면 그 블록은 늘 정규형), `BlockMarkdown.Write`의 조각 알림(`writer.Begin` → 쓰기 → `writer.Piece`)이 그 블록 출력 전체를 감싸는지 확인한다.
+  블록 글은 `RenderBody`(내용 + `PieceContext` 문맥)만으로 정해져야 한다 — 새 속성이 글에 들어가면 `BlockMarkdown.ExtraOf`(종류별 속성)나 `PieceContext`에 넣고 `MarkdownSource.SameContent`가 비교하게 한다(안 하면 그 속성만 바꾼 저장이 원문 그대로 남음).
   `MinimalDiffSaveTests`에 무편집 바이트 동일·한 블록 편집 diff 사례를 추가한다.
 
 ### 이벤트 원본에서 조상 찾기
