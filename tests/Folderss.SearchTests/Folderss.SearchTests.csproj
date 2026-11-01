@@ -72,6 +72,7 @@
     <Compile Include="..\..\Folderss\Models\EditorBlock.cs" Link="Linked\EditorBlock.cs" />
     <Compile Include="..\..\Folderss\Services\BlockMarkdown.cs" Link="Linked\BlockMarkdown.cs" />
     <Compile Include="..\..\Folderss\Services\BlockOperations.cs" Link="Linked\BlockOperations.cs" />
+    <Compile Include="..\..\Folderss\Services\BlockSelection.cs" Link="Linked\BlockSelection.cs" />
     <Compile Include="..\..\Folderss\Services\BlockSidecar.cs" Link="Linked\BlockSidecar.cs" />
     <Compile Include="..\..\Folderss\Services\ZipEntryNameEncoding.cs" Link="Linked\ZipEntryNameEncoding.cs" />
     <Compile Include="..\..\Folderss\Services\ZipArchiveService.cs" Link="Linked\ZipArchiveService.cs" />
