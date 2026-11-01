@@ -83,7 +83,12 @@ namespace Folderss.Services
 
         public IFileViewer Resolve(string extension)
         {
-            var key = GetEffectiveMappingKey(extension);
+            return CreateViewer(GetEffectiveMappingKey(extension));
+        }
+
+        /// <summary>뷰어 키로 새 뷰어를 만든다. 시스템 기본·모르는 키는 null. 매핑과 무관하게 보기를 바꿀 때(<c>.md</c> 블록 편집 ↔ 미리보기, #81)도 쓴다.</summary>
+        public static IFileViewer CreateViewer(string key)
+        {
             if (string.IsNullOrEmpty(key) || string.Equals(key, SystemDefaultKey, StringComparison.OrdinalIgnoreCase))
                 return null;
 

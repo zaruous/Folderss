@@ -783,6 +783,50 @@ function scrollPreviewToHeading(id) {
   return true;
 }
 
+// ── 블록 편집 ↔ 미리보기 전환(#81) ─────────
+// 전환할 때 보던 위치: 미리보기·분할은 화면 맨 위(그 위 포함)의 제목 id, 원문 편집은 맨 위 줄 번호(1부터). 편집기는 줄바꿈 없이(wrap=off) 그리므로 줄 높이로 계산한다.
+function editorLineHeight() {
+  var lh = parseFloat(window.getComputedStyle(editor).lineHeight);
+  return lh > 0 ? lh : 20;
+}
+
+function topPreviewHeadingId() {
+  var preview = document.getElementById('mdv-preview-pane');
+  if (!preview || _mode === 'edit' || _largeFileMode) return null;
+  var top = preview.getBoundingClientRect().top + 16;
+  var found = null;
+  var headings = preview.querySelectorAll('h1[id], h2[id], h3[id], h4[id], h5[id], h6[id]');
+  for (var i = 0; i < headings.length; i++) {
+    if (headings[i].getBoundingClientRect().top > top) break;
+    found = headings[i].id;
+  }
+  return found;
+}
+
+function getViewPosition() {
+  return {
+    mode: _largeFileMode ? 'edit' : _mode,
+    heading: topPreviewHeadingId(),
+    line: (_mode === 'preview' && !_largeFileMode) ? 0 : Math.floor(editor.scrollTop / editorLineHeight()) + 1
+  };
+}
+
+function setViewPosition(heading, line) {
+  if (heading && _mode !== 'edit' && !_largeFileMode) {
+    var preview = document.getElementById('mdv-preview-pane');
+    var target = document.getElementById(heading);
+    if (preview && target && preview.contains(target)) {
+      // 전환 직후에는 부드러운 스크롤 없이 바로 그 자리에 둔다.
+      preview.scrollTop = Math.max(0, preview.scrollTop + target.getBoundingClientRect().top - preview.getBoundingClientRect().top - 12);
+      setActiveTocItem(heading);
+    }
+  }
+  if (line > 0 && (_mode !== 'preview' || _largeFileMode)) {
+    editor.scrollTop = (line - 1) * editorLineHeight();
+    editorGutter.scrollTop = editor.scrollTop;
+  }
+}
+
 function setActiveTocItem(id) {
   var tocPanel = document.getElementById('mdv-toc-panel');
   tocPanel.querySelectorAll('.toc-item.active').forEach(function(el){ el.classList.remove('active'); });
@@ -1081,6 +1125,9 @@ var app = {
 
   // 다른 문서의 "파일#제목" 링크로 열렸을 때 C#이 호출한다.
   scrollToAnchor: scrollToAnchor,
+  getViewPosition: getViewPosition,
+  setViewPosition: setViewPosition,
+  currentContent: function() { return editor.value; },
 
   openFind: openFindBar,
   search: searchMarkdown,
