@@ -53,7 +53,13 @@ namespace Folderss.Controls
                 EndMouseSelect(true);
             };
             // 창 전환 등으로 캡처를 잃으면 선택은 그대로 두고 끄기만 끝낸다.
-            _panel.LostMouseCapture += (s, e) => EndMouseSelect(false);
+            // LostMouseCapture는 버블 이벤트라 패널 안 입력란·손잡이가 캡처를 놓아도 여기로 올라온다 — 패널 자신의 것만 본다
+            // (글자 끌기 → 블록 선택 전환에서 TextBox가 캡처를 놓을 때 막 시작한 선택이 끝나 버리지 않게).
+            _panel.LostMouseCapture += (s, e) =>
+            {
+                if (ReferenceEquals(e.OriginalSource, _panel))
+                    EndMouseSelect(false);
+            };
             PreviewMouseMove += OnCrossBlockPreviewMouseMove;
             PreviewMouseLeftButtonDown += OnShiftClickPreview;
         }
