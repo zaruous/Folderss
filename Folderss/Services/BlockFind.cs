@@ -154,6 +154,19 @@ namespace Folderss.Services
                 var blockIndex = matches[i].Block;
                 var block = blocks[blockIndex];
                 var value = SanitizeReplacement(block.Kind, replacement);
+                if (block.GetAttribute(TextMarks.Attribute) != null)
+                {
+                    // 줄 안 범위(밑줄·색)가 있는 블록은 뒤에서부터 하나씩 바꿔 범위가 결과마다 정확히 옮겨지게 한다(EditorBlock.Text가 바뀐 구간 하나로 옮김).
+                    var firstOfBlock = i;
+                    while (i < matches.Count && matches[i].Block == blockIndex)
+                        i++;
+                    for (var k = i - 1; k >= firstOfBlock; k--)
+                        block.Text = block.Text.Remove(matches[k].Start, matches[k].Length).Insert(matches[k].Start, value);
+                    if (first < 0)
+                        first = blockIndex;
+                    last = blockIndex;
+                    continue;
+                }
                 var text = block.Text;
                 var builder = new StringBuilder(text.Length);
                 var copied = 0;

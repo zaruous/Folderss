@@ -139,6 +139,10 @@ namespace Folderss.Controls
                     CloseSlash();
             };
 
+            // 줄 안 글자 색·형광펜 리소스(테마 밝기별). 화면에 붙은 뒤 테마 리소스가 달라졌을 수 있어 Loaded에서도 확인한다.
+            UpdateTextMarkBrushes();
+            Loaded += (s, e) => UpdateTextMarkBrushes();
+
             SetMarkdown(string.Empty);
         }
 
@@ -214,6 +218,7 @@ namespace Folderss.Controls
         /// <summary>테마가 바뀌었다: 테마 밝기에 따라 고르는 색(블록 글자색·배경색)을 다시 칠한다. 나머지 색은 DynamicResource라 저절로 바뀐다.</summary>
         public void RefreshTheme()
         {
+            UpdateTextMarkBrushes();
             _panel.SyncRealized();
         }
 
@@ -847,6 +852,9 @@ namespace Folderss.Controls
                     return mods == ctrl && !verbatim && FormatKey(row, InlineFormat.Code, "`");
                 case Key.S:
                     return mods == ctrlShift && !verbatim && FormatKey(row, InlineFormat.Strike, "~~");
+                case Key.U:
+                    // 밑줄은 Markdown 밖 범위 속성(#76 9번) — 서식 입력란만. 표 셀(원문 입력란)은 대상이 아니다.
+                    return mods == ctrl && !verbatim && row.Rich != null && ToggleUnderline(row);
                 case Key.K:
                     return mods == ctrl && !verbatim && (row.Rich != null ? ShowLinkEditor(row) : InsertLink(row));
             }
@@ -925,6 +933,8 @@ namespace Folderss.Controls
                 return;
             }
 
+            // 줄 안 범위(밑줄·색): 앞 블록은 본문이 바뀔 때 저절로 잘리고(EditorBlock.Text), 뒤 블록은 커서 뒤 범위를 따로 넣는다.
+            var tailMarks = TailMarks(block, selectionStart, editor.SelectionLength);
             var continues = EditorBlock.IsListItem(block.Kind) ? block.Kind : BlockKind.Paragraph;
             if (selectionStart == 0 && !isEmpty)
             {
@@ -958,6 +968,7 @@ namespace Folderss.Controls
                 insertAt = index + 1;
             }
 
+            TextMarks.Set(created, tailMarks.Marks, tailMarks.Plain);
             _blocks.Insert(insertAt, InColumnOf(created, block));
             BlockOperations.NormalizeIndents(_blocks);
             SyncRows();
@@ -1022,7 +1033,7 @@ namespace Folderss.Controls
                 return;
             }
             var caret = PlainLength(target);
-            target.Text = JoinText(target, block.Text);
+            JoinBlock(target, block.Text, TextMarks.Get(block), null);
             _blocks.RemoveAt(index);
             BlockOperations.NormalizeIndents(_blocks);
             SyncRows();
@@ -1045,7 +1056,7 @@ namespace Folderss.Controls
                 if (next < 0 || _blocks[next].Kind == BlockKind.TableRow || _blocks[next].Kind == BlockKind.Image ||
                     EditorBlock.IsLinkCard(_blocks[next].Kind))
                     return;
-                row.Block.Text = JoinText(row.Block, _blocks[next].Text);
+                JoinBlock(row.Block, _blocks[next].Text, TextMarks.Get(_blocks[next]), null);
                 _blocks.RemoveAt(next);
             }
             BlockOperations.NormalizeIndents(_blocks);
@@ -1448,7 +1459,10 @@ namespace Folderss.Controls
             var editor = row.Editor;
             var rich = editor as RichBlockBox;
             var wasBlank = string.IsNullOrWhiteSpace(row.Block.Text);
-            row.Block.Text = rich != null ? rich.Markdown : editor.Text;
+            if (rich != null)
+                SetBlockFromRich(row.Block, rich);
+            else
+                row.Block.Text = editor.Text;
             row.UpdatePlaceholder();
             RecordChange(row);
             // 빈 문단은 번호 목록 번호를 끊지 않으므로, 비었다가 글자가 생기거나 그 반대면 번호를 다시 센다.
@@ -1622,15 +1636,16 @@ namespace Folderss.Controls
             if (string.IsNullOrEmpty(text) || text.IndexOf('\n') < 0)
                 return;
             e.CancelCommand();
-            PasteBlocks(row, text);
+            PasteBlocks(row, text, ClipboardBlockMarks(e.DataObject, text));
         }
 
-        private void PasteBlocks(BlockRow row, string markdown)
+        private void PasteBlocks(BlockRow row, string markdown, IList<string> blockMarks = null)
         {
             var parsed = BlockMarkdown.Parse(markdown);
             PastedFrontMatterAsRaw(parsed);
             if (parsed.Count == 0)
                 return;
+            ApplyPastedMarks(parsed, blockMarks);
 
             var index = IndexOf(row);
             var block = row.Block;
@@ -1638,6 +1653,7 @@ namespace Folderss.Controls
             string current, head, tail;
             int selectionStart;
             bool isEmpty;
+            var tailMarks = TailMarks(block, editor.SelectionStart, editor.SelectionLength);
             ReadSplit(row, editor, out current, out head, out tail, out selectionStart, out isEmpty);
 
             foreach (var item in parsed)
@@ -1655,7 +1671,7 @@ namespace Folderss.Controls
             else if (parsed[0].Kind == BlockKind.Paragraph)
             {
                 block.Text = head;
-                block.Text = JoinText(block, parsed[0].Text);
+                JoinBlock(block, parsed[0].Text, TextMarks.Get(parsed[0]), null);
                 inserted.AddRange(parsed.Skip(1));
             }
             else
@@ -1674,7 +1690,7 @@ namespace Folderss.Controls
                     inserted.Add(last);
                     caret = 0;
                 }
-                last.Text = JoinText(last, tail);
+                JoinBlock(last, tail, tailMarks.Marks, tailMarks.Plain);
             }
 
             _blocks.InsertRange(index + 1, inserted);
@@ -1935,8 +1951,11 @@ namespace Folderss.Controls
         private void CopyBlocks(int first, int last)
         {
             var end = BlockOperations.ExtendToSubtrees(_blocks, first, last + 1);
-            var markdown = BlockMarkdown.Serialize(_blocks.GetRange(first, end - first));
-            ClipboardService.TrySetDataObject(new DataObject(DataFormats.UnicodeText, markdown));
+            var range = _blocks.GetRange(first, end - first);
+            var markdown = BlockMarkdown.Serialize(range);
+            var data = new DataObject(DataFormats.UnicodeText, markdown);
+            SetClipboardMarks(data, markdown, range);
+            ClipboardService.TrySetDataObject(data);
         }
 
         private void PasteAfterSelection(int last)
@@ -1959,6 +1978,7 @@ namespace Folderss.Controls
             PastedFrontMatterAsRaw(parsed);
             if (parsed.Count == 0)
                 return;
+            ApplyPastedMarks(parsed, ClipboardBlockMarks(text));
             var indent = _blocks[last].Indent;
             foreach (var block in parsed)
             {

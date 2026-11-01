@@ -140,16 +140,20 @@ Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)
 | `Shift+클릭` | 지금 블록부터 누른 블록까지 블록 선택(같은 블록 안이면 글자 선택) | `OnShiftClickPreview` |
 
 #76 "줄 안 서식 WYSIWYG"에서 바뀐 키. 서식 블록(텍스트·제목·목록·할 일·토글·인용·콜아웃)은 서식 입력란(`RichBlockBox`)에서 서식을 직접 켜고 끈다.
-표 셀(원문 입력란)에서는 예전처럼 Markdown 표식으로 감싼다. RichTextBox 기본 서식 명령(`Ctrl+U` 밑줄, `Ctrl+E/L/R/J` 정렬, `Ctrl+[`/`]` 글자 크기 등)은 `RichBlockBox`에서 꺼 두었다.
+표 셀(원문 입력란)에서는 예전처럼 Markdown 표식으로 감싼다. RichTextBox 기본 서식 명령(`Ctrl+U` 밑줄, `Ctrl+E/L/R/J` 정렬, `Ctrl+[`/`]` 글자 크기 등)은 `RichBlockBox`에서 꺼 두었고,
+`Ctrl+U`는 편집기의 밑줄(사이드카 범위 속성 `marks`, #76 9번)로 다시 잡았다.
 
 | 키 | 동작 | 처리 위치 |
 |----|------|------|
 | `Ctrl+B` / `Ctrl+I` / `Ctrl+E` / `Ctrl+Shift+S` | 굵게 / 기울임 / 코드 / 취소선 적용·해제(선택이 모두 그 서식이면 해제, 선택이 없으면 다음 입력 글자 서식). 실행 취소 한 단계 | `HandleEditorKey` → `FormatKey` → `BlockEditor.Inline.cs` `ToggleInlineFormat` (표 셀은 `WrapSelection`) |
+| `Ctrl+U` | 밑줄 적용·해제(선택이 모두 밑줄이면 해제, 선택이 없으면 다음 입력 글자). Markdown에는 쓰지 않고 사이드카 `marks`에 저장. 실행 취소 한 단계. 표 셀·코드 블록에서는 아무것도 하지 않음 | `HandleEditorKey` → `BlockEditor.Inline.cs` `ToggleUnderline` |
 | `Ctrl+K` | 링크 주소 팝업(선택 글자를 링크로, 커서가 링크 안이면 그 링크 고치기·열기·제거, 선택이 없으면 주소를 링크 글자로 넣기). 팝업 안 `Enter` 적용·`Esc` 취소 | `ShowLinkEditor` (표 셀은 `InsertLink`) |
 | `Ctrl+Z` (서식 단축 직후) | 입력 중 `**글**` 등으로 바뀐 서식을 입력한 표식 글자로 되돌림 | 변환을 따로 한 단계로 기록(`TryInlineInputRule` → `ApplyRuns`) |
 | `Ctrl+클릭` | 서식 입력란·표시 글자의 링크 열기(링크 조각 또는 맨 URL) | `OnLinkPreviewMouseDown` → `RichLinkAt` / `BlockInlineRenderer.DisplayLinkAt` |
 
-미구현 제안: `Ctrl+U` 밑줄·글자 색·형광펜 단축키(#78 사이드카 범위 속성이 들어가면).
+글자 색·배경색(형광펜)은 단축키 없이 서식 도구막대 `A▾`에서 고른다(`SetTextMarkColor`·`ClearTextMarkColors`).
+
+미구현 제안: 마지막에 쓴 글자 색·형광펜 다시 칠하기 단축키(Notion `Ctrl+Shift+H`).
 
 ---
 

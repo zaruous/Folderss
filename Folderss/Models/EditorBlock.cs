@@ -1,3 +1,4 @@
+using Folderss.Services;
 using System;
 using System.Collections.Generic;
 using System.Threading;
@@ -59,10 +60,41 @@ namespace Folderss.Models
         /// </summary>
         public long Id { get; private set; } = Interlocked.Increment(ref _lastId);
 
-        public BlockKind Kind { get; set; }
+        private BlockKind _kind;
+        private string _text = string.Empty;
 
-        /// <summary>본문. 굵게·링크 등 줄 안 서식은 Markdown 원문(<c>**굵게**</c>) 그대로 담는다.</summary>
-        public string Text { get; set; } = string.Empty;
+        /// <summary>블록 종류. 줄 안 범위 속성(<see cref="TextMarks"/>)을 받지 않는 종류(코드·원문·표 행 등)로 바뀌면 그 속성을 지운다.</summary>
+        public BlockKind Kind
+        {
+            get => _kind;
+            set
+            {
+                _kind = value;
+                if (Attributes != null && !TextMarks.IsTarget(value))
+                    SetAttribute(TextMarks.Attribute, null);
+            }
+        }
+
+        /// <summary>
+        /// 본문. 굵게·링크 등 줄 안 서식은 Markdown 원문(<c>**굵게**</c>) 그대로 담는다.
+        /// 줄 안 범위 속성(밑줄·글자 색·형광펜, <see cref="TextMarks"/>)이 있으면 바뀐 글자에 맞춰 범위를 옮긴다(찾아 바꾸기·<c>/</c> 명령·날짜 넣기 등 모든 경로).
+        /// </summary>
+        public string Text
+        {
+            get => _text;
+            set
+            {
+                if (Attributes != null && !string.Equals(_text, value, StringComparison.Ordinal) && Attributes.ContainsKey(TextMarks.Attribute))
+                    TextMarks.OnTextChanging(this, _text, value);
+                _text = value;
+            }
+        }
+
+        /// <summary>범위 속성을 옮기지 않고 본문만 바꾼다(<see cref="TextMarks.SetText"/> — 범위를 따로 정하는 경로).</summary>
+        internal void SetTextOnly(string text)
+        {
+            _text = text;
+        }
 
         public int Indent { get; set; }
 
@@ -109,6 +141,9 @@ namespace Folderss.Models
         /// 규칙은 <c>BlockTable</c>.
         /// </summary>
         public const string AttrColWidths = "colwidths";
+
+        /// <summary>줄 안 밑줄·글자 색·형광펜 범위(#76 9번). 형식·규칙은 <see cref="TextMarks"/>.</summary>
+        public const string AttrMarks = TextMarks.Attribute;
 
         /// <summary>표 머리글 행 표시 끄기(<c>true</c>). Markdown 표는 머리글이 필수라 첫 행은 그대로 머리글로 저장하고 화면에서만 일반 행처럼 그린다. 표의 첫 행에만 둔다.</summary>
         public const string AttrNoHeader = "noheader";

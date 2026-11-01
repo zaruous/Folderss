@@ -224,5 +224,118 @@ namespace Folderss.SearchTests
             Assert.Null(reread[2].Attributes);
             Assert.Null(reread[3].Attributes);
         }
+
+        // ── #76 9번: 줄 안 밑줄·글자 색·형광펜(marks) ──────────────────────────
+
+        private static EditorBlock Marked(BlockKind kind, string text, params TextMark[] marks)
+        {
+            var block = new EditorBlock(kind, text);
+            TextMarks.Set(block, marks);
+            return block;
+        }
+
+        /// <summary>marks는 보이는 글자 기준으로 저장되고 같은 블록에 다시 붙는다. Markdown에는 아무 표식도 없다(다른 도구에서 열면 그냥 글자).</summary>
+        [Fact]
+        public void TextMarks_RoundTrip_SameBlock_MarkdownUntouched()
+        {
+            var blocks = new List<EditorBlock>
+            {
+                new EditorBlock(BlockKind.Heading1, "제목"),
+                Marked(BlockKind.Paragraph, "**굵은** 밑줄 노랑",
+                    new TextMark(TextMarkKind.Underline, null, 3, 5),
+                    new TextMark(TextMarkKind.Highlight, "yellow", 6, 8),
+                    new TextMark(TextMarkKind.Color, "red", 0, 2)),
+                Marked(BlockKind.Bulleted, "목록 항목", new TextMark(TextMarkKind.Color, "blue", 0, 2)),
+            };
+            var before = BlockMarkdown.Serialize(blocks);
+
+            string sidecar;
+            int unmatched;
+            var reread = SaveAndReload(blocks, out sidecar, out unmatched);
+
+            Assert.Equal(0, unmatched);
+            var plainBlocks = blocks.Select(b => new EditorBlock(b.Kind, b.Text)).ToList();
+            Assert.Equal(BlockMarkdown.Serialize(plainBlocks), before);   // 속성이 없을 때와 같은 Markdown
+            Assert.DoesNotContain("yellow", before);
+            Assert.DoesNotContain("<u>", before);
+            Assert.Contains("\"marks\":", sidecar);
+            var paragraph = reread[1];
+            Assert.Equal("**굵은** 밑줄 노랑", paragraph.Text);
+            var marks = TextMarks.Get(paragraph);
+            Assert.Equal(3, marks.Count);
+            Assert.Contains(marks, m => m.Kind == TextMarkKind.Underline && m.Start == 3 && m.End == 5);
+            Assert.Contains(marks, m => m.Kind == TextMarkKind.Highlight && m.Value == "yellow" && m.Start == 6 && m.End == 8);
+            Assert.Contains(marks, m => m.Kind == TextMarkKind.Color && m.Value == "red" && m.Start == 0 && m.End == 2);
+            Assert.Equal("blue", TextMarks.Get(reread[2]).Single().Value);
+            Assert.Equal(paragraph.GetAttribute(TextMarks.Attribute), blocks[1].GetAttribute(TextMarks.Attribute));
+        }
+
+        /// <summary>marks 값의 보이는 글자 해시가 본문과 맞지 않으면(사이드카를 손으로 고침·형식 바뀜) 칠하지 않고 버리며, 붙이지 못한 속성으로 센다.</summary>
+        [Fact]
+        public void TextMarks_HashMismatch_DroppedAndCounted()
+        {
+            var blocks = new List<EditorBlock> { Marked(BlockKind.Paragraph, "가나다라", new TextMark(TextMarkKind.Underline, null, 0, 2)) };
+            blocks[0].SetAttribute("color", "red");
+            var markdown = BlockMarkdown.Serialize(blocks);
+            var sidecar = BlockSidecar.Serialize(blocks, markdown, "문서.md");
+            var value = blocks[0].GetAttribute(TextMarks.Attribute);
+            var tampered = sidecar.Replace(value, "00000000|u:0-2");
+
+            var reread = BlockMarkdown.Parse(markdown);
+            var unmatched = BlockSidecar.Apply(reread, tampered);
+
+            Assert.Equal(1, unmatched);
+            Assert.Null(reread[0].GetAttribute(TextMarks.Attribute));
+            Assert.Equal("red", reread[0].GetAttribute("color"));   // 다른 속성은 그대로
+        }
+
+        /// <summary>다른 도구에서 그 블록 본문을 고치면 블록 해시가 달라져 marks도 붙지 않는다(엉뚱한 글자에 칠하지 않음). 다른 블록의 marks는 그대로.</summary>
+        [Fact]
+        public void TextMarks_ExternalEdit_DropsOnlyChangedBlock()
+        {
+            var blocks = new List<EditorBlock>
+            {
+                Marked(BlockKind.Paragraph, "첫 문단 색", new TextMark(TextMarkKind.Color, "green", 0, 1)),
+                Marked(BlockKind.Paragraph, "둘째 문단 밑줄", new TextMark(TextMarkKind.Underline, null, 3, 5)),
+            };
+
+            string sidecar;
+            int unmatched;
+            var reread = SaveAndReload(blocks, out sidecar, out unmatched, md => md.Replace("둘째 문단", "바뀐 둘째 문단"));
+
+            Assert.Equal(1, unmatched);
+            Assert.Equal("green", TextMarks.Get(reread[0]).Single().Value);
+            Assert.Empty(TextMarks.Get(reread[1]));
+            Assert.Null(reread[1].GetAttribute(TextMarks.Attribute));
+        }
+
+        /// <summary>저장하며 보이는 글자가 달라지면(줄 끝 공백 정리 등) 다시 읽은 글자 기준으로 옮겨 저장해 다시 붙는다.</summary>
+        [Fact]
+        public void TextMarks_AnchoredToRereadText()
+        {
+            var blocks = new List<EditorBlock> { Marked(BlockKind.Paragraph, "  앞 공백 글자", new TextMark(TextMarkKind.Highlight, "pink", 4, 6)) };
+
+            string sidecar;
+            int unmatched;
+            var reread = SaveAndReload(blocks, out sidecar, out unmatched);
+
+            Assert.Equal(0, unmatched);
+            var plain = TextMarks.PlainOf(reread[0]);
+            var mark = TextMarks.Get(reread[0]).Single();
+            Assert.Equal("공백", plain.Substring(mark.Start, mark.End - mark.Start));
+        }
+
+        /// <summary>표 셀·코드 블록은 marks 대상이 아니다(종류가 바뀌면 지움, 저장하지 않음).</summary>
+        [Fact]
+        public void TextMarks_NotStoredForNonTargetKinds()
+        {
+            var block = Marked(BlockKind.Paragraph, "코드로 바꿈", new TextMark(TextMarkKind.Underline, null, 0, 2));
+            Assert.NotNull(block.GetAttribute(TextMarks.Attribute));
+
+            block.Kind = BlockKind.Code;
+
+            Assert.Null(block.GetAttribute(TextMarks.Attribute));
+            Assert.Null(BlockSidecar.Serialize(new List<EditorBlock> { block }, BlockMarkdown.Serialize(new List<EditorBlock> { block }), "문서.md"));
+        }
     }
 }

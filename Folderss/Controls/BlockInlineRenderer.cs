@@ -32,14 +32,23 @@ namespace Folderss.Controls
             return runs;
         }
 
+        /// <summary>줄 안 글자 색·배경색(#76 9번)의 편집기 리소스 키. 값(테마 밝기별 붓)은 <c>BlockEditor.UpdateTextMarkBrushes</c>가 채운다.</summary>
+        public static string TextMarkResourceKey(string name, bool background)
+        {
+            return (background ? "BlockMarkBack." : "BlockMarkText.") + name;
+        }
+
         /// <summary>
         /// 표시용 TextBlock 내용을 채운다. <paramref name="formatted"/>면 줄 안 Markdown을 서식으로(표식이 없을 법한 글자는 Text 하나로 — 빠른 길),
         /// 아니면 글자 그대로. 같은 글자·크기로 이미 그렸으면 아무것도 하지 않는다(가상화로 행을 다시 묶을 때·표 행 동기화 때).
+        /// <paramref name="marks"/>는 줄 안 범위 속성 값(<see cref="TextMarks"/>, 없으면 null) — 본문과 맞지 않으면 칠하지 않는다.
         /// </summary>
-        public static void PopulateDisplay(System.Windows.Controls.TextBlock target, string text, double fontSize, bool formatted)
+        public static void PopulateDisplay(System.Windows.Controls.TextBlock target, string text, double fontSize, bool formatted, string marks = null)
         {
             text = text ?? string.Empty;
-            if (!formatted || InlineMarkdown.IsPlain(text))
+            if (!formatted)
+                marks = null;
+            if (!formatted || (marks == null && InlineMarkdown.IsPlain(text)))
             {
                 if (target.Tag != null || target.Inlines.Count > 1 || target.Text != text)
                 {
@@ -49,12 +58,20 @@ namespace Folderss.Controls
                 }
                 return;
             }
-            var key = new DisplayKey(text, fontSize);
+            var key = new DisplayKey(text, fontSize, marks);
             if (key.Equals(target.Tag))
                 return;
             target.Inlines.Clear();
             var start = 0;
-            foreach (var run in ParseDisplay(text))
+            IList<InlineRun> runs = InlineMarkdown.IsPlain(text) ? new List<InlineRun> { new InlineRun { Text = text } } : ParseDisplay(text);
+            if (marks != null)
+            {
+                // 범위 경계에서 조각을 나눈 사본(파서 캐시는 읽기 전용).
+                List<TextMark> parsed;
+                if (TextMarks.TryParse(marks, InlineMarkdown.ToPlain(runs), out parsed))
+                    runs = TextMarks.ApplyToRuns(runs, parsed);
+            }
+            foreach (var run in runs)
             {
                 var length = run.Kind == InlineRunKind.Math ? run.Text.Length + 2 : run.Text.Length;
                 target.Inlines.Add(CreateDisplayInline(run, fontSize, new DisplayPos(start, length, run.Kind == InlineRunKind.Math)));
@@ -109,8 +126,9 @@ namespace Folderss.Controls
         {
             private readonly string _text;
             private readonly double _size;
-            public DisplayKey(string text, double size) { _text = text; _size = size; }
-            public override bool Equals(object obj) => obj is DisplayKey k && k._text == _text && k._size == _size;
+            private readonly string _marks;
+            public DisplayKey(string text, double size, string marks) { _text = text; _size = size; _marks = marks; }
+            public override bool Equals(object obj) => obj is DisplayKey k && k._text == _text && k._size == _size && k._marks == _marks;
             public override int GetHashCode() => _text.GetHashCode();
         }
 
@@ -155,14 +173,30 @@ namespace Folderss.Controls
                 inline.TextDecorations = TextDecorations.Underline;
         }
 
+        private static readonly TextDecorationCollection UnderlineAndStrike = CreateUnderlineAndStrike();
+
+        private static TextDecorationCollection CreateUnderlineAndStrike()
+        {
+            var both = new TextDecorationCollection();
+            both.Add(TextDecorations.Underline);
+            both.Add(TextDecorations.Strikethrough);
+            both.Freeze();
+            return both;
+        }
+
         private static void ApplyFormat(Inline inline, InlineRun run, bool display)
         {
             if (run.Has(InlineFormat.Bold))
                 inline.FontWeight = FontWeights.Bold;
             if (run.Has(InlineFormat.Italic))
                 inline.FontStyle = FontStyles.Italic;
-            if (run.Has(InlineFormat.Strike))
+            var strike = run.Has(InlineFormat.Strike);
+            if (strike && run.Underline)
+                inline.TextDecorations = UnderlineAndStrike;
+            else if (strike)
                 inline.TextDecorations = TextDecorations.Strikethrough;
+            else if (run.Underline)
+                inline.TextDecorations = TextDecorations.Underline;
             if (run.Has(InlineFormat.Code))
             {
                 inline.FontFamily = CodeFont;
@@ -170,6 +204,11 @@ namespace Folderss.Controls
                 if (display)
                     inline.SetResourceReference(TextElement.ForegroundProperty, "PrimaryText");
             }
+            // 줄 안 글자 색·형광펜(#76 9번): 편집기 리소스 참조라 테마를 바꾸면 다시 그리지 않고 따라간다. 모르는 이름은 칠하지 않는다.
+            if (run.TextColor != null && Array.IndexOf(TextMarks.ColorNames, run.TextColor) >= 0)
+                inline.SetResourceReference(TextElement.ForegroundProperty, TextMarkResourceKey(run.TextColor, false));
+            if (run.Highlight != null && Array.IndexOf(TextMarks.ColorNames, run.Highlight) >= 0)
+                inline.SetResourceReference(TextElement.BackgroundProperty, TextMarkResourceKey(run.Highlight, true));
         }
 
         /// <summary>표시용 링크 조각의 주소(<see cref="Span.Tag"/>).</summary>
@@ -319,6 +358,7 @@ namespace Folderss.Controls
 
             bool? bold = null, italic = null;
             var strike = false;
+            var underline = false;
             var code = false;
             for (DependencyObject element = run; element != null && !(element is Paragraph) && !(element is FlowDocument); element = LogicalTreeHelper.GetParent(element))
             {
@@ -332,8 +372,13 @@ namespace Folderss.Controls
                 if (te is Inline inline && inline.ReadLocalValue(Inline.TextDecorationsProperty) is TextDecorationCollection decorations)
                 {
                     foreach (var d in decorations)
+                    {
                         if (d.Location == TextDecorationLocation.Strikethrough)
                             strike = true;
+                        // 링크(Hyperlink)의 밑줄은 링크 모양이지 밑줄 범위가 아니다.
+                        else if (d.Location == TextDecorationLocation.Underline && !(element is Hyperlink))
+                            underline = true;
+                    }
                 }
                 if (!code && te.ReadLocalValue(TextElement.FontFamilyProperty) is FontFamily family && family.Source == CodeFont.Source)
                     code = true;
@@ -355,6 +400,13 @@ namespace Folderss.Controls
             if (bold == true) result.Format |= InlineFormat.Bold;
             if (italic == true) result.Format |= InlineFormat.Italic;
             if (strike) result.Format |= InlineFormat.Strike;
+            // 줄 안 범위: 밑줄은 글자 장식으로, 색은 조각 원형(Tag)으로. 입력으로 새로 생긴 Run(원형 없음)은 앞 조각에서 물려받은 지역 색 값으로 읽는다.
+            result.Underline = underline;
+            if (proto == null)
+            {
+                result.TextColor = run.ReadLocalValue(TextElement.ForegroundProperty) is SolidColorBrush fore ? BlockEditor.TextMarkNameOf(fore.Color, false) : null;
+                result.Highlight = !code && run.ReadLocalValue(TextElement.BackgroundProperty) is SolidColorBrush back ? BlockEditor.TextMarkNameOf(back.Color, true) : null;
+            }
             if (code)
             {
                 result.Format |= InlineFormat.Code;

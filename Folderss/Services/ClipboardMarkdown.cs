@@ -9,13 +9,17 @@ namespace Folderss.Services
 {
     /// <summary>
     /// 블록 편집기 붙여넣기(#76): 클립보드 HTML(브라우저·Word·Google 문서 등)을 Markdown으로. 줄 안 서식은 굵게·기울임·취소선·코드·링크만,
-    /// 문단·제목(h1~h3)·목록·인용·줄바꿈은 블록 Markdown 줄로 바꾼다. 나머지 태그(표·그림·글꼴·색)는 글자만 남긴다. WPF 없음(단위 테스트).
+    /// 문단·제목(h1~h3)·목록·인용·줄바꿈은 블록 Markdown 줄로 바꾼다. 나머지 태그(표·그림·글꼴)는 글자만 남긴다. WPF 없음(단위 테스트).
+    /// 밑줄(<c>u</c>·<c>ins</c>·<c>text-decoration: underline</c>)·글자 색(<c>color</c>·<c>&lt;font color&gt;</c>)·배경색(<c>mark</c>·<c>background-color</c>)은
+    /// Markdown에 넣지 않고 줄마다 범위 속성 값(<see cref="TextMarks"/>)으로 따로 돌려준다(#76 9번). 색은 가장 가까운 9가지 이름으로, 검정·흰색·투명은 버린다.
     /// </summary>
     public static class ClipboardMarkdown
     {
         private static readonly Regex Tag = new Regex(@"<!--[\s\S]*?-->|<(/?)([A-Za-z][A-Za-z0-9]*)((?:[^>""']|""[^""]*""|'[^']*')*)>", RegexOptions.Compiled);
         private static readonly Regex Href = new Regex(@"\bhref\s*=\s*(?:""([^""]*)""|'([^']*)'|([^\s>]+))", RegexOptions.Compiled | RegexOptions.IgnoreCase);
         private static readonly Regex Style = new Regex(@"\bstyle\s*=\s*(?:""([^""]*)""|'([^']*)')", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex FontColor = new Regex(@"\bcolor\s*=\s*(?:""([^""]*)""|'([^']*)'|([^\s>]+))", RegexOptions.Compiled | RegexOptions.IgnoreCase);
+        private static readonly Regex RgbFunction = new Regex(@"^rgba?\(\s*(\d+)\s*[, ]\s*(\d+)\s*[, ]\s*(\d+)\s*(?:[,/]\s*([\d.]+%?)\s*)?\)$", RegexOptions.Compiled);
 
         /// <summary>CF_HTML(클립보드 "HTML Format")에서 조각(StartFragment~EndFragment)만 꺼낸다. 머리말이 없으면 그대로.</summary>
         public static string ExtractFragment(string cfHtml)
@@ -44,10 +48,21 @@ namespace Folderss.Services
             public InlineFormat Format;
             public string Link;
             public bool Ignore;
+            public bool Underline;
+            public string Color;
+            public string Highlight;
         }
 
         /// <summary>HTML 조각을 Markdown으로. 블록이 하나뿐이면 줄 안 Markdown 한 줄.</summary>
         public static string FromHtml(string html)
+        {
+            return FromHtml(html, null);
+        }
+
+        /// <summary>
+        /// HTML 조각을 Markdown으로. <paramref name="lineMarks"/>가 있으면 Markdown 블록(빈 줄로 나뉜 줄)마다 범위 속성 값(<see cref="TextMarks.Format"/>, 없으면 null)을 같은 순서로 채운다.
+        /// </summary>
+        public static string FromHtml(string html, List<string> lineMarks)
         {
             html = ExtractFragment(html);
             var lines = new List<string>();
@@ -62,9 +77,17 @@ namespace Folderss.Services
             Action flush = () =>
             {
                 var md = InlineMarkdown.Serialize(runs).Trim();
-                runs.Clear();
                 if (md.Length > 0)
+                {
                     lines.Add(prefix + md);
+                    if (lineMarks != null)
+                    {
+                        var marks = TextMarks.FromRuns(runs);
+                        var plain = InlineMarkdown.ToPlain(md);
+                        lineMarks.Add(marks.Count == 0 ? null : TextMarks.Format(TextMarks.Adjust(marks, string.Concat(runs.Select(r => r.Text)), plain), plain));
+                    }
+                }
+                runs.Clear();
                 prefix = string.Empty;
             };
 
@@ -85,7 +108,7 @@ namespace Folderss.Services
                 {
                     case "br":
                         if (inPre) pre.Append('\n');
-                        else runs.Add(new InlineRun { Text = "\n", Format = Current(stack), Link = CurrentLink(stack) });
+                        else runs.Add(Styled(new InlineRun { Text = "\n", Format = Current(stack), Link = CurrentLink(stack) }, stack));
                         continue;
                     case "p": case "div": case "h1": case "h2": case "h3": case "h4": case "h5": case "h6": case "li": case "blockquote": case "tr": case "dt": case "dd":
                         flush();
@@ -125,7 +148,10 @@ namespace Folderss.Services
                             inPre = false;
                             var code = WebUtility.HtmlDecode(pre.ToString()).TrimEnd('\n', '\r');
                             if (code.Length > 0)
+                            {
                                 lines.Add("```\n" + code + "\n```");
+                                lineMarks?.Add(null);
+                            }
                             pre.Clear();
                         }
                         else
@@ -167,10 +193,25 @@ namespace Folderss.Services
                     case "style": case "script": case "head": case "title":
                         element.Ignore = true;
                         break;
+                    case "u": case "ins":
+                        element.Underline = true;
+                        break;
+                    case "mark":
+                        element.Highlight = "yellow";
+                        break;
+                    case "font":
+                        var fontColor = FontColor.Match(attrs);
+                        if (fontColor.Success)
+                            element.Color = NearestColorName(fontColor.Groups[1].Success ? fontColor.Groups[1].Value : fontColor.Groups[2].Success ? fontColor.Groups[2].Value : fontColor.Groups[3].Value, false);
+                        break;
                 }
                 var style = Style.Match(attrs);
                 if (style.Success)
-                    element.Format |= FromStyle(style.Groups[1].Success ? style.Groups[1].Value : style.Groups[2].Value);
+                {
+                    var css = style.Groups[1].Success ? style.Groups[1].Value : style.Groups[2].Value;
+                    element.Format |= FromStyle(css);
+                    ApplyStyleMarks(css, element);
+                }
                 stack.Add(element);
             }
             if (pos < html.Length)
@@ -200,6 +241,123 @@ namespace Folderss.Services
                     format |= InlineFormat.Code;
             }
             return format;
+        }
+
+        /// <summary>CSS의 밑줄·글자 색·배경색을 요소에 둔다.</summary>
+        private static void ApplyStyleMarks(string css, Element element)
+        {
+            foreach (var part in css.Split(';'))
+            {
+                var kv = part.Split(new[] { ':' }, 2);
+                if (kv.Length != 2)
+                    continue;
+                var key = kv[0].Trim().ToLowerInvariant();
+                var value = kv[1].Trim().ToLowerInvariant();
+                if ((key == "text-decoration" || key == "text-decoration-line") && value.Contains("underline"))
+                    element.Underline = true;
+                else if (key == "color")
+                    element.Color = NearestColorName(value, false);
+                else if (key == "background-color" || key == "background")
+                    element.Highlight = NearestColorName(value, true);
+            }
+        }
+
+        private static readonly Dictionary<string, string> NamedColors = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { "red", "#ff0000" }, { "darkred", "#8b0000" }, { "crimson", "#dc143c" }, { "orange", "#ffa500" }, { "darkorange", "#ff8c00" },
+            { "yellow", "#ffff00" }, { "gold", "#ffd700" }, { "green", "#008000" }, { "lime", "#00ff00" }, { "darkgreen", "#006400" },
+            { "blue", "#0000ff" }, { "navy", "#000080" }, { "darkblue", "#00008b" }, { "teal", "#008080" }, { "aqua", "#00ffff" }, { "cyan", "#00ffff" },
+            { "purple", "#800080" }, { "violet", "#ee82ee" }, { "magenta", "#ff00ff" }, { "fuchsia", "#ff00ff" }, { "pink", "#ffc0cb" }, { "hotpink", "#ff69b4" },
+            { "brown", "#a52a2a" }, { "maroon", "#800000" }, { "gray", "#808080" }, { "grey", "#808080" }, { "silver", "#c0c0c0" },
+            { "black", "#000000" }, { "white", "#ffffff" },
+        };
+
+        /// <summary>
+        /// CSS 색 → 가장 가까운 색 이름(<see cref="TextMarks.ColorNames"/>). 검정·흰색에 가까운 색(기본 글자색·바탕), 거의 투명한 색, 모르는 값은 null.
+        /// 색상(hue)으로 고르고, 채도가 낮으면 회색, 어두운 주황 계열은 갈색.
+        /// </summary>
+        public static string NearestColorName(string css, bool background)
+        {
+            if (string.IsNullOrWhiteSpace(css))
+                return null;
+            css = css.Trim().ToLowerInvariant();
+            var important = css.IndexOf("!important", StringComparison.Ordinal);
+            if (important >= 0)
+                css = css.Substring(0, important).Trim();
+            // background 단축 속성은 색만 본다(첫 낱말)
+            if (background && css.IndexOf(' ') > 0 && !css.StartsWith("rgb", StringComparison.Ordinal))
+                css = css.Substring(0, css.IndexOf(' '));
+            string named;
+            if (NamedColors.TryGetValue(css, out named))
+                css = named;
+            int r, g, b;
+            if (css.StartsWith("#", StringComparison.Ordinal))
+            {
+                var h = css.Substring(1);
+                if (h.Length == 3 || h.Length == 4)
+                    h = new string(new[] { h[0], h[0], h[1], h[1], h[2], h[2] });
+                else if (h.Length == 8)
+                    h = h.Substring(0, 6);
+                int value;
+                if (h.Length != 6 || !int.TryParse(h, System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out value))
+                    return null;
+                r = (value >> 16) & 0xff;
+                g = (value >> 8) & 0xff;
+                b = value & 0xff;
+            }
+            else
+            {
+                var m = RgbFunction.Match(css);
+                if (!m.Success)
+                    return null;
+                if (m.Groups[4].Success)
+                {
+                    var alpha = m.Groups[4].Value;
+                    var percent = alpha.EndsWith("%", StringComparison.Ordinal);
+                    double a;
+                    if (double.TryParse(alpha.TrimEnd('%'), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out a) && (percent ? a < 20 : a < 0.2))
+                        return null;   // 거의 투명
+                }
+                r = Math.Min(255, int.Parse(m.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture));
+                g = Math.Min(255, int.Parse(m.Groups[2].Value, System.Globalization.CultureInfo.InvariantCulture));
+                b = Math.Min(255, int.Parse(m.Groups[3].Value, System.Globalization.CultureInfo.InvariantCulture));
+            }
+            var rf = r / 255.0;
+            var gf = g / 255.0;
+            var bf = b / 255.0;
+            var max = Math.Max(rf, Math.Max(gf, bf));
+            var min = Math.Min(rf, Math.Min(gf, bf));
+            var light = (max + min) / 2;
+            var delta = max - min;
+            var saturation = delta == 0 ? 0 : delta / (1 - Math.Abs(2 * light - 1));
+            if (light < 0.12 || light > 0.94)
+                return null;   // 검정·흰색(기본 글자색·바탕)
+            if (saturation < 0.15 || delta < 0.08)
+                return light < 0.85 ? "gray" : null;
+            double hue;
+            if (max == rf) hue = 60 * (((gf - bf) / delta) % 6);
+            else if (max == gf) hue = 60 * ((bf - rf) / delta + 2);
+            else hue = 60 * ((rf - gf) / delta + 4);
+            if (hue < 0)
+                hue += 360;
+            if (hue < 12 || hue >= 345) return light < 0.3 ? "brown" : "red";
+            if (hue < 40) return light < 0.4 ? "brown" : "orange";
+            if (hue < 70) return "yellow";
+            if (hue < 165) return "green";
+            if (hue < 255) return "blue";
+            if (hue < 315) return "purple";
+            return "pink";
+        }
+
+        private static InlineRun Styled(InlineRun run, List<Element> stack)
+        {
+            foreach (var e in stack)
+            {
+                if (e.Underline) run.Underline = true;
+                if (e.Color != null) run.TextColor = e.Color;
+                if (e.Highlight != null) run.Highlight = e.Highlight;
+            }
+            return run;
         }
 
         private static InlineFormat Current(List<Element> stack)
@@ -235,7 +393,7 @@ namespace Folderss.Services
                 text = text.TrimStart(' ');
             if (text.Length == 0)
                 return;
-            runs.Add(new InlineRun { Text = text, Format = Current(stack), Link = CurrentLink(stack) });
+            runs.Add(Styled(new InlineRun { Text = text, Format = Current(stack), Link = CurrentLink(stack) }, stack));
         }
     }
 }
