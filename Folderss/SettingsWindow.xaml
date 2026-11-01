@@ -272,7 +272,7 @@
                                       SelectedValuePath="Key"
                                       DisplayMemberPath="DisplayName"/>
                         </StackPanel>
-                        <TextBlock Text="블록 편집·미리보기 중 무엇으로 열지 정합니다(.md·.markdown이 Markdown 또는 Block Editor로 매핑된 경우). 탭 위 전환 버튼으로 바꾸면 그 파일은 마지막 보기로 열립니다."
+                        <TextBlock Text="블록 편집·미리보기 중 무엇으로 열지 정합니다(.md·.markdown이 Markdown 또는 Block Editor로 매핑된 경우, 기본값 블록 편집). 탭 위 전환 버튼으로 바꾸면 그 파일은 마지막 보기로 열립니다. 블록 편집기로 열 수 없는 큰 파일(32MB 초과)은 미리보기로 열립니다. 블록 편집기는 고친 블록만 다시 쓰고 나머지는 원문 그대로 저장합니다."
                                    FontSize="11"
                                    TextWrapping="Wrap"
                                    Margin="0,4,0,0"
