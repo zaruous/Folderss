@@ -19,7 +19,8 @@ namespace Folderss.Viewers
         /// 편집기는 화면에 보이는 블록만 입력란을 만들므로(가상화) 블록 수 제한은 없다. 이 크기는 해석·메모리 상한일 뿐이다
         /// (블록 모델·실행 취소 기록이 파일 크기에 비례).
         /// </summary>
-        private const long MaxFileBytes = 32 * 1024 * 1024;
+        /// <summary>블록 편집기로 여는 최대 파일 크기. 넘으면 .md 탭은 미리보기(Markdown 뷰어)로 연다(ViewerHost.OpenFile).</summary>
+        public const long MaxFileBytes = 32 * 1024 * 1024;
 
         private const string ShortcutHelp =
             "Enter 블록 나누기 · Shift+Enter 줄바꿈 · Tab/Shift+Tab 들여쓰기\n" +
@@ -194,9 +195,9 @@ namespace Folderss.Viewers
         {
             if (_filePath == null || _tooLarge)
                 return;
-            var markdown = _editor.GetMarkdown();
-            var sidecar = _editor.GetSidecar(markdown, Path.GetFileName(_filePath));
-            var text = _crlf ? markdown.Replace("\n", "\r\n") : markdown;
+            // 바뀐 블록만 다시 쓰고 나머지는 원문 줄 그대로(줄 끝 CRLF/LF·끝 줄바꿈 유무도 원문을 따름 — 최소 변경 저장, #81).
+            var text = _editor.GetMarkdown();
+            var sidecar = _editor.GetSidecar(text, Path.GetFileName(_filePath));
             try
             {
                 // 임시 파일에 쓴 뒤 교체한다(쓰기 도중 실패해도 원본이 남음).

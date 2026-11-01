@@ -175,7 +175,8 @@ namespace Folderss.SearchTests
         public void Settings_DefaultsWhenFileMissing()
         {
             var settings = new MarkdownViewSettings(TempPath());
-            Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
+            Assert.Equal(MarkdownViewSwitch.ViewBlocks, settings.DefaultView);   // 새 사용자 기본값 = 블록 편집(#81 3단계)
+            Assert.Equal(MarkdownViewSwitch.DefaultViewWhenUnset, settings.DefaultView);
             Assert.Null(settings.GetRemembered(@"C:\docs\a.md"));
         }
 
@@ -204,6 +205,28 @@ namespace Folderss.SearchTests
         }
 
         [Fact]
+        public void Settings_SavedDefaultViewIsRespected_MissingUsesNewDefault()
+        {
+            var settings = new MarkdownViewSettings(TempPath());
+            settings.Parse("{\"version\":1,\"defaultView\":\"mapping\",\"files\":[]}");   // 예전 기본값을 저장한 기존 사용자
+            Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
+            settings.Parse("{\"version\":1,\"defaultView\":\"preview\"}");
+            Assert.Equal(MarkdownViewSwitch.ViewPreview, settings.DefaultView);
+            settings.Parse("{\"version\":1,\"files\":[{\"path\":\"C:\\\\a.md\",\"view\":\"preview\"}]}");   // defaultView 항목 없음
+            Assert.Equal(MarkdownViewSwitch.ViewBlocks, settings.DefaultView);
+            Assert.Equal("preview", settings.GetRemembered(@"C:\a.md"));
+        }
+
+        [Fact]
+        public void Choose_TooLargeForBlocks_OpensPreview()
+        {
+            Assert.Equal(Markdown, MarkdownViewSwitch.ChooseViewerKey(".md", Markdown, null, "blocks", true));
+            Assert.Equal(Markdown, MarkdownViewSwitch.ChooseViewerKey(".md", Markdown, "blocks", "preview", true));
+            Assert.Equal(Markdown, MarkdownViewSwitch.ChooseViewerKey(".md", Blocks, null, "mapping", true));   // 매핑이 블록 편집기여도
+            Assert.Equal(Blocks, MarkdownViewSwitch.ChooseViewerKey(".md", Markdown, null, "blocks", false));
+            Assert.Equal(Monaco, MarkdownViewSwitch.ChooseViewerKey(".md", Monaco, null, "blocks", true));   // 다른 매핑은 그대로
+        }
+        [Fact]
         public void Settings_KeepsMostRecent200()
         {
             var settings = new MarkdownViewSettings(TempPath());
@@ -223,7 +246,7 @@ namespace Folderss.SearchTests
         {
             var settings = new MarkdownViewSettings(TempPath());
             settings.Parse("{ not json");
-            Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
+            Assert.Equal(MarkdownViewSwitch.DefaultViewWhenUnset, settings.DefaultView);   // 읽을 수 없으면 저장한 값이 없는 것과 같음
             settings.Parse("{\"version\":1,\"defaultView\":\"monaco\",\"files\":[{\"path\":\"C:\\\\a.md\",\"view\":\"edit\"},{\"path\":\"C:\\\\b.md\",\"view\":\"Blocks\"},{\"view\":\"preview\"}]}");
             Assert.Equal(MarkdownViewSwitch.DefaultFollowMapping, settings.DefaultView);
             Assert.Null(settings.GetRemembered(@"C:\a.md"));

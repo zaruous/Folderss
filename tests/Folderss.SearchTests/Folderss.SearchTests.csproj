@@ -71,6 +71,7 @@
     <Compile Include="..\..\Folderss\Services\ThemeFileValidator.cs" Link="Linked\ThemeFileValidator.cs" />
     <Compile Include="..\..\Folderss\Models\EditorBlock.cs" Link="Linked\EditorBlock.cs" />
     <Compile Include="..\..\Folderss\Services\BlockMarkdown.cs" Link="Linked\BlockMarkdown.cs" />
+    <Compile Include="..\..\Folderss\Services\BlockMarkdown.Source.cs" Link="Linked\BlockMarkdown.Source.cs" />
     <Compile Include="..\..\Folderss\Services\BlockOperations.cs" Link="Linked\BlockOperations.cs" />
     <Compile Include="..\..\Folderss\Services\BlockSelection.cs" Link="Linked\BlockSelection.cs" />
     <Compile Include="..\..\Folderss\Services\BlockSidecar.cs" Link="Linked\BlockSidecar.cs" />

@@ -4,6 +4,7 @@ namespace Folderss.Controls
 {
     /// <summary>
     /// 블록 편집 ↔ 미리보기(Markdown 뷰어) 전환에서 보던 위치를 잡고 되돌린다(#81). 위치 대응 규칙은 <see cref="MarkdownViewSwitch"/>.
+    /// 줄 번호는 실제로 저장되는 글(최소 변경 저장, <see cref="MarkdownSource"/>) 기준이라 디스크 원문의 줄과 맞는다.
     /// </summary>
     public sealed partial class BlockEditor
     {
@@ -12,18 +13,24 @@ namespace Folderss.Controls
         {
             double delta;
             var index = _panel.GetTopAnchor(out delta);
-            return MarkdownViewSwitch.FromBlock(_blocks, index);
+            return MarkdownViewSwitch.FromBlock(_blocks, index, BlockLines());
         }
 
         /// <summary>다른 보기에서 잡은 위치(제목·줄 번호)에 맞는 블록을 화면 맨 위로 올린다. 찾았으면 true.</summary>
         public bool RestoreViewPosition(MarkdownViewPosition position)
         {
-            var index = MarkdownViewSwitch.ToBlock(_blocks, position);
+            var index = MarkdownViewSwitch.ToBlock(_blocks, position, position != null && position.Line > 0 ? BlockLines() : null);
             if (index < 0 || index >= _blocks.Count)
                 return false;
             RevealBlock(index);
             _panel.ScrollToAnchor(index, index == 0 ? 0 : -8);
             return true;
+        }
+
+        /// <summary>블록별 시작 줄(저장될 글 기준). 정규형으로 되돌아가는 경우 null(정규형으로 셈).</summary>
+        private int[] BlockLines()
+        {
+            return (_source ?? MarkdownSource.Empty()).Save(_blocks).BlockLines;
         }
     }
 }

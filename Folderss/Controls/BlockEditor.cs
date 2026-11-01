@@ -177,7 +177,8 @@ namespace Folderss.Controls
             _focusedRow = null;
             _typingRow = null;
             _blocks.Clear();
-            _blocks.AddRange(BlockMarkdown.Parse(markdown));
+            // 원문 조각을 기억해 두었다가 저장할 때 바뀐 블록만 다시 쓴다(최소 변경 저장, MarkdownSource).
+            _blocks.AddRange(MarkdownSource.Parse(markdown, out _source));
             UnmatchedAttributes = BlockSidecar.Apply(_blocks, sidecarJson);
             if (_blocks.Count == 0)
                 _blocks.Add(new EditorBlock(BlockKind.Paragraph));
@@ -194,11 +195,23 @@ namespace Folderss.Controls
             RaiseModified();
         }
 
+        /// <summary>
+        /// 파일에 쓸 Markdown. 읽을 때의 원문에서 바뀐 블록만 다시 쓰고 나머지는 원문 줄 그대로이며, 줄 끝(CRLF/LF)·끝 줄바꿈 유무도 원문을 따른다
+        /// (<see cref="MarkdownSource"/>). 그대로 파일에 쓰면 된다.
+        /// </summary>
         public string GetMarkdown()
         {
-            CommitFrontMatterEditing();
-            return BlockMarkdown.Serialize(_blocks);
+            return GetSaveResult().Text;
         }
+
+        /// <summary>저장할 글과 블록별 시작 줄(<see cref="GetMarkdown"/>과 같은 글 기준).</summary>
+        public MarkdownSaveResult GetSaveResult()
+        {
+            CommitFrontMatterEditing();
+            return (_source ?? MarkdownSource.Empty()).Save(_blocks);
+        }
+
+        private MarkdownSource _source;
 
         /// <summary>
         /// 함께 저장할 사이드카 JSON. Markdown 밖 속성이 하나도 없으면 null(사이드카 파일을 지우면 됨).
