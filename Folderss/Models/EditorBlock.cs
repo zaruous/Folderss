@@ -217,6 +217,15 @@ namespace Folderss.Models
             return kind == BlockKind.Code || kind == BlockKind.Raw || kind == BlockKind.Math;
         }
 
+        /// <summary>
+        /// 본문이 줄 안 Markdown 서식(굵게·기울임·코드·링크 등, #76)을 갖는 블록인지 — 표시·편집 때 표식 없이 서식으로 보인다.
+        /// 원문 블록(코드·원문·수식)과 캡션·카드 제목, 구분선·목차는 아니다. 표 행은 셀마다 서식(셀 편집 입력란은 원문).
+        /// </summary>
+        public static bool HasInlineFormatting(BlockKind kind)
+        {
+            return !IsVerbatim(kind) && kind != BlockKind.FrontMatter && kind != BlockKind.Image && !IsLinkCard(kind) && kind != BlockKind.Divider && kind != BlockKind.Toc;
+        }
+
         /// <summary>경로(<see cref="Source"/>)와 제목을 카드로 보여 주는 블록(파일 첨부·북마크·페이지 링크)인지.</summary>
         public static bool IsLinkCard(BlockKind kind)
         {
