@@ -23,6 +23,12 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 - 번들 92개 언어를 Monaco 등록 정보로 자동 연결, 탭 툴바 언어 선택(파일별 기억), 설정 > 뷰어 확장자·파일 이름·패턴 → 언어 지정(`monaco-language.json`). `docs/items/monaco-language.md`
 
+### 플러그인 퍼스펙티브
+
+- 설정 > 플러그인 `표시 방식`(팝업 창 / 메인 창 퍼스펙티브, `plugins\display.json`). 메인 창이면 제목 표시줄 전환 버튼·`Ctrl+F8`로 파일 화면과 오가고 닫을 때까지 뷰 유지(DockManager는 Visibility만 전환).
+  플러그인 화면에서는 본체 단축키·⋯ 메뉴 파일 항목 끔(`Tag="global"` 제외), 팝업 창으로 옮기기(같은 뷰), 플러그인의 메인 창 `Close()`는 그 퍼스펙티브만 닫음, UI 예외 시 떼어 냄.
+- `plugin.json` `popupOnly: true`: 자기 창을 다루는 플러그인은 항상 팝업(AutoClick 1.0.2가 선언). `docs/items/plugin-perspective.md`
+
 ### 설정 창
 
 - 뷰어 패널을 스크롤 영역으로, 확장자 매핑 표 고정 높이(항목이 늘어 기본 창 높이에서 표가 거의 안 보이던 문제)
