@@ -68,6 +68,7 @@
     <Compile Include="..\..\Folderss\Services\FileJobs.cs" Link="Linked\FileJobs.cs" />
     <Compile Include="..\..\Folderss\Services\FileJobQueue.cs" Link="Linked\FileJobQueue.cs" />
     <Compile Include="..\..\Folderss\Services\FileCopier.cs" Link="Linked\FileCopier.cs" />
+    <Compile Include="..\..\Folderss\Services\BlockSidecarFiles.cs" Link="Linked\BlockSidecarFiles.cs" />
     <Compile Include="..\..\Folderss\Services\ThemeFileValidator.cs" Link="Linked\ThemeFileValidator.cs" />
     <Compile Include="..\..\Folderss\Models\EditorBlock.cs" Link="Linked\EditorBlock.cs" />
     <Compile Include="..\..\Folderss\Services\BlockMarkdown.cs" Link="Linked\BlockMarkdown.cs" />

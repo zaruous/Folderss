@@ -70,6 +70,7 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] 이름 변경·새 폴더·새 파일 같은 즉시 작업은 `RenameRecorded`/`CreateFolderRecorded`/`CreateFileRecorded`(→ `FileJobQueue`)로 실행해 이력에 남긴다
 - [ ] 새 종류를 실행 취소하려면 `JournalOperationKind` 끝에 값을 더하고 `FileOperationJournal.ItemProblems`·`Revert`, `FileJobQueue.DescribeOperation`·`DescribeUndoStep`, `FileJobQueueTests`를 함께 고친다
 - [ ] 폴더 비교 창 작업은 비교 창 이력(`compare-history`)에, 메인 패널 작업은 `file-history`에 — 두 이력을 섞지 않는다
+- [ ] 문서와 함께 움직여야 하는 동반 파일(블록 편집기 사이드카 `X.md.meta.json`)은 `FileJobQueue.Run`/`Rename`의 `BlockSidecarFiles` 처리를 거친다. 새 실행 경로를 만들면 같은 짝짓기를 적용하고 `FileJobQueueSidecarTests`에 경우를 더한다(`docs/items/block-sidecar-file-ops.md`)
 
 ### 플러그인 계약 변경 시
 - [ ] `Folderss.PluginContract/PluginContracts.cs` — 기존 멤버 삭제·시그니처 변경은 이미 배포된 플러그인을 깨뜨린다. 추가 위주로 하고, 깨지는 변경이면 계약 `<Version>` 주 버전을 올린다
