@@ -35,6 +35,7 @@
 | `SwitchPaneRight` | 오른쪽 패널 전환 | `Ctrl+Shift+→` | MainWindow | 다음 폴더 패널로 포커스 전환 |
 | `ShowSearch` | 파일 검색 | `Ctrl+F` | MainWindow | 파일 검색 창 열기 (내용 검색/파일명 검색 대상 선택, 와일드카드 패턴) |
 | `PanelMaximize` | 패널 최대화 토글 | `F11` | MainWindow | 활성 패널/문서 최대화 토글 |
+| `NextPerspective` | 다음 퍼스펙티브 (파일 ↔ 플러그인) | `Ctrl+F8` | MainWindow (`MainWindow.Perspectives.cs`) | 메인 창에 띄운 플러그인 퍼스펙티브가 있을 때만: 파일 → 열린 플러그인들 → 파일 순으로 전환. 플러그인 퍼스펙티브가 보이는 동안 다른 본체 단축키는 처리하지 않고 플러그인에 넘김 |
 | `UndoFileOperation` | 실행 취소 (파일 작업) | `Ctrl+Z` | MainWindow | 폴더 패널 포커스(텍스트 입력 중 아님)일 때 메인 패널의 마지막 파일 작업(복사·이동·휴지통 삭제·이름 변경·새 폴더·새 파일)을 확인 창을 거쳐 되돌림. ⋯ 메뉴 `실행 취소: …`와 같은 명령(`MainWindow.UndoLastFileOperation`). 경로·필터 입력란에서는 텍스트 되돌리기, 뷰어·캡쳐 편집 창은 각자 처리 |
 
 ---

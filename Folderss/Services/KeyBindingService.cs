@@ -49,6 +49,7 @@ namespace Folderss.Services
                 new KeyBindingEntry { CommandId = "ShowSearch",      DisplayName = "내용 검색",        Key = Key.F,     Modifiers = ModifierKeys.Control },
                 new KeyBindingEntry { CommandId = "PanelMaximize",  DisplayName = "패널 최대화 토글", Key = Key.F11 },
                 new KeyBindingEntry { CommandId = "UndoFileOperation", DisplayName = "실행 취소 (파일 작업)", Key = Key.Z, Modifiers = ModifierKeys.Control },
+                new KeyBindingEntry { CommandId = "NextPerspective", DisplayName = "다음 퍼스펙티브 (파일 ↔ 플러그인)", Key = Key.F8, Modifiers = ModifierKeys.Control },
             };
         }
 

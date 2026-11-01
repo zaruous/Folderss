@@ -60,6 +60,7 @@ namespace Folderss
         {
             InitializeComponent();
             PluginManager.OpenFileHandler = OpenViewerTab;
+            InitializePerspectives();
 
             // ViewerHost가 문서 탭 전환 방지를 위해 Handled 처리한 WebView2 발생 Home/End를
             // 라우팅 마지막 단계(Window)에서 되돌려, WebView2 래퍼가 브라우저 기본 동작
@@ -240,7 +241,7 @@ namespace Folderss
         /// <summary>트레이에서 플러그인 창 열기. 본체 창이 숨어 있으면 소유자 없이 연다 — 숨은 창을 Owner로 두면 플러그인 창도 같이 숨는다.</summary>
         private void ShowPluginFromTray(PluginManifest manifest)
         {
-            PluginManager.ShowPluginWindow(manifest, IsVisible ? this : null);
+            RunPlugin(manifest);
         }
 
         /// <summary>트레이에서 플러그인 관리: 설정 창은 본체 창을 소유자로 쓰므로 먼저 본체 창을 보인다.</summary>
@@ -309,6 +310,7 @@ namespace Folderss
             ActivePane?.FillPathCopyMenu(CopyPathMenuItem);
             UpdateViewMenuChecks();
             UpdateUndoMenuItem();
+            UpdateMainMenuForPerspective();
             MainContextMenu.PlacementTarget = MainMenuButton;
             MainContextMenu.Placement = PlacementMode.Bottom;
             MainContextMenu.IsOpen = true;
@@ -876,6 +878,8 @@ namespace Folderss
 
         private void OpenViewerTab(string filePath)
         {
+            // 플러그인 퍼스펙티브의 폴더 패널에서 연 파일도 파일 퍼스펙티브의 뷰어 탭에 열리므로 그쪽을 보인다.
+            ShowFilePerspective();
             if (TryActivateExistingViewerDocument(filePath))
                 return;
 
@@ -1172,6 +1176,12 @@ namespace Folderss
 
         private void Window_Closing(object sender, CancelEventArgs e)
         {
+            if (!_reallyClose && TryClosePerspectiveForPluginClose())
+            {
+                e.Cancel = true;
+                return;
+            }
+
             if (!_reallyClose)
             {
                 SaveCurrentLayoutState();
@@ -1839,6 +1849,17 @@ namespace Folderss
         {
             var kb = _keyBindingService;
 
+            if (kb.Matches(e, "NextPerspective") && _perspectives.Count > 0)
+            {
+                ShowNextPerspective();
+                e.Handled = true;
+                return;
+            }
+
+            // 플러그인 퍼스펙티브가 보이는 동안 본체 단축키는 숨겨진 패널을 대상으로 하므로 처리하지 않고 플러그인에 넘긴다.
+            if (IsPluginPerspectiveActive)
+                return;
+
             if (IsConsoleFocused())
                 return;
 
@@ -2044,7 +2065,9 @@ namespace Folderss
                         : manifest.Description + "\n" + manifest.Id + " " + manifest.Version
                 };
                 var target = manifest;
-                item.Click += (s, args) => PluginManager.ShowPluginWindow(target, this);
+                // 메인 창에 열려 있는 플러그인은 체크 표시(선택하면 그 퍼스펙티브로 전환)
+                item.IsChecked = FindPerspective(manifest.Id) != null;
+                item.Click += (s, args) => RunPlugin(target);
                 PluginsMenuItem.Items.Add(item);
             }
             if (plugins.Count == 0)

@@ -24,6 +24,11 @@ namespace Folderss.Services
         public string Type { get; set; }
         /// <summary>true면 아직 실행하지 않은 플러그인도 설정 창에 안내 탭을 보인다 (로드는 하지 않음).</summary>
         public bool HasSettings { get; set; }
+        /// <summary>
+        /// true면 항상 팝업 창으로 연다(메인 창 퍼스펙티브 불가, 설정 창에서 표시 방식을 고를 수 없음).
+        /// 자기 창의 크기·Topmost·숨기기·창 핸들 단축키를 직접 다루는 플러그인용 — 퍼스펙티브에서는 그 창이 메인 창이 된다.
+        /// </summary>
+        public bool PopupOnly { get; set; }
 
         /// <summary>등록된 zip 경로 (파일에서 읽지 않음).</summary>
         public string PackagePath { get; set; }

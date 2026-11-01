@@ -86,6 +86,7 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `samples/HelloPlugin` — 예제가 계속 빌드되는지 확인 (`dotnet build samples/HelloPlugin`)
 - [ ] 플러그인에 보여 줄 본체 설정 키를 추가·변경하면 `Services/PluginAppSettings.cs`, 계약 `GetAppSettings` 주석, `PluginSessionTests.AppSettings_ExposesDocumentedKeysOnly`를 함께 고친다 (키 이름 변경은 깨지는 변경)
 - [ ] `README.md` 플러그인 섹션, `docs/architecture.md` PluginManager 절
+- [ ] 플러그인 뷰는 팝업 창 또는 메인 창 퍼스펙티브(`MainWindow.Perspectives.cs`, 닫을 때까지 같은 뷰 유지) 어느 쪽에도 들어갈 수 있다 — 두 경로를 함께 확인(`docs/items/plugin-perspective.md`)
 - [ ] 플러그인 개발자 문서 `docs/plugin-development.md`(API 표·plugin.json 표·오류 처리 표), 튜토리얼 `docs/plugin-tutorial-order-form.md`의 코드가 계속 빌드되는지
 
 ### 태그/릴리스 생성 시
@@ -147,6 +148,10 @@ SystemColors 오버라이드 4쌍도 반드시 포함.
 ### 이벤트 원본에서 조상 찾기
 마우스·드래그 이벤트의 `e.OriginalSource`는 `TextBlock` 안의 `Run`/`Span`(ContentElement)일 수 있다. 이것을 `VisualTreeHelper.GetParent`에 넘기면 `InvalidOperationException`으로 앱이 종료된다(블록 편집기 수식 클릭 크래시).
 조상을 찾을 때는 직접 루프를 쓰지 말고 `Controls/ElementTree.FindAncestor<T>` / `ElementTree.GetParent`를 쓴다.
+
+### ⋯ 메뉴 항목 추가 시
+- 플러그인 퍼스펙티브가 보이는 동안 ⋯ 메뉴는 `Tag="global"`이 아닌 최상위 항목을 끈다(숨겨진 폴더 패널에 작업이 가지 않게, `UpdateMainMenuForPerspective`).
+  활성 패널과 무관한 새 항목(창 열기·설정 등)이면 `Tag="global"`을 붙인다.
 
 ### ContextMenu 스타일
 WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍게 보임.

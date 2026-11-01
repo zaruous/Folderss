@@ -65,9 +65,18 @@
                                VerticalAlignment="Center"/>
                 </StackPanel>
 
+                <StackPanel Grid.Column="1"
+                            Orientation="Horizontal"
+                            HorizontalAlignment="Right"
+                            VerticalAlignment="Center">
+                <!-- 퍼스펙티브 전환(파일 / 메인 창에 띄운 플러그인). 플러그인 퍼스펙티브가 열려 있을 때만 보인다 (MainWindow.Perspectives.cs) -->
+                <StackPanel x:Name="PerspectiveBar"
+                            Orientation="Horizontal"
+                            VerticalAlignment="Center"
+                            Margin="0,0,6,0"
+                            Visibility="Collapsed"
+                            shell:WindowChrome.IsHitTestVisibleInChrome="True"/>
                 <Button x:Name="MainMenuButton"
-                        Grid.Column="1"
-                        HorizontalAlignment="Right"
                         VerticalAlignment="Center"
                         Style="{StaticResource CompactToolButtonStyle}"
                         shell:WindowChrome.IsHitTestVisibleInChrome="True"
@@ -89,7 +98,7 @@
                             <MenuItem Header="이름 변경" InputGestureText="F2" Click="Rename_Click"/>
                             <MenuItem Header="휴지통으로 이동" InputGestureText="Delete" Click="Delete_Click"/>
                             <MenuItem x:Name="UndoFileOperationMenuItem" Header="실행 취소" InputGestureText="Ctrl+Z" Click="UndoFileOperation_Click"/>
-                            <MenuItem Header="파일 작업 진행 창…" Click="ShowFileJobs_Click"
+                            <MenuItem Tag="global" Header="파일 작업 진행 창…" Click="ShowFileJobs_Click"
                                       ToolTip="복사·이동·삭제 대기열과 진행률(일시정지·취소)을 보입니다."/>
                             <Separator x:Name="OpenWithSeparator" Visibility="Collapsed"/>
                             <MenuItem x:Name="OpenWithMenuItem" Header="다음으로 열기" Visibility="Collapsed"/>
@@ -124,22 +133,23 @@
                                       ToolTip="활성 패널과 반대편 패널의 현재 폴더를 비교 창에서 비교합니다 (활성 패널에서 폴더 두 개를 골랐으면 그 둘)."/>
                             <MenuItem Header="Git 저장소…" Click="ShowGit_Click"
                                       ToolTip="선택한 폴더(없으면 현재 폴더) 아래의 Git 저장소를 찾아 상태·스테이지·커밋·브랜치·로그·pull/push를 다룹니다."/>
-                            <MenuItem x:Name="PluginsMenuItem" Header="플러그인" SubmenuOpened="PluginsMenu_SubmenuOpened">
+                            <MenuItem Tag="global" x:Name="PluginsMenuItem" Header="플러그인" SubmenuOpened="PluginsMenu_SubmenuOpened">
                                 <MenuItem Header="(등록된 플러그인 없음)" IsEnabled="False"/>
                             </MenuItem>
                             <!-- 항목은 Themes/ 폴더의 테마로 코드에서 채운다 (BuildThemeMenu) -->
-                            <MenuItem x:Name="ThemeMenu" Header="테마"/>
-                            <MenuItem Header="화면 캡쳐…" Click="ScreenCapture_Click"
+                            <MenuItem Tag="global" x:Name="ThemeMenu" Header="테마"/>
+                            <MenuItem Tag="global" Header="화면 캡쳐…" Click="ScreenCapture_Click"
                                       ToolTip="Folderss 창을 잠시 숨기고 화면을 찍은 뒤, 드래그한 영역을 결과 창에 보여 줍니다. 결과는 클립보드에 복사되고 활성 폴더 패널에 저장할 수 있습니다."/>
                             <Separator/>
-                            <MenuItem Header="설정" Click="Settings_Click"/>
+                            <MenuItem Tag="global" Header="설정" Click="Settings_Click"/>
                             <Separator/>
-                            <MenuItem Header="Folderss 정보" Click="About_Click"/>
-                            <MenuItem Header="업데이트 확인" Click="CheckUpdate_Click"/>
-                            <MenuItem Header="종료" Click="Exit_Click"/>
+                            <MenuItem Tag="global" Header="Folderss 정보" Click="About_Click"/>
+                            <MenuItem Tag="global" Header="업데이트 확인" Click="CheckUpdate_Click"/>
+                            <MenuItem Tag="global" Header="종료" Click="Exit_Click"/>
                         </ContextMenu>
                     </Button.ContextMenu>
                 </Button>
+                </StackPanel>
 
                 <StackPanel Grid.Column="2"
                             Orientation="Horizontal"
@@ -225,7 +235,14 @@
             </layout:LayoutRoot>
         </avalon:DockingManager>
 
-        <Border Grid.Row="2"
+        <!-- 메인 창에 띄운 플러그인 화면. DockManager는 옮기지 않고 Visibility만 바꾼다 (MainWindow.Perspectives.cs) -->
+        <Grid x:Name="PerspectiveHost"
+              Grid.Row="1"
+              Margin="6"
+              Visibility="Collapsed"/>
+
+        <Border x:Name="StatusBarBorder"
+                Grid.Row="2"
                 Margin="6,0,6,6"
                 Padding="8,4"
                 Background="{DynamicResource SurfaceBackground}"

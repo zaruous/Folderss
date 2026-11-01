@@ -52,7 +52,17 @@ namespace Folderss.SearchTests
             Assert.Equal("Hello", manifest.DisplayName);
             Assert.Equal("Hello.Plugin", manifest.Type);
             Assert.True(manifest.HasSettings);
+            Assert.False(manifest.PopupOnly);
             Assert.Equal(zip, manifest.PackagePath);
+        }
+
+        [Fact]
+        public void ReadManifest_PopupOnly_IsRead()
+        {
+            var json = ValidManifest.Replace("\"hasSettings\": true", "\"PopupOnly\": true");
+            var zip = MakeZip("b.zip", ("plugin.json", json), ("Hello.dll", "x"));
+
+            Assert.True(PluginPackage.ReadManifest(zip).PopupOnly);
         }
 
         [Fact]

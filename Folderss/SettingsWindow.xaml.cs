@@ -36,6 +36,38 @@ namespace Folderss
         public string Version { get { return Manifest.Version; } }
         public string Id { get { return Manifest.Id; } }
         public string Status { get; set; }
+
+        /// <summary>설정 창이 저장할 때까지 들고 있는 표시 방식 사전(id → popup/main). 콤보에서 바꾸면 여기에 쓴다.</summary>
+        internal IDictionary<string, string> DisplayModes { get; set; }
+
+        public string DisplayMode
+        {
+            get
+            {
+                string mode;
+                if (Manifest.PopupOnly)
+                    return PluginDisplayStore.Popup;
+                return DisplayModes != null && DisplayModes.TryGetValue(Id, out mode) ? mode : PluginDisplayStore.Popup;
+            }
+            set
+            {
+                if (!Manifest.PopupOnly && DisplayModes != null && PluginDisplayStore.IsKnown(value))
+                    DisplayModes[Id] = value;
+            }
+        }
+
+        /// <summary>plugin.json <c>popupOnly</c>면 표시 방식을 바꿀 수 없다.</summary>
+        public bool CanChangeDisplayMode { get { return !Manifest.PopupOnly; } }
+
+        public string DisplayModeToolTip
+        {
+            get
+            {
+                return Manifest.PopupOnly
+                    ? "이 플러그인은 자기 창을 직접 다루므로 팝업 창으로만 열립니다(plugin.json popupOnly)."
+                    : "팝업 창: 실행할 때마다 별도 창. 메인 창: 제목 표시줄의 전환 버튼으로 파일 화면과 오가며, 닫을 때까지 화면 상태가 유지됩니다(Ctrl+F8). 저장 후 다음 실행부터 적용.";
+            }
+        }
     }
 
     public class ViewerOption
@@ -67,6 +99,29 @@ namespace Folderss
         private ThemeInfo _originalTheme;
         private readonly GitSettings _workingGit;
         public IReadOnlyList<ViewerOption> ViewerOptions { get; }
+
+        /// <summary>설정 > 플러그인 표시 방식 콤보 항목.</summary>
+        public IReadOnlyList<ViewerOption> PluginDisplayOptions { get; } = new List<ViewerOption>
+        {
+            new ViewerOption { Key = PluginDisplayStore.Popup, DisplayName = "팝업 창" },
+            new ViewerOption { Key = PluginDisplayStore.Main, DisplayName = "메인 창 (퍼스펙티브)" }
+        };
+
+        /// <summary>표시 방식 작업 사본. 저장 버튼에서 plugins\display.json에 쓴다.</summary>
+        private readonly Dictionary<string, string> _workingPluginDisplay = LoadPluginDisplayModes();
+
+        private static Dictionary<string, string> LoadPluginDisplayModes()
+        {
+            try
+            {
+                return PluginDisplayStore.Load(PluginManager.PluginsDirectory);
+            }
+            catch (InvalidDataException)
+            {
+                // 깨진 파일은 저장할 때 덮어쓴다(값이 기본=팝업으로 돌아갈 뿐 플러그인 데이터는 없다).
+                return new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+            }
+        }
 
         /// <summary>저장·적용을 누른 뒤의 Git 설정(파일 저장이 실패해도 이번 실행에는 적용할 값). 저장 전이면 null.</summary>
         public GitSettings SavedGitSettings { get; private set; }
@@ -764,6 +819,8 @@ namespace Folderss
             TrySave(failures, "네트워크", "network-settings.xml", () => NetworkSettingsService.Save(_workingNetwork));
             TrySave(failures, "경로 복사", "path-copy-settings.xml", () => PathCopySettingsService.Save(_workingPathCopy));
             TrySave(failures, "Monaco 언어", "monaco-language.json", SaveMonacoLanguageSettings);
+            TrySave(failures, "플러그인 표시 방식", @"plugins\" + PluginDisplayStore.FileName,
+                () => PluginDisplayStore.Save(PluginManager.PluginsDirectory, _workingPluginDisplay));
             foreach (var page in _pluginPages.Where(p => p.Page != null && p.ViewCreated))
                 TrySave(failures, "플러그인: " + page.Title, page.PluginId, page.Page.Save);
             SavedGitSettings = _workingGit.Clone();
@@ -1129,8 +1186,17 @@ namespace Folderss
         private List<PluginListItem> RefreshPluginList()
         {
             var errors = new List<string>();
-            var items = PluginManager.ListInstalled(errors)
-                .Select(m => new PluginListItem { Manifest = m, Status = PluginManager.IsLoaded(m.Id) ? "로드됨" : string.Empty })
+            var installed = PluginManager.ListInstalled(errors);
+            // 팝업 전용 플러그인에 예전에 저장한 표시 방식은 저장할 때 지운다.
+            foreach (var manifest in installed.Where(m => m.PopupOnly))
+                _workingPluginDisplay.Remove(manifest.Id);
+            var items = installed
+                .Select(m => new PluginListItem
+                {
+                    Manifest = m,
+                    Status = PluginManager.IsLoaded(m.Id) ? "로드됨" : string.Empty,
+                    DisplayModes = _workingPluginDisplay
+                })
                 .ToList();
             PluginList.ItemsSource = items;
             PluginErrorText.Text = errors.Count == 0 ? string.Empty : string.Format("읽지 못한 zip {0}개", errors.Count);

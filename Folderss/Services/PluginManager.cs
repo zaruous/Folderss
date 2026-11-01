@@ -217,8 +217,11 @@ namespace Folderss.Services
             try { PluginSessionLog.AppendLog(LogPath, message); } catch (Exception) { }
         }
 
-        /// <summary>플러그인 팝업 창을 연다. 실패하면 메시지만 보이고 끝낸다.</summary>
-        public static void ShowPluginWindow(PluginManifest manifest, Window owner)
+        /// <summary>
+        /// 플러그인을 로드하고 <see cref="IFolderssPlugin.CreateView"/>로 화면을 만든다. 실패하면 메시지를 보이고 null.
+        /// 팝업 창과 메인 창 퍼스펙티브가 함께 쓴다.
+        /// </summary>
+        public static FrameworkElement CreatePluginView(PluginManifest manifest)
         {
             string error;
             var loaded = TryLoad(manifest, out error);
@@ -238,11 +241,40 @@ namespace Folderss.Services
             }
 
             if (view == null)
-            {
                 ShowError(manifest.DisplayName, "플러그인을 열지 못했습니다.", error);
-                return;
-            }
+            return view;
+        }
 
+        /// <summary>
+        /// 플러그인 코드에서 처리되지 않은 UI 예외가 날 때마다 플러그인 ID로 알린다(메시지는 처음 한 번만 보인다).
+        /// 메인 창은 그 플러그인의 퍼스펙티브를 떼어 낸다 — 메인 창 안의 레이아웃 예외가 반복되면 본체가 멈춘 것처럼 보이기 때문.
+        /// </summary>
+        public static event Action<string> PluginFaulted;
+
+        /// <summary>플러그인 표시 방식(<see cref="PluginDisplayStore"/>). 읽을 수 없으면 팝업.</summary>
+        public static string GetDisplayMode(string id)
+        {
+            return PluginDisplayStore.Get(PluginsDirectory, id);
+        }
+
+        /// <summary>지금 호출 스택에 플러그인 코드가 있으면 그 플러그인 ID(예: 플러그인이 메인 창 Close()를 부름). 없으면 null.</summary>
+        public static string FindCallingPluginId()
+        {
+            return FindPluginId(new StackTrace());
+        }
+
+        /// <summary>플러그인 팝업 창을 연다. 실패하면 메시지만 보이고 끝낸다.</summary>
+        public static void ShowPluginWindow(PluginManifest manifest, Window owner)
+        {
+            var view = CreatePluginView(manifest);
+            if (view == null)
+                return;
+            ShowViewWindow(manifest, view, owner);
+        }
+
+        /// <summary>이미 만든 플러그인 뷰를 팝업 창에 넣어 연다(퍼스펙티브 → 팝업 창으로 옮기기). 실패하면 메시지만 보인다.</summary>
+        public static void ShowViewWindow(PluginManifest manifest, FrameworkElement view, Window owner)
+        {
             try
             {
                 var window = new Window
@@ -279,6 +311,12 @@ namespace Folderss.Services
                 return false;
 
             TryAppendLog("플러그인 " + DescribeOwner(assembly) + "의 처리되지 않은 UI 예외(본체는 계속 실행): " + exception);
+            var context = AssemblyLoadContext.GetLoadContext(assembly) as PluginLoadContext;
+            var faulted = PluginFaulted;
+            if (context != null && faulted != null)
+            {
+                try { faulted(context.PluginId); } catch (Exception ex) { TryAppendLog("퍼스펙티브 정리 실패: " + ex); }
+            }
             if (ReportedAssemblies.Add(assembly))
             {
                 ShowError(DescribeOwner(assembly),

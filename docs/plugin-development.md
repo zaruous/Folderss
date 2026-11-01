@@ -22,6 +22,7 @@ OrderFormPlugin.zip
 | 설정 창 열기 | 이미 실행한 플러그인은 등록한 설정 탭, 아직 실행하지 않았고 `hasSettings: true`면 안내 탭 | 이미 실행한 경우 `IPluginSettingsPage`의 `Title`·`CreateView()`만 |
 | **메뉴에서 플러그인 실행 (처음)** | zip 해제 → DLL 로드 → 인스턴스 생성 → `Initialize(manager)` → `CreateView()` → 팝업 | `Initialize`, `CreateView` |
 | 메뉴에서 다시 실행 | 로드된 인스턴스를 그대로 쓴다 → `CreateView()` → 새 팝업 | `CreateView` |
+| 표시 방식이 **메인 창(퍼스펙티브)**일 때 | 처음 실행에만 `CreateView()` → 메인 창 퍼스펙티브. 이미 열려 있으면 전환만 하고 `CreateView()`를 부르지 않음 | `CreateView`(한 번) |
 | Folderss 종료 | 로드된 플러그인은 종료할 때까지 메모리에 남는다 | 없음 (종료 알림 없음) |
 
 **플러그인 DLL은 사용자가 메뉴에서 직접 실행할 때만 로드됩니다.** 메뉴 이름과 설정 창 안내 탭은 `plugin.json`만 읽어 만듭니다.
@@ -106,6 +107,7 @@ zip **루트**에 있어야 합니다. 키 대/소문자는 구분하지 않고,
 | `assembly` | ✔ | 진입점 DLL의 zip 내 상대 경로 (`.dll`, `..` 불가). 예: `OrderFormPlugin.dll`, `bin/OrderFormPlugin.dll` |
 | `type` | ✔ | `IFolderssPlugin`을 구현한 클래스의 **네임스페이스 포함 전체 이름** |
 | `hasSettings` |  | `true`면 아직 실행하지 않은 플러그인도 설정 창에 안내 탭이 보인다 (로드하지는 않음) |
+| `popupOnly` |  | `true`면 항상 팝업 창으로 열린다. 설정 > 플러그인의 `표시 방식`을 고를 수 없고 메인 창 퍼스펙티브로 띄울 수 없다. `Window.GetWindow(view)`로 얻은 창의 크기·`Topmost`·숨기기를 바꾸거나 창 핸들에 전역 단축키를 거는 플러그인은 `true`로 두세요 |
 
 같은 `id`의 zip을 다시 등록하면 교체됩니다. 이미 로드된 플러그인이면 교체한 버전은 **재시작 후** 적용됩니다.
 
@@ -254,7 +256,11 @@ grid.SetResourceReference(Control.ForegroundProperty, "PrimaryText");
 
 - `Task.Run`, `Thread`, 타이머 콜백 안에서는 **반드시 `try/catch`** 하세요. `async void` 이벤트 처리기도 마찬가지입니다.
 - `Application.Current.Shutdown()`, `Environment.Exit()`, `MainWindow.Close()` 를 부르지 마세요. 참고로 메인 창 `Close()`는 트레이로 숨기기만 합니다.
-- 팝업 창을 닫고 싶으면 `Window.GetWindow(view)?.Close()`를 쓰세요.
+- 팝업 창을 닫고 싶으면 `Window.GetWindow(view)?.Close()`를 쓰세요. 메인 창 퍼스펙티브로 표시 중이면 `Window.GetWindow(view)`가 **Folderss 메인 창**입니다. 플러그인 코드에서 그 `Close()`를 부르면 Folderss는 트레이로 숨기지 않고 그 플러그인의 퍼스펙티브만 닫습니다.
+- `Window.GetWindow(view)`로 얻은 창의 크기·`Topmost`·숨기기를 바꾸거나 그 창 핸들에 전역 단축키를 거는 플러그인은 퍼스펙티브에서 **메인 창**을 바꾸게 됩니다. 창을 직접 다뤄야 하면 `plugin.json`에 `"popupOnly": true`를 두세요.
+  퍼스펙티브에서 화면이 닫힐 때(사용자가 ×) 창 `Closed`는 오지 않고 뷰의 `Unloaded`만 옵니다. 다른 퍼스펙티브로 전환할 때는 숨겨지기만 하고 `Unloaded`가 오지 않습니다.
+- 사용자가 설정 > 플러그인에서 표시 방식을 `메인 창 (퍼스펙티브)`로 바꾸면 화면이 메인 창 안에 들어가고, 사용자가 닫을 때까지 같은 뷰가 계속 쓰입니다(숨겨졌다 다시 보였다 함).
+  처리되지 않은 UI 예외가 나면 그 퍼스펙티브는 닫힙니다. 계약은 같으므로 플러그인 코드를 바꿀 필요는 없습니다.
 
 로그와 파일 위치 (`%LOCALAPPDATA%\Folderss\` 기준):
 

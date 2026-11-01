@@ -119,6 +119,7 @@ Folderss/
 │   ├── ZipTempStore.cs             — zip 안 파일 열기·클립보드 복사용 실행별 임시 폴더(%TEMP%\Folderss\zip\<pid>-<시각>), 종료 때 정리·하루 지난 폴더 수거 (순수 로직)
 │   ├── PluginGitHubSource.cs       — 공개 GitHub 저장소 최신 정식 릴리스 조회·zip 받기(100MB 제한, digest SHA-256 비교), 오류는 문장 예외 (순수 로직)
 │   ├── PluginSourceStore.cs        — plugins\sources.json: 플러그인 id별 설치 출처(local / github.com/<소유자>/<저장소>) (순수 로직)
+│   ├── PluginDisplayStore.cs       — plugins\display.json: 플러그인 id별 표시 방식(popup / main). 기록 없음·깨진 파일 = 팝업 (순수 로직)
 │   ├── PluginSettingsStore.cs      — 플러그인별 키/값 settings.json (SettingsFile 사용, 실패는 예외)
 │   ├── PluginAppSettings.cs        — 플러그인에 주는 본체 설정 읽기 전용 키 목록 (명시 매핑, 순수 로직)
 │   ├── PluginSessionRecord.cs      — PluginSessionLog: plugin-sessions\<pid>.json 기록·주인 없는 기록 수거·plugin-log.txt (순수 로직)
@@ -155,6 +156,7 @@ Folderss/
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── ArchiveDialogs.cs               — `ArchiveExtractDialog`·`ArchiveCompressDialog`(GitDialogBase 상속), `ArchiveProgressWindow`(0.4초 넘는 작업만, 취소), `ArchiveOperations`(백그라운드 실행·오류 알림·zip 이름 폴더 풀기)
+├── MainWindow.Perspectives.cs      — (partial) 퍼스펙티브: 메인 창을 파일 화면(DockManager)과 메인 창에 띄운 플러그인 화면 사이에서 전환, 제목 표시줄 전환 버튼, Ctrl+F8, 플러그인 예외 시 떼어 내기
 ├── MainWindow.Archive.cs           — MainWindow의 zip 연결: 파일 작업 가드(`BlockedInArchive`), 이동·복사 처리, 반대편 패널, 결과 선택, ⋯ 메뉴 `압축 풀기…`·`zip으로 압축…`
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 네트워크, 경로 복사, 플러그인)
@@ -402,6 +404,16 @@ Folderss/
 - 팝업 폴더 패널(`PluginFolderPanel`)은 `FolderBrowser`를 새로 만들되 메인 창의 활성 패널 추적(`Activated`/`PathChanged`)에는
   붙이지 않는다. 붙이면 ⋯ 메뉴 명령이 팝업 속 패널을 대상으로 삼고 팝업을 닫은 뒤에도 그 패널을 가리킨다. 파일 열기만
   `PluginManager.OpenFileHandler`(메인 창 `OpenViewerTab`)로 보낸다. 두 파일 비교 메뉴는 팝업 패널에서 동작하지 않는다.
+- **표시 방식 / 퍼스펙티브** (`docs/items/plugin-perspective.md`): 메뉴·트레이 실행은 `MainWindow.RunPlugin` →
+  `PluginManager.GetDisplayMode`(`PluginDisplayStore`, `plugins\display.json`, 기본 팝업). 플러그인 자기 `settings.json`에 두지 않는다(플러그인이 바꾸면 안 됨).
+  - `plugin.json` `popupOnly: true`(`PluginManifest.PopupOnly`)면 저장된 방식과 관계없이 팝업. 설정 창 콤보는 비활성, 예전 기록은 저장 때 지운다.
+  - 팝업: `ShowPluginWindow`(실행마다 `CreateView`). 메인: `CreatePluginView`를 한 번 불러 `PerspectiveHost`(DockManager와 같은 행의 Grid)에 넣고 닫을 때까지 유지.
+  - DockManager는 다른 부모로 옮기지 않고 `Visibility`만 바꾼다(논리 부모·레이아웃 복원 문제 회피). 하단 상태 표시줄도 파일 퍼스펙티브에서만 보인다.
+  - 플러그인 퍼스펙티브가 보이는 동안: `Window_PreviewKeyDown`은 `NextPerspective`(Ctrl+F8)만 처리, ⋯ 메뉴는 `Tag="global"`이 아닌 항목을 끈다(`UpdateMainMenuForPerspective`).
+    새 ⋯ 메뉴 항목이 활성 패널과 무관하면 `Tag="global"`을 붙인다.
+  - `OpenViewerTab`은 파일 퍼스펙티브로 전환한 뒤 연다(플러그인 폴더 패널의 파일 열기).
+  - `TryHandleUnhandled`가 플러그인 예외를 판별하면 `PluginFaulted(id)` → 메인 창이 그 퍼스펙티브를 떼어 내고 파일 퍼스펙티브로 돌아간다.
+  - 열린 퍼스펙티브는 세션에 저장하지 않는다(시작 때 플러그인을 로드하지 않는 원칙). 닫을 때 `Dispose`는 부르지 않는다(팝업과 같음).
 - 플러그인 설정 탭은 `SettingsWindow.ContentHost`에 코드로 패널을, `TabNav`에 항목을 추가한다(`_pluginPages`).
 - 설치(`SettingsWindow.InstallPluginPackage`, zip·GitHub 공통): `ReadManifest` → 진입점 DLL의 `Folderss.PluginContract` 참조 버전을
   메타데이터로 읽어(`ReadAssemblyReference`, 로드하지 않음) 본체 계약보다 높으면 거부(`EnsureContractCompatible`) → 출처 비교 → 등록 → 출처 기록.
