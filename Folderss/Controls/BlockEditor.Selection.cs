@@ -216,7 +216,7 @@ namespace Folderss.Controls
         {
             if (_mouseSelect != MouseSelectMode.None || e.LeftButton != MouseButtonState.Pressed)
                 return;
-            var box = Mouse.Captured as TextBox;
+            var box = Mouse.Captured as IBlockInput;
             var row = box?.Tag as BlockRow;
             if (row == null)
                 return;
@@ -234,7 +234,7 @@ namespace Folderss.Controls
             e.Handled = true;
             _mouseSelect = MouseSelectMode.CrossBlock;
             _crossAnchor = from;
-            box.ReleaseMouseCapture();
+            ((UIElement)box).ReleaseMouseCapture();
             box.SelectionLength = 0;
             Keyboard.Focus(this);
             CloseSlash();
@@ -339,7 +339,7 @@ namespace Folderss.Controls
             if (!docEdge && !page)
                 return false;
 
-            var blockMode = HasBlockSelection && !(Keyboard.FocusedElement is TextBox);
+            var blockMode = HasBlockSelection && !(Keyboard.FocusedElement is IBlockInput);
             int from;
             if (blockMode)
             {
@@ -347,7 +347,7 @@ namespace Folderss.Controls
             }
             else
             {
-                var row = (Keyboard.FocusedElement as TextBox)?.Tag as BlockRow;
+                var row = (Keyboard.FocusedElement as IBlockInput)?.Tag as BlockRow;
                 from = IndexOf(row);
                 if (from < 0)
                     return false;

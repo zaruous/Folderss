@@ -21,7 +21,7 @@ namespace Folderss.Controls
     /// <item>입력: Enter 블록 나누기, Backspace(맨 앞) 텍스트로 전환·내어쓰기·앞 블록에 합치기, Tab/Shift+Tab 들여쓰기, ↑↓←→ 블록 사이 이동.</item>
     /// <item>문단 맨 앞 Markdown 표식(<c># </c>, <c>- </c>, <c>1. </c>, <c>[] </c>, <c>&gt; </c>, <c>```</c>, <c>---</c>)은 블록 종류로 바뀐다(<see cref="BlockMarkdown.TryMatchShortcut"/>).</item>
     /// <item><c>/</c> 명령 메뉴, 왼쪽 <c>+</c>·<c>⋮⋮</c> 손잡이(끌어 옮기기·블록 메뉴), Esc 블록 선택(Shift+↑↓ 확장, Del 삭제, Ctrl+C Markdown 복사).</item>
-    /// <item>Ctrl+Shift+↑↓ 블록 이동, Ctrl+D 복제, Ctrl+Alt+0~8 블록 전환, Ctrl+Enter 할 일 체크·토글 접기, Ctrl+B/I/E/K 줄 안 서식(Markdown 표식으로 감쌈).</item>
+    /// <item>Ctrl+Shift+↑↓ 블록 이동, Ctrl+D 복제, Ctrl+Alt+0~8 블록 전환, Ctrl+Enter 할 일 체크·토글 접기, Ctrl+B/I/E/Shift+S 줄 안 서식 적용·해제, Ctrl+K 링크 주소 팝업(서식 블록 — <c>BlockEditor.Inline.cs</c>, 표 셀은 Markdown 표식으로 감쌈).</item>
     /// <item>표는 행마다 블록(셀 입력란, Tab·Enter로 셀 이동·행 추가, 엑셀 붙여넣기), 이미지는 백그라운드에서 화면 폭에 맞춰 디코딩한다.</item>
     /// </list>
     /// 큰 문서용 구조:
@@ -79,7 +79,7 @@ namespace Folderss.Controls
 
         private bool _suppressTextChanged;
         private BlockRow _focusedRow;
-        private TextBox _caretScrollTarget;
+        private IBlockInput _caretScrollTarget;
 
         private int _selAnchor = -1;
         private int _selActive = -1;
@@ -138,6 +138,10 @@ namespace Folderss.Controls
                 if (!IsVisible)
                     CloseSlash();
             };
+
+            // 줄 안 글자 색·형광펜 리소스(테마 밝기별). 화면에 붙은 뒤 테마 리소스가 달라졌을 수 있어 Loaded에서도 확인한다.
+            UpdateTextMarkBrushes();
+            Loaded += (s, e) => UpdateTextMarkBrushes();
 
             SetMarkdown(string.Empty);
         }
@@ -214,6 +218,7 @@ namespace Folderss.Controls
         /// <summary>테마가 바뀌었다: 테마 밝기에 따라 고르는 색(블록 글자색·배경색)을 다시 칠한다. 나머지 색은 DynamicResource라 저절로 바뀐다.</summary>
         public void RefreshTheme()
         {
+            UpdateTextMarkBrushes();
             _panel.SyncRealized();
         }
 
@@ -268,7 +273,7 @@ namespace Folderss.Controls
         private void RecordChange(BlockRow typingRow = null)
         {
             var focus = IndexOf(_focusedRow);
-            var caret = focus >= 0 ? _focusedRow.Editor.CaretIndex : 0;
+            var caret = focus >= 0 ? _focusedRow.CurrentCaret : 0;
             var column = focus >= 0 ? _focusedRow.ActiveColumn : 0;
             var now = DateTime.UtcNow;
 
@@ -523,7 +528,7 @@ namespace Folderss.Controls
             FocusEditor(row.EditorForColumn(column), caret);
         }
 
-        private void FocusEditor(TextBox editor, int caret)
+        private void FocusEditor(IBlockInput editor, int caret)
         {
             if (!editor.IsVisible)
                 UpdateLayout();
@@ -533,7 +538,7 @@ namespace Folderss.Controls
             ScheduleCaretIntoView(editor);
         }
 
-        private void ScheduleCaretIntoView(TextBox editor)
+        private void ScheduleCaretIntoView(IBlockInput editor)
         {
             var pending = _caretScrollTarget != null;
             _caretScrollTarget = editor;
@@ -553,12 +558,12 @@ namespace Folderss.Controls
             }));
         }
 
-        private static bool IsOnFirstLine(TextBox editor)
+        private static bool IsOnFirstLine(IBlockInput editor)
         {
             return editor.GetLineIndexFromCharacterIndex(editor.CaretIndex) <= 0;
         }
 
-        private static bool IsOnLastLine(TextBox editor)
+        private static bool IsOnLastLine(IBlockInput editor)
         {
             var line = editor.GetLineIndexFromCharacterIndex(editor.CaretIndex);
             return line < 0 || line >= editor.LineCount - 1;
@@ -594,7 +599,7 @@ namespace Folderss.Controls
             var caret = direction < 0 ? destination.Text.Length : 0;
             try
             {
-                var x = _panel.TranslatePoint(new Point(sourceInPanel, 0), destination).X;
+                var x = _panel.TranslatePoint(new Point(sourceInPanel, 0), (UIElement)destination).X;
                 var line = direction < 0 ? destination.LineCount - 1 : 0;
                 if (line >= 0)
                 {
@@ -661,13 +666,13 @@ namespace Folderss.Controls
                 return;
             }
 
-            if (HasBlockSelection && !(Keyboard.FocusedElement is TextBox))
+            if (HasBlockSelection && !(Keyboard.FocusedElement is IBlockInput))
             {
                 HandleSelectionKey(e, key, mods);
                 return;
             }
 
-            var editor = Keyboard.FocusedElement as TextBox;
+            var editor = Keyboard.FocusedElement as IBlockInput;
             var row = editor?.Tag as BlockRow;
             if (row == null || !ReferenceEquals(row.Editor, editor))
                 return;
@@ -838,16 +843,20 @@ namespace Folderss.Controls
                     }
                     return false;
 
+                // 서식 블록은 서식 적용·해제(#76), 표 셀(원문 입력란)은 표식으로 감싸기
                 case Key.B:
-                    return mods == ctrl && !verbatim && WrapSelection(row, "**");
+                    return mods == ctrl && !verbatim && FormatKey(row, InlineFormat.Bold, "**");
                 case Key.I:
-                    return mods == ctrl && !verbatim && WrapSelection(row, "*");
+                    return mods == ctrl && !verbatim && FormatKey(row, InlineFormat.Italic, "*");
                 case Key.E:
-                    return mods == ctrl && !verbatim && WrapSelection(row, "`");
+                    return mods == ctrl && !verbatim && FormatKey(row, InlineFormat.Code, "`");
                 case Key.S:
-                    return mods == ctrlShift && !verbatim && WrapSelection(row, "~~");
+                    return mods == ctrlShift && !verbatim && FormatKey(row, InlineFormat.Strike, "~~");
+                case Key.U:
+                    // 밑줄은 Markdown 밖 범위 속성(#76 9번) — 서식 입력란만. 표 셀(원문 입력란)은 대상이 아니다.
+                    return mods == ctrl && !verbatim && row.Rich != null && ToggleUnderline(row);
                 case Key.K:
-                    return mods == ctrl && !verbatim && InsertLink(row);
+                    return mods == ctrl && !verbatim && (row.Rich != null ? ShowLinkEditor(row) : InsertLink(row));
             }
 
             BlockKind kind;
@@ -858,6 +867,13 @@ namespace Folderss.Controls
                 return true;
             }
             return false;
+        }
+
+        private bool FormatKey(BlockRow row, InlineFormat format, string marker)
+        {
+            if (row.Rich != null)
+                return ToggleInlineFormat(row, format);
+            return WrapSelection(row, marker);
         }
 
         /// <summary>Notion과 같은 Ctrl+Alt+숫자 블록 전환: 0 텍스트, 1~3 제목, 4 할 일, 5 글머리, 6 번호, 7 토글, 8 코드.</summary>
@@ -903,10 +919,12 @@ namespace Folderss.Controls
             var index = IndexOf(row);
             var block = row.Block;
             var editor = row.Editor;
-            var selectionStart = editor.SelectionStart;
-            var text = editor.Text.Remove(selectionStart, editor.SelectionLength);
+            string text, head, tail;
+            int selectionStart;
+            bool isEmpty;
+            ReadSplit(row, editor, out text, out head, out tail, out selectionStart, out isEmpty);
 
-            if (text.Length == 0 && block.Kind != BlockKind.Paragraph && !IsHeading(block.Kind))
+            if (isEmpty && block.Kind != BlockKind.Paragraph && !IsHeading(block.Kind))
             {
                 if (EditorBlock.IsListItem(block.Kind) && block.Indent > 0)
                     IndentBlocks(index, index, -1);
@@ -915,8 +933,10 @@ namespace Folderss.Controls
                 return;
             }
 
+            // 줄 안 범위(밑줄·색): 앞 블록은 본문이 바뀔 때 저절로 잘리고(EditorBlock.Text), 뒤 블록은 커서 뒤 범위를 따로 넣는다.
+            var tailMarks = TailMarks(block, selectionStart, editor.SelectionLength);
             var continues = EditorBlock.IsListItem(block.Kind) ? block.Kind : BlockKind.Paragraph;
-            if (selectionStart == 0 && text.Length > 0)
+            if (selectionStart == 0 && !isEmpty)
             {
                 block.Text = text;
                 _blocks.Insert(index, InColumnOf(new EditorBlock(continues, string.Empty, block.Indent), block));
@@ -926,8 +946,7 @@ namespace Folderss.Controls
                 return;
             }
 
-            block.Text = text.Substring(0, selectionStart);
-            var tail = text.Substring(selectionStart);
+            block.Text = head;
             var subtreeEnd = BlockOperations.SubtreeEnd(_blocks, index);
             EditorBlock created;
             int insertAt;
@@ -949,6 +968,7 @@ namespace Folderss.Controls
                 insertAt = index + 1;
             }
 
+            TextMarks.Set(created, tailMarks.Marks, tailMarks.Plain);
             _blocks.Insert(insertAt, InColumnOf(created, block));
             BlockOperations.NormalizeIndents(_blocks);
             SyncRows();
@@ -1012,8 +1032,8 @@ namespace Folderss.Controls
                 }
                 return;
             }
-            var caret = target.Text.Length;
-            target.Text += block.Text;
+            var caret = PlainLength(target);
+            JoinBlock(target, block.Text, TextMarks.Get(block), null);
             _blocks.RemoveAt(index);
             BlockOperations.NormalizeIndents(_blocks);
             SyncRows();
@@ -1025,7 +1045,7 @@ namespace Folderss.Controls
         private void MergeNext(BlockRow row)
         {
             var index = IndexOf(row);
-            var caret = row.Block.Text.Length;
+            var caret = PlainLength(row.Block);
             if (index + 1 < _blocks.Count && (_blocks[index + 1].Kind == BlockKind.Divider || _blocks[index + 1].Kind == BlockKind.Toc))
             {
                 _blocks.RemoveAt(index + 1);
@@ -1036,7 +1056,7 @@ namespace Folderss.Controls
                 if (next < 0 || _blocks[next].Kind == BlockKind.TableRow || _blocks[next].Kind == BlockKind.Image ||
                     EditorBlock.IsLinkCard(_blocks[next].Kind))
                     return;
-                row.Block.Text += _blocks[next].Text;
+                JoinBlock(row.Block, _blocks[next].Text, TextMarks.Get(_blocks[next]), null);
                 _blocks.RemoveAt(next);
             }
             BlockOperations.NormalizeIndents(_blocks);
@@ -1056,7 +1076,7 @@ namespace Folderss.Controls
             if (delta < 0 && Enumerable.Range(first, end - first).Any(i => _blocks[i].Indent == 0))
                 return;
 
-            var caret = _focusedRow != null ? _focusedRow.Editor.CaretIndex : 0;
+            var caret = _focusedRow != null ? _focusedRow.CurrentCaret : 0;
             var focusIndex = IndexOf(_focusedRow);
             for (var i = first; i < end; i++)
                 _blocks[i].Indent += delta;
@@ -1075,7 +1095,7 @@ namespace Folderss.Controls
             if (first < 0 || MovesFrontMatter(first, direction < 0 ? first - 1 : first + 1))
                 return;
             var end = BlockOperations.ExtendToSubtrees(_blocks, first, last + 1);
-            var caret = _focusedRow != null ? _focusedRow.Editor.CaretIndex : 0;
+            var caret = _focusedRow != null ? _focusedRow.CurrentCaret : 0;
             var focusBlock = HasBlockSelection ? null : _focusedRow?.Block;
             var newStart = BlockOperations.MoveRange(_blocks, first, end, direction);
             if (newStart < 0)
@@ -1245,7 +1265,7 @@ namespace Folderss.Controls
         {
             if (first < 0)
                 return;
-            var caret = _focusedRow != null ? _focusedRow.Editor.CaretIndex : 0;
+            var caret = _focusedRow != null ? _focusedRow.CurrentCaret : 0;
             var focusBlock = HasBlockSelection ? null : _focusedRow?.Block;
             EditorBlock afterNonEditable = null;
             for (var i = first; i <= last && i < _blocks.Count; i++)
@@ -1320,7 +1340,7 @@ namespace Folderss.Controls
             row.Block.Collapsed = !row.Block.Collapsed;
             row.RefreshState();
             RefreshStructure();
-            if (row.Editor.IsKeyboardFocused)
+            if (row.IsEditorFocused)
                 return;
             FocusRow(IndexOf(row), int.MaxValue);
         }
@@ -1341,10 +1361,12 @@ namespace Folderss.Controls
             RecordChange();
         }
 
-        /// <summary>선택 영역을 Markdown 표식으로 감싼다. 이미 감싸져 있으면 표식을 벗긴다.</summary>
+        /// <summary>선택 영역을 Markdown 표식으로 감싼다. 이미 감싸져 있으면 표식을 벗긴다(원문 입력란 — 표 셀).</summary>
         private bool WrapSelection(BlockRow row, string marker)
         {
-            var editor = row.Editor;
+            var editor = row.Editor as TextBox;
+            if (editor == null)
+                return false;
             var start = editor.SelectionStart;
             var length = editor.SelectionLength;
             var text = editor.Text;
@@ -1368,7 +1390,9 @@ namespace Folderss.Controls
         /// <summary>Ctrl+K: 선택 글자를 <c>[글자](https://)</c> 링크로 만들고 주소 부분을 선택한다.</summary>
         private bool InsertLink(BlockRow row)
         {
-            var editor = row.Editor;
+            var editor = row.Editor as TextBox;
+            if (editor == null)
+                return false;
             var start = editor.SelectionStart;
             var label = editor.SelectedText.Length > 0 ? editor.SelectedText : "링크";
             const string url = "https://";
@@ -1433,8 +1457,18 @@ namespace Folderss.Controls
             if (_suppressTextChanged)
                 return;
             var editor = row.Editor;
+            var rich = editor as RichBlockBox;
             var wasBlank = string.IsNullOrWhiteSpace(row.Block.Text);
-            row.Block.Text = editor.Text;
+            if (rich != null)
+            {
+                // 글자·서식·범위가 그대로인 알림(입력란을 행에 붙일 때 글자 색 리소스가 연결되며 오는 속성 변경 등)은 기록하지 않는다 —
+                // 그대로 두면 색 범위가 있는 블록에 들어가기만 해도 수정됨·실행 취소 단계가 생긴다(#76 9번 병합 검증).
+                if (string.Equals(row.Block.Text, rich.Markdown, StringComparison.Ordinal) && !RichMarksDiffer(rich, row.Block))
+                    return;
+                SetBlockFromRich(row.Block, rich);
+            }
+            else
+                row.Block.Text = editor.Text;
             row.UpdatePlaceholder();
             RecordChange(row);
             // 빈 문단은 번호 목록 번호를 끊지 않으므로, 비었다가 글자가 생기거나 그 반대면 번호를 다시 센다.
@@ -1445,38 +1479,69 @@ namespace Folderss.Controls
             if (editor.IsKeyboardFocused)
                 ScheduleCaretIntoView(editor);
 
-            TextChange inserted = null;
-            foreach (var change in e.Changes)
-                if (change.AddedLength > 0)
-                    inserted = change;
+            // 방금 들어간 글자 위치(보이는 글자 기준). 서식 입력란은 이전 글자와 비교해 얻는다.
+            var insertedAt = -1;
+            var insertedLength = 0;
+            if (rich != null)
+            {
+                if (rich.LastAddedLength > 0)
+                {
+                    insertedAt = rich.LastChangeOffset;
+                    insertedLength = rich.LastAddedLength;
+                }
+            }
+            else
+            {
+                foreach (var change in e.Changes)
+                {
+                    if (change.AddedLength > 0)
+                    {
+                        insertedAt = change.Offset;
+                        insertedLength = change.AddedLength;
+                    }
+                }
+            }
+            if (_applyingInlineEdit)
+                return;
 
             if (_slashRow == row)
             {
                 // TextChanged 시점에는 커서가 아직 옮겨지지 않았을 수 있어 이벤트가 끝난 뒤 검색어를 다시 읽는다.
                 Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(UpdateSlashQuery));
             }
-            else if (inserted != null && !EditorBlock.IsVerbatim(row.Block.Kind) &&
+            else if (insertedAt >= 0 && !EditorBlock.IsVerbatim(row.Block.Kind) &&
                      row.Block.Kind != BlockKind.Image && !EditorBlock.IsLinkCard(row.Block.Kind) &&
-                     inserted.AddedLength == 1)
+                     insertedLength == 1)
             {
-                var at = inserted.Offset;
-                if (at < editor.Text.Length && editor.Text[at] == '/' && (at == 0 || char.IsWhiteSpace(editor.Text[at - 1])))
+                var at = insertedAt;
+                var text = editor.Text;
+                if (at < text.Length && text[at] == '/' && (at == 0 || char.IsWhiteSpace(text[at - 1])))
                     OpenSlash(row, at);
             }
 
-            if (inserted != null)
-                TryAutoFormat(row, inserted);
+            if (insertedAt >= 0)
+                TryAutoFormat(row, insertedAt, insertedLength);
+            // 대기 서식(선택 없이 Ctrl+B 등, 글자를 바꿔 쓰면 바뀐 첫 글자 모양) 적용을 입력 단축 판단보다 먼저 예약한다
+            // (입력 단축은 다시 그려졌으면 다시 계산). 조합 중이면 확정 때(InputCompleted) 적용한다.
+            if (rich != null)
+            {
+                SetPendingForReplace(rich);
+                if (!rich.IsComposing)
+                    SchedulePendingApply(rich);
+            }
+            if (rich != null && insertedLength == 1)
+                TryInlineInputRule(row, rich, insertedAt + 1);
         }
 
         /// <summary>문단 맨 앞에 Markdown 표식을 입력하면 블록 종류를 바꾼다. 실행 취소하면 입력한 표식 글자로 돌아간다.</summary>
-        private void TryAutoFormat(BlockRow row, TextChange inserted)
+        private void TryAutoFormat(BlockRow row, int insertedOffset, int insertedLength)
         {
             var block = row.Block;
             if (block.Kind != BlockKind.Paragraph && block.Kind != BlockKind.Bulleted)
                 return;
             // 커서 대신 방금 들어간 글자 위치로 판단한다(TextChanged 때 커서가 아직 안 옮겨졌을 수 있음).
             var editor = row.Editor;
-            var prefixEnd = inserted.Offset + inserted.AddedLength;
+            var prefixEnd = insertedOffset + insertedLength;
             if (prefixEnd > 7 || prefixEnd > editor.Text.Length)
                 return;
 
@@ -1529,7 +1594,7 @@ namespace Folderss.Controls
                 return;
             Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
             {
-                if (_slashRow == row && !row.Editor.IsKeyboardFocused)
+                if (_slashRow == row && !row.IsEditorFocused)
                     CloseSlash();
             }));
         }
@@ -1540,7 +1605,7 @@ namespace Folderss.Controls
                 return;
             if (_slashRow == row)
                 UpdateSlashQuery();
-            if (row.Editor.IsKeyboardFocused && Mouse.LeftButton != MouseButtonState.Pressed)
+            if (row.IsEditorFocused && Mouse.LeftButton != MouseButtonState.Pressed)
                 ScheduleCaretIntoView(row.Editor);
         }
 
@@ -1585,23 +1650,25 @@ namespace Folderss.Controls
             if (string.IsNullOrEmpty(text) || text.IndexOf('\n') < 0)
                 return;
             e.CancelCommand();
-            PasteBlocks(row, text);
+            PasteBlocks(row, text, ClipboardBlockMarks(e.DataObject, text));
         }
 
-        private void PasteBlocks(BlockRow row, string markdown)
+        private void PasteBlocks(BlockRow row, string markdown, IList<string> blockMarks = null)
         {
             var parsed = BlockMarkdown.Parse(markdown);
             PastedFrontMatterAsRaw(parsed);
             if (parsed.Count == 0)
                 return;
+            ApplyPastedMarks(parsed, blockMarks);
 
             var index = IndexOf(row);
             var block = row.Block;
             var editor = row.Editor;
-            var selectionStart = editor.SelectionStart;
-            var current = editor.Text.Remove(selectionStart, editor.SelectionLength);
-            var head = current.Substring(0, selectionStart);
-            var tail = current.Substring(selectionStart);
+            string current, head, tail;
+            int selectionStart;
+            bool isEmpty;
+            var tailMarks = TailMarks(block, editor.SelectionStart, editor.SelectionLength);
+            ReadSplit(row, editor, out current, out head, out tail, out selectionStart, out isEmpty);
 
             foreach (var item in parsed)
             {
@@ -1610,14 +1677,15 @@ namespace Folderss.Controls
             }
 
             var inserted = new List<EditorBlock>();
-            if (current.Length == 0 && block.Kind == BlockKind.Paragraph)
+            if (isEmpty && block.Kind == BlockKind.Paragraph)
             {
                 CopyContent(parsed[0], block);
                 inserted.AddRange(parsed.Skip(1));
             }
             else if (parsed[0].Kind == BlockKind.Paragraph)
             {
-                block.Text = head + parsed[0].Text;
+                block.Text = head;
+                JoinBlock(block, parsed[0].Text, TextMarks.Get(parsed[0]), null);
                 inserted.AddRange(parsed.Skip(1));
             }
             else
@@ -1627,7 +1695,7 @@ namespace Folderss.Controls
             }
 
             var last = inserted.Count > 0 ? inserted[inserted.Count - 1] : block;
-            var caret = last.Text.Length;
+            var caret = PlainLength(last);
             if (tail.Length > 0)
             {
                 if (last.Kind == BlockKind.Divider)
@@ -1636,7 +1704,7 @@ namespace Folderss.Controls
                     inserted.Add(last);
                     caret = 0;
                 }
-                last.Text += tail;
+                JoinBlock(last, tail, tailMarks.Marks, tailMarks.Plain);
             }
 
             _blocks.InsertRange(index + 1, inserted);
@@ -1897,8 +1965,11 @@ namespace Folderss.Controls
         private void CopyBlocks(int first, int last)
         {
             var end = BlockOperations.ExtendToSubtrees(_blocks, first, last + 1);
-            var markdown = BlockMarkdown.Serialize(_blocks.GetRange(first, end - first));
-            ClipboardService.TrySetDataObject(new DataObject(DataFormats.UnicodeText, markdown));
+            var range = _blocks.GetRange(first, end - first);
+            var markdown = BlockMarkdown.Serialize(range);
+            var data = new DataObject(DataFormats.UnicodeText, markdown);
+            SetClipboardMarks(data, markdown, range);
+            ClipboardService.TrySetDataObject(data);
         }
 
         private void PasteAfterSelection(int last)
@@ -1921,6 +1992,7 @@ namespace Folderss.Controls
             PastedFrontMatterAsRaw(parsed);
             if (parsed.Count == 0)
                 return;
+            ApplyPastedMarks(parsed, ClipboardBlockMarks(text));
             var indent = _blocks[last].Indent;
             foreach (var block in parsed)
             {
@@ -2274,7 +2346,7 @@ namespace Folderss.Controls
                 if (_slashRow != row)
                     return;
                 var rect = row.Editor.GetRectFromCharacterIndex(Math.Min(_slashStart, row.Editor.Text.Length));
-                _slashPopup.PlacementTarget = row.Editor;
+                _slashPopup.PlacementTarget = (UIElement)row.Editor;
                 _slashPopup.PlacementRectangle = rect.IsEmpty ? new Rect(0, 0, 0, row.Editor.ActualHeight) : rect;
                 _slashPopup.IsOpen = true;
             }));
@@ -2411,7 +2483,7 @@ namespace Folderss.Controls
             var editor = row.Editor;
             var caret = Math.Max(editor.CaretIndex, _slashStart);
             var at = _slashStart;
-            var text = editor.Text.Remove(at, Math.Min(caret, editor.Text.Length) - at);
+            var text = TextWithout(editor, at, Math.Min(caret, editor.Text.Length));
             CloseSlash();
 
             row.Block.Text = text;
@@ -2454,8 +2526,7 @@ namespace Folderss.Controls
 
         private void InsertText(BlockRow row, int at, string value)
         {
-            var text = row.Block.Text.Insert(Math.Min(at, row.Block.Text.Length), value);
-            row.Block.Text = text;
+            row.Block.Text = InsertPlain(row.Block, at, value);
             row.SyncFromBlock();
             FocusRow(IndexOf(row), at + value.Length);
             RecordChange();

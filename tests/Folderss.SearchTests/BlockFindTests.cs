@@ -124,6 +124,132 @@ namespace Folderss.SearchTests
             Assert.Equal(2, BlockMarkdown.SplitCells(doc[0].Text).Length);
         }
 
+        // ── 서식 블록: 보이는 글자 기준(#76) ───────────────────────────────
+
+        [Fact]
+        public void FindAll_FormattedBlock_UsesVisibleTextAndOffsets()
+        {
+            var doc = Doc(B(BlockKind.Paragraph, "**사과**와 *사과*, [사과](u)"));
+            Assert.Equal("사과와 사과, 사과", BlockFind.SearchText(doc[0]));
+            Assert.Equal(new[] { "0:0+2", "0:4+2", "0:8+2" }, BlockFind.FindAll(doc, "사과", true).Select(m => m.ToString()).ToArray());
+        }
+
+        [Fact]
+        public void FindAll_FormattedBlock_MarkersAreNotFound_ButCodeAndTableCellsAreSource()
+        {
+            var doc = Doc(B(BlockKind.Paragraph, "**굵게**"), B(BlockKind.Code, "a ** b"), B(BlockKind.TableRow, "**나**\tx"));
+            Assert.Equal(new[] { "1:2+2", "2:0+2", "2:3+2" }, BlockFind.FindAll(doc, "**", true).Select(m => m.ToString()).ToArray());
+        }
+
+        [Fact]
+        public void FindAll_FormattedBlock_WordSplitByMarkers_IsFound()
+        {
+            var doc = Doc(B(BlockKind.Heading2, "사**과** 나무"));
+            Assert.Equal(new[] { "0:0+2" }, BlockFind.FindAll(doc, "사과", true).Select(m => m.ToString()).ToArray());
+        }
+
+        [Fact]
+        public void FindAll_FormattedBlock_HiddenLinkAddressAndTitle_NotFound()
+        {
+            // 이전(원문에서 찾고 위치를 근사 대응)에는 보이지 않는 주소·제목 글자가 결과로 잡히고 위치가 어긋났다.
+            var doc = Doc(B(BlockKind.Paragraph, "[x](http://t.example \"t\") t"));
+            Assert.Equal("x t", BlockFind.SearchText(doc[0]));
+            Assert.Equal(new[] { "0:2+1" }, BlockFind.FindAll(doc, "t", true).Select(m => m.ToString()).ToArray());
+            Assert.Empty(BlockFind.FindAll(doc, "http", true));
+        }
+
+        [Fact]
+        public void FindAll_EscapedMarkerCharacters_AreVisibleText()
+        {
+            var doc = Doc(B(BlockKind.Paragraph, "2\\*3 = **6**"));
+            Assert.Equal(new[] { "0:1+1" }, BlockFind.FindAll(doc, "*", true).Select(m => m.ToString()).ToArray());
+            Assert.Equal(new[] { "0:6+1" }, BlockFind.FindAll(doc, "6", true).Select(m => m.ToString()).ToArray());
+        }
+
+        [Fact]
+        public void SearchText_CachesPerTextInstance_AndFollowsEdits()
+        {
+            var block = B(BlockKind.Paragraph, "**a**");
+            Assert.Same(BlockFind.SearchText(block), BlockFind.SearchText(block));
+            block.Text = "*b*";
+            Assert.Equal("b", BlockFind.SearchText(block));
+        }
+
+        [Theory]
+        // 서식 안 결과 → 서식 유지
+        [InlineData("앞 **사과** 뒤", "사과", "배", "앞 **배** 뒤")]
+        [InlineData("[사과](u) 사과", "사과", "배", "[배](u) 배")]
+        [InlineData("`code` x", "code", "c2", "`c2` x")]
+        // 서식 경계에 걸친 결과 → 바뀌는 첫 글자의 서식
+        [InlineData("**굵**보통", "굵보", "X", "**X**통")]
+        [InlineData("보**굵**", "보굵", "X", "X")]
+        // 결과 일부만 서식 안 → 바깥 글자 서식 그대로
+        [InlineData("**사과나무**", "나무", "", "**사과**")]
+        // 바꿀 글자는 보이는 글자 그대로(표식으로 읽지 않음 — 필요하면 이스케이프)
+        [InlineData("a b", "b", "*x*", "a \\*x\\*")]
+        public void ReplaceAll_FormattedBlock_VisibleTextRules(string markdown, string query, string replacement, string expected)
+        {
+            var doc = Doc(B(BlockKind.Paragraph, markdown));
+            int first, last;
+            Assert.True(BlockFind.ReplaceAll(doc, query, replacement, true, out first, out last) > 0);
+            Assert.Equal(expected, doc[0].Text);
+            // 바꾼 결과는 찾는 글자에서 바로 보인다
+            if (replacement.Length > 0)
+                Assert.Contains(replacement, BlockFind.SearchText(doc[0]));
+        }
+
+        [Fact]
+        public void ReplaceOne_FormattedBlock_VisibleOffsetsAndEnd()
+        {
+            var doc = Doc(B(BlockKind.Paragraph, "**cat** cat"));
+            var matches = BlockFind.FindAll(doc, "cat", true);
+            Assert.Equal(new[] { "0:0+3", "0:4+3" }, matches.Select(m => m.ToString()).ToArray());
+            Assert.True(BlockFind.IsMatchAt(doc, matches[1], "cat", true));
+            Assert.Equal(9, BlockFind.ReplaceOne(doc, matches[1], "cat", "tiger", true));
+            Assert.Equal("**cat** tiger", doc[0].Text);
+            Assert.Equal(4, BlockFind.ReplaceOne(doc, matches[0], "cat", "puma", true));
+            Assert.Equal("**puma** tiger", doc[0].Text);
+        }
+
+        [Fact]
+        public void ReplaceAll_FormattedBlockWithMarks_KeepsFormattingAndRanges()
+        {
+            var block = B(BlockKind.Paragraph, "**cat** and *cat* or cat");
+            // 보이는 글자 "cat and cat or cat": "and"(4-7) 밑줄, 마지막 "cat"의 c(15) 빨강
+            TextMarks.Set(block, new[] { new TextMark(TextMarkKind.Underline, null, 4, 7), new TextMark(TextMarkKind.Color, "red", 15, 16) });
+            var doc = Doc(block);
+            int first, last;
+
+            Assert.Equal(3, BlockFind.ReplaceAll(doc, "cat", "tiger", true, out first, out last));
+
+            Assert.Equal("**tiger** and *tiger* or tiger", block.Text);
+            var plain = TextMarks.PlainOf(block);
+            var marks = TextMarks.Get(block);
+            Assert.Equal("and", Covered(plain, marks, TextMarkKind.Underline));
+            Assert.Equal("tiger", Covered(plain, marks, TextMarkKind.Color));   // 칠한 첫 글자를 바꾸면 새 글자 전체가 그 색(TextMarks 경계 규칙)
+        }
+
+        [Fact]
+        public void ReplaceOne_FormattedBlockWithMarks_OtherRangesStay()
+        {
+            var block = B(BlockKind.Paragraph, "aaXbb **cc**");
+            TextMarks.Set(block, new[] { new TextMark(TextMarkKind.Highlight, "yellow", 0, 2), new TextMark(TextMarkKind.Underline, null, 6, 8) });
+            var doc = Doc(block);
+            var match = BlockFind.FindAll(doc, "X", true)[0];
+
+            BlockFind.ReplaceOne(doc, match, "X", "a", true);   // 바꾼 글자가 이웃과 같아도 자리가 정확(본문 비교로 추정하지 않음)
+
+            var plain = TextMarks.PlainOf(block);
+            Assert.Equal("aaabb cc", plain);
+            Assert.Equal("aa", Covered(plain, TextMarks.Get(block), TextMarkKind.Highlight));
+            Assert.Equal("cc", Covered(plain, TextMarks.Get(block), TextMarkKind.Underline));
+        }
+
+        private static string Covered(string plain, IEnumerable<TextMark> marks, TextMarkKind kind)
+        {
+            return string.Join("|", marks.Where(m => m.Kind == kind).Select(m => plain.Substring(m.Start, m.End - m.Start)));
+        }
+
         [Fact]
         public void ReplaceAll_NoMatch_ReturnsZero()
         {

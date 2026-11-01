@@ -45,6 +45,13 @@ namespace Folderss.Controls
             private const double ColumnGap = 16;
             private const int PoolLimit = 80;
 
+            // 화면 밖에 미리 만들어 둘 여유(화면 높이 배수, 위·아래 각각). 휠·한 화면 스크롤은 여유가 얼마든 한 번에 새로 들어오는 만큼만 만들므로
+            // 여유가 클수록 이득은 없고 큰 폭 점프(스크롤바 끌기·처음↔끝·찾기 이동)의 비용만 커진다. 점프 직후에는 더 줄인다(다음 작은 스크롤이 채움).
+            private const double RealizeBuffer = 0.25;
+            private const double JumpRealizeBuffer = 0.1;
+            private double _realizedOffset = double.NaN;   // 마지막으로 행을 맞춘 스크롤 위치(점프 판단)
+            private bool _jumped;
+
             private readonly BlockEditor _owner;
             private readonly Dictionary<long, HeightEntry> _heights = new Dictionary<long, HeightEntry>();
             private readonly Dictionary<long, BlockRow> _realized = new Dictionary<long, BlockRow>();
@@ -103,6 +110,7 @@ namespace Folderss.Controls
                     Release(row);
                 _heights.Clear();
                 _offset = 0;
+                _realizedOffset = double.NaN;
                 _anchorId = -1;
                 _anchorDelta = 0;
                 _topsDirty = true;
@@ -179,7 +187,8 @@ namespace Folderss.Controls
             {
                 var block = _owner._blocks[index];
                 BlockRow row;
-                if (_pool.Count > 0)
+                var pooled = _pool.Count > 0;
+                if (pooled)
                 {
                     row = _pool.Pop();
                     row.Rebind(block);
@@ -192,7 +201,27 @@ namespace Folderss.Controls
                 }
                 _realized[block.Id] = row;
                 _owner.ApplyRowContext(row, index);
+                if (pooled)
+                    InvalidateDirtyChains(row.Root);
                 return row;
+            }
+
+            /// <summary>
+            /// 풀에서 꺼내 다시 묶은 행의 안쪽에서 측정이 무효가 된 요소가 있으면 그 위 요소들(행 뿌리까지)도 무효로 한다.
+            /// WPF <c>Measure</c>는 자기 측정이 유효하고 크기 제약이 같으면 자식을 보지 않으므로, 그대로 두면 패널이 이전 블록의 높이를 읽고
+            /// 레이아웃이 끝난 뒤 안쪽 요소가 따로 측정되며 크기가 바뀔 때마다 패널 측정(위치 계산 포함)이 다시 돈다 — 큰 폭 스크롤에서 점프 한 번에
+            /// 패널 측정이 수십 번 돌던 원인(#76 병합 검증 성능). 행 하나의 요소 수만큼만 훑는다.
+            /// </summary>
+            private static bool InvalidateDirtyChains(DependencyObject element)
+            {
+                var dirty = element is UIElement u && !u.IsMeasureValid;
+                var count = VisualTreeHelper.GetChildrenCount(element);
+                for (var i = 0; i < count; i++)
+                    if (InvalidateDirtyChains(VisualTreeHelper.GetChild(element, i)))
+                        dirty = true;
+                if (dirty && element is UIElement e)
+                    e.InvalidateMeasure();
+                return dirty;
             }
 
             private void Release(BlockRow row)
@@ -202,6 +231,8 @@ namespace Folderss.Controls
                     _realized.Remove(row.Block.Id);
                 if (ReferenceEquals(_owner._slashRow, row))
                     _owner.CloseSlash();
+                if (ReferenceEquals(_owner._richRow, row))
+                    _owner.ReleaseRich();   // 서식 입력란은 하나뿐 — 거두는 행에서 떼어 둔다(#76)
                 row.Root.Visibility = Visibility.Collapsed;
                 row.ResetTransient();
                 // 입력란(TextBox)을 만든 행은 입력기(TSF)에 등록돼 있어 다시 쓰면 내용 바꿀 때 멈출 수 있으므로 버린다.
@@ -370,6 +401,9 @@ namespace Folderss.Controls
             private double Estimate(EditorBlock block, int index, double rowWidth)
             {
                 var width = (rowWidth > 0 ? rowWidth : 860) - GutterWidth - block.Indent * IndentWidth;
+                // 줄 안 서식 블록은 표식(**·링크 주소 등)을 빼고 센다 — 원문 길이로 세면 서식이 많은 줄(링크 셀 등)을 여러 줄로 잘못 보고
+                // 화면에 들어올 때마다 높이가 줄어 측정이 여러 번 돈다(#76 큰 폭 스크롤).
+                var formatted = EditorBlock.HasInlineFormatting(block.Kind);
                 switch (block.Kind)
                 {
                     case BlockKind.Divider:
@@ -404,15 +438,15 @@ namespace Folderss.Controls
                         var cellWidth = Math.Max(30, width / columns - 14);
                         var lines = 1;
                         foreach (var cell in BlockMarkdown.SplitCells(block.Text))
-                            lines = Math.Max(lines, EstimateLines(cell, 15, cellWidth - 22, false));
+                            lines = Math.Max(lines, EstimateLines(cell, 15, cellWidth - 22, false, true));
                         // 표의 마지막 행은 아래에 행 추가(+) 줄이 붙는다
                         return lines * 20 + 9 + (TableShapeAt(index) % 2 == 1 ? TableAddRowHeight : 0);
                     case BlockKind.Heading1:
-                        return EstimateLines(block.Text, 28, width, false) * 37 + 30;
+                        return EstimateLines(block.Text, 28, width, false, formatted) * 37 + 30;
                     case BlockKind.Heading2:
-                        return EstimateLines(block.Text, 22, width, false) * 29 + 24;
+                        return EstimateLines(block.Text, 22, width, false, formatted) * 29 + 24;
                     case BlockKind.Heading3:
-                        return EstimateLines(block.Text, 18, width, false) * 24 + 17;
+                        return EstimateLines(block.Text, 18, width, false, formatted) * 24 + 17;
                     case BlockKind.Code:
                         return EstimateLines(block.Text, 13.5, width - 30, true) * 18 + 52;
                     case BlockKind.Raw:
@@ -425,30 +459,47 @@ namespace Folderss.Controls
                                 fmLines++;
                         return Math.Max(1, fmLines - 2) * 26 + 50;
                     case BlockKind.Callout:
-                        return EstimateLines(block.Text, 15, width - 60, false) * 20 + 36;
+                        return EstimateLines(block.Text, 15, width - 60, false, formatted) * 20 + 36;
                     case BlockKind.Quote:
-                        return EstimateLines(block.Text, 15, width - 17, false) * 20 + 8;
+                        return EstimateLines(block.Text, 15, width - 17, false, formatted) * 20 + 8;
                     case BlockKind.Bulleted:
                     case BlockKind.Numbered:
                     case BlockKind.Todo:
                     case BlockKind.Toggle:
                         var th = block.GetToggleHeadingLevel();
-                        if (th == 1) return EstimateLines(block.Text, 24, width - 26, false) * 33 + 22;
-                        if (th == 2) return EstimateLines(block.Text, 20, width - 26, false) * 27 + 18;
-                        if (th == 3) return EstimateLines(block.Text, 17, width - 26, false) * 23 + 14;
-                        return EstimateLines(block.Text, 15, width - 26, false) * 20 + 8;
+                        if (th == 1) return EstimateLines(block.Text, 24, width - 26, false, formatted) * 33 + 22;
+                        if (th == 2) return EstimateLines(block.Text, 20, width - 26, false, formatted) * 27 + 18;
+                        if (th == 3) return EstimateLines(block.Text, 17, width - 26, false, formatted) * 23 + 14;
+                        return EstimateLines(block.Text, 15, width - 26, false, formatted) * 20 + 8;
                     default:
-                        return EstimateLines(block.Text, 15, width, false) * 20 + 8;
+                        return EstimateLines(block.Text, 15, width, false, formatted) * 20 + 8;
                 }
             }
 
-            private static int EstimateLines(string text, double fontSize, double width, bool monospace)
+            private static int EstimateLines(string text, double fontSize, double width, bool monospace, bool markdown = false)
             {
                 width = Math.Max(40, width);
                 var lines = 0;
                 var lineWidth = 0.0;
-                foreach (var c in text ?? string.Empty)
+                text = text ?? string.Empty;
+                for (var i = 0; i < text.Length; i++)
                 {
+                    var c = text[i];
+                    if (markdown)
+                    {
+                        // 대강의 보이는 글자(파싱하지 않음 — 추정용): 강조·코드 표식·이스케이프는 폭 없음, 링크 주소 "](...)"는 건너뜀
+                        if (c == '*' || c == '_' || c == '~' || c == '`' || c == '\\' || c == '[')
+                            continue;
+                        if (c == ']' && i + 1 < text.Length && text[i + 1] == '(')
+                        {
+                            var close = text.IndexOf(')', i + 2);
+                            if (close > 0)
+                            {
+                                i = close;
+                                continue;
+                            }
+                        }
+                    }
                     if (c == '\n')
                     {
                         lines += Math.Max(1, (int)Math.Ceiling(lineWidth / width));
@@ -591,6 +642,13 @@ namespace Folderss.Controls
                 }
                 _columnLeft = SideLeft + (available - column) / 2;
 
+                // 지난번 행을 맞춘 위치에서 한 화면 넘게 옮겼으면 점프 — 여유를 줄여 화면에 보일 행부터 만든다. 위치가 그대로인 다시 측정(입력 등)은
+                // 앞 판단을 이어 가고, 다음 스크롤이 오면 보통 여유로 돌아간다.
+                EnsureTops();
+                ResolveOffset();
+                if (double.IsNaN(_realizedOffset) || Math.Abs(_offset - _realizedOffset) > 0.5)
+                    _jumped = !double.IsNaN(_realizedOffset) && Math.Abs(_offset - _realizedOffset) > _viewport.Height;
+
                 // 실제 높이가 추정과 다르면 위치가 바뀌어 보이는 범위도 바뀔 수 있어 몇 번 반복한다.
                 for (var pass = 0; pass < 4; pass++)
                 {
@@ -620,19 +678,20 @@ namespace Folderss.Controls
                     ResolveOffset();
                 }
 
+                _realizedOffset = _offset;
                 _dropLine.Measure(new Size(width, 3));
                 ScrollOwner?.InvalidateScrollInfo();
                 return _viewport;
             }
 
-            /// <summary>보이는 범위(위·아래 반 화면 여유)와 고정 행만 남기고 나머지 행은 거둔다.</summary>
+            /// <summary>보이는 범위(위·아래 여유 <see cref="RealizeBuffer"/>, 점프 직후 <see cref="JumpRealizeBuffer"/>)와 고정 행만 남기고 나머지 행은 거둔다.</summary>
             private void Realize()
             {
                 var blocks = _owner._blocks;
                 var n = blocks.Count;
                 _arranged.Clear();
                 var needed = new HashSet<long>();
-                var buffer = _viewport.Height * 0.5;
+                var buffer = _viewport.Height * (_jumped ? JumpRealizeBuffer : RealizeBuffer);
                 var from = _offset - TopMargin - buffer;
                 var to = _offset - TopMargin + _viewport.Height + buffer;
                 var first = Math.Max(0, IndexAtY(from));

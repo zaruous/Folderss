@@ -122,6 +122,14 @@ Notion 페이지 속성처럼 **속성 표(키 | 값)** 로 보이게 한다. �
   칸 안 글자만 되돌리기를 기대하는 사용자도 있을 수 있어 설계 판단으로 남긴다.
 - 하네스로 확인하지 못한 것(사람이 볼 것): 실제 한국어 입력기(IME)로 조합 중 `Enter`(하네스는 ImeProcessed 키와 조합 완료 글자를 순서대로 넣어 흉내), 속성 표 모양·칸 편집 상자 모양(밝은·어두운 테마), 실제 끌어 놓기 화면 표시(놓을 자리 표시선).
 
+### #76 병합 후 회귀 (2026-11-01)
+
+- 하네스 `harness76m`(`C:\Users\KYJ\AppData\Local\Temp\claude\D--git-cshap-Folderss\0e9a6dec-1b59-4430-8014-acdde638b328\scratchpad\harness76m\`) `fm` **53개 모두 통과**.
+- #76 병합 조정(front matter를 `HasInlineFormatting`에서 제외) 확인 `fm76` **18개 모두 통과**: YAML 값 `a *b* c`·`snake_case_name`·`"**굵게 아님**"`이 서식으로 해석되지 않고 글자 그대로(굵게 Run 없음),
+  front matter 행에 RichTextBox 없음, `원문 편집` 입력란은 `BlockTextBox`·YAML 원문 그대로, 원문 편집 중 `Ctrl+B`·`_` 입력이 서식이 되지 않음, 값 칸 편집기 TextBox,
+  원문 편집에 들어갔다 나온 뒤 무편집 `Ctrl+S` → LF·CRLF·BOM 바이트 동일. `` ` ``·`[`로 시작하는 값은 YAML 예약 문자라 복잡 값(원문 표시) — 기존 설계대로.
+- 성능: 1만 줄 + 속성 20개 front matter + 서식 + 이미지 문서(`perfm`) — `block-editor-stage2-inline-format.md` 성능 표.
+
 ## 남은 것 / 범위 밖
 
 - 찾기·바꾸기에 front matter 값 포함(지금은 대상 아님 — 표 칸에 결과 강조가 필요).

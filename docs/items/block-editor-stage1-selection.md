@@ -75,6 +75,13 @@
   글자 끌기→블록 선택 이동 처리 중앙 0.2ms, `PageDown` 중앙 59ms(새 화면 행 생성 포함), `Ctrl+End` 중앙 0.4ms.
 - 사람이 직접 볼 것: 실제 마우스로 영역 사각형 그리기 모양·색(장식 층), 자동 스크롤 속도 체감, 손잡이 끌기 중 놓기 선 위치.
 
+### #76 병합 후 회귀 (2026-11-01)
+
+- 하네스 `harness76m`(`C:\Users\KYJ\AppData\Local\Temp\claude\D--git-cshap-Folderss\0e9a6dec-1b59-4430-8014-acdde638b328\scratchpad\harness76m\`) `selection` **53개 모두 통과**. 문단은 이제 서식 입력란(`RichBlockBox`, `IBlockInput`)이라 하네스의 `TextBox` 캐스트를 `IBlockInput` 감싸개로 바꿨다.
+  글자 끌기 → 블록 선택 전환은 RichTextBox 행에서도 그대로(캡처 `TextBoxBase`).
+- `Shift+클릭`은 실제처럼 **블록 5의 표시 글자**를 누르도록 고침(입력란은 편집기에 하나라 하네스가 블록 5 입력란을 가져오면 입력란이 블록 5로 옮겨 가 시험이 틀어짐) — 2~5·2~7·같은 블록 글자 선택 통과.
+- 같은 검증에서 고친 버그(9228041): ↑↓←→·표시 글자 클릭으로 서식 입력란을 옮겨 붙이면 포커스 행(`_focusedRow`)이 이전 행으로 남아, 멀리 스크롤하면 편집 행이 거둬져 포커스를 잃던 문제(`block-editor-stage2-inline-format.md` 검증 절).
+
 ## 변경 이력
 
 - 2026-11-01: 착수·구현, 빌드 확인 (`Ready for Verification`). 단위 테스트·하네스는 병합 후 일괄 실행.

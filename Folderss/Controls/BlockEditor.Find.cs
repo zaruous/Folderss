@@ -40,7 +40,7 @@ namespace Folderss.Controls
         private int _findCursorBlock = -1;
         private int _findCursorOffset;
         private bool _findCursorInclusive;
-        private TextBox _findHighlightEditor;
+        private IBlockInput _findHighlightEditor;
 
         /// <summary>본문 링크를 <c>Ctrl+클릭</c>했다(Markdown 링크 주소 원문). 뷰어가 열거나 문서 안 제목으로 옮긴다.</summary>
         public event EventHandler<string> LinkOpenRequested;
@@ -200,7 +200,7 @@ namespace Folderss.Controls
             CloseSlash();
 
             // 시작점: 지금 커서(선택 시작). 선택한 한 줄 글자는 검색어로.
-            var editor = Keyboard.FocusedElement as TextBox;
+            var editor = Keyboard.FocusedElement as IBlockInput;
             var row = editor?.Tag as BlockRow;
             var index = IndexOf(row);
             string selected = null;
@@ -257,7 +257,7 @@ namespace Folderss.Controls
             }
             else if (_focusedRow != null && IndexOf(_focusedRow) >= 0)
             {
-                FocusRow(IndexOf(_focusedRow), _focusedRow.Editor.CaretIndex, _focusedRow.ActiveColumn);
+                FocusRow(IndexOf(_focusedRow), _focusedRow.CurrentCaret, _focusedRow.ActiveColumn);
             }
             else
             {
@@ -352,7 +352,7 @@ namespace Folderss.Controls
             // 입력란에 커서가 있으면 그 자리에서, 아니면 마지막으로 보여 준 결과에서 이어 찾는다.
             int block, offset;
             var inclusive = false;
-            var editor = Keyboard.FocusedElement as TextBox;
+            var editor = Keyboard.FocusedElement as IBlockInput;
             var row = editor?.Tag as BlockRow;
             var rowIndex = IndexOf(row);
             if (rowIndex >= 0)
@@ -411,6 +411,7 @@ namespace Folderss.Controls
             if (!editor.IsVisible)
                 UpdateLayout();
 
+            // 서식 블록(서식 입력란)은 찾기 자체가 보이는 글자 기준(BlockFind.SearchesVisibleText)이라 위치를 그대로 쓴다.
             SetHighlightEditor(editor);
             var length = Math.Min(match.Length, Math.Max(0, editor.Text.Length - start));
             if (focusEditor || !IsFindOpen)
@@ -421,7 +422,7 @@ namespace Folderss.Controls
         }
 
         /// <summary>찾기 입력란에 포커스가 있어도 결과 선택이 보이게 한다. 이전 입력란은 원래대로.</summary>
-        private void SetHighlightEditor(TextBox editor)
+        private void SetHighlightEditor(IBlockInput editor)
         {
             if (ReferenceEquals(_findHighlightEditor, editor))
                 return;
@@ -448,10 +449,10 @@ namespace Folderss.Controls
         }
 
         /// <summary>입력란의 글자 위치를 블록 본문 위치로. 표 행은 포커스를 받은 셀(<see cref="BlockRow.ActiveColumn"/>) 기준으로 탭 구분 위치로 바꾼다.</summary>
-        private static int ToBlockOffset(BlockRow row, TextBox editor, int offset)
+        private static int ToBlockOffset(BlockRow row, IBlockInput editor, int offset)
         {
             if (row.Block.Kind != BlockKind.TableRow)
-                return offset;
+                return offset;   // 서식 입력란은 보이는 글자, 원문 입력란은 본문 — 찾기 결과 위치와 같은 기준
             return BlockFind.TextOffset(row.Block.Text, row.ActiveColumn, offset);
         }
 
@@ -583,12 +584,19 @@ namespace Folderss.Controls
             if (e.Handled || Keyboard.Modifiers != ModifierKeys.Control)
                 return;
             var source = e.OriginalSource as DependencyObject;
-            if (source == null || (_findBar != null && _findBar.IsAncestorOf(source)))
+            if (source == null || (_findBar != null && ElementTree.IsWithin(source, _findBar)))
                 return;
 
             string link = null;
-            var box = ElementTree.FindAncestor<TextBox>(source);
-            if (box != null)
+            var rich = ElementTree.FindAncestor<RichBlockBox>(source);
+            var box = rich == null ? ElementTree.FindAncestor<TextBox>(source) : null;
+            if (rich != null)
+            {
+                if (!(rich.Tag is BlockRow))
+                    return;
+                link = RichLinkAt(rich, e.GetPosition(rich));
+            }
+            else if (box != null)
             {
                 if (!(box.Tag is BlockRow))
                     return;
@@ -600,6 +608,8 @@ namespace Folderss.Controls
             {
                 var text = ElementTree.FindAncestor<TextBlock>(source);
                 if (text != null && ElementTree.FindAncestor<BlockEditor>(text) == this)
+                    link = BlockInlineRenderer.DisplayLinkAt(source);
+                if (link == null && text != null && ElementTree.FindAncestor<BlockEditor>(text) == this)
                 {
                     var position = text.GetPositionFromPoint(e.GetPosition(text), true);
                     if (position != null)

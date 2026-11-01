@@ -22,10 +22,13 @@ Folderss/
 │   ├── BlockEditor.Table.cs        — 표 셀 키(Tab·Enter 행 추가)·행/열 추가·삭제·엑셀 붙여넣기, /표·/이미지, 이미지 경로 해석
 │   ├── BlockImageLoader.cs         — 로컬·원격(http/https) 이미지 비동기 디코딩(화면 폭으로 줄임)·LRU 캐시·원본 크기 기억, 북마크 메타데이터 조회
 │   ├── BlockEditor.Media.cs        — 클립보드 이미지·복사한 파일 붙여넣기(`images/` 저장), 탐색기/폴더 패널 파일 드롭, 파일/북마크/페이지 블록 추가 대화상자(`BlockPageDialog`), 페이지 열기·만들기, 원본 크기 보기 창(`BlockImagePreviewWindow`), 순수 C# 수식 렌더러(`BlockMathRenderer`)
-│   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색"
+│   ├── BlockEditor.Color.cs        — 블록 글자색·배경색(사이드카 속성), 테마 밝기별 팔레트, 블록 메뉴 "색", 줄 안 글자 색·형광펜 리소스(테마 따라 바꿈)
 │   ├── BlockEditor.Find.cs         — 찾기·바꾸기 막대(Ctrl+F/H, F3), 제목 앵커 이동, 다시 읽은 뒤 스크롤 앵커 복원, 링크 Ctrl+클릭(#75)
 │   ├── BlockEditor.ViewSwitch.cs   — 블록 편집 ↔ 미리보기 전환 때 화면 맨 위 블록 → 제목·줄 번호 잡기, 받은 위치로 스크롤(#81)
 │   ├── BlockEditor.FrontMatter.cs  — front matter 속성 표(키 | 값) 표시·칸 편집·속성 추가/삭제·원문 편집 전환(#81)
+│   ├── BlockEditor.Inline.cs       — 줄 안 서식(#76): 서식 입력란 하나 옮겨 붙이기, Ctrl+B/I/E/Shift+S/U·링크 팝업(Ctrl+K)·서식 도구막대(밑줄·글자 색·배경색 포함)·입력 중 서식 단축·HTML/RTF 붙여넣기, 줄 안 범위의 나누기·합치기·복사·붙여넣기
+│   ├── BlockInlineRenderer.cs      — 줄 안 서식 조각 ↔ WPF Inline(표시용 TextBlock·편집용 RichTextBox), 표시 글자 위치 → 편집 커서
+│   ├── BlockTextInput.cs           — 블록 입력란 공통 모양 IBlockInput, 원문 입력란 BlockTextBox, 서식 입력란 RichBlockBox(보이는 글자 기준 위치·줄 API)
 │   ├── ElementTree.cs              — 입력 이벤트 `OriginalSource`에서 조상 찾기(`Run` 등 ContentElement는 논리 부모로 건너감 — `VisualTreeHelper.GetParent` 예외 방지)
 │   ├── ViewerHost.xaml/.cs         — 파일 뷰어 컨테이너 (IFileViewer 래퍼)
 │   └── ViewerHost.ViewSwitch.cs    — `.md` 탭 툴바 `블록 편집`/`미리보기` 전환(저장 확인·위치 유지·파일별 기억, #81)
@@ -95,6 +98,9 @@ Folderss/
 │   ├── BlockFind.cs                — 블록 편집기 찾기·바꾸기 매칭, 제목 슬러그·앵커, 다시 읽은 뒤 스크롤 앵커 대응, 링크 해석(#75, 순수 로직)
 │   ├── MarkdownViewSwitch.cs       — `.md` 블록 편집 ↔ 미리보기: 열 뷰어 고르기, 블록 ↔ 제목·줄 번호 대응, 파일별 마지막 보기·기본 보기(`markdown-view.json`, #81)
 │   ├── FrontMatter.cs              — 블록 편집기 front matter 속성 표 해석·속성 줄 단위 편집(YAML 라이브러리 없음, #81, 순수 로직)
+│   ├── InlineMarkdown.cs           — 줄 안 Markdown ↔ 조각 목록(굵게·기울임·취소선·코드·링크, 원문·수식 보존), 보이는 글자 기준 편집 연산·입력 단축(#76, 순수 로직)
+│   ├── ClipboardMarkdown.cs        — 붙여넣기 HTML → Markdown(줄 안 서식·문단·제목·목록) + 줄마다 밑줄·글자 색·형광펜 범위(#76, 순수 로직)
+│   ├── TextMarks.cs                — 줄 안 밑줄·글자 색·형광펜 범위(사이드카 `marks`): 값 형식·보이는 글자 해시 검증, 본문 변경에 따른 범위 이동·나누기·합치기, 조각 ↔ 범위(#76 9번, 순수 로직)
 │   ├── OpenWithService.cs          — 확장자 마스크 기반 외부 열기 프로그램 저장·실행
 │   ├── ConsoleSettingsService.cs   — 콘솔 기본 프로필/사용자 정의 프로필 설정 저장
 │   ├── ConsoleSessionService.cs    — 기본 셸 탐색, 프로필 해석, 외부 터미널 실행 관리
@@ -633,8 +639,9 @@ Folderss/
 - Markdown 변환 `BlockMarkdown`: 목록 자식은 부모 항목의 내용 시작 열만큼 들여써 읽고 쓴다. 토글 `<details [open]><summary>`, 콜아웃 `> [!TYPE]`,
   GFM 표(구분 행에 `|`가 있고 셀 수가 머리글과 같을 때만), 이미지만 있는 줄 → `Image`. 문서 맨 앞 front matter는 `FrontMatter`(원문 그대로 보관·저장), HTML·구분 행 없는 표는 `Raw`로 원문 보존.
   저장하면 형식이 정규화되므로 `BlockMarkdownTests.NormalizedDocument_RoundTripsUnchanged`가 정규형 문서의 왕복 불변을 지킨다.
-- 가상화 `BlockPanel`(ScrollViewer의 IScrollInfo, `CanContentScroll=true`): 보이는 블록 + 위·아래 반 화면만 `BlockRow`를 만들고, 나머지는 종류·글자 수로 높이를 추정하며
-  측정한 높이는 (내용·폭이 같으면) 기억한다. 블록 위치는 높이 누적(`_tops`, 구조·높이가 바뀔 때만 O(n) 재계산). 스크롤 위치는 "블록 Id + 그 안 오프셋"(앵커)이라
+- 가상화 `BlockPanel`(ScrollViewer의 IScrollInfo, `CanContentScroll=true`): 보이는 블록 + 위·아래 여유(`RealizeBuffer` 화면의 0.25 — 한 화면 넘게 점프한 직후에는 `JumpRealizeBuffer` 0.1,
+  다음 스크롤에 보통 여유로)만 `BlockRow`를 만들고, 나머지는 종류·글자 수로 높이를 추정하며(서식 블록·표 셀은 표식·링크 주소를 뺀 대강의 보이는 글자로) 측정한 높이는 (내용·폭이 같으면) 기억한다.
+  풀에서 꺼내 다시 묶은 행은 안쪽의 측정 무효 요소부터 행 뿌리까지 무효로 표시한다(`InvalidateDirtyChains` — 안 하면 패널이 이전 블록 높이를 읽고 레이아웃 뒤 크기 변경 알림마다 패널 측정이 다시 돌았다). 블록 위치는 높이 누적(`_tops`, 구조·높이가 바뀔 때만 O(n) 재계산). 스크롤 위치는 "블록 Id + 그 안 오프셋"(앵커)이라
   추정 높이가 실제로 바뀌어도 보던 내용이 흔들리지 않는다. 포커스·`/` 메뉴·끌기 중인 행은 화면 밖이어도 유지. `MakeVisible`로 캐럿 따라 스크롤.
 - 여러 열(#77 Phase 2): 블록 속성 `column` = `묶음id/열번호`, 묶음 첫 블록의 `colratio`(예: `2:1`)가 너비 비율. Markdown에는 1열 → 2열 순서대로 쓰므로 다른 편집기에서는 세로로 이어진다.
   `BlockOperations.ColumnLayout`이 구조 갱신 때마다 정리한다(같은 묶음 사이에 낀 블록은 앞 블록의 열, 떨어져 다시 나온 같은 id는 뺌, 열 번호는 줄지 않게 0부터 다시 매김, 한 열뿐이면 풂).
@@ -647,6 +654,48 @@ Folderss/
   TextBox를 만든 행(`HasEditors`)은 재사용 풀에 넣지 않는다. 종류가 바뀌어도 TextBox는 그대로 두고 모양만 바꾼다(입력 중 포커스·IME 조합 유지).
   표 행은 [셀 | 오른쪽 끝 열 추가 `+`] / [마지막 행에만 아래 행 추가 `+`] 영역이고, 버튼 자리는 늘 잡아 두고 행에 마우스를 올렸을 때만 보인다(레이아웃이 흔들리지 않게).
   마지막 행 여부(`_tableLast`)는 높이 기억의 조건에도 들어간다(`TableShapeAt`).
+- 줄 안 서식 WYSIWYG(#76, `BlockEditor.Inline.cs`·`BlockInlineRenderer`·`BlockTextInput`, 순수 로직 `Services/InlineMarkdown`·`ClipboardMarkdown` — `InlineMarkdownTests`):
+  - 모델은 그대로 `EditorBlock.Text` = 줄 안 Markdown 원문. `InlineMarkdown`이 이를 조각(`InlineRun`: 글자·서식 플래그·링크·원문/수식 종류·표식 모양) 평면 목록으로 읽고 쓴다.
+    CommonMark 강조 규칙(왼쪽·오른쪽 붙음, 3의 배수, 밑줄 단어 안 금지)·GFM 취소선·코드 울타리·`[글](주소 "제목")`·자동 링크를 따르고, 이미지·HTML 태그·엔터티는 원문 조각, `$...$`(Pandoc 규칙)는 수식 조각.
+    직렬화는 서식 경계 공백을 표식 밖으로 빼고, 이스케이프는 "없이 → 강조 표식 말고 → 전부" 순으로 다시 읽어 같은 서식이 되는 첫 결과(필요한 만큼만). 표식 모양(`**`/`__`)·코드 울타리·링크 바깥 서식은 기억해 정규형은 `Serialize(Parse(s)) == s`.
+    서식이 겹쳐 CommonMark로 나타낼 수 없는 드문 경우(단어 안에서 굵게 끝과 기울임 시작이 엇갈림)는 글자는 보존하되 서식이 일부 글자 표식으로 남을 수 있다.
+  - 표시: 서식 블록(`EditorBlock.HasInlineFormatting` — 원문 블록·캡션·카드 제목·구분선·목차 제외)의 표시용 TextBlock과 표 셀을 조각마다 Run(링크는 `Span` + `LinkTag` — Hyperlink는 누르기를 먹어 편집 진입을 막음, 수식은 `BlockMathRenderer` Span)으로 그린다.
+    표식 글자가 없을 법하면(`IsPlain`) 예전처럼 Text 하나. 파서 결과는 글자별 캐시(4,096개), 같은 글자·크기면 다시 그리지 않음(TextBlock.Tag의 `DisplayKey`), 행을 다시 묶을 때 조각 모양(수·서식·링크 여부·범위)이 같으면 Inline을 새로 만들지 않고 글자·링크 주소만 바꾼다(`TryUpdateInPlace`). 색은 모두 리소스 참조(테마 따라감).
+  - 편집: 서식 블록은 편집기에 **하나뿐인** `RichBlockBox`(RichTextBox — TSF에 등록되므로 반드시 하나)를 커서가 들어가는 행으로 옮겨 붙인다(`AttachRich`/`ReleaseRich`, 행 쪽 `BlockRow.AttachRich`/`DetachRich`).
+    내용(`SetMarkdown`)은 떼어 낸 상태에서 넣고 붙인다. 마우스를 올려도 만들지 않고, 표시 글자를 누르면 붙인 뒤 누른 자리(`DisplayOffsetAt`)에 커서를 두고 같은 누르기(`Mouse.MouseDown`)를 입력란에 넘겨 끌어 선택이 이어진다.
+    문서 모양은 언제나 문단 하나 + 조각마다 Run(Tag = 조각 원형), 링크는 Hyperlink(Tag = `LinkInfo`). 서식은 WPF 서식 명령 대신 조각 목록을 고쳐 다시 그리고(`SetRuns`), 읽기(`ReadRuns`)는 Run·상위 요소의 지역 값으로 정한다.
+    RichTextBox 기본 서식 명령(Ctrl+B/I/U·정렬·글자 크기·목록·문단 나누기)은 CommandBinding으로 끔. 원문 입력란(코드·원문·수식·캡션·카드 제목·표 셀·메타)은 `BlockTextBox`(TextBox).
+  - 위치는 모두 "보이는 글자" 기준(`IBlockInput` — TextBox와 같은 이름의 `CaretIndex`·`Select`·`GetRectFromCharacterIndex`·줄 API를 `RichBlockBox`가 TextPointer로 구현). 그래서 커서·실행 취소 기록·`FocusRow`는 그대로이고,
+    본문을 다루는 곳만 Markdown 규칙을 탄다: 나누기·붙여넣기(`ReadSplit` — 선택을 지운 앞·뒤 Markdown), 합치기(`JoinText` = `InlineMarkdown.Concat`, 커서 = `PlainLength`), `/` 명령 글자 지우기(`TextWithout`), 날짜 넣기(`InsertPlain`),
+    찾기·바꾸기(서식 블록은 보이는 글자에서 찾고 결과 위치도 보이는 글자 — `BlockFind.SearchesVisibleText`·`SearchText`(본문 문자열별 캐시), 바꾸기는 `BlockFind.ReplaceVisible`:
+    새 글자는 바뀌는 첫 글자의 서식·링크·범위를 따르고 글자 그대로(필요하면 이스케이프) — `InlineMarkdown.ReplaceText`. 표 행·코드·원문은 본문 그대로). 행의 입력란을 확인만 할 때는 `IsEditorFocused`·`CurrentCaret`(서식 입력란을 가져오지 않음).
+  - 서식 적용(`ToggleInlineFormat`)·링크 팝업(`ShowLinkEditor`)·입력 단축 변환(`TryInlineInputRule`)·붙여넣기는 `ApplyRuns`로 다시 그리고 앞뒤로 입력 묶음을 끊어 실행 취소 한 단계.
+  - 다음 입력 서식(대기 서식, 순수 로직 `Services/PendingInlineFormat` — `PendingInlineFormatTests`): 선택 없이 `Ctrl+B/I/E/Shift+S/U`·색, 입력 단축 변환·링크 넣기 직후(닫힌 서식·링크 끄기),
+    선택한 글자를 덮어 입력(바뀐 첫 글자 모양)이면 편집기가 "켤·끌 서식과 자리"(`_pending`)를 들고 있다가 그 자리에 글자가 들어오면 들어온 범위에 적용해 다시 그린다(`TryApplyPending`, 입력과 같은 실행 취소 단계).
+    WPF 선택 서식(springload)은 코드로 넣은 문서에서 무시되어 쓰지 않는다. 입력기 조합 중에는 문서를 바꾸지 않고 확정(`RichBlockBox.InputCompleted`) 뒤 조합한 글자 전체에 적용.
+    커서 이동·클릭·선택·블록 전환·포커스 잃음·내용 다시 그리기(`ContentVersion`)에 지운다. 대기 서식에 정한 속성만 새 글자에 강제하고(같은 속성이면 범위 경계 규칙보다 우선), 나머지는 경계 규칙 그대로.
+    커서는 조각 경계에서 앞 조각 쪽에 붙인다(`PlaceCaret` — `CaretPosition`을 설정하면 WPF가 뒤 조각으로 옮겨 서식·범위 시작에서 친 글자가 뒤 조각을 따랐다).
+    입력 단축은 닫는 표식(`* _ ~ \` $ )`)을 친 순간만 조각을 훑고, 입력기 조합 중(`IsComposing` — `PreviewTextInputStart`~`PreviewTextInput`)에는 하지 않는다. 변환은 이벤트가 끝난 뒤(`Dispatcher` Send) 적용.
+  - 도구막대는 선택이 생기고 마우스를 뗀 뒤 선택 위 Popup(버튼은 포커스를 가져가지 않음), 스크롤·선택 해제·포커스 잃음에 닫힌다. 붙여넣기는 편집기 형식(`Folderss.InlineMarkdown`) → HTML(`ClipboardMarkdown`) → RTF(WPF로 읽어 서식 조각) → 글자(Markdown으로 읽음) 순.
+    여러 줄이면 블록으로(`PasteBlocks`). 복사·잘라내기는 선택 글자의 줄 안 Markdown을 글자·편집기 형식으로 넣는다.
+  - 측정(1만 1천 줄, Debug, 화면 밖 하네스): 서식 입력란 진입 약 10ms(TextBox 새로 만들기 약 60ms), 글자 입력 중앙 약 16ms, 표 행 추가 약 62ms, 큰 폭 스크롤 약 62ms.
+    모든 표 셀에 서식이 든 문서의 큰 폭 스크롤은 147~153ms였다가 행 다시 묶기 무효화·추정 보정·여유 조정 뒤 같은 부하에서 80~91ms. 근거는 `docs/items/block-editor-stage2-inline-format.md`.
+  - 밑줄·글자 색·형광펜(#76 9번, 순수 로직 `Services/TextMarks` — `TextMarksTests`·`BlockSidecarTests`, 근거 `docs/items/block-editor-stage2-text-marks.md`): Markdown으로 나타낼 수 없어
+    블록 속성 `marks` 하나에 범위를 담아 사이드카에 둔다(Markdown에는 아무 표식도 없음). 값 `해시|범위;…` — `u:시작-끝`(밑줄), `c=색:시작-끝`(글자 색), `h=색:시작-끝`(배경색),
+    위치는 편집기 **보이는 글자**(`InlineMarkdown.ToPlain` — 표식 뺀 글자, 줄 안 수식은 원문 `$…$`, UTF-16) 기준, 해시는 그 보이는 글자의 SHA-256 앞 8자. 색 이름은 블록 색과 같은 9가지.
+    해시가 본문과 다르면 범위를 통째로 버린다(사이드카를 다시 붙일 때 `BlockSidecar.Apply`가 버리고 "붙이지 못한 속성"으로 세어 상태 줄에 알림, 표시·입력란은 칠하지 않음).
+    - 본문이 바뀌는 모든 경로는 `EditorBlock.Text` 설정자가 이전·새 보이는 글자를 비교해 범위를 옮긴다(`TextMarks.Adjust` — 앞뒤 같은 글자를 뺀 한 구간: 앞은 그대로, 뒤는 밀고, 지운 글자 범위는 줄임.
+      새 글자는 같은 길이 바꾸기면 글자마다 그대로, 바꾼 글자가 있으면 그 첫 글자, 끼워 넣기면 바로 앞 글자(끝에서 입력하면 이어짐), 줄 처음이면 바로 뒤 글자의 범위). 그래서 찾아 바꾸기·`/` 명령·날짜 넣기·블록 전환은 따로 고치지 않았다
+      (`BlockFind.ReplaceAll`만 범위가 있는 블록을 뒤에서부터 하나씩 바꿈). `Kind`가 대상이 아닌 종류(코드·원문·수식·표 행 등)로 바뀌면 지운다.
+    - 글자가 블록 사이로 옮겨 가는 경로는 편집기가 따로 정한다: 나누기(앞 블록은 위 규칙으로 잘리고 뒤 블록은 `TailMarks`), 합치기·여러 줄 붙여넣기(`JoinBlock` — 뒤 글자는 앞 글자 범위를 따르지 않고 제 범위).
+      블록 복제·이동·실행 취소는 속성이 `Clone`·`SameContent`에 들어 있어 그대로 따라간다.
+    - 조각(`InlineRun`)에 `Underline`·`TextColor`·`Highlight`가 있고 `Serialize`·`Equivalent`는 무시한다(범위 경계에서 나뉜 코드·원문 조각도 다시 이어 씀). 서식 입력란은 범위를 조각에 실어 그리고(`SetMarkdown(md, marks)`),
+      입력할 때마다 본문과 함께 조각에서 범위를 읽어 넣는다(`SetBlockFromRich` → `TextMarks.SetText` — 자동 이동 없이 입력란 그대로). 밑줄은 글자 장식(링크 Hyperlink의 밑줄 제외), 색은 Run.Tag 원형(새로 생긴 Run은 물려받은 지역 색 값을 팔레트와 맞춰 읽음).
+    - 표시·입력란 모두 색은 편집기 리소스(`BlockMarkText.<색>`·`BlockMarkBack.<색>`, `UpdateTextMarkBrushes`)를 DynamicResource로 참조 — 테마를 바꾸면 리소스만 바꿔 다시 그리지 않는다. 범위가 없는 블록은 비용이 그대로(속성 조회 하나).
+      입력란을 행에 붙일 때 이 리소스가 연결되며 오는 속성 변경 TextChanged는 글자·범위가 그대로면 기록하지 않는다(`OnEditorTextChanged`).
+    - UI: 도구막대 `U`(밑줄, `Ctrl+U`)·`A▾`(색 고르기 — 글자 색 줄·배경색 줄 각 기본 + 9가지, "글자 색·배경색 지우기"). 블록 메뉴 > 색(블록 전체)과 따로. 표 셀은 대상 외(셀 편집은 원문 TextBox이고 셀 단위 범위·셀 이동 규칙까지 늘어남).
+    - 클립보드: 편집기 형식 `Folderss.TextMarks`(첫 줄 Markdown 글자 해시 + 블록마다 `marks` 값) — 서식 입력란 복사·블록 복사(`CopyBlocks`)가 넣고 붙여넣기가 읽는다. 바깥에는 Markdown 글자만.
+      HTML 붙여넣기는 `u`·`ins`·`text-decoration: underline`·`color`·`<font color>`·`mark`·`background-color`를 가장 가까운 9가지 색 범위로(검정·흰색·투명은 버림).
 - 표 조작(#75 "표", `BlockEditor.TableOps.cs` + 순수 로직 `Services/BlockTable`): 셀 오른쪽 클릭 메뉴(위·아래 행 삽입, 왼쪽·오른쪽 열 삽입, 행·열 삭제, 열 정렬, 머리글 행 켜기·끄기),
   열 경계 끌기로 너비 조절(두 번 클릭은 자동), 셀 위쪽 손잡이로 열·첫 셀 왼쪽 손잡이로 행 끌어 옮기기. **표 전체 속성은 표의 첫 행 블록에 둔다**:
   정렬 `TableAlign`(Markdown 구분 행), 열 너비 `colwidths`(px 쉼표 목록, 빈 값은 자동)·머리글 끄기 `noheader`(`true`, Markdown은 그대로 첫 행이 머리글)는 사이드카.
@@ -672,7 +721,8 @@ Folderss/
 - 측정(약 1만 1천 줄, 블록 9,862개, 표 행 8,301개, 이미지 60개, Debug): 열기 0.13~0.17초, 글자 입력 약 15ms, 표 Enter 행 추가 50~65ms(편집기 키 처리 5~6ms, 나머지는
   새 TextBox 포커스 후 WPF 그리기·입력기 처리), 실행 취소 약 25ms, 한 화면씩 이동 약 30ms, 큰 폭 점프 30~70ms, 구조 재계산·기록 비교·위치 계산 각 1~2ms.
   그 밖에 처음 겪은 성능 문제: 세로 스크롤바 `Auto`의 이중 측정(→ `Visible`), UI Automation 전체 트리 갱신(→ `OnCreateAutomationPeer`로 화면에 보이는 블록만).
-- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`, 표 첫 행의 `colwidths`·`noheader`)은 `EditorBlock.Attributes`에 두고
+- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`, 표 첫 행의 `colwidths`·`noheader`,
+  줄 안 밑줄·글자 색·형광펜 `marks`(#76 9번 — 값 `해시|u:0-4;c=red:5-7;h=yellow:6-11`, 보이는 글자 기준, 해시가 다르면 버림))은 `EditorBlock.Attributes`에 두고
   문서 옆 `문서.md.meta.json`(`BlockSidecar`)에 저장한다 — Markdown 파일은 순수하게 남는다. 속성은 "Markdown에 쓰인 블록 순번 + (종류·본문) 해시 + 앞 블록 해시"로
   붙인다: 문서 전체 해시가 같으면 순번으로, 다른 도구에서 고쳤으면 같은 내용의 블록을 순서대로 찾아(같은 내용이 여럿이면 앞 블록까지 맞는 쪽) 붙이고,
   본문이 바뀐 블록의 속성은 버리고 개수를 상태 줄에 알린다. 속성이 없으면 사이드카를 지우고, 읽지 못한 사이드카는 덮어쓰기 전에 `.bak`로 보관한다.
@@ -697,6 +747,7 @@ Folderss/
   바꾸기는 블록 모델을 고친 뒤 `SyncRows` + `RecordChange()` 한 번 — 모두 바꾸기도 바뀐 첫·끝 블록 구간만 한 단계로 기록된다. 표 행 바꿀 글자의 탭·줄바꿈은 공백으로.
   키는 `OnPreviewKeyDown` 맨 앞 `HandleFindKey`(Ctrl+F/H, F3, 찾기 막대 안 Enter·Esc). 찾기 막대는 `InitializeFind`가 스크롤 영역 위에 겹친 Grid로 감싸 넣는다. 전역 `ShowSearch`(Ctrl+F)는 `BlockEditorViewer.HandleShortcut`이 가로챈다.
 - 링크 Ctrl+클릭: `PreviewMouseLeftButtonDown`에서 `ElementTree.FindAncestor<TextBox>`로 행 입력란을 찾아 글자 위치의 링크(`BlockFind.LinkAt`: `[글자](주소)`·`<url>`·맨 URL)를 `LinkOpenRequested`로 알린다.
+  서식 입력란은 `RichLinkAt`(링크 조각 → 맨 URL), 표시 글자는 `BlockInlineRenderer.DisplayLinkAt`(링크 Span의 `LinkTag`)로 찾는다(#76).
   뷰어(`BlockEditorViewer.OpenLink`)가 Markdown 뷰어와 같은 규칙으로 연다: `#제목`은 `ScrollToHeading`(GitHub 앵커 규칙 `BlockFind.Slugify`, 중복 `-1`), 로컬 `.md#제목`은 `MarkdownViewer.PendingAnchors`(두 뷰어가 공유)에 넣고 `FileOpenRequested`,
   실행 파일은 확인 뒤 실행, 그 밖의 로컬 파일은 뷰어 탭, 폴더는 탐색기, http/https/mailto는 셸. 열린·활성화된 블록 편집기는 `PendingAnchors`를 꺼내 그 제목으로 간다.
 - 외부 변경(`BlockEditorViewer.External.cs`): `FileSystemWatcher` 하나로 문서와 사이드카 두 파일을 감시(`Filters`), 400ms 디바운스, 비활성 탭은 `SetActive(true)` 때. 디스크 Markdown·사이드카가

@@ -46,6 +46,42 @@ namespace Folderss.Controls
             return brush;
         }
 
+        // ── 줄 안 글자 색·형광펜(#76 9번) ────────────────────────────────────
+        //
+        // 블록 색과 같은 팔레트. 글자 조각(Run)은 편집기 리소스(키: BlockInlineRenderer.TextMarkResourceKey)를 DynamicResource로 참조하고,
+        // 테마가 바뀌면 이 리소스만 바꿔 화면의 모든 조각이 다시 그리지 않고 따라간다.
+
+        private bool? _textMarkBrushesDark;
+
+        /// <summary>글자 색·배경색 리소스를 지금 테마 밝기로 채운다(바뀌었을 때만).</summary>
+        private void UpdateTextMarkBrushes()
+        {
+            var dark = IsDarkTheme();
+            if (_textMarkBrushesDark == dark)
+                return;
+            _textMarkBrushesDark = dark;
+            foreach (var name in BlockColorNames)
+            {
+                Resources[BlockInlineRenderer.TextMarkResourceKey(name, false)] = BlockColorBrush(name, false);
+                Resources[BlockInlineRenderer.TextMarkResourceKey(name, true)] = BlockColorBrush(name, true);
+            }
+        }
+
+        /// <summary>
+        /// 색 값의 이름(입력란에서 새로 생긴 Run이 앞 조각의 색을 지역 값으로 물려받았을 때 읽기용). 두 테마의 팔레트 모두에서 찾는다. 없으면 null.
+        /// </summary>
+        internal static string TextMarkNameOf(Color color, bool background)
+        {
+            var light = background ? BackgroundOnLight : TextOnLight;
+            var dark = background ? BackgroundOnDark : TextOnDark;
+            for (var i = 0; i < BlockColorNames.Length; i++)
+            {
+                if ((Color)ColorConverter.ConvertFromString(light[i]) == color || (Color)ColorConverter.ConvertFromString(dark[i]) == color)
+                    return BlockColorNames[i];
+            }
+            return null;
+        }
+
         /// <summary>[first, last] 블록의 속성 하나를 바꾼다(값이 비면 지움). 실행 취소 한 단계.</summary>
         private void SetBlockAttribute(int first, int last, string key, string value)
         {
@@ -57,10 +93,10 @@ namespace Folderss.Controls
             RecordChange();
         }
 
-        /// <summary>블록 메뉴의 "색": 기본(색 없음), 글자색 9가지, 배경색 9가지.</summary>
+        /// <summary>블록 메뉴의 "색"(블록 전체): 기본(색 없음), 글자색 9가지, 배경색 9가지. 선택한 글자만 칠하는 줄 안 색은 서식 도구막대(BlockEditor.Inline.cs).</summary>
         private MenuItem CreateColorMenu(Func<int> first, Func<int> last, Func<bool> valid)
         {
-            var menu = new MenuItem { Header = "색" };
+            var menu = new MenuItem { Header = "색", ToolTip = "블록 전체의 글자색·배경색 (선택한 글자만 칠하려면 글자를 선택해 서식 도구막대의 A)" };
             menu.Items.Add(CreateMenuItem("기본 (색 없음)", string.Empty, () =>
             {
                 if (!valid())
