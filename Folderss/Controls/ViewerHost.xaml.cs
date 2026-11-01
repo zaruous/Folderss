@@ -13,6 +13,8 @@ namespace Folderss.Controls
     {
         private readonly ViewerConfigService _viewerConfig;
         private IFileViewer _currentViewer;
+        private string _currentViewerKey;
+        private bool _switchingView;
         private string _currentFilePath;
         private bool _isActive = true;
         private bool _isModified;
@@ -56,13 +58,23 @@ namespace Folderss.Controls
         {
             DetachCurrentViewer();
 
+            // .md·.markdown은 파일별로 기억한 보기 → 설정의 처음 열 때 기본 보기 → 확장자 매핑 순서로 고른다(#81).
             var ext = Path.GetExtension(filePath);
-            var viewer = _viewerConfig.Resolve(ext);
+            var settings = MarkdownViewSettings.Shared;
+            var viewerKey = MarkdownViewSwitch.ChooseViewerKey(ext, _viewerConfig.GetMappingKey(ext),
+                settings.GetRemembered(filePath), settings.DefaultView);
+            var viewer = ViewerConfigService.CreateViewer(viewerKey);
             if (viewer == null)
                 return;
 
+            AttachViewer(filePath, viewer, viewerKey);
+        }
+
+        private void AttachViewer(string filePath, IFileViewer viewer, string viewerKey)
+        {
             _currentFilePath = filePath;
             _currentViewer = viewer;
+            _currentViewerKey = viewerKey;
             viewer.TitleChanged += Viewer_TitleChanged;
             viewer.ModifiedChanged += Viewer_ModifiedChanged;
             var fileOpenRequester = viewer as IFileOpenRequester;
@@ -75,6 +87,7 @@ namespace Folderss.Controls
                 activationAware.SetActive(_isActive);
             HostContent.Content = viewer.View;
             FilePathText.Text = filePath;
+            UpdateViewSwitchButtons();
         }
 
         public void SetActive(bool isActive)
@@ -125,6 +138,7 @@ namespace Folderss.Controls
                 disposable.Dispose();
             HostContent.Content = null;
             _currentViewer = null;
+            _currentViewerKey = null;
             _isModified = false;
         }
 

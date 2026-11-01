@@ -165,6 +165,13 @@ namespace Folderss
             ViewerMappingList.ItemsSource = _workingMappings;
             OpenWithList.ItemsSource = _workingOpenWith;
             NewViewerCombo.SelectedValue = ViewerConfigService.SystemDefaultKey;
+            MarkdownDefaultViewCombo.ItemsSource = new[]
+            {
+                new ViewerOption { Key = MarkdownViewSwitch.DefaultFollowMapping, DisplayName = "확장자 매핑을 따름" },
+                new ViewerOption { Key = MarkdownViewSwitch.ViewBlocks, DisplayName = "블록 편집" },
+                new ViewerOption { Key = MarkdownViewSwitch.ViewPreview, DisplayName = "미리보기 (Markdown 뷰어)" },
+            };
+            MarkdownDefaultViewCombo.SelectedValue = MarkdownViewSettings.Shared.DefaultView;
             ConsoleProfileList.ItemsSource = _workingConsoleProfiles;
             ConsoleDefaultProfileCombo.ItemsSource = _consoleProfileOptions;
             ConsoleFontSizeBox.Text = _workingConsoleSettings.FontSize.ToString();
@@ -745,6 +752,8 @@ namespace Folderss
             TrySave(failures, "단축키", "keybindings.xml", () => _service.Save(_workingBindings));
             TrySave(failures, "뷰어 매핑", "viewer-config.json", () => _viewerConfig.ReplaceMappings(
                 _workingMappings.Select(item => new KeyValuePair<string, string>(item.Extension, item.ViewerKey))));
+            TrySave(failures, ".md 기본 보기", "markdown-view.json", () => MarkdownViewSettings.Shared.SaveDefaultView(
+                MarkdownDefaultViewCombo.SelectedValue as string ?? MarkdownViewSwitch.DefaultFollowMapping));
             TrySave(failures, "열기 프로그램", "open-with.xml", () => OpenWithService.Save(_workingOpenWith));
             TrySave(failures, "콘솔", "console-settings.xml", () => ConsoleSettingsService.Save(_workingConsoleSettings));
             TrySave(failures, "테마", "theme.txt", ThemeManager.SaveCurrentTheme);

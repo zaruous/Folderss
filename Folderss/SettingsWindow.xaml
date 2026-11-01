@@ -188,6 +188,7 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                         <RowDefinition Height="Auto"/>
+                        <RowDefinition Height="Auto"/>
                     </Grid.RowDefinitions>
 
                     <TextBlock Grid.Row="0"
@@ -258,6 +259,24 @@
                                   SelectedValuePath="Key"
                                   DisplayMemberPath="DisplayName"/>
                         <Button Content="추가" Click="AddViewer_Click" Padding="12,4"/>
+                    </StackPanel>
+
+                    <!-- .md 탭 처음 열 때 기본 보기(#81). 탭의 블록 편집/미리보기 버튼으로 바꾸면 파일별로 기억한다(markdown-view.json). -->
+                    <StackPanel Grid.Row="4" Margin="0,14,0,0">
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text=".md 탭을 처음 열 때"
+                                       VerticalAlignment="Center"
+                                       Margin="0,0,8,0"/>
+                            <ComboBox x:Name="MarkdownDefaultViewCombo"
+                                      Width="220"
+                                      SelectedValuePath="Key"
+                                      DisplayMemberPath="DisplayName"/>
+                        </StackPanel>
+                        <TextBlock Text="블록 편집·미리보기 중 무엇으로 열지 정합니다(.md·.markdown이 Markdown 또는 Block Editor로 매핑된 경우). 탭 위 전환 버튼으로 바꾸면 그 파일은 마지막 보기로 열립니다."
+                                   FontSize="11"
+                                   TextWrapping="Wrap"
+                                   Margin="0,4,0,0"
+                                   Foreground="{DynamicResource SecondaryText}"/>
                     </StackPanel>
                 </Grid>
 
