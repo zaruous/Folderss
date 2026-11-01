@@ -411,14 +411,8 @@ namespace Folderss.Controls
             if (!editor.IsVisible)
                 UpdateLayout();
 
+            // 서식 블록(서식 입력란)은 찾기 자체가 보이는 글자 기준(BlockFind.SearchesVisibleText)이라 위치를 그대로 쓴다.
             SetHighlightEditor(editor);
-            if (editor is RichBlockBox)
-            {
-                // 서식 블록: 찾기는 본문(Markdown)에서 하므로 표식을 뺀 글자 위치로 바꾼다
-                var end = SourceToEditor(row, match.Start + match.Length);
-                start = SourceToEditor(row, match.Start);
-                match = new BlockMatch(match.Block, start, Math.Max(0, end - start));
-            }
             var length = Math.Min(match.Length, Math.Max(0, editor.Text.Length - start));
             if (focusEditor || !IsFindOpen)
                 editor.Focus();
@@ -458,7 +452,7 @@ namespace Folderss.Controls
         private static int ToBlockOffset(BlockRow row, IBlockInput editor, int offset)
         {
             if (row.Block.Kind != BlockKind.TableRow)
-                return editor is RichBlockBox ? EditorToSource(row, offset) : offset;
+                return offset;   // 서식 입력란은 보이는 글자, 원문 입력란은 본문 — 찾기 결과 위치와 같은 기준
             return BlockFind.TextOffset(row.Block.Text, row.ActiveColumn, offset);
         }
 

@@ -145,10 +145,10 @@ Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)
 
 | 키 | 동작 | 처리 위치 |
 |----|------|------|
-| `Ctrl+B` / `Ctrl+I` / `Ctrl+E` / `Ctrl+Shift+S` | 굵게 / 기울임 / 코드 / 취소선 적용·해제(선택이 모두 그 서식이면 해제, 선택이 없으면 다음 입력 글자 서식). 실행 취소 한 단계 | `HandleEditorKey` → `FormatKey` → `BlockEditor.Inline.cs` `ToggleInlineFormat` (표 셀은 `WrapSelection`) |
+| `Ctrl+B` / `Ctrl+I` / `Ctrl+E` / `Ctrl+Shift+S` | 굵게 / 기울임 / 코드 / 취소선 적용·해제(선택이 모두 그 서식이면 해제). 선택이 없으면 다음 입력 글자 서식(대기 서식 — 여러 키를 겹쳐 누를 수 있고, 커서 이동·클릭·블록 전환하면 취소, 한글 조합은 확정 뒤 적용). 실행 취소 한 단계 | `HandleEditorKey` → `FormatKey` → `BlockEditor.Inline.cs` `ToggleInlineFormat` (표 셀은 `WrapSelection`) |
 | `Ctrl+U` | 밑줄 적용·해제(선택이 모두 밑줄이면 해제, 선택이 없으면 다음 입력 글자). Markdown에는 쓰지 않고 사이드카 `marks`에 저장. 실행 취소 한 단계. 표 셀·코드 블록에서는 아무것도 하지 않음 | `HandleEditorKey` → `BlockEditor.Inline.cs` `ToggleUnderline` |
 | `Ctrl+K` | 링크 주소 팝업(선택 글자를 링크로, 커서가 링크 안이면 그 링크 고치기·열기·제거, 선택이 없으면 주소를 링크 글자로 넣기). 팝업 안 `Enter` 적용·`Esc` 취소 | `ShowLinkEditor` (표 셀은 `InsertLink`) |
-| `Ctrl+Z` (서식 단축 직후) | 입력 중 `**글**` 등으로 바뀐 서식을 입력한 표식 글자로 되돌림 | 변환을 따로 한 단계로 기록(`TryInlineInputRule` → `ApplyRuns`) |
+| `Ctrl+Z` (서식 단축 직후) | 입력 중 `**글**` 등으로 바뀐 서식을 입력한 표식 글자로 되돌림(변환 직후 이어 쓰는 글자는 서식 없음 — 대기 서식으로 끔) | 변환을 따로 한 단계로 기록(`TryInlineInputRule` → `ApplyRuns`) |
 | `Ctrl+클릭` | 서식 입력란·표시 글자의 링크 열기(링크 조각 또는 맨 URL) | `OnLinkPreviewMouseDown` → `RichLinkAt` / `BlockInlineRenderer.DisplayLinkAt` |
 
 글자 색·배경색(형광펜)은 단축키 없이 서식 도구막대 `A▾`에서 고른다(`SetTextMarkColor`·`ClearTextMarkColors`).

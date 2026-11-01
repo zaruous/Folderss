@@ -2,12 +2,15 @@ using Folderss.Models;
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.RegularExpressions;
 
 namespace Folderss.Services
 {
-    /// <summary>블록 편집기 문서 내 검색 결과 하나: 블록 위치와 그 블록 <see cref="EditorBlock.Text"/> 안의 글자 범위.</summary>
+    /// <summary>
+    /// 블록 편집기 문서 내 검색 결과 하나: 블록 위치와 그 블록 찾는 글자(<see cref="BlockFind.SearchText"/> — 서식 블록은 보이는 글자, 그 밖은 <see cref="EditorBlock.Text"/>) 안의 범위.
+    /// </summary>
     public struct BlockMatch
     {
         public int Block;
@@ -41,7 +44,29 @@ namespace Folderss.Services
         }
 
         /// <summary>
+        /// 이 종류는 "보이는 글자"(줄 안 Markdown 표식을 뺀 글자, <see cref="InlineMarkdown.ToPlain(string)"/>)에서 찾는지(#76). 서식 입력란(<c>RichBlockBox</c>)으로
+        /// 편집하는 블록 — 결과 위치(<see cref="BlockMatch.Start"/>)도 보이는 글자 기준이라 입력란 선택에 그대로 쓴다. 표 행(셀은 원문 입력란)·코드·원문 블록은 본문 그대로.
+        /// </summary>
+        public static bool SearchesVisibleText(BlockKind kind)
+        {
+            return EditorBlock.HasInlineFormatting(kind) && kind != BlockKind.TableRow;
+        }
+
+        // 블록 본문(같은 문자열 인스턴스) → 보이는 글자. 바뀐 블록은 새 문자열이라 저절로 다시 계산하고, 버린 문자열은 함께 거둬진다.
+        private static readonly ConditionalWeakTable<string, string> VisibleCache = new ConditionalWeakTable<string, string>();
+
+        /// <summary>찾는 글자: 서식 블록은 보이는 글자, 그 밖은 본문 그대로.</summary>
+        public static string SearchText(EditorBlock block)
+        {
+            var text = block?.Text ?? string.Empty;
+            if (!SearchesVisibleText(block?.Kind ?? BlockKind.Paragraph) || InlineMarkdown.IsPlain(text))
+                return text;
+            return VisibleCache.GetValue(text, t => InlineMarkdown.ToPlain(t));
+        }
+
+        /// <summary>
         /// 모든 블록에서 <paramref name="query"/>를 찾는다(겹치지 않게 앞에서부터). 표 행은 셀 경계(탭)를 넘는 일치를 뺀다.
+        /// 서식 블록은 보이는 글자에서 찾는다(<see cref="SearchesVisibleText"/> — 표식 글자 <c>**</c>는 찾지 않고, 표식에 끊긴 낱말도 찾음).
         /// </summary>
         public static List<BlockMatch> FindAll(IReadOnlyList<EditorBlock> blocks, string query, bool matchCase)
         {
@@ -54,7 +79,7 @@ namespace Folderss.Services
                 var block = blocks[i];
                 if (!IsSearchable(block.Kind))
                     continue;
-                foreach (var start in FindInText(block.Text, query, comparison, block.Kind == BlockKind.TableRow))
+                foreach (var start in FindInText(SearchText(block), query, comparison, block.Kind == BlockKind.TableRow))
                     result.Add(new BlockMatch(i, start, query.Length));
             }
             return result;
@@ -112,7 +137,7 @@ namespace Folderss.Services
         {
             if (blocks == null || string.IsNullOrEmpty(query) || match.Block < 0 || match.Block >= blocks.Count || match.Length != query.Length)
                 return false;
-            var text = blocks[match.Block].Text ?? string.Empty;
+            var text = SearchText(blocks[match.Block]);
             if (match.Start < 0 || match.Start + match.Length > text.Length)
                 return false;
             return string.Compare(text, match.Start, query, 0, query.Length, matchCase ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase) == 0;
@@ -134,8 +159,34 @@ namespace Folderss.Services
                 return -1;
             var block = blocks[match.Block];
             var value = SanitizeReplacement(block.Kind, replacement);
-            block.Text = block.Text.Remove(match.Start, match.Length).Insert(match.Start, value);
+            if (SearchesVisibleText(block.Kind))
+                ReplaceVisible(block, match.Start, match.Length, value);
+            else
+                block.Text = block.Text.Remove(match.Start, match.Length).Insert(match.Start, value);
             return match.Start + value.Length;
+        }
+
+        /// <summary>
+        /// 서식 블록의 보이는 글자 [start, start+length)를 <paramref name="value"/>(보이는 글자 그대로 — Markdown 표식으로 읽지 않고 필요하면 이스케이프)로 바꾼다.
+        /// 서식 경계에 걸친 치환: 새 글자는 <b>바뀌는 첫 글자</b>의 서식·링크·조각 종류를 따르고(<see cref="InlineMarkdown.ReplaceText"/>), 밑줄·색 범위도 첫 글자를 따른다
+        /// (<see cref="TextMarks.Edit"/>). 결과 밖 글자의 서식·범위는 그대로.
+        /// </summary>
+        public static void ReplaceVisible(EditorBlock block, int start, int length, string value)
+        {
+            var runs = InlineMarkdown.ParseForEditing(block.Text ?? string.Empty);
+            var plain = InlineMarkdown.ToPlain(runs);
+            start = Math.Max(0, Math.Min(start, plain.Length));
+            length = Math.Max(0, Math.Min(length, plain.Length - start));
+            var replaced = InlineMarkdown.ReplaceText(runs, start, start + length, value ?? string.Empty);
+            var text = InlineMarkdown.Serialize(replaced);
+            if (block.GetAttribute(TextMarks.Attribute) == null)
+            {
+                block.Text = text;
+                return;
+            }
+            // 범위는 바뀐 자리를 정확히 알므로 본문 비교(자동 옮기기) 대신 직접 옮긴다.
+            var marks = TextMarks.Get(block, plain);
+            TextMarks.SetText(block, text, TextMarks.Edit(marks, plain.Length, start, length, (value ?? string.Empty).Length), InlineMarkdown.ToPlain(replaced));
         }
 
         /// <summary>
@@ -154,6 +205,19 @@ namespace Folderss.Services
                 var blockIndex = matches[i].Block;
                 var block = blocks[blockIndex];
                 var value = SanitizeReplacement(block.Kind, replacement);
+                if (SearchesVisibleText(block.Kind))
+                {
+                    // 서식 블록: 보이는 글자 기준으로 뒤에서부터 하나씩(앞 결과 위치가 흔들리지 않게).
+                    var firstOfBlock = i;
+                    while (i < matches.Count && matches[i].Block == blockIndex)
+                        i++;
+                    for (var k = i - 1; k >= firstOfBlock; k--)
+                        ReplaceVisible(block, matches[k].Start, matches[k].Length, value);
+                    if (first < 0)
+                        first = blockIndex;
+                    last = blockIndex;
+                    continue;
+                }
                 if (block.GetAttribute(TextMarks.Attribute) != null)
                 {
                     // 줄 안 범위(밑줄·색)가 있는 블록은 뒤에서부터 하나씩 바꿔 범위가 결과마다 정확히 옮겨지게 한다(EditorBlock.Text가 바뀐 구간 하나로 옮김).

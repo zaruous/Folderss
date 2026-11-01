@@ -95,16 +95,56 @@ namespace Folderss.Controls
                 }));
             }
 
-            AddHandler(TextCompositionManager.PreviewTextInputStartEvent, new TextCompositionEventHandler((s, e) => _composing++), true);
-            AddHandler(TextCompositionManager.PreviewTextInputEvent, new TextCompositionEventHandler((s, e) => _composing = 0), true);
+            AddHandler(TextCompositionManager.PreviewTextInputStartEvent, new TextCompositionEventHandler((s, e) =>
+            {
+                if (_composing == 0)
+                    NoteInputStart();
+                _composing++;
+            }), true);
+            AddHandler(TextCompositionManager.PreviewTextInputEvent, new TextCompositionEventHandler((s, e) =>
+            {
+                if (_composing == 0 && !string.IsNullOrEmpty(e.Text))
+                    NoteInputStart();   // 시작 알림 없이 바로 온 입력
+                _composing = 0;
+                InputCompleted?.Invoke(this, EventArgs.Empty);
+            }), true);
             LostKeyboardFocus += (s, e) => _composing = 0;
         }
+
+        /// <summary>
+        /// 글자 입력(입력기 조합이면 조합 확정)이 끝나 가는 중 — <see cref="TextCompositionManager.PreviewTextInputEvent"/> 시점이라 글자는 아직 들어가지 않았을 수 있다.
+        /// 받는 쪽은 이벤트가 끝난 뒤(Dispatcher) 처리한다(대기 서식 적용).
+        /// </summary>
+        public event EventHandler InputCompleted;
+
+        /// <summary>내용을 코드로 다시 그린 횟수(<see cref="SetMarkdown"/>·<see cref="SetRuns"/>). 입력으로는 늘지 않는다 — 대기 서식이 그사이 내용이 바뀌었는지 볼 때 쓴다.</summary>
+        public int ContentVersion { get; private set; }
 
         /// <summary>입력기 조합 중인지(조합을 깨지 않도록 이때는 내용을 다시 그리지 않음).</summary>
         public bool IsComposing => _composing > 0;
 
+        private bool _replacingSelection;
+
+        /// <summary>
+        /// 지금 내용 변경이 선택한 글자를 덮어 입력(자판·입력기 조합 시작)한 것인지 — 붙여넣기·끌어 놓기·조합 중 글자 바꿈과 구분.
+        /// 입력을 시작할 때 선택이 있었으면 그 다음 내용 변경 한 번에만 참.
+        /// </summary>
+        public bool IsReplacingSelection => _replacingSelection;
+
+        private void NoteInputStart()
+        {
+            if (Selection.IsEmpty || _replacingSelection)
+                return;
+            // WPF는 입력 글자를 바로 넣지 않고 모아 두었다가 넣는다 — 그 다음 TextChanged까지(넣지 않으면 한가할 때 지움).
+            _replacingSelection = true;
+            Dispatcher.BeginInvoke(System.Windows.Threading.DispatcherPriority.ApplicationIdle, new Action(() => _replacingSelection = false));
+        }
+
         /// <summary>마지막 내용 변경의 보이는 글자 위치·추가·삭제 길이(TextChanged 처리용).</summary>
         public int LastChangeOffset { get; private set; }
+
+        /// <summary>마지막 내용 변경 전의 조각 목록(읽어 둔 적이 있을 때만, 없으면 null) — 글자를 바꿔 쓸 때 바뀐 첫 글자 모양을 알려고.</summary>
+        public List<InlineRun> PreviousRuns { get; private set; }
         public int LastAddedLength { get; private set; }
         public int LastRemovedLength { get; private set; }
 
@@ -141,6 +181,7 @@ namespace Folderss.Controls
 
         private void Rebuild(IList<InlineRun> runs)
         {
+            ContentVersion++;
             BeginChange();
             try
             {
@@ -156,11 +197,17 @@ namespace Folderss.Controls
                 _plain = null;
                 EndChange();
             }
+            // 다음 변경 전 모양(PreviousRuns)을 아직 읽지 않았어도 알 수 있게 그린 조각을 기억한다.
+            _builtRuns = new List<InlineRun>(runs);
         }
+
+        private List<InlineRun> _builtRuns;
 
         protected override void OnTextChanged(TextChangedEventArgs e)
         {
             var oldPlain = _plain;
+            PreviousRuns = _runs ?? _builtRuns;
+            _builtRuns = null;
             _runs = null;
             _markdown = null;
             _plain = null;
@@ -185,6 +232,7 @@ namespace Folderss.Controls
                 LastRemovedLength = 0;
             }
             base.OnTextChanged(e);
+            _replacingSelection = false;
         }
 
         // ── 보이는 글자 위치 ↔ TextPointer ────────────────────────────────
@@ -338,12 +386,26 @@ namespace Folderss.Controls
         public int CaretIndex
         {
             get => OffsetOf(CaretPosition);
-            set
+            set => PlaceCaret(Math.Max(0, Math.Min(value, Text.Length)));
+        }
+
+        /// <summary>
+        /// 커서를 둔다. 조각 경계(앞 조각 끝 — 다음이 Run 닫힘, 앞이 글자)에서는 앞 글자 쪽(<see cref="LogicalDirection.Backward"/>)에 붙여 선택만 바꾼다:
+        /// <c>CaretPosition</c>을 설정하면 WPF가 빈 선택을 뒤 조각 처음(<see cref="LogicalDirection.Forward"/>)으로 옮겨, 서식·범위 시작에서 친 글자가
+        /// 뒤 조각(굵게·밑줄)을 따라간다(#76 9번 경계 규칙 "범위 시작에서 입력하면 따라가지 않음"). 조각 안(줄 바꿈 자리 등)은 그대로.
+        /// </summary>
+        private void PlaceCaret(int offset)
+        {
+            var p = PointerAt(offset);
+            if (offset > 0 && p.GetPointerContext(LogicalDirection.Forward) == TextPointerContext.ElementEnd &&
+                p.GetPointerContext(LogicalDirection.Backward) == TextPointerContext.Text)
             {
-                var p = PointerAt(Math.Max(0, Math.Min(value, Text.Length)));
-                Selection.Select(p, p);
-                CaretPosition = p;
+                var back = p.GetPositionAtOffset(0, LogicalDirection.Backward);
+                Selection.Select(back, back);
+                return;
             }
+            Selection.Select(p, p);
+            CaretPosition = p;
         }
 
         public int SelectionStart
@@ -375,9 +437,12 @@ namespace Folderss.Controls
             var len = Text.Length;
             start = Math.Max(0, Math.Min(start, len));
             var end = Math.Max(start, Math.Min(start + Math.Max(0, length), len));
-            var a = PointerAt(start);
-            var b = end == start ? a : PointerAt(end);
-            Selection.Select(a, b);
+            if (end == start)
+            {
+                PlaceCaret(start);
+                return;
+            }
+            Selection.Select(PointerAt(start), PointerAt(end));
         }
 
         public Rect GetRectFromCharacterIndex(int charIndex)

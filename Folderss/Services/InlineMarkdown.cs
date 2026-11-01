@@ -1552,6 +1552,26 @@ namespace Folderss.Services
             return Merge(result);
         }
 
+        /// <summary>
+        /// 보이는 글자 [start, end)를 글자 <paramref name="value"/>로 바꾼다(찾아 바꾸기). 새 글자는 바뀌는 첫 글자의 조각 모양(서식·링크·표식 모양·원문 종류·범위)을 따른다 —
+        /// 빈 구간이면 앞 글자(줄 처음이면 뒤 글자). 바꾼 구간 밖 조각은 그대로.
+        /// </summary>
+        public static List<InlineRun> ReplaceText(IList<InlineRun> runs, int start, int end, string value)
+        {
+            var length = ToPlain(runs).Length;
+            start = Math.Max(0, Math.Min(start, length));
+            end = Math.Max(start, Math.Min(end, length));
+            if (string.IsNullOrEmpty(value))
+                return Replace(runs, start, end, new InlineRun[0]);
+            var basis = end > start || start == 0 ? RunAt(runs, start, false) : RunAt(runs, start, true);
+            var inserted = basis != null ? basis.Clone() : new InlineRun();
+            if (inserted.Kind == InlineRunKind.Math)
+                inserted.Kind = InlineRunKind.Raw;   // 편집용 읽기에는 없음(수식은 원문 조각) — 다른 조각 목록에서 와도 글자 그대로
+            inserted.Text = value;
+            inserted.BareUrl = false;
+            return Replace(runs, start, end, new[] { inserted });
+        }
+
         // ── 입력 중 서식 단축 ─────────────────────────────────────────────
 
         /// <summary>

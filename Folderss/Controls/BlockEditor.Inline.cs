@@ -56,6 +56,7 @@ namespace Folderss.Controls
             if (ReferenceEquals(_richRow, row) && ReferenceEquals(row.Rich, box))
                 return box;
             HideFormatBar();
+            ClearPending();
             if (_richRow != null)
             {
                 var old = _richRow;
@@ -82,6 +83,7 @@ namespace Folderss.Controls
             if (row == null)
                 return;
             HideFormatBar();
+            ClearPending();
             _richRow = null;
             row.DetachRich();
         }
@@ -104,6 +106,7 @@ namespace Folderss.Controls
             };
             box.LostKeyboardFocus += (s, e) =>
             {
+                ClearPending();
                 if (box.Tag is BlockRow row)
                     OnEditorBlurred(row);
                 UpdateFormatBarSoon();
@@ -112,8 +115,11 @@ namespace Folderss.Controls
             {
                 if (box.Tag is BlockRow row)
                     OnEditorSelectionChanged(row);
+                if (_pending != null)
+                    Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() => ClearPendingIfMoved(box)));
                 UpdateFormatBarSoon();
             };
+            box.InputCompleted += (s, e) => SchedulePendingApply(box);
             box.PreviewMouseLeftButtonUp += (s, e) => UpdateFormatBarSoon();
             DataObject.AddPastingHandler(box, (s, e) =>
             {
@@ -222,18 +228,6 @@ namespace Folderss.Controls
             var length = InlineMarkdown.ToPlain(runs).Length;
             at = Math.Max(0, Math.Min(at, length));
             return InlineMarkdown.Serialize(InlineMarkdown.Replace(runs, at, at, new[] { new InlineRun { Text = value } }));
-        }
-
-        /// <summary>찾기: 입력란 글자 위치 → 블록 본문(원문) 위치.</summary>
-        private static int EditorToSource(BlockRow row, int offset)
-        {
-            return row.UsesRich ? InlineMarkdown.PlainToSource(row.Block.Text, offset) : offset;
-        }
-
-        /// <summary>찾기: 블록 본문(원문) 위치 → 입력란 글자 위치.</summary>
-        private static int SourceToEditor(BlockRow row, int offset)
-        {
-            return row.UsesRich ? InlineMarkdown.SourceToPlain(row.Block.Text, offset) : offset;
         }
 
         // ── 줄 안 범위(밑줄·글자 색·형광펜, #76 9번) ─────────────────────────
@@ -392,10 +386,7 @@ namespace Folderss.Controls
             var marks = TextMarks.FromRuns(runs);
             if (length == 0)
             {
-                var before = InlineMarkdown.RunAt(runs, start, true);
-                var on = !(before != null && before.Underline);
-                ApplySpringDecoration(box, TextDecorationLocation.Underline, on);
-                UpdateFormatBarSoon();
+                PendingFor(box, start).ToggleUnderline(runs, start);
                 return true;
             }
             var turnOn = !TextMarks.Covers(marks, plainLength, TextMarkKind.Underline, start, start + length);
@@ -403,12 +394,18 @@ namespace Folderss.Controls
             return true;
         }
 
-        /// <summary>선택 글자의 글자 색(<paramref name="highlight"/>면 배경색)을 바꾼다(null이면 지움). 선택이 없으면 하지 않는다. 실행 취소 한 단계.</summary>
+        /// <summary>선택 글자의 글자 색(<paramref name="highlight"/>면 배경색)을 바꾼다(null이면 지움). 선택이 없으면 다음 입력 글자의 색(대기 서식). 실행 취소 한 단계.</summary>
         private bool SetTextMarkColor(BlockRow row, bool highlight, string name)
         {
             var box = row?.Rich;
-            if (box == null || box.SelectionLength == 0)
+            if (box == null)
                 return false;
+            if (box.SelectionLength == 0)
+            {
+                // 선택 없이 색: 다음 입력 글자의 색(대기 서식)
+                PendingFor(box, box.SelectionStart).SetColor(highlight, name);
+                return true;
+            }
             var start = box.SelectionStart;
             var length = box.SelectionLength;
             var runs = box.Runs;
@@ -439,24 +436,6 @@ namespace Folderss.Controls
             ApplyRuns(row, box, TextMarks.ApplyToRuns(TextMarks.Strip(box.Runs), marks), selectionStart, selectionLength);
         }
 
-        /// <summary>선택 없이 밑줄·취소선 키: 다음 입력 글자의 글자 장식(다른 장식은 그대로 둠).</summary>
-        private static void ApplySpringDecoration(RichBlockBox box, TextDecorationLocation location, bool on)
-        {
-            var selection = box.Selection;
-            var current = selection.GetPropertyValue(Inline.TextDecorationsProperty) as TextDecorationCollection;
-            var result = new TextDecorationCollection();
-            if (current != null)
-            {
-                foreach (var d in current)
-                    if (d.Location != location)
-                        result.Add(d);
-            }
-            if (on)
-                result.Add(location == TextDecorationLocation.Underline ? TextDecorations.Underline[0] : TextDecorations.Strikethrough[0]);
-            result.Freeze();
-            selection.ApplyPropertyValue(Inline.TextDecorationsProperty, result);
-        }
-
         // ── 서식 적용 ─────────────────────────────────────────────────────
 
         /// <summary>
@@ -473,43 +452,12 @@ namespace Folderss.Controls
             var runs = box.Runs;
             if (length == 0)
             {
-                ApplySpringFormat(box, format, !InlineMarkdown.HasFormat(runs, start, start, format));
-                UpdateFormatBarSoon();
+                PendingFor(box, start).Toggle(runs, start, format);
                 return true;
             }
             var on = !InlineMarkdown.HasFormat(runs, start, start + length, format);
             ApplyRuns(row, box, InlineMarkdown.ApplyFormat(runs, start, start + length, format, on), start, length);
             return true;
-        }
-
-        /// <summary>선택 없이 서식 키를 누름: 다음에 입력할 글자의 서식(WPF 선택 서식 — 입력하면 그 서식의 새 Run이 생김).</summary>
-        private static void ApplySpringFormat(RichBlockBox box, InlineFormat format, bool on)
-        {
-            var selection = box.Selection;
-            switch (format)
-            {
-                case InlineFormat.Bold:
-                    selection.ApplyPropertyValue(TextElement.FontWeightProperty, on ? FontWeights.Bold : FontWeights.Normal);
-                    break;
-                case InlineFormat.Italic:
-                    selection.ApplyPropertyValue(TextElement.FontStyleProperty, on ? FontStyles.Italic : FontStyles.Normal);
-                    break;
-                case InlineFormat.Strike:
-                    ApplySpringDecoration(box, TextDecorationLocation.Strikethrough, on);
-                    break;
-                case InlineFormat.Code:
-                    if (on)
-                    {
-                        selection.ApplyPropertyValue(TextElement.FontFamilyProperty, BlockInlineRenderer.CodeFont);
-                        selection.ApplyPropertyValue(TextElement.BackgroundProperty, Application.Current?.TryFindResource("SurfaceBackground") as Brush);
-                    }
-                    else
-                    {
-                        selection.ApplyPropertyValue(TextElement.FontFamilyProperty, box.FontFamily);
-                        selection.ApplyPropertyValue(TextElement.BackgroundProperty, null);
-                    }
-                    break;
-            }
         }
 
         /// <summary>조각 목록으로 다시 그리고 실행 취소 한 단계로 기록한다(입력 묶음과 섞이지 않게 앞뒤로 끊음).</summary>
@@ -535,6 +483,127 @@ namespace Folderss.Controls
             UpdateFormatBarSoon();
         }
 
+        // ── 다음 입력 서식(대기 서식) ─────────────────────────────────────────
+
+        /// <summary>
+        /// 다음 입력 서식(<see cref="PendingInlineFormat"/>)과 그 자리. 선택 없이 서식 키·색을 누르거나 입력 단축을 변환하면 정하고, 그 자리에 글자가 들어오면
+        /// (입력기 조합이면 조합이 확정된 뒤) 들어온 글자 범위에 적용한다. 커서 이동·클릭·선택·블록 전환·포커스 잃음·내용 다시 그리기에 지운다.
+        /// </summary>
+        private sealed class PendingState
+        {
+            public RichBlockBox Box;
+            public PendingInlineFormat Format;
+            public int At;        // 글자가 들어갈 보이는 글자 위치
+            public int Length;    // 정할 때 입력란 글자 수
+            public int Version;   // 정할 때 입력란 ContentVersion
+        }
+
+        private PendingState _pending;
+
+        /// <summary>지금 대기 서식(없으면 null). 하네스 검사용.</summary>
+        internal PendingInlineFormat PendingFormat => _pending?.Format;
+
+        /// <summary>입력란 <paramref name="box"/>의 <paramref name="caret"/> 자리 대기 서식(같은 자리면 이어서 고침 — Ctrl+B 뒤 Ctrl+I는 둘 다).</summary>
+        private PendingInlineFormat PendingFor(RichBlockBox box, int caret)
+        {
+            var p = _pending;
+            var length = box.Text.Length;
+            if (p == null || !ReferenceEquals(p.Box, box) || p.At != caret || p.Length != length || p.Version != box.ContentVersion)
+                p = _pending = new PendingState { Box = box, Format = new PendingInlineFormat(), At = caret, Length = length, Version = box.ContentVersion };
+            // 대기 서식으로 친 글자는 앞 입력과 따로 실행 취소한다.
+            _typingRow = null;
+            return p.Format;
+        }
+
+        /// <summary>입력 단축 변환·링크 넣기 직후: 닫힌 서식·링크를 이어 쓰는 글자에서 끈다.</summary>
+        private void SetPendingAfterClosed(RichBlockBox box, int caret)
+        {
+            ClearPending();
+            if (box.SelectionLength != 0 || box.CaretIndex != caret)
+                return;
+            var format = PendingInlineFormat.AfterClosedFormat(box.Runs, caret);
+            if (format != null)
+                _pending = new PendingState { Box = box, Format = format, At = caret, Length = box.Text.Length, Version = box.ContentVersion };
+        }
+
+        /// <summary>
+        /// 입력으로 글자를 바꿔 씀(선택한 글자를 덮어 입력·조합 시작): 새 글자가 바뀐 첫 글자 모양(서식·링크·범위)을 따르도록 대기 서식을 둔다 —
+        /// WPF는 지운 조각의 글자 장식(밑줄·취소선)·바탕을 이어 주지 않고 앞 조각을 따른다. 이미 정한 대기 서식이 있으면 그대로 둔다.
+        /// </summary>
+        private void SetPendingForReplace(RichBlockBox box)
+        {
+            if (_pending != null || !box.IsReplacingSelection || box.LastRemovedLength <= 0 || box.LastAddedLength <= 0 || box.PreviousRuns == null)
+                return;
+            var like = PendingInlineFormat.Like(InlineMarkdown.RunAt(box.PreviousRuns, box.LastChangeOffset, false));
+            if (like != null)
+                _pending = new PendingState { Box = box, Format = like, At = box.LastChangeOffset, Length = box.Text.Length - box.LastAddedLength, Version = box.ContentVersion };
+        }
+
+        private void ClearPending()
+        {
+            _pending = null;
+        }
+
+        /// <summary>선택이 바뀐 뒤(이벤트가 끝난 뒤): 글자 입력 없이 커서가 옮겨졌거나 글자를 선택했으면 대기 서식을 지운다.</summary>
+        private void ClearPendingIfMoved(RichBlockBox box)
+        {
+            var p = _pending;
+            if (p == null || !ReferenceEquals(p.Box, box) || box.IsComposing)
+                return;
+            if (box.ContentVersion != p.Version)
+            {
+                ClearPending();
+                return;
+            }
+            if (box.Text.Length == p.Length && (box.SelectionLength != 0 || box.CaretIndex != p.At))
+                ClearPending();
+        }
+
+        /// <summary>입력란 글자가 바뀌었거나 입력이 끝나 감: 이벤트가 끝난 뒤 대기 서식을 들어온 글자에 적용한다.</summary>
+        private void SchedulePendingApply(RichBlockBox box)
+        {
+            if (_pending == null || !ReferenceEquals(_pending.Box, box))
+                return;
+            Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() => TryApplyPending(box)));
+        }
+
+        /// <summary>
+        /// 대기 서식 자리에 글자가 들어왔으면 그 글자 범위에 적용하고 지운다(한 번만 — 다음 글자는 앞 조각을 이어 같은 서식). 조합 중이면 확정 뒤로 미룬다
+        /// (조합 중에는 문서를 다시 그리지 않음). 적용은 입력과 같은 실행 취소 단계에 묶인다.
+        /// </summary>
+        private bool TryApplyPending(RichBlockBox box)
+        {
+            var p = _pending;
+            if (p == null || !ReferenceEquals(p.Box, box) || box.IsComposing)
+                return false;
+            var row = box.Tag as BlockRow;
+            if (row == null || !ReferenceEquals(row, _richRow) || !ReferenceEquals(row.Rich, box) || box.ContentVersion != p.Version)
+            {
+                ClearPending();
+                return false;
+            }
+            var grown = box.Text.Length - p.Length;
+            var caret = box.CaretIndex;
+            if (grown == 0 && box.SelectionLength == 0 && caret == p.At)
+                return false;   // 아직 입력 전
+            ClearPending();
+            if (grown <= 0 || box.SelectionLength != 0 || caret != p.At + grown || p.Format.IsEmpty)
+                return false;
+            var runs = p.Format.Apply(box.Runs, p.At, caret);
+            _applyingInlineEdit = true;
+            try
+            {
+                // TextChanged(OnEditorTextChanged)가 본문·범위를 갱신하고 방금 입력과 같은 단계로 기록한다.
+                box.SetRuns(runs, caret, 0);
+            }
+            finally
+            {
+                _applyingInlineEdit = false;
+            }
+            UpdateFormatBarSoon();
+            return true;
+        }
+
         // ── 입력 중 서식 단축 ──────────────────────────────────────────────
 
         /// <summary>
@@ -552,26 +621,18 @@ namespace Folderss.Controls
             int newCaret;
             if (!InlineMarkdown.TryInputRule(box.Runs, caret, out result, out newCaret))
                 return;
+            var version = box.ContentVersion;
             Dispatcher.BeginInvoke(DispatcherPriority.Send, new Action(() =>
             {
                 if (!ReferenceEquals(row.Rich, box) || box.IsComposing)
                     return;
+                // 그사이 대기 서식 적용 등으로 다시 그렸으면 지금 조각으로 다시 계산한다(먼저 계산한 결과는 그 서식을 잃음).
+                if (box.ContentVersion != version && !InlineMarkdown.TryInputRule(box.Runs, caret, out result, out newCaret))
+                    return;
                 ApplyRuns(row, box, result, newCaret, 0);
-                // 변환한 서식은 닫혔으므로 이어 쓰는 글자는 서식 없이(Notion과 같음)
-                ClearSpringFormat(box);
+                // 변환한 서식은 닫혔으므로 이어 쓰는 글자는 서식 없이(Notion과 같음) — 대기 서식으로 끈다.
+                SetPendingAfterClosed(box, newCaret);
             }));
-        }
-
-        private static void ClearSpringFormat(RichBlockBox box)
-        {
-            var selection = box.Selection;
-            if (!selection.IsEmpty)
-                return;
-            selection.ApplyPropertyValue(TextElement.FontWeightProperty, FontWeights.Normal);
-            selection.ApplyPropertyValue(TextElement.FontStyleProperty, FontStyles.Normal);
-            selection.ApplyPropertyValue(Inline.TextDecorationsProperty, new TextDecorationCollection());
-            selection.ApplyPropertyValue(TextElement.FontFamilyProperty, box.FontFamily);
-            selection.ApplyPropertyValue(TextElement.BackgroundProperty, null);
         }
 
         // ── 붙여넣기·복사 ─────────────────────────────────────────────────
@@ -914,7 +975,7 @@ namespace Folderss.Controls
                 }
                 var inserted = new[] { new InlineRun { Text = url, Link = url } };
                 ApplyRuns(row, box, InlineMarkdown.Replace(runs, start, start, inserted), start + url.Length, 0);
-                ClearSpringFormat(box);
+                SetPendingAfterClosed(box, start + url.Length);
                 return;
             }
             ApplyRuns(row, box, InlineMarkdown.ApplyLink(runs, start, end, url.Length == 0 ? null : url), start, end - start);

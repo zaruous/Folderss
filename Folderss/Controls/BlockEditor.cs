@@ -1460,7 +1460,13 @@ namespace Folderss.Controls
             var rich = editor as RichBlockBox;
             var wasBlank = string.IsNullOrWhiteSpace(row.Block.Text);
             if (rich != null)
+            {
+                // 글자·서식·범위가 그대로인 알림(입력란을 행에 붙일 때 글자 색 리소스가 연결되며 오는 속성 변경 등)은 기록하지 않는다 —
+                // 그대로 두면 색 범위가 있는 블록에 들어가기만 해도 수정됨·실행 취소 단계가 생긴다(#76 9번 병합 검증).
+                if (string.Equals(row.Block.Text, rich.Markdown, StringComparison.Ordinal) && !RichMarksDiffer(rich, row.Block))
+                    return;
                 SetBlockFromRich(row.Block, rich);
+            }
             else
                 row.Block.Text = editor.Text;
             row.UpdatePlaceholder();
@@ -1515,6 +1521,14 @@ namespace Folderss.Controls
 
             if (insertedAt >= 0)
                 TryAutoFormat(row, insertedAt, insertedLength);
+            // 대기 서식(선택 없이 Ctrl+B 등, 글자를 바꿔 쓰면 바뀐 첫 글자 모양) 적용을 입력 단축 판단보다 먼저 예약한다
+            // (입력 단축은 다시 그려졌으면 다시 계산). 조합 중이면 확정 때(InputCompleted) 적용한다.
+            if (rich != null)
+            {
+                SetPendingForReplace(rich);
+                if (!rich.IsComposing)
+                    SchedulePendingApply(rich);
+            }
             if (rich != null && insertedLength == 1)
                 TryInlineInputRule(row, rich, insertedAt + 1);
         }

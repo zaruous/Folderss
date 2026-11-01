@@ -61,8 +61,6 @@ namespace Folderss.Controls
             var key = new DisplayKey(text, fontSize, marks);
             if (key.Equals(target.Tag))
                 return;
-            target.Inlines.Clear();
-            var start = 0;
             IList<InlineRun> runs = InlineMarkdown.IsPlain(text) ? new List<InlineRun> { new InlineRun { Text = text } } : ParseDisplay(text);
             if (marks != null)
             {
@@ -71,6 +69,16 @@ namespace Folderss.Controls
                 if (TextMarks.TryParse(marks, InlineMarkdown.ToPlain(runs), out parsed))
                     runs = TextMarks.ApplyToRuns(runs, parsed);
             }
+            key.Runs = runs;
+            // 같은 모양(조각 수·서식·링크 여부·범위)으로 그렸던 글자면 Inline을 다시 만들지 않고 글자만 바꾼다
+            // (가상화로 행을 다시 묶을 때 — 표 셀은 같은 열이 대개 같은 모양이다).
+            if (target.Tag is DisplayKey previous && previous.SameSize(key) && TryUpdateInPlace(target, previous.Runs, runs))
+            {
+                target.Tag = key;
+                return;
+            }
+            target.Inlines.Clear();
+            var start = 0;
             foreach (var run in runs)
             {
                 var length = run.Kind == InlineRunKind.Math ? run.Text.Length + 2 : run.Text.Length;
@@ -128,8 +136,53 @@ namespace Folderss.Controls
             private readonly double _size;
             private readonly string _marks;
             public DisplayKey(string text, double size, string marks) { _text = text; _size = size; _marks = marks; }
+            /// <summary>그린 조각 목록(읽기 전용 — 파서 캐시와 같은 목록일 수 있음).</summary>
+            public IList<InlineRun> Runs;
+            public bool SameSize(DisplayKey other) => other != null && other._size == _size;
             public override bool Equals(object obj) => obj is DisplayKey k && k._text == _text && k._size == _size && k._marks == _marks;
             public override int GetHashCode() => _text.GetHashCode();
+        }
+
+        /// <summary>
+        /// 이전에 그린 조각(<paramref name="previous"/>)과 새 조각의 모양이 같으면 기존 Inline의 글자·자리·링크 주소만 바꾼다(만들기·리소스 참조 연결을 건너뜀).
+        /// 수식 조각이 있거나 모양이 다르면 false(새로 그림).
+        /// </summary>
+        private static bool TryUpdateInPlace(System.Windows.Controls.TextBlock target, IList<InlineRun> previous, IList<InlineRun> runs)
+        {
+            if (previous == null || previous.Count != runs.Count || target.Inlines.Count != runs.Count)
+                return false;
+            for (var i = 0; i < runs.Count; i++)
+            {
+                var a = previous[i];
+                var b = runs[i];
+                if (a.Kind != b.Kind || b.Kind == InlineRunKind.Math || a.Format != b.Format || (a.Link == null) != (b.Link == null) ||
+                    a.Underline != b.Underline || a.TextColor != b.TextColor || a.Highlight != b.Highlight)
+                    return false;
+            }
+            var start = 0;
+            var inline = target.Inlines.FirstInline;
+            for (var i = 0; i < runs.Count; i++, inline = inline.NextInline)
+            {
+                var run = runs[i];
+                var span = inline as Span;
+                var textRun = span != null ? span.Inlines.FirstInline as Run : inline as Run;
+                if (textRun == null || (run.Link != null) != (span != null))
+                    return false;   // 모양 검사를 통과했으면 생기지 않음 — 혹시 다르면 새로 그리게(앞쪽만 바뀐 상태여도 호출자가 지우고 다시 그림)
+                if (!string.Equals(textRun.Text, run.Text, StringComparison.Ordinal))
+                    textRun.Text = ToDisplayText(run.Text);
+                textRun.Tag = new DisplayPos(start, run.Text.Length, false);
+                if (span != null)
+                {
+                    var url = run.Url;
+                    if (!(span.Tag is LinkTag tag) || tag.Url != url)
+                    {
+                        span.Tag = new LinkTag(url);
+                        span.ToolTip = url + "\nCtrl+클릭: 열기";
+                    }
+                }
+                start += run.Text.Length;
+            }
+            return true;
         }
 
         /// <summary>테마가 바뀌어도 리소스 참조로 따라가므로 다시 그릴 필요는 없다. 강제로 다시 그리게 표시 기억을 지운다.</summary>
