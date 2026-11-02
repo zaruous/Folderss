@@ -317,15 +317,33 @@ namespace Folderss.Services
             switch (mode)
             {
                 case GitDiffViewMode.Context10: return "-U10";
-                case GitDiffViewMode.FullFile: return "-U" + FullFileContext;
+                case GitDiffViewMode.FullFile:
+                case GitDiffViewMode.FullContent: return "-U" + FullFileContext;
                 default: return null;
             }
+        }
+
+        /// <summary>
+        /// 이 보기 모드에서 공백 무시(<c>-w</c>)를 적용하는지. 변경 전/후 전체 내용 보기는 적용하지 않는다 —
+        /// <c>-w</c>면 공백만 바뀐 줄이 문맥 줄 하나(변경 후 모양)로 나와 변경 전 내용이 틀리게 보인다.
+        /// </summary>
+        public static bool IgnoresWhitespace(bool requested, GitDiffViewMode mode)
+        {
+            return requested && mode != GitDiffViewMode.FullContent;
         }
 
         /// <summary>diff/show 인수에 보기 모드의 문맥 옵션을 넣은 새 목록. 하위 명령 바로 뒤에 넣어 경로(--) 앞에 오게 한다.</summary>
         public static List<string> WithViewMode(IReadOnlyList<string> arguments, GitDiffViewMode mode)
         {
             var args = new List<string>(arguments);
+            if (!IgnoresWhitespace(true, mode))
+            {
+                // 경로 구분자(--) 앞의 -w만 뺀다(뒤는 경로).
+                var separator = args.IndexOf("--");
+                var w = args.IndexOf("-w");
+                if (w >= 0 && (separator < 0 || w < separator))
+                    args.RemoveAt(w);
+            }
             var option = ContextOption(mode);
             if (option != null && args.Count > 0)
                 args.Insert(1, option);

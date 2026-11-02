@@ -1,6 +1,66 @@
 <UserControl x:Class="Folderss.Controls.GitDiffView"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <Style x:Key="DiffLineItemStyle" TargetType="ListBoxItem">
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+            <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
+            <Setter Property="Template">
+                <Setter.Value>
+                    <ControlTemplate TargetType="ListBoxItem">
+                        <Border x:Name="Bd" Background="Transparent">
+                            <ContentPresenter/>
+                        </Border>
+                        <ControlTemplate.Triggers>
+                            <Trigger Property="IsSelected" Value="True">
+                                <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectionBrush}"/>
+                            </Trigger>
+                        </ControlTemplate.Triggers>
+                    </ControlTemplate>
+                </Setter.Value>
+            </Setter>
+        </Style>
+        <DataTemplate x:Key="DiffLineTemplate">
+            <!-- 추가/삭제 색은 테마와 무관하게 반투명 초록/빨강을 깔아 어두운·밝은 테마 모두에서 읽히게 한다. -->
+            <Grid x:Name="Row" Background="Transparent">
+                <Grid.ColumnDefinitions>
+                    <!-- 변경 전 번호 열: 코드 내용 보기(ShowLines)·변경 전/후 전체 내용 보기에서는 접어 번호를 하나만 보인다. -->
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="44"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock x:Name="OldNumber" Grid.Column="0" Width="38" Text="{Binding OldLine}" TextAlignment="Right" Margin="0,0,6,0"
+                           Foreground="{DynamicResource SecondaryText}"/>
+                <TextBlock Grid.Column="1" Text="{Binding NewLine}" TextAlignment="Right" Margin="0,0,8,0"
+                           Foreground="{DynamicResource SecondaryText}"/>
+                <TextBlock x:Name="LineText" Grid.Column="2" Text="{Binding Text}"/>
+            </Grid>
+            <DataTemplate.Triggers>
+                <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="SingleLineNumber">
+                    <Setter TargetName="OldNumber" Property="Visibility" Value="Collapsed"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Added">
+                    <Setter TargetName="Row" Property="Background" Value="#3328A745"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Removed">
+                    <Setter TargetName="Row" Property="Background" Value="#33D73A49"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Hunk">
+                    <Setter TargetName="LineText" Property="Foreground" Value="{DynamicResource AccentBrush}"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Header">
+                    <Setter TargetName="LineText" Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                    <Setter TargetName="LineText" Property="FontWeight" Value="SemiBold"/>
+                </DataTrigger>
+                <DataTrigger Binding="{Binding Kind}" Value="Meta">
+                    <Setter TargetName="LineText" Property="Foreground" Value="{DynamicResource SecondaryText}"/>
+                    <Setter TargetName="LineText" Property="FontStyle" Value="Italic"/>
+                </DataTrigger>
+            </DataTemplate.Triggers>
+        </DataTemplate>
+    </UserControl.Resources>
     <DockPanel>
         <DockPanel DockPanel.Dock="Top" Margin="2,0,2,4">
             <Button x:Name="ReportButton"
@@ -20,14 +80,15 @@
                     ToolTip="설정 &gt; 비교에서 지정한 비교 도구(WinMerge, Beyond Compare 등)로 같은 비교를 엽니다"/>
             <ComboBox x:Name="ViewModeCombo"
                       DockPanel.Dock="Right"
-                      Width="110"
+                      Width="130"
                       Margin="6,0,4,0"
                       Visibility="Collapsed"
                       SelectionChanged="ViewModeCombo_SelectionChanged"
-                      ToolTip="변경점만 / 변경점과 앞뒤 10줄 / 파일 전체(변경 줄은 색으로 표시)">
+                      ToolTip="변경점만 / 변경점과 앞뒤 10줄 / 파일 전체(변경 줄은 색으로 표시) / 변경 전·후 전체 내용을 양옆에 그대로(변경 표시 없음)">
                 <ComboBoxItem Content="변경점만"/>
                 <ComboBoxItem Content="문맥 10줄"/>
                 <ComboBoxItem Content="전체 파일"/>
+                <ComboBoxItem Content="변경 전/후 전체"/>
             </ComboBox>
             <TextBlock x:Name="TitleText"
                        VerticalAlignment="Center"
@@ -35,79 +96,46 @@
                        TextTrimming="CharacterEllipsis"/>
         </DockPanel>
         <Grid>
-            <ListBox x:Name="LineList"
-                     FontFamily="Consolas"
-                     FontSize="12"
-                     SelectionMode="Extended"
-                     VirtualizingPanel.IsVirtualizing="True"
-                     VirtualizingPanel.VirtualizationMode="Recycling"
-                     ScrollViewer.HorizontalScrollBarVisibility="Auto"
-                     KeyDown="LineList_KeyDown"
-                     ToolTip="Ctrl+C: 선택한 줄 복사">
-                <ListBox.ItemContainerStyle>
-                    <Style TargetType="ListBoxItem">
-                        <Setter Property="Padding" Value="0"/>
-                        <Setter Property="Margin" Value="0"/>
-                        <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
-                        <Setter Property="Foreground" Value="{DynamicResource PrimaryText}"/>
-                        <Setter Property="Template">
-                            <Setter.Value>
-                                <ControlTemplate TargetType="ListBoxItem">
-                                    <Border x:Name="Bd" Background="Transparent">
-                                        <ContentPresenter/>
-                                    </Border>
-                                    <ControlTemplate.Triggers>
-                                        <Trigger Property="IsSelected" Value="True">
-                                            <Setter TargetName="Bd" Property="Background" Value="{DynamicResource SelectionBrush}"/>
-                                        </Trigger>
-                                    </ControlTemplate.Triggers>
-                                </ControlTemplate>
-                            </Setter.Value>
-                        </Setter>
-                    </Style>
-                </ListBox.ItemContainerStyle>
-                <ListBox.ItemTemplate>
-                    <DataTemplate>
-                        <!-- 추가/삭제 색은 테마와 무관하게 반투명 초록/빨강을 깔아 어두운·밝은 테마 모두에서 읽히게 한다. -->
-                        <Grid x:Name="Row" Background="Transparent">
-                            <Grid.ColumnDefinitions>
-                                <!-- 변경 전 번호 열: 코드 내용 보기(ShowLines)에서는 접어 번호를 하나만 보인다. -->
-                                <ColumnDefinition Width="Auto"/>
-                                <ColumnDefinition Width="44"/>
-                                <ColumnDefinition Width="*"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock x:Name="OldNumber" Grid.Column="0" Width="38" Text="{Binding OldLine}" TextAlignment="Right" Margin="0,0,6,0"
-                                       Foreground="{DynamicResource SecondaryText}"/>
-                            <TextBlock Grid.Column="1" Text="{Binding NewLine}" TextAlignment="Right" Margin="0,0,8,0"
-                                       Foreground="{DynamicResource SecondaryText}"/>
-                            <TextBlock x:Name="LineText" Grid.Column="2" Text="{Binding Text}"/>
-                        </Grid>
-                        <DataTemplate.Triggers>
-                            <DataTrigger Binding="{Binding Tag, RelativeSource={RelativeSource AncestorType=ListBox}}" Value="SingleLineNumber">
-                                <Setter TargetName="OldNumber" Property="Visibility" Value="Collapsed"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind}" Value="Added">
-                                <Setter TargetName="Row" Property="Background" Value="#3328A745"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind}" Value="Removed">
-                                <Setter TargetName="Row" Property="Background" Value="#33D73A49"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind}" Value="Hunk">
-                                <Setter TargetName="LineText" Property="Foreground" Value="{DynamicResource AccentBrush}"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind}" Value="Header">
-                                <Setter TargetName="LineText" Property="Foreground" Value="{DynamicResource SecondaryText}"/>
-                                <Setter TargetName="LineText" Property="FontWeight" Value="SemiBold"/>
-                            </DataTrigger>
-                            <DataTrigger Binding="{Binding Kind}" Value="Meta">
-                                <Setter TargetName="LineText" Property="Foreground" Value="{DynamicResource SecondaryText}"/>
-                                <Setter TargetName="LineText" Property="FontStyle" Value="Italic"/>
-                            </DataTrigger>
-                        </DataTemplate.Triggers>
-                    </DataTemplate>
-                </ListBox.ItemTemplate>
-            </ListBox>
+            <!-- 변경 전/후 전체 내용 보기(FullContent)에서만 오른쪽 칸(변경 후)과 칸 이름이 보인다. 두 칸은 따로 스크롤한다. -->
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*"/>
+                <ColumnDefinition x:Name="SplitterColumn" Width="0"/>
+                <ColumnDefinition x:Name="NewPaneColumn" Width="0"/>
+            </Grid.ColumnDefinitions>
+            <DockPanel Grid.Column="0">
+                <TextBlock x:Name="OldPaneLabel" DockPanel.Dock="Top" Margin="2,0,2,2" Visibility="Collapsed"
+                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SecondaryText}"/>
+                <ListBox x:Name="LineList"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         SelectionMode="Extended"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ItemContainerStyle="{StaticResource DiffLineItemStyle}"
+                         ItemTemplate="{StaticResource DiffLineTemplate}"
+                         KeyDown="LineList_KeyDown"
+                         ToolTip="Ctrl+C: 선택한 줄 복사"/>
+            </DockPanel>
+            <GridSplitter x:Name="PaneSplitter" Grid.Column="1" Width="5" HorizontalAlignment="Stretch" Visibility="Collapsed"
+                          Background="{DynamicResource BorderBrush}"/>
+            <DockPanel x:Name="NewPane" Grid.Column="2" Visibility="Collapsed">
+                <TextBlock x:Name="NewPaneLabel" DockPanel.Dock="Top" Margin="2,0,2,2"
+                           TextTrimming="CharacterEllipsis" Foreground="{DynamicResource SecondaryText}"/>
+                <ListBox x:Name="NewLineList"
+                         FontFamily="Consolas"
+                         FontSize="12"
+                         SelectionMode="Extended"
+                         VirtualizingPanel.IsVirtualizing="True"
+                         VirtualizingPanel.VirtualizationMode="Recycling"
+                         ScrollViewer.HorizontalScrollBarVisibility="Auto"
+                         ItemContainerStyle="{StaticResource DiffLineItemStyle}"
+                         ItemTemplate="{StaticResource DiffLineTemplate}"
+                         KeyDown="LineList_KeyDown"
+                         ToolTip="Ctrl+C: 선택한 줄 복사"/>
+            </DockPanel>
             <TextBlock x:Name="MessageText"
+                       Grid.ColumnSpan="3"
                        HorizontalAlignment="Center"
                        VerticalAlignment="Center"
                        TextWrapping="Wrap"

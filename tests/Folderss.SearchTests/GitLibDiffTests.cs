@@ -139,6 +139,8 @@ namespace Folderss.SearchTests
             await AssertSameAsCli(repo, GitDiffCommands.WorkTree("slider.txt"));
             await AssertSameAsCli(repo, GitDiffCommands.WorkTree("ws.txt"));
             await AssertSameAsCli(repo, GitDiffCommands.WorkTree("ws.txt", ignoreWhitespace: true));
+            // 변경 전/후 전체 내용 보기는 -w를 빼고 읽는다(CLI 인수와 libgit2가 같아야 함)
+            await AssertSameAsCli(repo, GitDiffCommands.WorkTree("ws.txt", ignoreWhitespace: true), GitDiffViewMode.FullContent);
             await AssertSameAsCli(repo, GitDiffCommands.WorkTree("del.txt"));
             await AssertSameAsCli(repo, GitDiffCommands.WorkTree("bin.dat"));
             await AssertSameAsCli(repo, GitDiffCommands.WorkTree("cp949.txt"), fallback: cp949);
@@ -232,6 +234,7 @@ namespace Folderss.SearchTests
             foreach (var mode in new[] { GitDiffViewMode.ChangesOnly, GitDiffViewMode.Context10, GitDiffViewMode.FullFile })
                 await AssertSameAsCli(null, GitDiffCommands.Files(F("one.txt"), F("two.txt")), mode);
             await AssertSameAsCli(null, GitDiffCommands.Files(F("one.txt"), F("two.txt"), ignoreWhitespace: true));
+            await AssertSameAsCli(null, GitDiffCommands.Files(F("one.txt"), F("two.txt"), ignoreWhitespace: true), GitDiffViewMode.FullContent);
             await AssertSameAsCli(null, GitDiffCommands.Files(F("one.txt"), F("same.txt")));
             await AssertSameAsCli(null, GitDiffCommands.Files(F("empty.txt"), F("one.txt")));
             await AssertSameAsCli(null, GitDiffCommands.Files(F("a.bin"), F("b.bin")));

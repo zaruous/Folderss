@@ -23,7 +23,12 @@ namespace Folderss.Services
         /// <summary>변경점 + 앞뒤 10줄.</summary>
         Context10,
         /// <summary>파일 전체(변경점은 색으로 표시).</summary>
-        FullFile
+        FullFile,
+        /// <summary>
+        /// 변경 전 전체 내용과 변경 후 전체 내용을 양옆에 그대로(색·정렬 없음). <see cref="FullFile"/> diff를 읽어
+        /// <c>GitOutputParser.SplitSides</c>로 나눈다. 공백 무시(<c>-w</c>)는 적용하지 않는다(한쪽 내용이 다른 쪽 공백으로 보이므로).
+        /// </summary>
+        FullContent
     }
 
     /// <summary>
