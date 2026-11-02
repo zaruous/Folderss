@@ -40,7 +40,7 @@ namespace Folderss.Controls
         public Func<GitDiffRequest, GitDiffViewMode, CancellationToken, Task<string>> TextLoader { get; set; }
 
         /// <summary>
-        /// 변경점만 / 문맥 10줄 / 전체 파일. 코드에서 바꿀 때는 <see cref="ViewModeChanged"/>를 내지 않는다(다시 불러오기는 호출 측 몫).
+        /// 변경점만 / 문맥 10줄 / 전체 파일 / 변경 전·후 전체 내용. 콤보 순서가 열거형 순서와 같다. 코드에서 바꿀 때는 <see cref="ViewModeChanged"/>를 내지 않는다(다시 불러오기는 호출 측 몫).
         /// </summary>
         public GitDiffViewMode ViewMode
         {
@@ -65,6 +65,7 @@ namespace Folderss.Controls
             _requestId++;
             SetRequest(null);
             TitleText.Text = string.Empty;
+            ShowSplit(false);
             LineList.ItemsSource = null;
             ShowMessage(message);
         }
@@ -76,6 +77,7 @@ namespace Folderss.Controls
             var title = request?.Title ?? string.Empty;
             TitleText.Text = title;
             TitleText.ToolTip = title;
+            ShowSplit(false);
             LineList.ItemsSource = null;
             ShowMessage("불러오는 중…");
             return _requestId;
@@ -94,6 +96,7 @@ namespace Folderss.Controls
             SetRequest(null);
             TitleText.Text = title;
             TitleText.ToolTip = title;
+            ShowSplit(false);
             LineList.Tag = SingleLineNumber;   // 파일 내용은 변경 전/후 구분이 없어 번호 열 하나만
             LineList.ItemsSource = lines;
             ShowMessage(lines.Count == 0 ? emptyMessage : null);
@@ -105,8 +108,21 @@ namespace Folderss.Controls
             if (requestId != _requestId)
                 return false;
 
-            LineList.Tag = null;
             var lines = GitOutputParser.ParseDiff(diffText, MaxLines);
+            if (ViewMode == GitDiffViewMode.FullContent && lines.Count > 0)
+            {
+                // 변경 전 / 변경 후 전체 내용을 양옆에 그대로(색 없음). 행을 맞추지 않으므로 두 칸은 따로 스크롤한다.
+                var (oldSide, newSide) = GitOutputParser.SplitSides(lines);
+                ShowSplit(true);
+                LineList.Tag = SingleLineNumber;
+                LineList.ItemsSource = oldSide;
+                NewLineList.ItemsSource = newSide;
+                ShowMessage(null);
+                return true;
+            }
+
+            ShowSplit(false);
+            LineList.Tag = null;
             LineList.ItemsSource = lines;
             ShowMessage(lines.Count == 0 ? emptyMessage : null);
             return true;
@@ -116,9 +132,31 @@ namespace Folderss.Controls
         {
             if (requestId != _requestId)
                 return false;
+            ShowSplit(false);
             LineList.ItemsSource = null;
             ShowMessage(message);
             return true;
+        }
+
+        /// <summary>오른쪽 칸(변경 후)을 보이거나 숨긴다. 숨길 때는 한 칸 diff 화면으로 돌아간다.</summary>
+        private void ShowSplit(bool split)
+        {
+            OldPaneLabel.Visibility = PaneSplitter.Visibility = NewPane.Visibility = split ? Visibility.Visible : Visibility.Collapsed;
+            SplitterColumn.Width = split ? GridLength.Auto : new GridLength(0);
+            NewPaneColumn.Width = split ? new GridLength(1, GridUnitType.Star) : new GridLength(0);
+            if (split)
+            {
+                OldPaneLabel.Text = SideLabel("변경 전", CurrentRequest?.OldLabel);
+                NewPaneLabel.Text = SideLabel("변경 후", CurrentRequest?.NewLabel);
+                OldPaneLabel.ToolTip = OldPaneLabel.Text;
+                NewPaneLabel.ToolTip = NewPaneLabel.Text;
+            }
+            else
+            {
+                NewLineList.ItemsSource = null;
+            }
+
+            static string SideLabel(string side, string label) => string.IsNullOrEmpty(label) ? side : side + ": " + label;
         }
 
         private void SetRequest(GitDiffRequest request)
@@ -163,12 +201,14 @@ namespace Folderss.Controls
 
         private void LineList_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.Key != Key.C || Keyboard.Modifiers != ModifierKeys.Control || LineList.SelectedItems.Count == 0)
+            // 변경 전/후 전체 내용 보기에서는 두 칸이 같은 처리기를 쓴다.
+            var list = (ListBox)sender;
+            if (e.Key != Key.C || Keyboard.Modifiers != ModifierKeys.Control || list.SelectedItems.Count == 0)
                 return;
 
             // 선택 순서가 아니라 화면 순서로 복사한다.
-            var selected = LineList.SelectedItems.Cast<GitDiffLine>().ToHashSet();
-            var text = string.Join("\r\n", LineList.Items.Cast<GitDiffLine>().Where(selected.Contains).Select(line => line.Text));
+            var selected = list.SelectedItems.Cast<GitDiffLine>().ToHashSet();
+            var text = string.Join("\r\n", list.Items.Cast<GitDiffLine>().Where(selected.Contains).Select(line => line.Text));
             ClipboardService.TrySetDataObject(text);
             e.Handled = true;
         }

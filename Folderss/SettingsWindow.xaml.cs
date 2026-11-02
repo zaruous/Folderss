@@ -166,7 +166,8 @@ namespace Folderss
         {
             (GitDiffViewMode.ChangesOnly, "변경점만 (git 기본 문맥, 보통 3줄)"),
             (GitDiffViewMode.Context10, "변경점 + 앞뒤 10줄"),
-            (GitDiffViewMode.FullFile, "전체 파일 (변경 줄은 색으로 표시)")
+            (GitDiffViewMode.FullFile, "전체 파일 (변경 줄은 색으로 표시)"),
+            (GitDiffViewMode.FullContent, "변경 전/후 전체 내용 (양옆, 변경 표시 없음)")
         };
 
         private static readonly (GitDiffToolMode Value, string Text)[] DiffToolChoices =

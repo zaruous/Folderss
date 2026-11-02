@@ -112,7 +112,7 @@ namespace Folderss.Services
                 File.WriteAllText(newFile, GitTextDecoder.DecodeFile(newBytes, fallbackEncoding), utf8);
 
                 var args = new List<string> { "diff", "--no-index", "--no-color", "--no-ext-diff" };
-                if (ignoreWhitespace)
+                if (GitDiffCommands.IgnoresWhitespace(ignoreWhitespace, viewMode))
                     args.Add("-w");
                 var context = GitDiffCommands.ContextOption(viewMode);
                 if (context != null)

@@ -1,6 +1,7 @@
 using Folderss.Models;
 using Folderss.Services;
 using System;
+using System.Collections.Generic;
 using System.IO;
 using System.Linq;
 using System.Threading;
@@ -1224,6 +1225,86 @@ namespace Folderss.SearchTests
             Assert.Equal(new[] { 19, 20, 21 }, await ShownNewLines(GitDiffViewMode.ChangesOnly));   // 사용자 설정(1줄) 그대로
             Assert.Equal(Enumerable.Range(10, 21).ToArray(), await ShownNewLines(GitDiffViewMode.Context10));
             Assert.Equal(Enumerable.Range(1, 40).ToArray(), await ShownNewLines(GitDiffViewMode.FullFile));
+        }
+
+        // ── 변경 전/후 전체 내용 보기 ───────────────────────────────────────────
+
+        [Fact]
+        public void WithViewMode_FullContent_UsesWholeFileContext_AndDropsIgnoreWhitespace()
+        {
+            var args = GitDiffCommands.WorkTree("a.txt", ignoreWhitespace: true).Arguments;
+            Assert.Contains("-w", args);
+
+            var full = GitDiffCommands.WithViewMode(args, GitDiffViewMode.FullContent);
+            Assert.Equal("-U" + GitDiffCommands.FullFileContext, full[1]);
+            Assert.DoesNotContain("-w", full);
+            Assert.Contains("-w", GitDiffCommands.WithViewMode(args, GitDiffViewMode.FullFile));   // 다른 모드는 그대로
+            Assert.True(GitDiffCommands.IgnoresWhitespace(true, GitDiffViewMode.FullFile));
+            Assert.False(GitDiffCommands.IgnoresWhitespace(true, GitDiffViewMode.FullContent));
+        }
+
+        [Fact]
+        public void WithViewMode_FullContent_KeepsPathNamedLikeOption()
+        {
+            var args = GitDiffCommands.WorkTree("-w").Arguments;   // 공백 무시 꺼짐, 경로 이름이 "-w"
+            Assert.Equal(args.Count + 1, GitDiffCommands.WithViewMode(args, GitDiffViewMode.FullContent).Count);
+            Assert.Equal("-w", GitDiffCommands.WithViewMode(args, GitDiffViewMode.FullContent).Last());
+        }
+
+        [Fact]
+        public void SplitSides_GivesOldAndNewContentWithoutMarks()
+        {
+            var diff = string.Join("\n",
+                "diff --git a/f.txt b/f.txt",
+                "index 1111111..2222222 100644",
+                "--- a/f.txt",
+                "+++ b/f.txt",
+                "@@ -1,4 +1,4 @@",
+                " a",
+                "-b",
+                "+B",
+                "+B2",
+                " c",
+                "-d",
+                "\\ No newline at end of file") + "\n";
+
+            var (oldSide, newSide) = GitOutputParser.SplitSides(GitOutputParser.ParseDiff(diff));
+
+            string[] Body(List<GitDiffLine> side) => side.Where(l => l.Kind == GitDiffLineKind.Context).Select(l => l.Text).ToArray();
+            int?[] Numbers(List<GitDiffLine> side) => side.Where(l => l.Kind == GitDiffLineKind.Context).Select(l => l.NewLine).ToArray();
+            Assert.Equal(new[] { "a", "b", "c", "d" }, Body(oldSide));
+            Assert.Equal(new int?[] { 1, 2, 3, 4 }, Numbers(oldSide));
+            Assert.Equal(new[] { "a", "B", "B2", "c" }, Body(newSide));
+            Assert.Equal(new int?[] { 1, 2, 3, 4 }, Numbers(newSide));
+            // 색 붙는 줄(추가·삭제)·hunk 머리줄·"\ No newline"은 없다. 파일 머리줄은 양쪽에.
+            foreach (var side in new[] { oldSide, newSide })
+            {
+                Assert.All(side, l => Assert.True(l.Kind == GitDiffLineKind.Context || l.Kind == GitDiffLineKind.Header));
+                Assert.Equal(4, side.Count(l => l.Kind == GitDiffLineKind.Header));
+            }
+        }
+
+        [SkippableFact]
+        public async Task RealGit_FullContent_ShowsExactOldAndNewFiles_EvenWithIgnoreWhitespace()
+        {
+            Skip.If(GitCommandRunner.FindGit() == null, "git이 설치되어 있지 않음");
+            var repo = await InitRepoAsync("fullcontent");
+            var before = Enumerable.Range(1, 30).Select(i => "line" + i).ToList();
+            File.WriteAllText(Path.Combine(repo, "f.txt"), string.Join("\n", before) + "\n");
+            await CommitAllAsync(repo, "init");
+            var after = new List<string>(before);
+            after[4] = "  line5";          // 공백만 바뀜 — -w였다면 변경 전 쪽도 이 모양으로 보인다
+            after[14] = "CHANGED";
+            after.RemoveAt(24);
+            after.Add("added");
+            File.WriteAllText(Path.Combine(repo, "f.txt"), string.Join("\n", after) + "\n");
+
+            var args = GitDiffCommands.WithViewMode(GitDiffCommands.WorkTree("f.txt", ignoreWhitespace: true).Arguments, GitDiffViewMode.FullContent);
+            var result = await Run(repo, args);
+            var (oldSide, newSide) = GitOutputParser.SplitSides(GitOutputParser.ParseDiff(result.StdOut));
+
+            Assert.Equal(before, oldSide.Where(l => l.Kind == GitDiffLineKind.Context).Select(l => l.Text));
+            Assert.Equal(after, newSide.Where(l => l.Kind == GitDiffLineKind.Context).Select(l => l.Text));
         }
 
         // ── 커밋 안 된 새 폴더 안 파일 / 변경 없는 파일 ─────────────────────────

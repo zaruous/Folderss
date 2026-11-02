@@ -582,6 +582,9 @@ Folderss/
 - diff 보기 모드: `GitDiffView.ViewMode`(창마다, 초기값 `GitSettings.DiffViewMode`)를 `LoadDiffAsync`가 `GitDiffCommands.WithViewMode`로
   하위 명령 바로 뒤에 `-U10` / `-U1000000`(전체 파일)으로 넣는다. 변경점만은 옵션을 넣지 않아 사용자 `diff.context`를 따른다.
   모드를 바꾸면 `ViewModeChanged` → 같은 `CurrentRequest`를 다시 불러온다. UTF-16 재비교(`GitEncodingDiff`)에도 같은 모드를 쓴다. 추적 안 됨(전체 추가)은 선택 상자를 숨긴다.
+  변경 전/후 전체(`FullContent`)는 전체 파일과 같은 `-U1000000` diff를 읽고 `GitOutputParser.SplitSides`로 변경 전/후 두 줄 목록으로 나눠
+  `GitDiffView`의 양옆 두 칸(`LineList`/`NewLineList`, 색·줄 맞춤 없음)에 보인다. 이 모드는 `-w`를 빼고 읽는다(`GitDiffCommands.IgnoresWhitespace` —
+  CLI 인수·libgit2·UTF-16 재비교 공통). HTML 보고서 범위에는 없고, 이 모드에서 보고서를 열면 범위가 전체 파일로 시작한다.
 - 상태 조회는 `GitOutputParser.StatusArguments`(`--untracked-files=all`)로 새 폴더 안 파일을 하나씩 받는다(폴더 한 줄로 접지 않음 —
   add할 파일을 고를 수 있게). 대가로 무시되지 않은 거대한 새 폴더(빌드 산출물 등)가 있으면 항목이 많아지고 status가 느려진다.
 - 상태 배지: 같은 파일이 변경됨·스테이지됨 양쪽에 있을 수 있어(MM, AM) `ShowChanges`가 `GitStatusEntry.ForSide(WorkTree|Index)` 사본을 만든다.

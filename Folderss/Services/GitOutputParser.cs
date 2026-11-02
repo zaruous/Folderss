@@ -325,6 +325,46 @@ namespace Folderss.Services
             return lines;
         }
 
+        /// <summary>
+        /// 전체 파일 diff(<see cref="ParseDiff"/> 결과)를 변경 전 내용 / 변경 후 내용 두 줄 목록으로 나눈다(변경 전/후 전체 내용 보기).
+        /// 삭제 줄은 변경 전에만, 추가 줄은 변경 후에만, 문맥 줄은 양쪽에 들어가고 모두 색 없는 문맥 줄이 된다.
+        /// 줄 번호는 각 쪽 번호를 <see cref="GitDiffLine.NewLine"/>에 둔다(번호 열 하나로 보이므로).
+        /// 파일 머리줄·생략 안내는 양쪽에, hunk 머리줄과 "\ No newline…"은 뺀다.
+        /// </summary>
+        public static (List<GitDiffLine> Old, List<GitDiffLine> New) SplitSides(IEnumerable<GitDiffLine> lines)
+        {
+            var oldSide = new List<GitDiffLine>();
+            var newSide = new List<GitDiffLine>();
+            foreach (var line in lines)
+            {
+                switch (line.Kind)
+                {
+                    case GitDiffLineKind.Context:
+                        oldSide.Add(new GitDiffLine { Kind = GitDiffLineKind.Context, Text = Body(line.Text), NewLine = line.OldLine });
+                        newSide.Add(new GitDiffLine { Kind = GitDiffLineKind.Context, Text = Body(line.Text), NewLine = line.NewLine });
+                        break;
+                    case GitDiffLineKind.Removed:
+                        oldSide.Add(new GitDiffLine { Kind = GitDiffLineKind.Context, Text = Body(line.Text), NewLine = line.OldLine });
+                        break;
+                    case GitDiffLineKind.Added:
+                        newSide.Add(new GitDiffLine { Kind = GitDiffLineKind.Context, Text = Body(line.Text), NewLine = line.NewLine });
+                        break;
+                    case GitDiffLineKind.Hunk:
+                        break;
+                    case GitDiffLineKind.Meta when line.Text.StartsWith("\\", StringComparison.Ordinal):
+                        break;
+                    default:
+                        oldSide.Add(new GitDiffLine { Kind = line.Kind, Text = line.Text });
+                        newSide.Add(new GitDiffLine { Kind = line.Kind, Text = line.Text });
+                        break;
+                }
+            }
+            return (oldSide, newSide);
+
+            // 앞의 +/-/공백 표시 한 글자를 뗀 원래 줄. 충돌 파일(combined diff)은 표시가 두 글자라 한 글자가 남는다.
+            string Body(string text) => string.IsNullOrEmpty(text) ? string.Empty : text.Substring(1);
+        }
+
         /// <summary><c>git stash list -z</c> + <see cref="GitStashCommands.List"/> 형식 출력을 해석한다.</summary>
         public static List<GitStashInfo> ParseStashes(string output)
         {

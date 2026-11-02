@@ -48,7 +48,7 @@ namespace Folderss.Services
             {
                 EnsureSupported(repo, request);
                 var settings = DiffSettings.From(repo.Config, mode);
-                var flags = settings.Flags | (request.IgnoreWhitespace ? DiffIgnoreWhitespace : 0);
+                var flags = settings.Flags | (GitDiffCommands.IgnoresWhitespace(request.IgnoreWhitespace, mode) ? DiffIgnoreWhitespace : 0);
                 if (request.Paths != null)
                     flags |= DiffDisablePathspecMatch;
 
@@ -108,7 +108,7 @@ namespace Folderss.Services
             if (request.Paths == null || request.Paths.Count != 2)
                 throw new NotSupportedException("두 파일 경로 없음");
             var settings = DiffSettings.From(Configuration.BuildFrom(null), mode);
-            var flags = settings.Flags | (request.IgnoreWhitespace ? DiffIgnoreWhitespace : 0);
+            var flags = settings.Flags | (GitDiffCommands.IgnoresWhitespace(request.IgnoreWhitespace, mode) ? DiffIgnoreWhitespace : 0);
             var oldBytes = File.ReadAllBytes(request.Paths[0]);
             var newBytes = File.ReadAllBytes(request.Paths[1]);
             using (var options = new NativeDiffOptions(flags, settings.Context, settings.InterHunk, null))
@@ -376,7 +376,7 @@ namespace Folderss.Services
                 var settings = new DiffSettings
                 {
                     Context = mode == GitDiffViewMode.Context10 ? 10
-                        : mode == GitDiffViewMode.FullFile ? GitDiffCommands.FullFileContext
+                        : mode == GitDiffViewMode.FullFile || mode == GitDiffViewMode.FullContent ? GitDiffCommands.FullFileContext
                         : config?.Get<int>("diff.context")?.Value ?? 3,
                     InterHunk = config?.Get<int>("diff.interHunkContext")?.Value ?? 0
                 };

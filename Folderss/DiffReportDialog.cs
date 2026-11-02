@@ -28,7 +28,7 @@ namespace Folderss
 
         public bool OpenAfterSave => _openAfterSave.IsChecked == true;
 
-        /// <param name="initialScope">처음 고른 범위 — 지금 보고 있는 diff 창의 보기 모드.</param>
+        /// <param name="initialScope">처음 고른 범위 — 지금 보고 있는 diff 창의 보기 모드. 변경 전/후 전체 내용 보기는 보고서 범위가 없어 전체 파일로 시작한다.</param>
         public DiffReportDialog(GitDiffViewMode initialScope) : base("HTML 보고서", 460)
         {
             AddText("보고 있는 비교를 HTML 파일 한 장으로 저장합니다(스타일 포함, 브라우저에서 인쇄·PDF 저장 가능).", secondary: true);
@@ -41,7 +41,7 @@ namespace Folderss
             _changesOnly = AddRadio("scope", "변경점만", "바뀐 곳과 앞뒤 몇 줄(git 기본 문맥)만.", initialScope == GitDiffViewMode.ChangesOnly);
             _context10 = AddRadio("scope", "변경점 + 앞뒤 10줄", null, initialScope == GitDiffViewMode.Context10);
             _fullFile = AddRadio("scope", "전체 파일", "파일 전체를 넣고 바뀐 줄만 색으로 표시합니다. 큰 파일은 보고서도 커집니다.",
-                initialScope == GitDiffViewMode.FullFile);
+                initialScope == GitDiffViewMode.FullFile || initialScope == GitDiffViewMode.FullContent);
 
             _openAfterSave = AddCheck("저장한 뒤 기본 브라우저로 열기", true);
             AddButtons("저장…");
