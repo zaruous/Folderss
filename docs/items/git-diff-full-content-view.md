@@ -34,7 +34,8 @@
 
 ## 검증
 
-- `dotnet test tests/Folderss.SearchTests` (Linux, .NET 8 SDK): 1126 통과 / 5 건너뜀 / 2 실패 — 실패 2건(`ZipArchiveTests` 경로 관련)은 변경 전에도 같은 결과.
+- `dotnet test tests/Folderss.SearchTests` (Linux, .NET 8 SDK): 1128 통과 / 5 건너뜀 / 0 실패.
+  - `ZipArchiveTests` 2건이 Windows 구분자(`\`)를 고정해 Linux에서 실패하던 것을 `Path.DirectorySeparatorChar`로 바꿔 OS별로 맞춤(Windows에서는 기존과 같은 값).
   - 새 테스트: `GitTests.WithViewMode_FullContent_UsesWholeFileContext_AndDropsIgnoreWhitespace`, `WithViewMode_FullContent_KeepsPathNamedLikeOption`,
     `SplitSides_GivesOldAndNewContentWithoutMarks`, `RealGit_FullContent_ShowsExactOldAndNewFiles_EvenWithIgnoreWhitespace`;
     `GitLibDiffTests`에 FullContent + 공백 무시 요청이 CLI와 libgit2에서 같은지 2건.

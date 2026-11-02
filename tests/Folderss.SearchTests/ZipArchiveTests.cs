@@ -82,7 +82,7 @@ namespace Folderss.SearchTests
             Assert.Equal(zip, archive);
             Assert.Equal("sub/f.txt", inner);
 
-            Assert.True(ZipArchivePath.TrySplit(zip + "\\", out archive, out inner));
+            Assert.True(ZipArchivePath.TrySplit(zip + Path.DirectorySeparatorChar, out archive, out inner));   // 끝 구분자: Windows '\', Linux '/'
             Assert.Equal(zip, archive);
             Assert.Equal(string.Empty, inner);
         }
@@ -114,7 +114,9 @@ namespace Folderss.SearchTests
         public void Combine_And_Parent_RoundTrip()
         {
             Assert.Equal(@"C:\a\b.zip", ZipArchivePath.Combine(@"C:\a\b.zip", ""));
-            Assert.Equal(@"C:\a\b.zip\sub\f.txt", ZipArchivePath.Combine(@"C:\a\b.zip", "sub/f.txt"));
+            // 안쪽 경로는 OS 구분자로 붙는다(Windows '\', Linux '/').
+            var sep = Path.DirectorySeparatorChar;
+            Assert.Equal(@"C:\a\b.zip" + sep + "sub" + sep + "f.txt", ZipArchivePath.Combine(@"C:\a\b.zip", "sub/f.txt"));
             Assert.Equal("sub", ZipArchivePath.GetParentInnerPath("sub/f.txt"));
             Assert.Equal(string.Empty, ZipArchivePath.GetParentInnerPath("f.txt"));
             Assert.Equal("a/b", ZipArchivePath.NormalizeInnerPath(@"\a\.\\b\"));
