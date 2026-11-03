@@ -247,6 +247,7 @@ Folderss/
   (localhost 또는 표시+http 허용)일 때만 `HttpClient`로 받아 전달한다(`image/*`, 20MB, 15초). 뷰어 페이지가 https라 http 이미지는 혼합 콘텐츠로 막히기 때문.
 - 인증서: Windows 저장소로 먼저 검증하고, 실패하면 `ServerCertificateErrorDetected`(WebView2)·`ServerCertificateCustomValidationCallback`(HttpClient)에서
   `ShouldAllowCertificateError`(localhost·오류 허용·추가한 내부 인증서로 체인+호스트 이름 확인)로 다시 판정한다. 설정 저장 시 `ClearServerCertificateErrorActionsAsync`.
+- 플러그인 GitHub 설치(`PluginGitHubSource.CreateClient`)도 같은 콜백을 쓰되 `PluginGitHubSource.ShouldAllowCertificateError`로 "인증서 오류 허용"을 끈 채 판정한다(실행할 코드를 받는 경로).
 - 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
   그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
 
