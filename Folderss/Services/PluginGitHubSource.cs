@@ -4,7 +4,9 @@ using System.IO;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Net.Security;
 using System.Security.Cryptography;
+using System.Security.Cryptography.X509Certificates;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using System.Threading;
@@ -48,13 +50,39 @@ namespace Folderss.Services
 
         public static HttpClient SharedClient { get { return Shared.Value; } }
 
-        /// <summary>Windows 프록시 설정을 따르고, 인증 프록시에는 현재 사용자 자격 증명을 쓴다.</summary>
+        /// <summary>
+        /// Windows 프록시 설정을 따르고, 인증 프록시에는 현재 사용자 자격 증명을 쓴다.
+        /// Windows 저장소 검증에 실패하면 네트워크 설정의 "추가로 신뢰할 내부 인증서"로 다시 판정한다(<see cref="ShouldAllowCertificateError"/>).
+        /// </summary>
         public static HttpClient CreateClient()
         {
-            var handler = new HttpClientHandler { DefaultProxyCredentials = CredentialCache.DefaultCredentials };
+            var handler = new HttpClientHandler
+            {
+                DefaultProxyCredentials = CredentialCache.DefaultCredentials,
+                // 요청마다 Current를 읽으므로 설정 저장 후 다음 요청부터 바로 적용된다.
+                ServerCertificateCustomValidationCallback = (request, certificate, chain, errors) =>
+                    errors == SslPolicyErrors.None ||
+                    ShouldAllowCertificateError(request.RequestUri, certificate,
+                        chain == null ? Enumerable.Empty<X509Certificate2>() : chain.ChainElements.Cast<X509ChainElement>().Select(el => el.Certificate),
+                        NetworkSettingsService.Current)
+            };
             var client = new HttpClient(handler) { Timeout = TimeSpan.FromMinutes(2) };
             client.DefaultRequestHeaders.UserAgent.ParseAdd("Folderss-PluginInstall");
             return client;
+        }
+
+        /// <summary>
+        /// 플러그인 받기의 인증서 오류 판정. 추가한 내부 인증서로 체인이 이어지고 호스트 이름이 맞을 때만 허용한다.
+        /// "인증서 오류가 있는 사이트 허용"은 따르지 않는다 — 실행할 코드를 받는 경로라, 검증을 끄면 중간자가 zip과 SHA-256(같은 API 응답)을 함께 바꿀 수 있다.
+        /// </summary>
+        public static bool ShouldAllowCertificateError(Uri uri, X509Certificate2 serverCertificate,
+            IEnumerable<X509Certificate2> presentedChain, NetworkSettings settings)
+        {
+            if (settings == null)
+                return false;
+            var strict = settings.Clone();
+            strict.AllowInvalidCertificates = false;
+            return RemoteContentPolicy.ShouldAllowCertificateError(uri, serverCertificate, presentedChain, strict);
         }
 
         /// <summary>

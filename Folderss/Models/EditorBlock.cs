@@ -44,6 +44,10 @@ namespace Folderss.Models
         /// 화면에는 속성 표(키 | 값)로 보이고, 편집은 <c>Services/FrontMatter</c>로 그 속성 줄만 다시 쓴다. 원문 편집으로 바꾸면 잠시 <see cref="Raw"/>가 된다.
         /// </summary>
         FrontMatter,
+        /// <summary>제목 4~6(<c>####</c>~<c>######</c>). 기존 값의 순서를 바꾸지 않으려고 끝에 둔다.</summary>
+        Heading4,
+        Heading5,
+        Heading6,
     }
 
     /// <summary>
@@ -160,7 +164,7 @@ namespace Folderss.Models
             return 0;
         }
 
-        /// <summary>제목 단계(1~3). <see cref="BlockKind.Heading1"/>~<see cref="BlockKind.Heading3"/> 또는 토글 제목이면 1~3, 아니면 0.</summary>
+        /// <summary>제목 단계. <see cref="BlockKind.Heading1"/>~<see cref="BlockKind.Heading6"/>이면 1~6, 토글 제목이면 1~3, 아니면 0.</summary>
         public int GetHeadingLevel()
         {
             switch (Kind)
@@ -168,6 +172,9 @@ namespace Folderss.Models
                 case BlockKind.Heading1: return 1;
                 case BlockKind.Heading2: return 2;
                 case BlockKind.Heading3: return 3;
+                case BlockKind.Heading4: return 4;
+                case BlockKind.Heading5: return 5;
+                case BlockKind.Heading6: return 6;
                 case BlockKind.Toggle: return GetToggleHeadingLevel();
                 default: return 0;
             }

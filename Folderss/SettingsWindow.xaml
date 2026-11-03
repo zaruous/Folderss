@@ -909,7 +909,7 @@
 
                         <TextBlock Style="{StaticResource NetSection}" Text="추가로 신뢰할 내부 인증서"/>
                         <TextBlock Style="{StaticResource NetHint}"
-                                   Text="Windows에 설치되지 않은 사내 루트 인증서(.cer, .crt, .pem)를 추가하면 그 인증서가 발급한 서버를 신뢰합니다. Windows에는 설치하지 않고 Folderss에서만 사용합니다."/>
+                                   Text="Windows에 설치되지 않은 사내 루트 인증서(.cer, .crt, .pem)를 추가하면 그 인증서가 발급한 서버를 신뢰합니다. Windows에는 설치하지 않고 Folderss에서만 사용합니다. 플러그인 GitHub 설치에도 적용됩니다(위의 &quot;인증서 오류 허용&quot;은 플러그인 설치에 적용되지 않음)."/>
                         <ListView x:Name="NetworkCertificateList" Height="120" Margin="0,8,0,0" SelectionMode="Single"
                                   BorderThickness="1" BorderBrush="{DynamicResource BorderBrush}">
                             <ListView.View>

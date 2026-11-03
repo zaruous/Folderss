@@ -130,6 +130,35 @@ namespace Folderss.SearchTests
                 new Uri("https://localhost:5001/a.png"), _leaf, Array.Empty<X509Certificate2>(), new NetworkSettings()));
         }
 
+        // ── 플러그인 GitHub 받기 ──────────────────────────────
+
+        [Fact]
+        public void PluginDownload_TrustedInternalRoot_IsAllowed()
+        {
+            var leaf = CreateLeaf(_root, "api.github.com");
+            var settings = new NetworkSettings();
+            settings.TrustedCertificates.Add(_root.ExportCertificatePem());
+            Assert.True(PluginGitHubSource.ShouldAllowCertificateError(
+                new Uri("https://api.github.com/repos/a/b/releases/latest"), leaf, Array.Empty<X509Certificate2>(), settings));
+        }
+
+        [Fact]
+        public void PluginDownload_NoTrustedCertificate_IsNotAllowed()
+        {
+            var leaf = CreateLeaf(_root, "api.github.com");
+            Assert.False(PluginGitHubSource.ShouldAllowCertificateError(
+                new Uri("https://api.github.com/repos/a/b/releases/latest"), leaf, Array.Empty<X509Certificate2>(), new NetworkSettings()));
+        }
+
+        [Fact]
+        public void PluginDownload_IgnoresAllowInvalidOption()
+        {
+            var leaf = CreateLeaf(_root, "api.github.com");
+            Assert.False(PluginGitHubSource.ShouldAllowCertificateError(
+                new Uri("https://api.github.com/repos/a/b/releases/latest"), leaf, Array.Empty<X509Certificate2>(),
+                new NetworkSettings { AllowInvalidCertificates = true }));
+        }
+
         // ── 설정 파일·인증서 파일 ──────────────────────────────
 
         [Fact]

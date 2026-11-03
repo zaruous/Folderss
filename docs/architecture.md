@@ -247,6 +247,7 @@ Folderss/
   (localhost 또는 표시+http 허용)일 때만 `HttpClient`로 받아 전달한다(`image/*`, 20MB, 15초). 뷰어 페이지가 https라 http 이미지는 혼합 콘텐츠로 막히기 때문.
 - 인증서: Windows 저장소로 먼저 검증하고, 실패하면 `ServerCertificateErrorDetected`(WebView2)·`ServerCertificateCustomValidationCallback`(HttpClient)에서
   `ShouldAllowCertificateError`(localhost·오류 허용·추가한 내부 인증서로 체인+호스트 이름 확인)로 다시 판정한다. 설정 저장 시 `ClearServerCertificateErrorActionsAsync`.
+- 플러그인 GitHub 설치(`PluginGitHubSource.CreateClient`)도 같은 콜백을 쓰되 `PluginGitHubSource.ShouldAllowCertificateError`로 "인증서 오류 허용"을 끈 채 판정한다(실행할 코드를 받는 경로).
 - 다른 문서 제목 링크(`other.md#제목`): 링크를 누른 뷰어가 정적 `PendingAnchors[대상 전체 경로]`에 조각을 넣고 파일 열기를 요청하면,
   그 파일의 뷰어가 `CallAppOpen` 직후 또는 `SetActive(true)` 때 꺼내 `app.scrollToAnchor`를 호출한다.
 
@@ -759,7 +760,7 @@ Folderss/
   연산마다 `SyncRows` → `RecordChange` 한 번(실행 취소 한 단계). 너비 끌기 중에는 화면에 만든 그 표의 행만 다시 그리고 놓을 때 기록한다.
   셀 손잡이는 셀에 처음 마우스를 올릴 때 만든다(행 추가 비용에 넣지 않음).
 - 이미지 `BlockImageLoader`: 파일 읽기·디코딩은 스레드 풀에서(화면 폭 × DPI로 `DecodePixelWidth`, 400px 단위), Freeze한 결과를 UI 스레드로. 최근 64개 LRU,
-  원본 픽셀 크기를 기억해 행을 만들기 전 높이 추정에 쓴다. 클립보드 이미지 붙여넣기(`images/<문서이름>-<시각>.png`), 탐색기/폴더 패널 파일 드래그 앤 드롭(외부 폴더 이미지는 `BlockImageDropDialog`), 우측 핸들 폭 조절(`width`), 정렬(`align`), 원본 크기 보기(`BlockImagePreviewWindow`), 수동 원격 이미지 로드(`이번만 불러오기`, `RemoteContentPolicy`·`NetworkSettingsService` 인증서 검증)를 지원한다. 수식(`Math`, `$$...$$` 및 인라인 `$...$`)은 순수 C# WPF 수식 렌더러(`BlockMathRenderer`)로 그리며, 목차(`Toc`, `[TOC]`/`<!-- toc -->`), 파일 첨부(`File`, `[📎 이름](경로)`), 북마크(`Bookmark`, `[🔖 제목](URL)`), 토글 제목 1~3(`Toggle` + `heading`), 콜아웃 아이콘 선택기(`Callout` + `icon`)를 지원한다.
+  원본 픽셀 크기를 기억해 행을 만들기 전 높이 추정에 쓴다. 클립보드 이미지 붙여넣기(`images/<문서이름>-<시각>.png`), 탐색기/폴더 패널 파일 드래그 앤 드롭(외부 폴더 이미지는 `BlockImageDropDialog`), 우측 핸들 폭 조절(`width`), 정렬(`align`), 원본 크기 보기(`BlockImagePreviewWindow`), 수동 원격 이미지 로드(`이번만 불러오기`, `RemoteContentPolicy`·`NetworkSettingsService` 인증서 검증)를 지원한다. 수식(`Math`, `$$...$$` 및 인라인 `$...$`)은 순수 C# WPF 수식 렌더러(`BlockMathRenderer`)로 그리며, 목차(`Toc`, `[TOC]`/`<!-- toc -->`), 파일 첨부(`File`, `[📎 이름](경로)`), 북마크(`Bookmark`, `[🔖 제목](URL)`), 제목 1~6(`Heading1`~`Heading6`, 4~6은 enum 끝에 추가), 토글 제목 1~3(`Toggle` + `heading`), 콜아웃 아이콘 선택기(`Callout` + `icon`)를 지원한다.
   페이지 링크(`Page`, `[📄 제목](경로.md)`, #77 Phase 2): 페이지 = `.md` 파일. 카드 제목을 누르면 `PageOpenRequested` → 뷰어 `IFileOpenRequester.FileOpenRequested`로 새 탭에서 연다(파일이 없으면 만들지 묻는다).
   `/페이지`의 `BlockPageDialog`는 하위 페이지(문서 옆 `문서이름/제목.md`, 제목 한 줄)를 새로 만들거나 기존 문서를 연결한다. 백링크·이동 경로는 #74. 파일·북마크·페이지는 `EditorBlock.IsLinkCard`로 같이 다룬다.
 - 키: `OnPreviewKeyDown` 한 곳에서 처리(Ctrl+S/Z/Y → 블록 선택 모드 → `/` 메뉴 → 표 셀(`HandleTableKey`) → 입력란). 한글 조합 중 Enter(`Key.ImeProcessed`)는 조합이 끝난 뒤

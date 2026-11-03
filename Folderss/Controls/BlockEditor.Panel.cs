@@ -447,6 +447,10 @@ namespace Folderss.Controls
                         return EstimateLines(block.Text, 22, width, false, formatted) * 29 + 24;
                     case BlockKind.Heading3:
                         return EstimateLines(block.Text, 18, width, false, formatted) * 24 + 17;
+                    case BlockKind.Heading4:
+                    case BlockKind.Heading5:
+                    case BlockKind.Heading6:
+                        return EstimateLines(block.Text, 16.5, width, false, formatted) * 22 + 15;
                     case BlockKind.Code:
                         return EstimateLines(block.Text, 13.5, width - 30, true) * 18 + 52;
                     case BlockKind.Raw:

@@ -9,7 +9,7 @@ using System.Xml;
 namespace Folderss.Services
 {
     /// <summary>
-    /// 뷰어가 외부 주소에 접속하는 방식(설정 창의 "네트워크" 탭). 지금은 마크다운 뷰어의 원격 이미지에 쓴다.
+    /// 뷰어가 외부 주소에 접속하는 방식(설정 창의 "네트워크" 탭). 지금은 마크다운 뷰어의 원격 이미지에 쓰고, 플러그인 GitHub 설치는 추가 신뢰 인증서만 쓴다(<see cref="PluginGitHubSource.ShouldAllowCertificateError"/>).
     /// localhost 같은 이 PC 안의 주소는 이 설정과 관계없이 허용한다(<see cref="RemoteContentPolicy"/>).
     /// </summary>
     public sealed class NetworkSettings

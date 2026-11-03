@@ -110,6 +110,7 @@ namespace Folderss.SearchTests
             yield return new object[] { "```\n안 닫힌 코드\n\n\n" };
             yield return new object[] { "\n\n   \n" };
             yield return new object[] { string.Empty };
+            yield return new object[] { "####   넷 ####\n\n#####다섯 아님\n\n###### 여섯\n" };    // 제목 4~6, 닫는 #, # 뒤 공백 없음(문단)
             yield return new object[] { "$$\nx^2\n$$\n\n$$ y $$\n\n[TOC]\n\n![a](b.png)\n\n[📎 파일](a.zip)\n" };
         }
 
@@ -164,6 +165,17 @@ namespace Folderss.SearchTests
             var d = Diff(Messy, saved);
             Assert.Equal(new[] { "Some __bold__ and *italic* text,", "wrapped by hand.   " }, d.removed);
             Assert.Equal(new[] { "Some __bold__ text, edited." }, d.added);
+        }
+
+        [Fact]
+        public void EditHeading4_OnlyThatLineChanges()
+        {
+            var original = Lf("# 하나", "", "####   넷 ####", "", "본문");
+            var blocks = MarkdownSource.Parse(original, out var source);
+            blocks[IndexOf(blocks, "넷")].Text = "넷 수정";
+            var d = Diff(original, Save(source, blocks));
+            Assert.Equal(new[] { "####   넷 ####" }, d.removed);
+            Assert.Equal(new[] { "#### 넷 수정" }, d.added);
         }
 
         [Fact]
