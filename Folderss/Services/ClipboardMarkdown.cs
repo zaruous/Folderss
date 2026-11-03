@@ -118,6 +118,9 @@ namespace Folderss.Services
                             if (name == "h1") prefix = "# ";
                             else if (name == "h2") prefix = "## ";
                             else if (name == "h3") prefix = "### ";
+                            else if (name == "h4") prefix = "#### ";
+                            else if (name == "h5") prefix = "##### ";
+                            else if (name == "h6") prefix = "###### ";
                             else if (name == "blockquote") prefix = "> ";
                             else if (name == "li")
                             {

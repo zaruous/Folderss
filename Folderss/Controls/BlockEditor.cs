@@ -918,7 +918,8 @@ namespace Folderss.Controls
 
         private static bool IsHeading(BlockKind kind)
         {
-            return kind == BlockKind.Heading1 || kind == BlockKind.Heading2 || kind == BlockKind.Heading3;
+            return kind == BlockKind.Heading1 || kind == BlockKind.Heading2 || kind == BlockKind.Heading3
+                || kind == BlockKind.Heading4 || kind == BlockKind.Heading5 || kind == BlockKind.Heading6;
         }
 
         // ── 블록 편집 연산 ─────────────────────────────────────────────────
@@ -2253,6 +2254,9 @@ namespace Folderss.Controls
             BlockCommand("제목 1", "H1", "#", BlockKind.Heading1, "h1", "heading1", "title", "큰제목"),
             BlockCommand("제목 2", "H2", "##", BlockKind.Heading2, "h2", "heading2", "subtitle", "중간제목"),
             BlockCommand("제목 3", "H3", "###", BlockKind.Heading3, "h3", "heading3", "소제목"),
+            BlockCommand("제목 4", "H4", "####", BlockKind.Heading4, "h4", "heading4"),
+            BlockCommand("제목 5", "H5", "#####", BlockKind.Heading5, "h5", "heading5"),
+            BlockCommand("제목 6", "H6", "######", BlockKind.Heading6, "h6", "heading6"),
             ToggleHeadingCommand("토글 제목 1", "▸1", "1", "th1", "toggleh1", "토글제목1", "토글큰제목"),
             ToggleHeadingCommand("토글 제목 2", "▸2", "2", "th2", "toggleh2", "토글제목2", "토글중간제목"),
             ToggleHeadingCommand("토글 제목 3", "▸3", "3", "th3", "toggleh3", "토글제목3", "토글소제목"),

@@ -626,7 +626,7 @@ namespace Folderss.Controls
                     target.SetResourceReference(TextElement.FontFamilyProperty, "AppFontFamily");
                 target.SetValue(TextElement.FontSizeProperty, FontSizeOf(Block));
                 target.SetValue(TextElement.FontWeightProperty, headingLevel == 1 ? FontWeights.Bold
-                    : headingLevel == 2 || headingLevel == 3 ? FontWeights.SemiBold
+                    : headingLevel >= 2 ? FontWeights.SemiBold
                     : FontWeights.Normal);
             }
 
@@ -2367,6 +2367,9 @@ namespace Folderss.Controls
                     case BlockKind.Heading1: return 28;
                     case BlockKind.Heading2: return 22;
                     case BlockKind.Heading3: return 18;
+                    case BlockKind.Heading4: return 16.5;
+                    case BlockKind.Heading5:
+                    case BlockKind.Heading6: return 15;
                     case BlockKind.Code:
                     case BlockKind.Math: return 13.5;
                     case BlockKind.Raw: return 13;
@@ -2392,6 +2395,9 @@ namespace Folderss.Controls
                     case BlockKind.Heading1: return "제목 1";
                     case BlockKind.Heading2: return "제목 2";
                     case BlockKind.Heading3: return "제목 3";
+                    case BlockKind.Heading4: return "제목 4";
+                    case BlockKind.Heading5: return "제목 5";
+                    case BlockKind.Heading6: return "제목 6";
                     case BlockKind.Bulleted:
                     case BlockKind.Numbered: return "목록";
                     case BlockKind.Todo: return "할 일";

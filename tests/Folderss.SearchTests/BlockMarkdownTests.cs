@@ -214,18 +214,44 @@ namespace Folderss.SearchTests
         [Fact]
         public void UnknownConstructs_ArePreservedAsTextOrRaw()
         {
-            var markdown = Md("#### 네 번째 제목", "", "<div align=\"center\">", "  <img src=\"a.png\">", "</div>", "", "    indented code");
+            var markdown = Md("<div align=\"center\">", "  <img src=\"a.png\">", "</div>", "", "    indented code");
 
             var blocks = BlockMarkdown.Parse(markdown);
 
-            Assert.Equal(new[] { BlockKind.Paragraph, BlockKind.Raw, BlockKind.Raw }, blocks.Select(b => b.Kind));
+            Assert.Equal(new[] { BlockKind.Raw, BlockKind.Raw }, blocks.Select(b => b.Kind));
             Assert.Equal(markdown, BlockMarkdown.Serialize(blocks));
+        }
+
+        [Theory]
+        [InlineData("#### 넷", BlockKind.Heading4, 4)]
+        [InlineData("##### 다섯", BlockKind.Heading5, 5)]
+        [InlineData("###### 여섯", BlockKind.Heading6, 6)]
+        public void Heading4To6_ParseAsHeadingAndRoundTrip(string line, BlockKind kind, int level)
+        {
+            var markdown = Md(line, "", "본문");
+
+            var blocks = BlockMarkdown.Parse(markdown);
+
+            Assert.Equal(kind, blocks[0].Kind);
+            Assert.Equal(level, blocks[0].GetHeadingLevel());
+            Assert.Equal(line.Substring(level + 1), blocks[0].Text);
+            Assert.Equal(markdown, BlockMarkdown.Serialize(blocks));
+        }
+
+        [Fact]
+        public void SevenHashes_StayParagraph()
+        {
+            var blocks = BlockMarkdown.Parse(Md("####### 일곱"));
+            Assert.Equal(BlockKind.Paragraph, blocks[0].Kind);
         }
 
         [Theory]
         [InlineData("# ", BlockKind.Heading1, false)]
         [InlineData("## ", BlockKind.Heading2, false)]
         [InlineData("### ", BlockKind.Heading3, false)]
+        [InlineData("#### ", BlockKind.Heading4, false)]
+        [InlineData("##### ", BlockKind.Heading5, false)]
+        [InlineData("###### ", BlockKind.Heading6, false)]
         [InlineData("- ", BlockKind.Bulleted, false)]
         [InlineData("* ", BlockKind.Bulleted, false)]
         [InlineData("1. ", BlockKind.Numbered, false)]
@@ -250,7 +276,7 @@ namespace Folderss.SearchTests
 
         [Theory]
         [InlineData("#")]
-        [InlineData("#### ")]
+        [InlineData("####### ")]
         [InlineData("-")]
         [InlineData("a ")]
         [InlineData("1.")]

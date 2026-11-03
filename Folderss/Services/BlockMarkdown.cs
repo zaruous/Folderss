@@ -20,6 +20,10 @@ namespace Folderss.Services
     /// </summary>
     public static partial class BlockMarkdown
     {
+        private static readonly BlockKind[] HeadingKinds =
+        {
+            BlockKind.Heading1, BlockKind.Heading2, BlockKind.Heading3, BlockKind.Heading4, BlockKind.Heading5, BlockKind.Heading6,
+        };
         private static readonly Regex AtxHeading = new Regex(@"^(#{1,6})(?:[ \t]+(.*?))?(?:[ \t]+#+)?[ \t]*$");
         private static readonly Regex ThematicBreak = new Regex(@"^(?:(?:\*[ \t]*){3,}|(?:-[ \t]*){3,}|(?:_[ \t]*){3,})$");
         private static readonly Regex SetextH1 = new Regex(@"^=+[ \t]*$");
@@ -263,10 +267,7 @@ namespace Folderss.Services
                     {
                         var level = LevelForBlock(indent);
                         var hashes = heading.Groups[1].Value.Length;
-                        var headingBlock = hashes <= 3
-                            ? new EditorBlock(hashes == 1 ? BlockKind.Heading1 : hashes == 2 ? BlockKind.Heading2 : BlockKind.Heading3,
-                                heading.Groups[2].Value, level)
-                            : new EditorBlock(BlockKind.Paragraph, content.TrimEnd(), level);
+                        var headingBlock = new EditorBlock(HeadingKinds[hashes - 1], heading.Groups[2].Value, level);
                         output.Add(headingBlock);
                         Track(headingBlock, i, i + 1, indent);
                         Close();
@@ -1006,14 +1007,16 @@ namespace Folderss.Services
                 case BlockKind.Heading1:
                 case BlockKind.Heading2:
                 case BlockKind.Heading3:
-                    if (setext != null && kind != BlockKind.Heading3 && setext[0] == (kind == BlockKind.Heading1 ? '=' : '-')
+                case BlockKind.Heading4:
+                case BlockKind.Heading5:
+                case BlockKind.Heading6:
+                    if (setext != null && (kind == BlockKind.Heading1 || kind == BlockKind.Heading2) && setext[0] == (kind == BlockKind.Heading1 ? '=' : '-')
                         && OneLine(text).Trim().Length > 0)
                     {
                         sb.Append(indent).Append(OneLine(text)).Append('\n').Append(indent).Append(setext).Append('\n');
                         break;
                     }
-                    var hashes = kind == BlockKind.Heading1 ? "# " : kind == BlockKind.Heading2 ? "## " : "### ";
-                    sb.Append(indent).Append(hashes).Append(OneLine(text)).Append('\n');
+                    sb.Append(indent).Append('#', Array.IndexOf(HeadingKinds, kind) + 1).Append(' ').Append(OneLine(text)).Append('\n');
                     break;
 
                 case BlockKind.Bulleted:
@@ -1184,7 +1187,7 @@ namespace Folderss.Services
 
         /// <summary>
         /// 문단 맨 앞에 입력한 Markdown 표식(커서 앞 글자 전부)을 블록 종류로 바꾼다. Notion과 같은 자동 변환:
-        /// <c># </c> 제목 1, <c>## </c>, <c>### </c>, <c>- </c>/<c>* </c>/<c>+ </c> 글머리 기호, <c>1. </c> 번호, <c>[] </c>/<c>[x] </c> 할 일,
+        /// <c># </c> 제목 1, <c>## </c>~<c>###### </c> 제목 2~6, <c>- </c>/<c>* </c>/<c>+ </c> 글머리 기호, <c>1. </c> 번호, <c>[] </c>/<c>[x] </c> 할 일,
         /// <c>&gt; </c>·<c>" </c> 인용, <c>``` </c>(백틱 셋) 코드, <c>---</c> 구분선.
         /// </summary>
         public static bool TryMatchShortcut(string prefix, out BlockKind kind, out bool isChecked)
@@ -1196,6 +1199,9 @@ namespace Folderss.Services
                 case "# ": kind = BlockKind.Heading1; return true;
                 case "## ": kind = BlockKind.Heading2; return true;
                 case "### ": kind = BlockKind.Heading3; return true;
+                case "#### ": kind = BlockKind.Heading4; return true;
+                case "##### ": kind = BlockKind.Heading5; return true;
+                case "###### ": kind = BlockKind.Heading6; return true;
                 case "- ":
                 case "* ":
                 case "+ ": kind = BlockKind.Bulleted; return true;
