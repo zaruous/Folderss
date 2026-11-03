@@ -21,7 +21,7 @@ namespace Folderss.Controls
     /// <item>입력: Enter 블록 나누기, Backspace(맨 앞) 텍스트로 전환·내어쓰기·앞 블록에 합치기, Tab/Shift+Tab 들여쓰기, ↑↓←→ 블록 사이 이동.</item>
     /// <item>문단 맨 앞 Markdown 표식(<c># </c>, <c>- </c>, <c>1. </c>, <c>[] </c>, <c>&gt; </c>, <c>```</c>, <c>---</c>)은 블록 종류로 바뀐다(<see cref="BlockMarkdown.TryMatchShortcut"/>).</item>
     /// <item><c>/</c> 명령 메뉴, 왼쪽 <c>+</c>·<c>⋮⋮</c> 손잡이(끌어 옮기기·블록 메뉴), Esc 블록 선택(Shift+↑↓ 확장, Del 삭제, Ctrl+C Markdown 복사).</item>
-    /// <item>Ctrl+Shift+↑↓ 블록 이동, Ctrl+D 복제, Ctrl+Alt+0~8 블록 전환, Ctrl+Enter 할 일 체크·토글 접기, Ctrl+B/I/E/Shift+S 줄 안 서식 적용·해제, Ctrl+K 링크 주소 팝업(서식 블록 — <c>BlockEditor.Inline.cs</c>, 표 셀은 Markdown 표식으로 감쌈).</item>
+    /// <item>Ctrl+Shift+↑↓ 블록 이동, Ctrl+D 복제, Ctrl+Alt+0~9 블록 전환, Ctrl+Enter 할 일 체크·토글 접기, Ctrl+B/I/E/Shift+S 줄 안 서식 적용·해제, Ctrl+K 링크 주소 팝업(서식 블록 — <c>BlockEditor.Inline.cs</c>, 표 셀은 Markdown 표식으로 감쌈).</item>
     /// <item>표는 행마다 블록(셀 입력란, Tab·Enter로 셀 이동·행 추가, 엑셀 붙여넣기), 이미지는 백그라운드에서 화면 폭에 맞춰 디코딩한다.</item>
     /// </list>
     /// 큰 문서용 구조:
@@ -889,7 +889,7 @@ namespace Folderss.Controls
             return WrapSelection(row, marker);
         }
 
-        /// <summary>Notion과 같은 Ctrl+Alt+숫자 블록 전환: 0 텍스트, 1~3 제목, 4 할 일, 5 글머리, 6 번호, 7 토글, 8 코드.</summary>
+        /// <summary>Notion과 같은 Ctrl+Alt+숫자 블록 전환: 0 텍스트, 1~6 제목, 7 할 일, 8 글머리, 9 번호(토글·코드는 / 명령).</summary>
         private static bool TryGetTurnIntoKind(Key key, out BlockKind kind)
         {
             kind = BlockKind.Paragraph;
@@ -907,11 +907,12 @@ namespace Folderss.Controls
                 case 1: kind = BlockKind.Heading1; return true;
                 case 2: kind = BlockKind.Heading2; return true;
                 case 3: kind = BlockKind.Heading3; return true;
-                case 4: kind = BlockKind.Todo; return true;
-                case 5: kind = BlockKind.Bulleted; return true;
-                case 6: kind = BlockKind.Numbered; return true;
-                case 7: kind = BlockKind.Toggle; return true;
-                case 8: kind = BlockKind.Code; return true;
+                case 4: kind = BlockKind.Heading4; return true;
+                case 5: kind = BlockKind.Heading5; return true;
+                case 6: kind = BlockKind.Heading6; return true;
+                case 7: kind = BlockKind.Todo; return true;
+                case 8: kind = BlockKind.Bulleted; return true;
+                case 9: kind = BlockKind.Numbered; return true;
                 default: return false;
             }
         }
@@ -2263,7 +2264,7 @@ namespace Folderss.Controls
             BlockCommand("글머리 기호 목록", "•", "-", BlockKind.Bulleted, "bullet", "list", "ul", "목록"),
             BlockCommand("번호 매기기 목록", "1.", "1.", BlockKind.Numbered, "numbered", "number", "ol", "번호"),
             BlockCommand("할 일 목록", "☐", "[]", BlockKind.Todo, "todo", "task", "check", "checkbox", "할일", "체크"),
-            BlockCommand("토글", "▸", "Ctrl+Alt+7", BlockKind.Toggle, "toggle", "details", "collapse", "접기"),
+            BlockCommand("토글", "▸", "", BlockKind.Toggle, "toggle", "details", "collapse", "접기"),
             BlockCommand("인용", "❝", ">", BlockKind.Quote, "quote", "blockquote"),
             BlockCommand("콜아웃", "💡", "", BlockKind.Callout, "callout", "note", "tip", "warning", "알림", "강조"),
             BlockCommand("코드", "</>", "```", BlockKind.Code, "code", "snippet", "codeblock"),
