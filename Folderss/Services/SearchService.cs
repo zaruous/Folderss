@@ -24,7 +24,10 @@ namespace Folderss.Services
             return Task.Run(() =>
             {
                 var comparisonType = caseSensitive ? StringComparison.Ordinal : StringComparison.OrdinalIgnoreCase;
-                var regex = BuildRegex(query, caseSensitive, useRegex, target);
+                var searchFileName = (target & SearchTarget.FileName) != 0;
+                var searchContent = (target & SearchTarget.Content) != 0;
+                var fileNameRegex = searchFileName ? BuildRegex(query, caseSensitive, useRegex, forFileName: true) : null;
+                var contentRegex = searchContent ? BuildRegex(query, caseSensitive, useRegex, forFileName: false) : null;
 
                 foreach (var filePath in EnumerateFiles(rootPath, recursive, cancellationToken))
                 {
@@ -32,10 +35,10 @@ namespace Folderss.Services
 
                     try
                     {
-                        if (target == SearchTarget.FileName)
-                            ScanFileName(filePath, query, regex, comparisonType, progress);
-                        else
-                            ScanFile(filePath, query, regex, comparisonType, progress, cancellationToken);
+                        if (searchFileName)
+                            ScanFileName(filePath, query, fileNameRegex, comparisonType, progress);
+                        if (searchContent)
+                            ScanFile(filePath, query, contentRegex, comparisonType, progress, cancellationToken);
                     }
                     catch (OperationCanceledException)
                     {
@@ -54,14 +57,14 @@ namespace Folderss.Services
         /// 정규식 옵션이 꺼져 있어도 파일명 검색이면 <c>*.cs</c> 같은 와일드카드 패턴을 지원한다.
         /// 내용 검색은 줄 텍스트에 와일드카드를 적용하는 것이 부자연스러우므로 기존대로 부분 일치를 유지한다.
         /// </summary>
-        private static Regex BuildRegex(string query, bool caseSensitive, bool useRegex, SearchTarget target)
+        private static Regex BuildRegex(string query, bool caseSensitive, bool useRegex, bool forFileName)
         {
             var flags = caseSensitive ? RegexOptions.None : RegexOptions.IgnoreCase;
 
             if (useRegex)
                 return new Regex(query, flags | RegexOptions.Compiled);
 
-            if (target == SearchTarget.FileName && HasWildcard(query))
+            if (forFileName && HasWildcard(query))
                 return new Regex(BuildWildcardPattern(query), flags | RegexOptions.Compiled);
 
             return null;

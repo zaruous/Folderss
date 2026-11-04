@@ -12,7 +12,7 @@ Folderss/
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
 │   ├── GitDiffView.xaml/.cs        — Git 창·파일 비교 창의 읽기 전용 diff 뷰 (줄 번호·추가/삭제 색, 늦게 온 결과 무시, Ctrl+C 복사)
 │   ├── ComparePairHeader.cs        — 두 파일 비교 창 머리글 "왼쪽 | ⇄ 좌우 바꾸기 | 오른쪽" (이름·위치, 선택적 … 경로 고르기 버튼)
-│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 내용/파일명 대상 선택, 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
+│   ├── SearchPanel.xaml/.cs        — 파일 검색 패널 (대상 폴더 표시·선택, 파일명/내용 대상 체크(동시 가능), 와일드카드 패턴, 내용 컬럼 표시 토글, 대/소문자·정규식·범위 옵션)
 │   ├── ConsolePanel.xaml/.cs       — ConPTY 기반 내장 터미널 패널
 │   ├── DiskUsagePanel.xaml/.cs     — 드라이브별 디스크 사용량 패널 (가로바, GB 단위 총량/사용량/여유)
 │   ├── DiskUsageMiniPanel.xaml/.cs — 즐겨찾기 열 상단 도킹용 컴팩트 디스크 사용량 뷰 (얇은 바, 남은 용량, 툴팁 상세)
@@ -52,7 +52,7 @@ Folderss/
 │   ├── DriveUsageInfo.cs           — 드라이브 총량·사용량·여유 공간(GB, 비율) 모델
 │   ├── EditorBlock.cs              — 블록 편집기 블록(BlockKind·본문·Indent·체크·접힘·언어·콜아웃 종류, 행 재사용용 Id)
 │   ├── SearchResult.cs             — 파일 검색 결과 모델
-│   └── SearchTarget.cs             — 검색 대상 enum (Content/FileName)
+│   └── SearchTarget.cs             — 검색 대상 [Flags] enum (Content/FileName, 동시 가능)
 ├── Services/
 │   ├── FileOperationService.cs     — 복사·이동·삭제·이름변경·새 폴더
 │   ├── FilePreviewService.cs       — 텍스트·이미지 미리보기 + 메타데이터 (`GetLinkTarget`로 링크 대상 판별)
@@ -85,7 +85,7 @@ Folderss/
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
 │   ├── IgnoreRuleSet.cs            — .gitignore/.folderssignore 규칙 매처 (gitignore 문법 부분집합, 폴더 목록 ignore 필터)
-│   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
+│   ├── SearchService.cs            — 파일 검색 (내용/파일명 대상·동시 검색, 와일드카드 패턴, 대/소문자, 정규식, 접근 거부·순환 링크 내성 순회)
 │   ├── DockLayoutService.cs        — AvalonDock 레이아웃 저장·복원
 │   ├── SessionStateService.cs      — 열린 폴더 경로 세션 저장·복원
 │   ├── PanelLockService.cs         — 문서 탭(패널) 닫기 잠금 상태 저장·복원
@@ -314,12 +314,14 @@ Folderss/
   `_rootPinned`가 서고 `SetRootPath`(자동 동기화)가 무시된다 — 그러지 않으면 창이 포커스를 받을 때마다
   사용자가 고른 폴더가 덮어써진다. `현재 폴더`(`UseActivePaneButton`)가 `ActivePaneRootRequested`를 올려
   `MainWindow`가 `FollowActivePaneRoot()`로 고정을 푼다. 고정 여부는 그 버튼의 활성화 상태로 드러낸다
-- `TargetCombo`로 검색 대상을 `내용 검색`/`파일명 검색` 중 선택 (`SearchTarget.Content` / `SearchTarget.FileName`)
+- 체크박스 `TargetFileNameCheck`(파일명)·`TargetContentCheck`(파일 내용)로 검색 대상을 하나 또는 둘 다 고른다.
+  `SearchTarget`은 `[Flags]`(`Content = 1`, `FileName = 2`)이고 둘 다 고르면 `FileName | Content`. 둘 다 끄면 검색하지 않고 상태 줄에 안내
 - 검색어 입력란 하나로 처리한다. 파일명 검색이고 정규식 옵션이 꺼져 있을 때 `*`/`?`가 들어 있으면
   와일드카드 패턴(`*.cs`, `report?.txt`)으로 해석하고, 파일명 전체가 일치해야 한다. 와일드카드가 없으면 기존처럼 부분 일치.
   (과거의 별도 확장자 필터 `ExtBox`는 이 패턴 검색으로 대체되어 제거됨)
 - 내용 검색은 줄 텍스트에 와일드카드를 적용하지 않는다 — `*`는 문자 그대로 찾는다
-- `SearchService.SearchAsync`가 대상에 따라 파일 내용 라인 단위 스캔(`ScanFile`) 또는 파일명만 비교(`ScanFileName`)로 분기
+- `SearchService.SearchAsync`는 파일마다 고른 대상에 따라 파일명 비교(`ScanFileName`)와 내용 라인 단위 스캔(`ScanFile`)을 실행한다.
+  둘 다 고르면 같은 파일에서 파일명 일치 1건(줄 0)과 내용 일치 줄들이 함께 나온다. 와일드카드 정규식은 파일명 쪽에만 만든다(`BuildRegex(..., forFileName)`)
 - `SearchService.EnumerateFiles`는 `Directory.EnumerateFiles(..., AllDirectories)`를 쓰지 않는다. 그 API는 하위 폴더 하나에서
   접근 거부가 나면 열거 자체가 예외로 끊겨 하위 폴더 검색 결과가 통째로 사라진다. 대신 폴더 단위 스택 순회로 폴더마다
   try/catch하고, 순환을 만드는 정션·심볼릭 링크(`FileAttributes.ReparsePoint`)에는 들어가지 않는다
@@ -327,8 +329,8 @@ Folderss/
 - `ContentColumnToggle`로 결과 목록의 `내용` 컬럼을 넣고 뺀다. `GridViewColumn`에는 Visibility가 없어
   `GridView.Columns`에서 제거·재삽입하는 방식을 쓴다 (`SearchPanel.UpdateContentColumnVisibility`)
 - `CaseToggle`(대/소문자), `RegexToggle`(정규식), `ScopeCombo`(현재 폴더만/하위 폴더 포함)는 검색 대상과 무관하게 공통 적용
-- 기본 선택은 `TargetCombo` = `파일명 검색`, `ScopeCombo` = `하위 폴더 포함`이며 XAML `ComboBoxItem`의 `IsSelected="True"`로만 정해진다
-  (코드 비하인드는 `SelectedItem.Tag`를 읽기만 함). 기본값을 바꿀 때는 이 두 속성만 옮기면 된다
+- 기본 선택은 `파일명`만 체크(`TargetFileNameCheck`의 `IsChecked="True"`), `ScopeCombo` = `하위 폴더 포함`(`ComboBoxItem`의 `IsSelected="True"`)이며
+  XAML로만 정해진다. 기본값을 바꿀 때는 이 속성들만 옮기면 된다
 - 검색 로직 회귀 테스트: `tests/Folderss.SearchTests` (`dotnet test tests/Folderss.SearchTests`).
   본체는 `net8.0-windows`라 CI/리눅스에서 못 돌리므로 검색 관련 소스만 링크해 `net8.0`으로 단독 실행한다.
   `Folderss.sln`에는 넣지 않아 앱 빌드에 영향이 없다
