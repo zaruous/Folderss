@@ -59,16 +59,26 @@
                     <ComboBoxItem Content="하위 폴더 포함" IsSelected="True" Tag="recursive"/>
                 </ComboBox>
 
-                <!-- 검색 대상 선택 -->
-                <ComboBox x:Name="TargetCombo"
+                <!-- 검색 대상 선택: 하나 또는 둘 다. DockPanel.Dock=Right라 화면에는 '파일명 · 파일 내용' 순서로 보인다 -->
+                <CheckBox x:Name="TargetContentCheck"
                           DockPanel.Dock="Right"
-                          Width="100"
-                          Margin="4,0,0,0"
-                          VerticalContentAlignment="Center"
-                          SelectionChanged="ScopeCombo_SelectionChanged">
-                    <ComboBoxItem Content="내용 검색" Tag="content"/>
-                    <ComboBoxItem Content="파일명 검색" IsSelected="True" Tag="filename"/>
-                </ComboBox>
+                          Content="파일 내용"
+                          ToolTip="파일 내용(줄 단위)에서 검색합니다. 바이너리 파일은 건너뜁니다."
+                          Margin="8,0,0,0"
+                          VerticalAlignment="Center"
+                          Foreground="{DynamicResource PrimaryText}"
+                          Checked="Option_Changed"
+                          Unchecked="Option_Changed"/>
+                <CheckBox x:Name="TargetFileNameCheck"
+                          DockPanel.Dock="Right"
+                          Content="파일명"
+                          ToolTip="파일 이름에서 검색합니다. *, ? 와일드카드 패턴을 쓸 수 있습니다."
+                          IsChecked="True"
+                          Margin="8,0,0,0"
+                          VerticalAlignment="Center"
+                          Foreground="{DynamicResource PrimaryText}"
+                          Checked="Option_Changed"
+                          Unchecked="Option_Changed"/>
 
                 <!-- 옵션 토글 -->
                 <ToggleButton x:Name="RegexToggle"

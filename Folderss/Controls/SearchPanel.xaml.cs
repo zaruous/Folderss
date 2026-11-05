@@ -263,6 +263,14 @@ namespace Folderss.Controls
                 return;
             }
 
+            var target = (TargetFileNameCheck.IsChecked == true ? SearchTarget.FileName : 0)
+                | (TargetContentCheck.IsChecked == true ? SearchTarget.Content : 0);
+            if (target == 0)
+            {
+                StatusText.Text = "검색 대상(파일명·파일 내용)을 하나 이상 선택하세요.";
+                return;
+            }
+
             CancelSearch();
             _results.Clear();
             _allResults.Clear();
@@ -274,10 +282,6 @@ namespace Folderss.Controls
             var useRegex = RegexToggle.IsChecked == true;
             var selectedItem = ScopeCombo.SelectedItem as ComboBoxItem;
             var recursive = selectedItem != null && (string)selectedItem.Tag == "recursive";
-            var targetItem = TargetCombo.SelectedItem as ComboBoxItem;
-            var target = targetItem != null && (string)targetItem.Tag == "filename"
-                ? SearchTarget.FileName
-                : SearchTarget.Content;
 
             if (useRegex)
             {

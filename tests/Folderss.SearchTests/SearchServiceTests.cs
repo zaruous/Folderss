@@ -207,6 +207,43 @@ namespace Folderss.SearchTests
             Assert.Equal(new[] { "notes.txt" }, SortedNames(results));
         }
 
+        // ── 파일명 + 내용 동시 검색 ──────────────────────────────────────────────────────
+
+        // 두 대상을 함께 고르면 파일명 일치(줄 0)와 내용 일치(줄 번호)가 모두 나온다.
+        [Fact]
+        public void Both_ReturnsFileNameAndContentMatches()
+        {
+            WriteFile("needle.txt", "x\nneedle\n");
+            WriteFile("other.txt", "needle\n");
+            WriteFile("needle.md", "nothing\n");
+            WriteFile("plain.txt", "nothing\n");
+
+            var results = Run("needle", recursive: true, target: SearchTarget.FileName | SearchTarget.Content);
+
+            var actual = results
+                .Select(r => r.FileName + ":" + r.LineNumber)
+                .OrderBy(s => s, StringComparer.Ordinal)
+                .ToArray();
+            Assert.Equal(new[] { "needle.md:0", "needle.txt:0", "needle.txt:2", "other.txt:1" }, actual);
+        }
+
+        // 동시 검색에서도 와일드카드는 파일명에만 적용되고, 내용은 '*'를 문자 그대로 찾는다.
+        [Fact]
+        public void Both_WildcardAppliesToFileNameOnly()
+        {
+            WriteFile("a.cs", "nothing\n");
+            WriteFile("note.txt", "see *.cs files\n");
+            WriteFile("b.txt", "a.cs\n");
+
+            var results = Run("*.cs", recursive: true, target: SearchTarget.FileName | SearchTarget.Content);
+
+            var actual = results
+                .Select(r => r.FileName + ":" + r.LineNumber)
+                .OrderBy(s => s, StringComparer.Ordinal)
+                .ToArray();
+            Assert.Equal(new[] { "a.cs:0", "note.txt:1" }, actual);
+        }
+
         // ── 도우미 ────────────────────────────────────────────────────────────────────────
 
         private void WriteFile(string relativePath, string content = "")
