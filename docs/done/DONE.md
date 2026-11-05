@@ -15,8 +15,9 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 - 파일 우클릭 > `뷰어 설정 (.확장자) ▸`에서 내장 뷰어(System Default·Markdown·Block Editor·Monaco·Text)를 그 확장자에 바로 연결(현재 뷰어 체크, `(기본값)` 표시), `기본값으로 되돌리기`, `설정 창에서 열기…`. 즉시 저장(`ViewerConfigService.SetMapping`/`ResetMapping`), 새로 여는 파일부터 적용. `docs/items/viewer-context-menu.md`
 
-### 함께 포함 (#83, #84)
+### 함께 포함 (#83, #84, #85)
 
+- **검색 대상 체크박스**: `Ctrl+F` 검색 창의 검색 대상 콤보를 `파일명`·`파일 내용` 체크박스로 바꿔 둘을 함께 검색(`SearchTarget` `[Flags]`, 와일드카드는 파일명에만). `docs/items/search-panel-target-checkboxes.md`
 - **Git diff 전체 내용 보기**: diff 보기 모드에 변경 전/후 전체 내용만 보는 모드 추가. `docs/items/git-diff-full-content-view.md`
 - **마크다운 제목 4~6단계**: 블록 편집기·Markdown 뷰어에서 `####`~`######` 제목 표시, 블록 편집기 `Ctrl+Alt+숫자` 전환(1~6 제목, 7 할 일, 8 글머리, 9 번호). `docs/items/markdown-heading4-6.md`
 - **플러그인 GitHub 설치 인증서**: `GitHub에서 설치…`에 설정 > 네트워크의 추가 신뢰 인증서 적용(SSL 검사 프록시 환경). `docs/items/plugin-github-network-cert.md`
