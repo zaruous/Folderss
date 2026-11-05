@@ -7,6 +7,7 @@ Folderss/
 ├── Controls/
 │   ├── FolderBrowser.xaml/.cs      — 핵심 파일 브라우저 컨트롤 (패널 재사용 단위, 선택적 좌측 트리뷰·폴더 고정 잠금, ignore 필터, 검색 결과 필터, 링크 표시 포함)
 │   ├── FolderBrowser.Archive.cs    — 같은 컨트롤의 zip 안 보기(읽기 전용): 가상 경로 이동·목록·zip 띠·미리보기·열기(임시 사본)·끌어 놓기·Ctrl+C·우클릭·압축 풀기/압축
+│   ├── FolderBrowser.ViewerMenu.cs — 같은 컨트롤의 우클릭 "뷰어 설정 (.확장자) ▸" 하위 메뉴(partial): 선택 파일 확장자에 내장 뷰어 연결·기본값 되돌리기·설정 창 열기(`ViewerConfigService.SetMapping`/`ResetMapping`, 호스트가 `ViewerConfig` 주입)
 │   ├── FolderBrowser.PathCopy.cs   — 같은 컨트롤의 경로 복사 부분(partial): 대상 고르기(선택·목록 순서, 없으면 현재 폴더), 우클릭·⋯ 메뉴 "경로 복사 ▸", 단축키, 상태 줄 잠깐 표시
 │   ├── FavoritesPanel.xaml/.cs     — 즐겨찾기 패널
 │   ├── GitGraphCell.cs             — 로그 한 행의 브랜치 그래프 OnRender (레인 팔레트, 병합은 빈 점, 최대 24레인)
@@ -341,6 +342,9 @@ Folderss/
   `ConsoleSettingsService.Save`, `ThemeManager.SaveCurrentTheme`)는 예외를 삼키지 않고 던진다. 빈 `catch { }`로 삼키면
   다른 PC에서 권한·보안 프로그램 문제로 저장이 안 될 때 원인을 알 수 없다. 설정 창 밖의 부수 저장
   (메뉴 테마 전환의 `SaveTheme`, 콘솔 탭 시작 시 마지막 프로필 기억)만 호출처에서 조용히 넘어간다.
+- 파일 패널 우클릭 "뷰어 설정"은 설정 창을 거치지 않고 `ViewerConfigService.SetMapping`/`ResetMapping`으로 확장자 하나씩 바로 저장한다
+  (메모리 먼저 갱신, 실패는 예외 → `FolderBrowser.ApplyViewerMapping`이 `설정 저장 실패`로 알림). 뷰어 표시 이름은
+  `ViewerConfigService.GetDisplayName` 한 곳에서 정하고 설정 창 `ToViewerDisplayName`도 이를 쓴다.
 - 새 설정 항목을 추가하면 저장 메서드를 던지는 형태로 만들고 `Save_Click`의 `TrySave` 목록에 등록한다.
 - 설정 파일 쓰기는 모두 `SettingsFile.Write`/`WriteAllText`를 거친다. 임시 파일(`<경로>.tmp`)에 쓴 뒤 `File.Move(temp, target, true)`로
   교체해 쓰기 도중 종료돼도 파일이 반쪽으로 남지 않는다. `File.Replace`는 쓰지 않는다 — 대상 파일을 백신·인덱서가 잡고 있거나

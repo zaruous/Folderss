@@ -9,6 +9,12 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## v1.9.1 (2026-11-05)
+
+### 파일 패널 우클릭 "뷰어 설정"
+
+- 파일 우클릭 > `뷰어 설정 (.확장자) ▸`에서 내장 뷰어(System Default·Markdown·Block Editor·Monaco·Text)를 그 확장자에 바로 연결(현재 뷰어 체크, `(기본값)` 표시), `기본값으로 되돌리기`, `설정 창에서 열기…`. 즉시 저장(`ViewerConfigService.SetMapping`/`ResetMapping`), 새로 여는 파일부터 적용. `docs/items/viewer-context-menu.md`
+
 ## v1.9.0 (2026-11-01)
 
 ### 블록 편집기 Notion 수준 완성도 묶음 (#79)

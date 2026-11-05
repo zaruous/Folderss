@@ -56,7 +56,7 @@ dotnet build .\Folderss.sln -c Debug
 - [ ] `Viewers/<Name>Viewer.xaml/.cs` — `IFileViewer` 구현 (WebView2 기반은 `TextViewer` 참고)
 - [ ] `.csproj` — SDK 스타일이라 `.cs`/`.xaml`은 자동 포함(따로 항목 추가 불필요)
 - [ ] `Services/ViewerConfigService.cs` — `"builtin:<name>"` 상수, `Resolve()` switch 케이스, `GetViewerKeys()` 목록(설정 창 `NewViewerCombo`가 이 목록에 바인딩됨)
-- [ ] `SettingsWindow.xaml.cs` — `ToViewerDisplayName()`에 표시 이름 추가
+- [ ] `ViewerConfigService.GetDisplayName()`에 표시 이름 추가 — 설정 창(`ToViewerDisplayName`)과 파일 패널 우클릭 "뷰어 설정" 하위 메뉴(`FolderBrowser.ViewerMenu.cs`, `GetViewerKeys()` 순서)가 함께 쓴다
 - [ ] `tests/Folderss.SearchTests/ViewerStubs.cs` — 새 뷰어 타입의 빈 스텁 추가(없으면 `ViewerConfigService` 소스 링크가 테스트 프로젝트에서 컴파일 안 됨)
 - [ ] `Viewers/Resources/` — HTML/JS/CSS 리소스 추가 시 `.csproj` `<Content>` 항목도 추가
 - [ ] `docs/architecture.md` — 뷰어 목록 업데이트

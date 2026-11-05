@@ -1495,6 +1495,10 @@ namespace Folderss.Controls
             }
             AddArchiveShellMenuItems(customItems);
 
+            var viewerMenu = BuildViewerSettingsShellMenu(selectedPaths);
+            if (viewerMenu.HasValue)
+                customItems.Add(viewerMenu.Value);
+
             var pathCopyMenu = BuildPathCopyShellMenu(GetPathCopyTargets());
             if (pathCopyMenu.HasValue)
                 customItems.Add(pathCopyMenu.Value);

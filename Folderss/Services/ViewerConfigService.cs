@@ -130,6 +130,70 @@ namespace Folderss.Services
             Save();
         }
 
+        /// <summary>
+        /// 확장자 하나의 뷰어를 바꾸고 바로 저장한다(파일 패널 우클릭 "뷰어 설정"). 기본 매핑과 같은 값이면 재정의를 지우고,
+        /// 기본 매핑이 없는 확장자에 시스템 기본을 고르면 재정의를 지운다(매핑 없음 = 시스템 기본).
+        /// <see cref="ReplaceMappings"/>처럼 메모리 상태를 먼저 바꾸고, 쓰기 실패는 예외로 알린다.
+        /// </summary>
+        public void SetMapping(string extension, string viewerKey)
+        {
+            extension = NormalizeExtension(extension);
+            if (extension == null || string.IsNullOrWhiteSpace(viewerKey))
+                return;
+            if (!DefaultMappings.ContainsKey(extension) &&
+                string.Equals(viewerKey, SystemDefaultKey, StringComparison.OrdinalIgnoreCase))
+                _overrides.Remove(extension);
+            else
+                ApplyMapping(extension, viewerKey);
+            Save();
+        }
+
+        /// <summary>확장자 하나의 재정의를 지워 기본 매핑(없으면 시스템 기본)으로 되돌리고 저장한다.</summary>
+        public void ResetMapping(string extension)
+        {
+            extension = NormalizeExtension(extension);
+            if (extension == null || !_overrides.Remove(extension))
+                return;
+            Save();
+        }
+
+        /// <summary>사용자가 기본 매핑과 다르게 지정한 확장자인지.</summary>
+        public bool IsOverridden(string extension)
+        {
+            extension = NormalizeExtension(extension);
+            return extension != null && _overrides.ContainsKey(extension);
+        }
+
+        /// <summary>프로그램 기본 매핑의 뷰어 키. 기본 매핑이 없으면 <see cref="SystemDefaultKey"/>.</summary>
+        public static string GetDefaultMappingKey(string extension)
+        {
+            extension = NormalizeExtension(extension);
+            string key;
+            return extension != null && DefaultMappings.TryGetValue(extension, out key) ? key : SystemDefaultKey;
+        }
+
+        /// <summary>뷰어 키의 표시 이름(설정 창 목록·파일 패널 우클릭 메뉴 공통).</summary>
+        public static string GetDisplayName(string key)
+        {
+            switch (key)
+            {
+                case SystemDefaultKey: return "System Default";
+                case BuiltInMarkdownKey: return "Markdown";
+                case BuiltInBlocksKey: return "Block Editor (Notion 스타일)";
+                case BuiltInMonacoKey: return "Monaco";
+                case BuiltInTextKey: return "Text";
+                default: return key;
+            }
+        }
+
+        private static string NormalizeExtension(string extension)
+        {
+            if (string.IsNullOrWhiteSpace(extension))
+                return null;
+            extension = extension.Trim();
+            return extension.StartsWith(".") ? extension : "." + extension;
+        }
+
         private void ApplyMapping(string extension, string viewerKey)
         {
             if (string.IsNullOrWhiteSpace(extension) || string.IsNullOrWhiteSpace(viewerKey))

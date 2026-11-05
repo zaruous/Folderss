@@ -190,5 +190,82 @@ namespace Folderss.SearchTests
 
             Assert.Equal("builtin:text", service.GetMappingKey(".txt"));
         }
+
+        // ── 우클릭 "뷰어 설정" (확장자 하나씩 바로 저장) ─────────────────────────────
+
+        [Fact]
+        public void SetMapping_SavesImmediatelyAndNormalizesExtension()
+        {
+            var service = new ViewerConfigService(_configPath);
+
+            service.SetMapping("log", ViewerConfigService.BuiltInMonacoKey);
+
+            Assert.True(service.IsOverridden(".log"));
+            Assert.Equal("builtin:monaco", new ViewerConfigService(_configPath).GetMappingKey(".LOG"));
+        }
+
+        [Fact]
+        public void SetMapping_SameAsDefault_RemovesOverride()
+        {
+            var service = LoadFrom("{\"version\":2,\"mappings\":{\".json\":\"builtin:text\"}}");
+
+            service.SetMapping(".json", ViewerConfigService.BuiltInMonacoKey);
+
+            Assert.False(service.IsOverridden(".json"));
+            Assert.Equal("builtin:monaco", new ViewerConfigService(_configPath).GetMappingKey(".json"));
+        }
+
+        [Fact]
+        public void SetMapping_SystemDefaultWithoutBuiltInDefault_RemovesOverride()
+        {
+            var service = LoadFrom("{\"version\":2,\"mappings\":{\".txt\":\"builtin:text\"}}");
+
+            service.SetMapping(".txt", ViewerConfigService.SystemDefaultKey);
+
+            Assert.False(service.IsOverridden(".txt"));
+            Assert.Null(new ViewerConfigService(_configPath).GetMappingKey(".txt"));
+        }
+
+        [Fact]
+        public void SetMapping_SystemDefaultOverBuiltInDefault_KeepsOverride()
+        {
+            // .md는 기본이 Markdown이므로 시스템 기본은 재정의로 남아야 한다(지우면 다시 Markdown으로 열림).
+            var service = new ViewerConfigService(_configPath);
+
+            service.SetMapping(".md", ViewerConfigService.SystemDefaultKey);
+
+            Assert.Equal(ViewerConfigService.SystemDefaultKey, new ViewerConfigService(_configPath).GetMappingKey(".md"));
+        }
+
+        [Fact]
+        public void ResetMapping_RestoresBuiltInDefault()
+        {
+            var service = LoadFrom("{\"version\":2,\"mappings\":{\".md\":\"builtin:text\",\".sql\":\"builtin:monaco\"}}");
+
+            service.ResetMapping(".md");
+            service.ResetMapping("sql");
+
+            var reloaded = new ViewerConfigService(_configPath);
+            Assert.Equal("builtin:markdown", reloaded.GetMappingKey(".md"));
+            Assert.Null(reloaded.GetMappingKey(".sql"));
+        }
+
+        [Fact]
+        public void GetDefaultMappingKey_FallsBackToSystemDefault()
+        {
+            Assert.Equal("builtin:markdown", ViewerConfigService.GetDefaultMappingKey(".MD"));
+            Assert.Equal(ViewerConfigService.SystemDefaultKey, ViewerConfigService.GetDefaultMappingKey(".zzz"));
+        }
+
+        [Fact]
+        public void SetMapping_WhenWriteFails_ThrowsButKeepsInMemoryState()
+        {
+            Directory.CreateDirectory(_configPath);
+            var service = new ViewerConfigService(_configPath);
+
+            Assert.ThrowsAny<Exception>(() => service.SetMapping(".txt", ViewerConfigService.BuiltInTextKey));
+
+            Assert.Equal("builtin:text", service.GetMappingKey(".txt"));
+        }
     }
 }

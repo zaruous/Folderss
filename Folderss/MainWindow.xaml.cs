@@ -767,13 +767,22 @@ namespace Folderss
             browser.FileOpenRequested -= Browser_FileOpenRequested;
             browser.CompareFilesRequested -= Browser_CompareFilesRequested;
             browser.CompareFoldersRequested -= Browser_CompareFoldersRequested;
+            browser.ViewerSettingsRequested -= Browser_ViewerSettingsRequested;
             browser.Activated += Pane_Activated;
             browser.PathChanged += FolderBrowser_PathChanged;
             browser.FileOpenRequested += Browser_FileOpenRequested;
             browser.CompareFilesRequested += Browser_CompareFilesRequested;
             browser.CompareFoldersRequested += Browser_CompareFoldersRequested;
+            // 우클릭 "뷰어 설정": 뷰어 탭이 쓰는 것과 같은 매핑 저장소를 넘겨 바꾼 값이 새로 여는 파일에 바로 적용되게 한다.
+            browser.ViewerConfig = _viewerConfigService;
+            browser.ViewerSettingsRequested += Browser_ViewerSettingsRequested;
             // 경로 복사 "상대 경로 (반대편 패널 기준)": 이 패널이 아닌 첫 폴더 패널(⋯ 메뉴 "반대편 패널"과 같은 규칙)
             browser.OppositeFolderProvider = () => GetFolderBrowsers().FirstOrDefault(pane => !ReferenceEquals(pane, browser))?.CurrentPath;
+        }
+
+        private void Browser_ViewerSettingsRequested(object sender, EventArgs e)
+        {
+            OpenSettings(this, "Viewers");
         }
 
         private void Browser_CompareFilesRequested(object sender, string[] files)

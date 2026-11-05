@@ -26,16 +26,19 @@ namespace Folderss.Services
         private const uint MfString = 0x0000;
         private const uint MfByPosition = 0x0400;
         private const uint MfPopup = 0x0010;
+        private const uint MfChecked = 0x0008;
 
         /// <summary>
         /// 셸 메뉴 맨 위에 넣는 앱 항목. <see cref="Label"/>이 null이면 구분선,
         /// <see cref="Children"/>가 있으면 하위 메뉴(<see cref="Invoke"/>는 쓰지 않음).
+        /// <see cref="Checked"/>는 명령 항목 앞에 체크 표시를 붙인다(현재 선택된 값 표시).
         /// </summary>
         public struct CustomMenuItem
         {
             public string Label;
             public Action Invoke;
             public IList<CustomMenuItem> Children;
+            public bool Checked;
         }
 
         public static void Show(IntPtr ownerHandle, IEnumerable<string> paths, int x, int y,
@@ -202,7 +205,8 @@ namespace Folderss.Services
                 return;
             }
 
-            InsertMenu(menu, position, MfByPosition | MfString, new UIntPtr(CustomCmdBase + (uint)actions.Count), item.Label);
+            InsertMenu(menu, position, MfByPosition | MfString | (item.Checked ? MfChecked : 0),
+                new UIntPtr(CustomCmdBase + (uint)actions.Count), item.Label);
             actions.Add(item.Invoke);
         }
 
