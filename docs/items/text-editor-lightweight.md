@@ -57,6 +57,16 @@
 - 테스트: `Load_MissingFile_UsesDefaultsOnly`(.txt·.log → text, .ini → 없음), `Load_UnversionedOverridesWithTxtText_IsNotMistakenForLegacyDump`, `SetMapping_SystemDefaultForTxt_IsKeptAsOverride`.
   "기본 매핑 없는 확장자" 예는 `.txt` 대신 `.ini`로 바꿈.
 
+### 툴바 인코딩 변환 (as → to)
+
+- 사용자 요청: "현재 열린 문서의 인코딩 정보를 표시하고, 저장 버튼 왼쪽에서 as 인코딩에서 to 인코딩으로 변환할 수 있게".
+- 탭 툴바 저장 버튼 왼쪽에 `인코딩 [as ▾] → [to ▾]`.
+  - as = 읽은 인코딩(자동 감지 또는 직접 지정, 툴팁에 구분 표시). 바꾸면 그 인코딩으로 다시 읽는다(저장 안 한 변경이 있으면 확인, 취소하면 원래 값으로 돌아감). 다시 읽으면 to도 같은 값이 된다.
+  - to = 저장할 인코딩. as와 다르면 굵게 표시·툴팁 "저장하면 A → B로 변환", 수정됨 상태가 되고 저장할 때 변환한다. 읽기 전용 파일은 to를 끈다.
+  - 예: BOM 없는 CP949 문서를 UTF-8로 바꾸기 = as가 자동으로 CP949 → to를 UTF-8 → 저장.
+- 상태 표시줄 인코딩 메뉴(다시 열기 / 저장할 인코딩)와 같은 동작이며 `SyncEncodingUi`가 두 곳을 맞춘다.
+- 확인: 측정기로 CP949(BOM 없음)·UTF-8 BOM·UTF-8 파일을 열어 툴바 값이 각각 `CP949 → CP949`, `UTF-8 BOM → UTF-8 BOM`, `UTF-8 → UTF-8`.
+
 ## 성능 비교
 
 측정기: `Bench.exe`(scratchpad, 저장소 밖) — `ViewerConfigService.CreateViewer("builtin:text")`를 1200×800 창에 넣고 `Load`부터 화면에 그려질 때까지(WebView: 내용 후 두 프레임, WPF: 문서 채운 뒤 ApplicationIdle)를 잰다. 파일마다 새 프로세스(첫 탭), 메모리는 자기+자손 프로세스 Private Bytes 증가분. Release 빌드, 같은 PC.

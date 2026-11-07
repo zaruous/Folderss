@@ -38,7 +38,7 @@ Folderss/
 │   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기 (강제 언어만 넘기고 언어 결정은 편집기 안, #82)
 │   ├── MonacoLanguagePicker.xaml/.cs — Monaco 탭 툴바 언어 선택(찾기 칸 + 목록, `자동`/파일별 기억, #82)
 │   ├── IViewerToolbarProvider.cs   — 뷰어 전용 탭 툴바 요소를 `ViewerHost`의 `ViewerToolbarSlot`에 넣는 인터페이스
-│   ├── TextViewer.xaml/.cs         — 일반 텍스트 편집기(`builtin:text`, AvalonEdit). 백그라운드 읽기·인코딩 감지, 저장(인코딩·BOM·줄 끝 유지), 상태 표시줄(인코딩▾·CRLF/LF▾·확대)
+│   ├── TextViewer.xaml/.cs         — 일반 텍스트 편집기(`builtin:text`, AvalonEdit). 백그라운드 읽기·인코딩 감지, 저장(인코딩·BOM·줄 끝 유지), 탭 툴바 `인코딩 [as] → [to]`·저장, 상태 표시줄(인코딩▾·CRLF/LF▾·확대)
 │   ├── TextViewer.Find.cs          — 찾기/바꾸기(입력하는 대로 찾기, 모든 결과 강조, 모두 바꾸기 = Ctrl+Z 한 번), 줄 이동(Ctrl+G)
 │   ├── TextViewer.External.cs      — 외부 변경 감시(SHA-256 비교, 자기 저장 무시, 위치 유지)
 │   ├── TextEditorRendering.cs      — 어두운 테마용 구문 색 밝게(`ThemedHighlightingColorizer`), 찾기 결과 강조(`SearchResultRenderer`)

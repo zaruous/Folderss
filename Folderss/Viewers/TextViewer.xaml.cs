@@ -48,6 +48,9 @@ namespace Folderss.Viewers
             "상태 표시줄: 인코딩·줄 끝(CRLF/LF)을 눌러 바꾸기";
 
         private readonly StackPanel _toolbar;
+        private readonly ComboBox _asEncodingCombo;             // 읽은 인코딩(바꾸면 그 인코딩으로 다시 읽기)
+        private readonly ComboBox _toEncodingCombo;             // 저장할 인코딩(바꾸면 저장 때 변환)
+        private bool _syncingEncodingUi;
         private readonly ToggleButton _wrapToggle;
         private readonly ToggleButton _whitespaceToggle;
         private readonly TextEditorSettings _settings = TextEditorSettings.Shared;
@@ -106,7 +109,37 @@ namespace Folderss.Viewers
             help.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
             ToolTipService.SetShowDuration(help, 60000);
 
+            // 인코딩: [읽은 인코딩(as) ▾] → [저장할 인코딩(to) ▾] — 저장 버튼 왼쪽.
+            _asEncodingCombo = MakeEncodingCombo(
+                "이 파일을 읽은 인코딩(처음엔 자동 감지: BOM → UTF-8 → CP949).\n글자가 깨져 보이면 바꿔서 그 인코딩으로 다시 읽습니다.");
+            _asEncodingCombo.SelectionChanged += (s, e) =>
+            {
+                var encoding = SelectedEncoding(_asEncodingCombo);
+                if (_syncingEncodingUi || encoding == null || TextFileEncoding.SameEncoding(encoding, _loadedEncoding))
+                    return;
+                ReopenWithEncoding(encoding);
+                SyncEncodingUi();   // 취소했으면 원래 값으로 되돌린다
+            };
+            _toEncodingCombo = MakeEncodingCombo(
+                "저장할 인코딩. 읽은 인코딩과 다르면 저장할 때 이 인코딩으로 변환합니다.\n(CP949에 없는 글자가 있으면 저장 전에 알립니다)");
+            _toEncodingCombo.SelectionChanged += (s, e) =>
+            {
+                var encoding = SelectedEncoding(_toEncodingCombo);
+                if (_syncingEncodingUi || encoding == null || TextFileEncoding.SameEncoding(encoding, _encoding))
+                    return;
+                SetSaveEncoding(encoding);
+            };
+            var encodingLabel = new TextBlock { Text = "인코딩", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(0, 0, 6, 0), FontSize = 11 };
+            encodingLabel.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+            var arrow = new TextBlock { Text = "→", VerticalAlignment = VerticalAlignment.Center, Margin = new Thickness(4, 0, 4, 0), ToolTip = "읽은 인코딩 → 저장할 인코딩" };
+            arrow.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+
             _toolbar = new StackPanel { Orientation = Orientation.Horizontal, VerticalAlignment = VerticalAlignment.Center };
+            _toolbar.Children.Add(encodingLabel);
+            _toolbar.Children.Add(_asEncodingCombo);
+            _toolbar.Children.Add(arrow);
+            _toolbar.Children.Add(_toEncodingCombo);
+            save.Margin = new Thickness(8, 0, 0, 0);
             _toolbar.Children.Add(save);
             _toolbar.Children.Add(_wrapToggle);
             _toolbar.Children.Add(_whitespaceToggle);
@@ -126,6 +159,59 @@ namespace Folderss.Viewers
             SetShowWhitespace(_settings.ShowWhitespace, false);
             SetFontSize(_settings.FontSize, false);
             UpdateStatus();
+        }
+
+        private static ComboBox MakeEncodingCombo(string tooltip)
+        {
+            var combo = new ComboBox { Width = 120, Height = 24, ToolTip = tooltip, VerticalContentAlignment = VerticalAlignment.Center };
+            foreach (var choice in TextFileEncoding.Choices)
+                combo.Items.Add(new ComboBoxItem { Content = choice.Key, Tag = choice.Value });
+            return combo;
+        }
+
+        private static Encoding SelectedEncoding(ComboBox combo)
+        {
+            return (combo.SelectedItem as ComboBoxItem)?.Tag as Encoding;
+        }
+
+        /// <summary>툴바 인코딩 칸(as → to)을 지금 상태로 맞춘다. 고르는 이벤트는 일으키지 않는다.</summary>
+        private void SyncEncodingUi()
+        {
+            _syncingEncodingUi = true;
+            try
+            {
+                SelectEncoding(_asEncodingCombo, _loadedEncoding);
+                SelectEncoding(_toEncodingCombo, _encoding);
+                var usable = _filePath != null && !_tooLarge && !_loading && _loadedEncoding != null;
+                _asEncodingCombo.IsEnabled = usable;
+                _toEncodingCombo.IsEnabled = usable && !Editor.IsReadOnly;
+                _toEncodingCombo.FontWeight = _encodingChanged ? FontWeights.SemiBold : FontWeights.Normal;
+                if (_loadedEncoding != null)
+                    _asEncodingCombo.ToolTip = string.Format("읽은 인코딩: {0} ({1})\n바꾸면 그 인코딩으로 다시 읽습니다(글자가 깨져 보일 때).",
+                        TextFileEncoding.DisplayName(_loadedEncoding), _forcedEncoding != null ? "직접 지정" : "자동 감지");
+                _toEncodingCombo.ToolTip = _encodingChanged
+                    ? string.Format("저장하면 {0} → {1}로 변환합니다.", TextFileEncoding.DisplayName(_loadedEncoding), TextFileEncoding.DisplayName(_encoding))
+                    : "저장할 인코딩. 바꾸면 저장할 때 그 인코딩으로 변환합니다.\n(CP949에 없는 글자가 있으면 저장 전에 알립니다)";
+            }
+            finally
+            {
+                _syncingEncodingUi = false;
+            }
+        }
+
+        private static void SelectEncoding(ComboBox combo, Encoding encoding)
+        {
+            combo.SelectedItem = null;
+            if (encoding == null)
+                return;
+            foreach (ComboBoxItem item in combo.Items)
+            {
+                if (TextFileEncoding.SameEncoding(item.Tag as Encoding, encoding))
+                {
+                    combo.SelectedItem = item;
+                    return;
+                }
+            }
         }
 
         private static ToggleButton MakeToggle(string text, string tooltip)
@@ -610,6 +696,7 @@ namespace Folderss.Viewers
 
         private void UpdateStatus()
         {
+            SyncEncodingUi();
             EncodingButton.Content = _tooLarge ? string.Empty : TextFileEncoding.DisplayName(_encoding)
                 + (_encodingChanged ? " (저장 시 변경)" : string.Empty);
             NewLineButton.Content = _tooLarge ? string.Empty : _newLine == "\n" ? "LF" : "CRLF";
