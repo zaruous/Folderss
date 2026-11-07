@@ -1,7 +1,7 @@
 # 파일 작업에서 블록 편집기 사이드카 함께 처리 (#78)
 
-- 상태: Ready for Verification
-- 상태 전환일: 2026-11-01
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

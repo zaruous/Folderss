@@ -1,6 +1,7 @@
 # 마크다운 뷰어 원격 이미지 표시와 네트워크 설정
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

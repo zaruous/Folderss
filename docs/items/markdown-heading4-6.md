@@ -1,6 +1,7 @@
 # 마크다운 제목 4~6단계(`####`~`######`) 표시
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

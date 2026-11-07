@@ -1,7 +1,7 @@
 # 블록 편집기 2단계: 밑줄·글자 색·형광펜 (#76 9번, #78)
 
-- 상태: Ready for Verification
-- 상태 전환일: 2026-11-01
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 - 관련: #76(2단계 글자 서식 WYSIWYG) 9번 항목, #78(사이드카 형식 — "줄 안 범위 속성은 형식 확장 필요"). 1~8번은 [block-editor-stage2-inline-format.md](block-editor-stage2-inline-format.md).
 
 ## 요구사항

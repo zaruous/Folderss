@@ -1,7 +1,7 @@
 # Monaco 뷰어: 번들 언어 자동 연결·탭 언어 선택·확장자별 언어 설정 (#82)
 
-- 상태: Ready for Verification
-- 상태 전환일: 2026-11-01
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 - 이슈: #82
 
 ## 요구사항

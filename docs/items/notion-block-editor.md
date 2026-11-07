@@ -1,6 +1,7 @@
 # Notion 스타일 블록 편집기 (BlockEditor 컨트롤 + `builtin:blocks` 뷰어)
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

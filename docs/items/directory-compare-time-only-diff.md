@@ -1,6 +1,7 @@
 # 폴더 비교 — 수정 시각만 다른 같은 파일이 "다름"으로 표시됨
 
-- 상태: Ready for Verification — 구현·단위 테스트 완료, Windows 화면 확인 대기
+- 상태: Done — master 머지 확인 (이전: Ready for Verification — 구현·단위 테스트 완료, Windows 화면 확인 대기)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

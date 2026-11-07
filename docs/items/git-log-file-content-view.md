@@ -1,6 +1,7 @@
 # Git 창 로그·브랜치 비교: 파일을 고르면 코드 내용을 먼저, diff는 선택
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

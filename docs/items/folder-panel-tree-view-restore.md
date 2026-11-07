@@ -1,6 +1,7 @@
 # 폴더 패널 트리뷰 열림 상태 유지
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

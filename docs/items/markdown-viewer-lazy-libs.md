@@ -1,6 +1,7 @@
 # 마크다운 뷰어 Mermaid·KaTeX·highlight.js 필요할 때만 불러오기
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

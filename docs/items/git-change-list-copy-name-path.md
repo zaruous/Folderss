@@ -1,6 +1,7 @@
 # Git 창 변경 사항 목록·트리 이름/경로 복사
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

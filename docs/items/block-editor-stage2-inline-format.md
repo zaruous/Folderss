@@ -1,7 +1,7 @@
 # 블록 편집기 2단계: 줄 안 서식 WYSIWYG (#76)
 
-- 상태: Ready for Verification
-- 상태 전환일: 2026-11-01
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

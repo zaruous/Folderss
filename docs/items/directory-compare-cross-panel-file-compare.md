@@ -1,6 +1,7 @@
 # 폴더 비교 창 — 좌우 패널에서 고른 두 파일 비교 버튼
 
-- 상태: Ready for Verification — 구현·단위 테스트 완료, Windows 화면 확인 대기
+- 상태: Done — master 머지 확인 (이전: Ready for Verification — 구현·단위 테스트 완료, Windows 화면 확인 대기)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

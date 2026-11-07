@@ -1,6 +1,7 @@
 # 폴더 비교 테스트 — Linux에서만 실패하던 2건
 
-- 상태: Ready for Verification — 테스트 수정, Windows CI 확인 대기
+- 상태: Done — master 머지 확인 (이전: Ready for Verification — 테스트 수정, Windows CI 확인 대기)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

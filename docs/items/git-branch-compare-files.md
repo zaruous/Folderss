@@ -1,6 +1,7 @@
 # Git 창 브랜치 탭: 브랜치 간 바뀐 파일 목록 + 파일별 diff
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

@@ -1,6 +1,7 @@
 # WebView2 뷰어 로딩 중 배경색을 테마에 맞추기
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

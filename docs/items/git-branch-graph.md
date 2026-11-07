@@ -1,6 +1,7 @@
 # Git 창 브랜치 탭: 요약 그래프 + 현재 브랜치 대비 ↑↓
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

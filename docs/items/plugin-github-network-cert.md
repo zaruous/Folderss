@@ -1,6 +1,7 @@
 # 플러그인 GitHub 설치에 네트워크 설정의 추가 신뢰 인증서 적용
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

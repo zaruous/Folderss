@@ -1,6 +1,7 @@
 # Git 창 보낼/받을 커밋 순서가 콘솔 git과 다름
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

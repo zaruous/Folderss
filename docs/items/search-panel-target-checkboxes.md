@@ -1,6 +1,7 @@
 # 검색 팝업 검색 대상을 체크박스로 (파일명·파일 내용 동시 검색)
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 

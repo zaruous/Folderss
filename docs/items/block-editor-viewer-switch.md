@@ -1,7 +1,7 @@
 # 블록 편집 ↔ 미리보기(Markdown 뷰어) 전환 (#81 "1. 뷰어 전환")
 
-- 상태: Ready for Verification
-- 상태 전환일: 2026-11-01
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 - 이슈: #81 (묶음 #79)
 
 ## 요구사항

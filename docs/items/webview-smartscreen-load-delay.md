@@ -1,6 +1,7 @@
 # WebView2 뷰어 첫 표시 약 2초 지연 해결 (SmartScreen 평판 검사)
 
-- 상태: Ready for Verification
+- 상태: Done — master 머지 확인 (이전: Ready for Verification)
+- 상태 전환일: 2026-11-07
 
 ## 요구사항
 
