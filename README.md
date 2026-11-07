@@ -44,7 +44,7 @@ Folderss/
 │   ├── MarkdownViewer      — Markdown 미리보기·편집·검색·내보내기, 외부 변경 감시
 │   ├── MonacoViewer        — Monaco Editor 기반 코드/텍스트 편집기, 외부 변경 감시
 │   ├── MonacoLanguagePicker — Monaco 탭 툴바 언어 선택(검색, 자동/파일별 기억)
-│   ├── TextViewer          — 읽기 전용 텍스트 뷰어
+│   ├── TextViewer          — AvalonEdit 기반 가벼운 텍스트 편집기(찾기/바꾸기, 인코딩·줄 끝 선택, 외부 변경 감시)
 │   ├── BlockEditorViewer   — Markdown 파일을 BlockEditor로 편집하는 뷰어 (`builtin:blocks`)
 │   ├── IFileViewer         — 뷰어 공통 인터페이스
 │   └── Resources/          — 뷰어 HTML/JS/CSS (marked, DOMPurify, Mermaid, KaTeX·글꼴, highlight.js, Monaco, CodeMirror)
@@ -286,10 +286,10 @@ tests/
 |---|---|---|
 | Markdown | `.md`, `.markdown` | 미리보기·편집·분할 보기(파일별 마지막 모드 기억, 분할 보기 스크롤 동기화), Edit/Split 모드 라인번호 표시, 편집 보조(목록 이어 쓰기, `Tab`/`Shift+Tab` 여러 줄 들여쓰기·내어쓰기, 이미지 붙여넣기 시 `images/`에 저장), `Ctrl+F` 문서 내 검색, TOC(표시 여부·너비 기억), 문서 안 `#제목`·다른 문서 `파일.md#제목` 링크(GitHub 앵커 규칙), front matter 표시, Mermaid, KaTeX 수식(`$…$`, `$$…$$`, `\(…\)`, `\[…\]`), 상대 경로·원격(https 기본, http는 설정) 이미지 표시(HTML `<img>` 태그 포함), 로컬 파일 링크 클릭 시 새 뷰어 탭으로 열기(실행 파일은 확인 후 실행), 본문 HTML의 스크립트 차단, BOM 없는 CP949 문서 자동 인식, HTML/PDF 내보내기, 우클릭 메뉴의 인쇄·다른 이름으로 저장·공유, 외부 변경 자동 반영(스크롤 위치 유지) |
 | Monaco | `.json`, `.jsonl`, `.xml` | Monaco Editor 기반 편집, 구문 강조, `Ctrl+F` 내장 검색(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1`), 대용량 파일 모드, 외부 변경 감지. `.jsonl`(JSON Lines)은 전용 언어로 열려 줄마다 JSON으로 강조하고, `Format Document`는 레코드를 한 줄로 압축, 커맨드 팔레트의 `JSONL: 레코드 펼쳐 보기`는 들여쓰기해 펼침(값·키 순서·큰 정수는 원문 그대로, 파싱 안 되는 줄은 손대지 않음) |
-| Text | 사용자 매핑 | 읽기 전용 텍스트 보기와 구문 강조 |
+| Text | `.txt`, `.log` | 가볍고 빠른 텍스트 편집기(WebView 없음 — 화면에 보이는 줄만 그려 수십 MB 로그도 바로 열림). 편집·`Ctrl+S` 저장(읽은 인코딩·BOM·줄 끝 유지), 찾기/바꾸기(`Ctrl+F`/`Ctrl+H`, 대/소문자·단어 단위·정규식, 모든 결과 강조), `Ctrl+G` 줄 이동, 줄 바꿈·공백 표시·글꼴 크기(`Ctrl+휠`, 모든 탭에 기억), 인코딩 자동 감지(BOM → UTF-8 → CP949)와 상태 표시줄에서 다른 인코딩으로 다시 열기·저장 인코딩 바꾸기(CP949에 없는 글자는 저장 전에 알림), CRLF↔LF 바꾸기, 구문 강조(8MB 이하), 아주 긴 줄(압축 JSON 등)은 앞 10,000자만 그려 바로 열림(저장·찾기·복사는 줄 전체), 읽기 전용 파일 표시, 외부 변경 감지(위치 유지) |
 | Block Editor (Notion 스타일) | `.md`, `.markdown`(처음 열 때 기본 보기 `블록 편집`), 그 밖에는 사용자 매핑 | Markdown 파일을 블록 단위로 편집 — 아래 [블록 편집기](#블록-편집기-notion-스타일) 참고 |
 
-- 매핑되지 않은 확장자는 Windows 기본 프로그램으로 열립니다. `.cs`, `.py`, `.txt` 등은 설정에서 Monaco 또는 Text 뷰어에 추가로 매핑할 수 있습니다.
+- 매핑되지 않은 확장자는 Windows 기본 프로그램으로 열립니다. `.cs`, `.py`, `.ini` 등은 설정에서 Monaco 또는 Text 뷰어에 추가로 매핑할 수 있습니다. `.txt`·`.log`를 메모장 등으로 열려면 `System Default`로 바꾸면 됩니다.
 - 뷰어 탭 툴바의 `다시 읽기` 버튼으로 디스크 내용을 다시 불러올 수 있습니다.
 - **Monaco 언어(구문 강조)**: Monaco에 번들된 약 90개 언어가 확장자·파일 이름으로 자동 연결됩니다(`.go`, `.rs`, `.kt`, `.rb`, `.php`, `.scss`, `.ini`, `.lua`, `.vb`, `.cshtml`, `.tf`, `Dockerfile`, `.editorconfig` 등 — 대소문자 무시). 설정에서 아무 확장자나 Monaco로 매핑하면 그 확장자의 언어로 바로 강조됩니다.
   - 탭 툴바의 언어 단추(예: `Go ▾`)로 이 파일의 언어를 바꿉니다. 이름·id·확장자(`.go`)로 찾을 수 있고, 고른 언어는 파일별로 기억해(` ●` 표시) 다시 열 때·세션을 복원할 때 그대로 씁니다. `자동`을 고르면 기억을 지웁니다.
@@ -636,7 +636,7 @@ Folderss\Themes\Controls.xaml
 | `Ctrl+R` | 양쪽 패널 새로 고침 |
 | `Ctrl+T` | 새 폴더 패널 추가 |
 | `F11` | 현재 폴더 패널 최대화/복원 |
-| `Ctrl+F` | 파일 검색 창 열기 (Markdown·Monaco 뷰어와 블록 편집기 안에서는 문서 내 검색) |
+| `Ctrl+F` | 파일 검색 창 열기 (Markdown·Monaco·Text 뷰어와 블록 편집기 안에서는 문서 내 검색) |
 
 기본 단축키는 `설정 > 단축키`에서 변경하거나 기본값으로 초기화할 수 있습니다.
 
@@ -651,6 +651,10 @@ Folderss\Themes\Controls.xaml
 | 파일검색 필터 | `↓` | 파일 목록으로 포커스 이동 |
 | 검색 창 | `Enter` / `Esc` | 검색 실행 / 창 닫기 |
 | 콘솔 | `Ctrl+C` | 선택 텍스트 복사 또는 인터럽트 |
+| Text 편집기 | `Ctrl+S` / `Ctrl+H` / `Ctrl+G` | 저장 / 바꾸기 / 줄 이동 |
+| Text 편집기 | `F3` / `Shift+F3` | 다음 / 이전 찾기 |
+| Text 편집기 | `Ctrl+휠`, `Ctrl+=` / `Ctrl+-` / `Ctrl+0` | 글꼴 확대 / 축소 / 기본 크기 |
+| Text 편집기 | `Ctrl+Shift+←/→` | 단어 단위 선택(편집기에 포커스가 있을 때는 패널 전환 대신) |
 
 전체 매핑과 처리 위치는 `docs/keyboard-shortcuts.md`를 참고하세요.
 

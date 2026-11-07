@@ -60,8 +60,10 @@ namespace Folderss.SearchTests
                 "\".txt\":\"builtin:text\",\".cs\":\"builtin:text\",\".json\":\"builtin:text\"," +
                 "\".xml\":\"builtin:text\",\".log\":\"builtin:text\"}}");
 
-            Assert.Null(service.GetMappingKey(".txt"));                    // legacy 표와 동일 → 잔여물로 버림
-            Assert.Null(service.GetMappingKey(".log"));
+            // legacy 표와 동일 → 잔여물로 버림(재정의 아님). 지금은 기본 매핑이 Text라 결과는 같다.
+            Assert.False(service.IsOverridden(".txt"));
+            Assert.False(service.IsOverridden(".log"));
+            Assert.Equal("builtin:text", service.GetMappingKey(".txt"));
             Assert.Equal("builtin:text", service.GetMappingKey(".cs"));    // legacy 표(.cs → monaco)와 다름 → 유지
             Assert.Equal("builtin:text", service.GetMappingKey(".json"));  // 현재 기본값(monaco)과 다른 재정의 → 유지
             Assert.Equal("builtin:markdown", service.GetMappingKey(".md")); // 기본값 그대로
@@ -106,8 +108,21 @@ namespace Folderss.SearchTests
 
             Assert.Equal("builtin:markdown", service.GetMappingKey(".md"));
             Assert.Equal("builtin:monaco", service.GetMappingKey(".json"));
-            Assert.Null(service.GetMappingKey(".txt"));
+            Assert.Equal("builtin:text", service.GetMappingKey(".txt"));   // 일반 텍스트는 Text 편집기
+            Assert.Equal("builtin:text", service.GetMappingKey(".log"));
+            Assert.Null(service.GetMappingKey(".ini"));                    // 기본 매핑 없음 → 시스템 기본
             Assert.False(File.Exists(_configPath));
+        }
+
+        [Fact]
+        public void Load_UnversionedOverridesWithTxtText_IsNotMistakenForLegacyDump()
+        {
+            // .txt → Text가 나중에 기본 매핑이 됐어도, 버전 없는 재정의 파일에서 사용자가 고른 .txt → Text를
+            // "옛 전체 덤프" 표지로 보면 안 된다(그러면 같은 파일의 .sql → Monaco가 legacy 잔여물로 버려진다).
+            var service = LoadFrom("{\"mappings\":{\".txt\":\"builtin:text\",\".sql\":\"builtin:monaco\"}}");
+
+            Assert.Equal("builtin:monaco", service.GetMappingKey(".sql"));
+            Assert.Equal("builtin:text", service.GetMappingKey(".txt"));
         }
 
         // ── 저장 규칙 ────────────────────────────────────────────────────────────────
@@ -218,12 +233,24 @@ namespace Folderss.SearchTests
         [Fact]
         public void SetMapping_SystemDefaultWithoutBuiltInDefault_RemovesOverride()
         {
-            var service = LoadFrom("{\"version\":2,\"mappings\":{\".txt\":\"builtin:text\"}}");
+            var service = LoadFrom("{\"version\":2,\"mappings\":{\".ini\":\"builtin:text\"}}");
+
+            service.SetMapping(".ini", ViewerConfigService.SystemDefaultKey);
+
+            Assert.False(service.IsOverridden(".ini"));
+            Assert.Null(new ViewerConfigService(_configPath).GetMappingKey(".ini"));
+        }
+
+        [Fact]
+        public void SetMapping_SystemDefaultForTxt_IsKeptAsOverride()
+        {
+            // .txt는 기본이 Text 편집기라, 메모장 등 Windows 기본 프로그램을 고르면 재정의로 남아야 한다.
+            var service = new ViewerConfigService(_configPath);
 
             service.SetMapping(".txt", ViewerConfigService.SystemDefaultKey);
 
-            Assert.False(service.IsOverridden(".txt"));
-            Assert.Null(new ViewerConfigService(_configPath).GetMappingKey(".txt"));
+            Assert.True(service.IsOverridden(".txt"));
+            Assert.Equal(ViewerConfigService.SystemDefaultKey, new ViewerConfigService(_configPath).GetMappingKey(".txt"));
         }
 
         [Fact]

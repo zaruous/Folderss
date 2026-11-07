@@ -1,12 +1,127 @@
 <UserControl x:Class="Folderss.Viewers.TextViewer"
              xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             xmlns:wv2="clr-namespace:Microsoft.Web.WebView2.Wpf;assembly=Microsoft.Web.WebView2.Wpf">
-    <Grid>
-        <wv2:WebView2 x:Name="WebView"/>
-        <TextBlock x:Name="ErrorText" Visibility="Collapsed"
-                   HorizontalAlignment="Center" VerticalAlignment="Center"
-                   Foreground="Gray" FontSize="13" TextWrapping="Wrap" Margin="40"
-                   Text="WebView2 런타임이 설치되어 있지 않습니다.&#10;https://go.microsoft.com/fwlink/p/?LinkId=2124703"/>
-    </Grid>
+             xmlns:ae="http://icsharpcode.net/sharpdevelop/avalonedit">
+    <!--
+      일반 텍스트 편집기(builtin:text). WebView 없이 AvalonEdit(WPF)로 그려 탭이 빨리 열리고 가볍다.
+      위: 찾기/바꾸기·줄 이동 막대(평소 숨김). 아래: 상태 표시줄(줄·열, 인코딩▾, 줄 끝▾, 확대 비율).
+      저장·줄 바꿈·공백 표시 버튼은 탭 툴바(IViewerToolbarProvider)에 넣는다.
+    -->
+    <DockPanel Background="{DynamicResource PanelBackground}">
+        <!-- 상태 표시줄 -->
+        <Border DockPanel.Dock="Bottom"
+                Background="{DynamicResource SurfaceBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,1,0,0">
+            <DockPanel Margin="6,1" LastChildFill="False">
+                <TextBlock x:Name="CaretText" VerticalAlignment="Center" FontSize="11" Margin="4,0"
+                           Foreground="{DynamicResource SecondaryText}"/>
+                <TextBlock x:Name="StateText" VerticalAlignment="Center" FontSize="11" Margin="12,0,4,0"
+                           Foreground="{DynamicResource SecondaryText}"/>
+                <Button x:Name="EncodingButton" DockPanel.Dock="Right" Style="{StaticResource CompactToolButtonStyle}"
+                        Width="Auto" Height="20" Padding="6,0" FontSize="11"
+                        ToolTip="인코딩 — 다른 인코딩으로 다시 열기 / 저장할 인코딩 바꾸기"
+                        Click="EncodingButton_Click"/>
+                <Button x:Name="NewLineButton" DockPanel.Dock="Right" Style="{StaticResource CompactToolButtonStyle}"
+                        Width="Auto" Height="20" Padding="6,0" FontSize="11"
+                        ToolTip="줄 끝 형식 — 눌러서 CRLF / LF로 바꾸기"
+                        Click="NewLineButton_Click"/>
+                <TextBlock x:Name="LanguageText" DockPanel.Dock="Right" VerticalAlignment="Center" FontSize="11" Margin="8,0"
+                           Foreground="{DynamicResource SecondaryText}"/>
+                <Button x:Name="ZoomButton" DockPanel.Dock="Right" Style="{StaticResource CompactToolButtonStyle}"
+                        Width="Auto" Height="20" Padding="6,0" FontSize="11"
+                        ToolTip="글꼴 크기 — Ctrl+휠·Ctrl+= / Ctrl+- 로 확대·축소, 눌러서(또는 Ctrl+0) 기본 크기"
+                        Click="ZoomButton_Click"/>
+            </DockPanel>
+        </Border>
+
+        <!-- 찾기 / 바꾸기 막대 -->
+        <Border x:Name="FindBar" DockPanel.Dock="Top" Visibility="Collapsed"
+                Background="{DynamicResource SurfaceBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1" Padding="6,4">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*" MaxWidth="420"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+
+                <ToggleButton x:Name="ReplaceToggle" Grid.RowSpan="2" Style="{StaticResource CompactToggleButtonStyle}"
+                              Width="20" VerticalAlignment="Stretch" Margin="0,0,4,0" Content="›"
+                              ToolTip="바꾸기 열기/닫기 (Ctrl+H)" Click="ReplaceToggle_Click"/>
+
+                <TextBox x:Name="FindBox" Grid.Column="1" Height="24" VerticalContentAlignment="Center"
+                         ToolTip="찾을 내용 — Enter 다음, Shift+Enter 이전, Esc 닫기"
+                         TextChanged="FindBox_TextChanged" PreviewKeyDown="FindBar_PreviewKeyDown"/>
+                <StackPanel Grid.Column="2" Orientation="Horizontal" Margin="4,0,0,0">
+                    <ToggleButton x:Name="MatchCaseToggle" Style="{StaticResource CompactToggleButtonStyle}"
+                                  Width="26" Height="24" Content="Aa" ToolTip="대/소문자 구분 (Alt+C)" Click="SearchOption_Click"/>
+                    <ToggleButton x:Name="WholeWordToggle" Style="{StaticResource CompactToggleButtonStyle}"
+                                  Width="26" Height="24" Margin="2,0" ToolTip="단어 단위 (Alt+W)" Click="SearchOption_Click">
+                        <TextBlock Text="ab" TextDecorations="Underline"/>
+                    </ToggleButton>
+                    <ToggleButton x:Name="RegexToggle" Style="{StaticResource CompactToggleButtonStyle}"
+                                  Width="26" Height="24" Content=".*" ToolTip="정규식 (Alt+R) — 바꾸기에서 $1, \n, \t 사용" Click="SearchOption_Click"/>
+                    <TextBlock x:Name="MatchInfoText" VerticalAlignment="Center" MinWidth="90" Margin="8,0" FontSize="11"
+                               Foreground="{DynamicResource SecondaryText}" Text="결과 없음"/>
+                    <Button Style="{StaticResource CompactToolButtonStyle}" Width="26" Height="24" Content="↑"
+                            ToolTip="이전 (Shift+F3, Shift+Enter)" Click="FindPrevious_Click"/>
+                    <Button Style="{StaticResource CompactToolButtonStyle}" Width="26" Height="24" Content="↓"
+                            ToolTip="다음 (F3, Enter)" Click="FindNext_Click"/>
+                    <Button Style="{StaticResource CompactToolButtonStyle}" Width="26" Height="24" Content="✕"
+                            ToolTip="닫기 (Esc)" Click="CloseBars_Click"/>
+                </StackPanel>
+
+                <TextBox x:Name="ReplaceBox" Grid.Row="1" Grid.Column="1" Height="24" Margin="0,4,0,0"
+                         VerticalContentAlignment="Center" Visibility="Collapsed"
+                         ToolTip="바꿀 내용 — Enter 바꾸기, Ctrl+Alt+Enter 모두 바꾸기"
+                         PreviewKeyDown="FindBar_PreviewKeyDown"/>
+                <StackPanel x:Name="ReplaceButtons" Grid.Row="1" Grid.Column="2" Orientation="Horizontal"
+                            Margin="4,4,0,0" Visibility="Collapsed">
+                    <Button Content="바꾸기" Padding="10,2" Margin="0,0,4,0" ToolTip="현재 결과를 바꾸고 다음으로 (Enter)"
+                            Click="ReplaceOne_Click"/>
+                    <Button Content="모두 바꾸기" Padding="10,2" ToolTip="모든 결과를 바꾸기 — Ctrl+Z 한 번으로 되돌림 (Ctrl+Alt+Enter)"
+                            Click="ReplaceAll_Click"/>
+                </StackPanel>
+            </Grid>
+        </Border>
+
+        <!-- 줄 이동 막대 (Ctrl+G) -->
+        <Border x:Name="GotoBar" DockPanel.Dock="Top" Visibility="Collapsed"
+                Background="{DynamicResource SurfaceBackground}"
+                BorderBrush="{DynamicResource BorderBrush}"
+                BorderThickness="0,0,0,1" Padding="6,4">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="줄 이동" VerticalAlignment="Center" Margin="2,0,8,0" Foreground="{DynamicResource PrimaryText}"/>
+                <TextBox x:Name="GotoBox" Width="140" Height="24" VerticalContentAlignment="Center"
+                         ToolTip="줄 번호 또는 줄:열 — Enter 이동, Esc 닫기" PreviewKeyDown="GotoBox_PreviewKeyDown"/>
+                <TextBlock x:Name="GotoHint" VerticalAlignment="Center" Margin="8,0" FontSize="11"
+                           Foreground="{DynamicResource SecondaryText}"/>
+                <Button Style="{StaticResource CompactToolButtonStyle}" Width="26" Height="24" Content="✕"
+                        ToolTip="닫기 (Esc)" Click="CloseBars_Click"/>
+            </StackPanel>
+        </Border>
+
+        <Grid>
+            <ae:TextEditor x:Name="Editor"
+                           ShowLineNumbers="True"
+                           FontFamily="Cascadia Mono, Cascadia Code, Consolas, D2Coding, Malgun Gothic"
+                           FontSize="13"
+                           Padding="4,2,0,0"
+                           HorizontalScrollBarVisibility="Auto"
+                           VerticalScrollBarVisibility="Auto"
+                           Background="{DynamicResource PanelBackground}"
+                           Foreground="{DynamicResource PrimaryText}"
+                           LineNumbersForeground="{DynamicResource DisabledTextBrush}"/>
+            <TextBlock x:Name="NoticeText" Visibility="Collapsed"
+                       HorizontalAlignment="Center" VerticalAlignment="Center"
+                       TextWrapping="Wrap" Margin="40" FontSize="13" TextAlignment="Center"
+                       Foreground="{DynamicResource SecondaryText}"/>
+        </Grid>
+    </DockPanel>
 </UserControl>

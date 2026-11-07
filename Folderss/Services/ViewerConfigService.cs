@@ -35,6 +35,24 @@ namespace Folderss.Services
             { ".json",     BuiltInMonacoKey   },
             { ".jsonl",    BuiltInMonacoKey   },
             { ".xml",      BuiltInMonacoKey   },
+            // 일반 텍스트는 가벼운 Text 편집기(AvalonEdit)로 연다 — 열기 5~10배 빠르고 메모리 1/7~1/10(docs/items/text-editor-lightweight.md).
+            { ".txt",      BuiltInTextKey     },
+            { ".log",      BuiltInTextKey     },
+        };
+
+        /// <summary>
+        /// 버전 표기 없는 옛 설정 파일이 "기본 매핑 전체 덤프"인지 가리는 표지(<see cref="IsLegacyFullDump"/>).
+        /// 그 파일들이 저장될 때의 기본 매핑이라 고정한다 — 나중에 기본 매핑에 넣은 항목(.txt·.log → Text)을 넣으면
+        /// 사용자가 직접 고른 `.txt → Text`가 든 재정의 파일을 덤프로 오판해 `.sql → Monaco` 같은 선택을 버린다.
+        /// </summary>
+        private static readonly Dictionary<string, string> LegacyDumpMarkers =
+            new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            { ".md",       BuiltInMarkdownKey },
+            { ".markdown", BuiltInMarkdownKey },
+            { ".json",     BuiltInMonacoKey   },
+            { ".jsonl",    BuiltInMonacoKey   },
+            { ".xml",      BuiltInMonacoKey   },
         };
 
         private static readonly Dictionary<string, string> LegacyDefaultMappings =
@@ -297,7 +315,7 @@ namespace Folderss.Services
             foreach (var kv in loaded)
             {
                 string defaultKey;
-                if (DefaultMappings.TryGetValue(kv.Key, out defaultKey) &&
+                if (LegacyDumpMarkers.TryGetValue(kv.Key, out defaultKey) &&
                     string.Equals(defaultKey, kv.Value, StringComparison.OrdinalIgnoreCase))
                     return true;
             }

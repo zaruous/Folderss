@@ -89,6 +89,9 @@
     <Compile Include="..\..\Folderss\Services\ZipArchiveService.cs" Link="Linked\ZipArchiveService.cs" />
     <Compile Include="..\..\Folderss\Services\ZipTempStore.cs" Link="Linked\ZipTempStore.cs" />
     <Compile Include="..\..\Folderss\Services\MonacoLanguages.cs" Link="Linked\MonacoLanguages.cs" />
+    <Compile Include="..\..\Folderss\Services\TextFileEncoding.cs" Link="Linked\TextFileEncoding.cs" />
+    <Compile Include="..\..\Folderss\Services\TextSearch.cs" Link="Linked\TextSearch.cs" />
+    <Compile Include="..\..\Folderss\Services\TextEditorSettings.cs" Link="Linked\TextEditorSettings.cs" />
   </ItemGroup>
 
   <!-- ThemeFileTests: 테마 XAML을 출력 폴더에 복사해 키 구성을 검사한다 -->

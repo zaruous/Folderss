@@ -13,6 +13,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="AvalonEdit" Version="6.3.0.90" />
     <PackageReference Include="Dirkster.AvalonDock" Version="4.74.1" />
     <PackageReference Include="EasyWindowsTerminalControl" Version="1.0.36" />
     <PackageReference Include="LibGit2Sharp" Version="0.32.0" />

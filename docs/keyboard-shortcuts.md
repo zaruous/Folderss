@@ -125,9 +125,23 @@ Monaco 내장 단축키(찾아 바꾸기 `Ctrl+H`, 커맨드 팔레트 `F1` 등)
 
 찾기 막대 입력란에서 누른 키는 `Ctrl+S`(저장)를 빼고 편집기 키 처리(`Ctrl+Z` 실행 취소 등)로 넘기지 않는다 — 입력란 자체의 글자 되돌리기가 동작한다.
 
-### TextViewer
+### TextViewer (일반 텍스트 편집기, `builtin:text`)
 
-자체 키보드 핸들러 없음.
+편집 키(`Ctrl+Z/Y`, `Ctrl+A`, `Tab`/`Shift+Tab` 들여쓰기, `Alt+드래그` 사각형 선택, 선택 없이 `Ctrl+C/X` 한 줄)는 AvalonEdit 기본 동작. 아래는 `TextViewer.OnPreviewKeyDown`·`TextViewer.Find.cs` 하드코딩.
+
+| 키 | 동작 | 비고 |
+|----|------|------|
+| `Ctrl+F` | 찾기 막대 열기 (선택한 한 줄 글자를 검색어로) | KeyBindingService `ShowSearch` 매핑 사용(`TextViewer.HandleShortcut`). 매핑을 바꿔도 편집기 안 `Ctrl+F`는 열림 |
+| `Ctrl+H` | 찾기 + 바꾸기 줄 열기 (읽기 전용 파일은 찾기만) | |
+| `F3` / `Shift+F3` | 다음 / 이전 결과 (찾기 막대가 닫혀 있어도, 검색어가 없으면 찾기 막대) | |
+| `Enter` / `Shift+Enter` | 찾기 입력란: 다음 / 이전 | |
+| `Enter` / `Ctrl+Alt+Enter` | 바꾸기 입력란: 지금 결과 바꾸기 / 모두 바꾸기(실행 취소 한 단계) | |
+| `Alt+C` / `Alt+W` / `Alt+R` | 찾기 막대: 대/소문자 · 단어 단위 · 정규식 켜고 끄기 | |
+| `Ctrl+G` | 줄 이동 막대(`줄` 또는 `줄:열`) | |
+| `Esc` | 찾기·줄 이동 막대 닫고 편집기로 | 막대가 열려 있을 때만 |
+| `Ctrl+S` | 저장 | |
+| `Ctrl+휠`, `Ctrl+=` / `Ctrl+-`, `Ctrl+0` | 글꼴 확대 / 축소, 기본 크기 | 모든 Text 탭에 기억(`text-editor.json`) |
+| `Ctrl+Shift+←/→` | 단어 단위 선택 | KeyBindingService `SwitchPaneLeft/Right`와 겹침 — 편집기·찾기 입력란에 포커스가 있으면 `HandleShortcut`이 선택으로 처리(패널 전환 안 함) |
 
 ### BlockEditor (블록 편집기)
 

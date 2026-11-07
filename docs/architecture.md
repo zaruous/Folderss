@@ -38,7 +38,10 @@ Folderss/
 │   ├── MonacoViewer.xaml/.cs       — Monaco 기반 코드/텍스트 편집기 (강제 언어만 넘기고 언어 결정은 편집기 안, #82)
 │   ├── MonacoLanguagePicker.xaml/.cs — Monaco 탭 툴바 언어 선택(찾기 칸 + 목록, `자동`/파일별 기억, #82)
 │   ├── IViewerToolbarProvider.cs   — 뷰어 전용 탭 툴바 요소를 `ViewerHost`의 `ViewerToolbarSlot`에 넣는 인터페이스
-│   ├── TextViewer.xaml/.cs         — 읽기 전용 텍스트 뷰어
+│   ├── TextViewer.xaml/.cs         — 일반 텍스트 편집기(`builtin:text`, AvalonEdit). 백그라운드 읽기·인코딩 감지, 저장(인코딩·BOM·줄 끝 유지), 상태 표시줄(인코딩▾·CRLF/LF▾·확대)
+│   ├── TextViewer.Find.cs          — 찾기/바꾸기(입력하는 대로 찾기, 모든 결과 강조, 모두 바꾸기 = Ctrl+Z 한 번), 줄 이동(Ctrl+G)
+│   ├── TextViewer.External.cs      — 외부 변경 감시(SHA-256 비교, 자기 저장 무시, 위치 유지)
+│   ├── TextEditorRendering.cs      — 어두운 테마용 구문 색 밝게(`ThemedHighlightingColorizer`), 찾기 결과 강조(`SearchResultRenderer`)
 │   ├── BlockEditorViewer.cs        — Markdown 파일을 BlockEditor로 편집하는 뷰어 (`builtin:blocks`, 인코딩·줄바꿈 유지 저장, 이미지 기준 폴더)
 │   ├── BlockEditorViewer.External.cs — 블록 편집기 외부 변경 감시·반영(문서+사이드카, 자기 저장 무시, 앵커 유지), 링크 열기(#75)
 │   ├── BlockEditorViewer.ViewSwitch.cs / MarkdownViewer.ViewSwitch.cs — `IMarkdownViewSwitchable` 구현(전환 전 저장, 위치 잡기·되돌리기, #81)
@@ -377,7 +380,19 @@ Folderss/
   설정 창은 `TrySave("Monaco 언어", "monaco-language.json", …)`(`SettingsWindow.MonacoLanguage.cs`), 쓰기는 `SettingsFile.WriteAllText`, 깨진 JSON은 기본값으로 읽는다.
 - **확장자 없는 파일**: 언어 결정은 파일 이름(`Dockerfile`, `Gemfile`, `.editorconfig`)도 보지만, 어떤 뷰어로 열지는 여전히 `ViewerConfigService`의 확장자 매핑이라
   확장자 없는 파일(`Dockerfile`, `Makefile`)은 Monaco 탭으로 열리지 않는다(기존 한계, `docs/items/monaco-language.md`).
-- `TextViewer.ExtToLanguage`는 highlight.js 언어 이름(`.sh → bash` 등)이라 공유하지 않는다.
+- Text 편집기(`TextViewer`)는 Monaco 언어 표를 쓰지 않는다. 구문 강조는 AvalonEdit 내장 정의(`HighlightingManager.GetDefinitionByExtension`)를 쓴다.
+
+### TextViewer (일반 텍스트 편집기, `builtin:text`)
+- AvalonEdit(WPF)라 WebView2 프로세스가 없다. 읽기·인코딩 감지·`TextDocument` 생성은 `Task.Run`에서 하고 `SetOwnerThread`로 UI 스레드에 넘긴다(큰 파일에서도 화면이 멈추지 않음).
+  읽는 사이 다른 파일을 열거나 탭을 닫으면 `_loadVersion`으로 결과를 버린다.
+- 인코딩·줄 끝 계산은 `Services/TextFileEncoding`(BOM → 엄격 UTF-8 → CP949, CP949 저장 손실 검사), 찾기·바꾸기 계산은 `Services/TextSearch`(조건을 정규식 하나로, 결과 10만 개·정규식 2초 상한),
+  보기 설정은 `Services/TextEditorSettings`(`%LOCALAPPDATA%\Folderss\text-editor.json` — 줄 바꿈·글꼴 크기·공백 표시). 셋 다 UI가 없어 `TextEditorTests`에서 단독 테스트한다.
+- 수정 여부 = `UndoStack.IsOriginalFile`이 아님 또는 저장 인코딩을 바꿈. 저장은 `SettingsFile.Write`(임시 파일 후 교체)로 바이트(BOM 포함)를 쓰고 `MarkAsOriginalFile`.
+- 외부 변경은 디스크 내용 SHA-256을 마지막으로 읽거나 저장한 값과 비교한다(원문 사본을 들지 않음). "이 인코딩으로 다시 열기"로 지정한 인코딩은 외부 변경 반영 때도 유지한다.
+- 8MB 넘는 파일은 구문 강조를 끄고, 256MB 넘는 파일은 열지 않는다(안내만).
+  10,000자 넘는 줄은 `LongLineElementGenerator`가 앞부분만 그리고(문서는 그대로), 그런 줄이 있으면 구문 강조를 끈다(AvalonEdit는 가로 가상화가 없어 220만 자 한 줄이 300초 넘게 걸렸음).
+  25만 자 넘는 선택을 복사할 때는 HTML 형식을 빼 다시 강조하는 비용을 피한다(`DataObject.AddSettingDataHandler`). 어두운 테마에서는 강조 정의를 고치지 않고 그릴 때만 밝기를 올린다(정의는 앱 전체 공유).
+- 전역 단축키와 겹치는 키: `ShowSearch`(Ctrl+F)는 문서 안 찾기, `SwitchPaneLeft/Right`(Ctrl+Shift+←/→)는 편집기·찾기 입력란에 포커스가 있으면 단어 단위 선택(`HandleShortcut`).
 
 ### PluginManager / PluginPackage (플러그인)
 - 계약: 솔루션의 `Folderss.PluginContract` 프로젝트(`IFolderssPlugin`, `IPluginManager`, `IFolderPanel`, `IPluginSettingsPage`).
