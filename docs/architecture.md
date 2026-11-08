@@ -85,6 +85,7 @@ Folderss/
 │   ├── FileJobQueue.cs             — 메인 패널 파일 작업 대기열(STA 작업 스레드 하나, FIFO): 복사·이동·삭제 실행, 이름 충돌, 이력(file-history\*.jsonl) 기록, 실행 취소 계획·실행, 이름 변경·새 폴더·새 파일 즉시 실행+기록 (순수 로직)
 │   ├── FileCopier.cs               — 파일 하나 복사(Windows CopyFileEx: 진행 콜백·일시정지·취소·\\?\ 긴 경로, 대상 있으면 실패), 읽기 전용까지 지우는 삭제
 │   ├── WindowsRecycleBin.cs        — IRecycleBin Windows 구현: 셸로 휴지통에 보내고, $I 정보 파일(원래 경로·삭제 시각)로 찾아 $R 항목을 되살림. 고정 드라이브만(CanSend/IsRecyclable: 고정 드라이브·260자 미만)
+│   ├── FileLockService.cs          — Windows Restart Manager(RmStartSession/RmGetList) 파일 점유 프로세스 조회, 오류 분류(공유/잠금 위반 vs 접근 거부), 안전성 평가 및 프로세스 정상/강제 종료
 │   ├── CaptureSettingsService.cs   — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더(없으면 사용자 폴더), 설정 창 입력 검증 `Validate`)
 │   ├── DiffSettingsService.cs      — 비교(diff) 설정 저장 (diff-settings.xml: 보기·공백·인코딩·외부 도구 + 프리셋, 옛 git-settings.xml 값 이관)
 │   ├── DiffHtmlReport.cs           — diff 텍스트 → HTML 보고서 한 장 (양옆/한 줄, 스타일 내장·스크립트 없음, 순수 로직)
@@ -154,6 +155,7 @@ Folderss/
 ├── MainWindow.xaml/.cs             — 메인 창, AvalonDock 호스트, 전역 단축키
 ├── MainWindow.FileJobs.cs          — (partial) 파일 작업 대기열 연결: 복사·이동·삭제 넣기, 이름 충돌 질문, 끝나면 새로 고침·실패 요약, 실행 취소(Ctrl+Z) 확인, 종료 시 진행 중 작업 확인
 ├── FileJobsWindow.cs               — 파일 작업 진행률 창(비모달, 대기열 전체·일시정지·취소)과 이름 충돌 대화상자 `FileConflictDialog`(GitDialogBase 상속), 코드로 구성
+├── FileLockInspectionWindow.cs       — 사용 중인 프로세스 조회 및 종료/재시도 대화상자 (비모달, Restart Manager 기반 프로세스 스냅숏, 정상/강제 종료, 삭제 재시도), 코드로 구성
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
 ├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `GitLibDiff`, 안 되면 `git diff --no-index`), 코드로 구성

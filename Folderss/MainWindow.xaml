@@ -100,6 +100,8 @@
                             <MenuItem x:Name="UndoFileOperationMenuItem" Header="실행 취소" InputGestureText="Ctrl+Z" Click="UndoFileOperation_Click"/>
                             <MenuItem Tag="global" Header="파일 작업 진행 창…" Click="ShowFileJobs_Click"
                                       ToolTip="복사·이동·삭제 대기열과 진행률(일시정지·취소)을 보입니다."/>
+                            <MenuItem Header="사용 중인 프로세스 확인…" Click="InspectLockedFile_Click"
+                                      ToolTip="선택한 파일(또는 현재 폴더)을 다른 프로세스가 사용 중인지 확인합니다."/>
                             <Separator x:Name="OpenWithSeparator" Visibility="Collapsed"/>
                             <MenuItem x:Name="OpenWithMenuItem" Header="다음으로 열기" Visibility="Collapsed"/>
                             <Separator/>

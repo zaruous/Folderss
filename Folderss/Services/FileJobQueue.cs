@@ -349,7 +349,7 @@ namespace Folderss.Services
             {
                 item.Succeeded = false;
                 item.Error = ex.Message;
-                job.ItemFailed(Path.GetFileName(source) + ": " + ex.Message);
+                job.ItemFailed(source, ex, Path.GetFileName(source) + ": " + ex.Message);
                 return item;
             }
         }
@@ -592,7 +592,7 @@ namespace Folderss.Services
             catch (Exception ex) when (IsItemError(ex))
             {
                 item.Error = ex.Message;
-                job.ItemFailed(Path.GetFileName(path) + ": " + ex.Message);
+                job.ItemFailed(path, ex, Path.GetFileName(path) + ": " + ex.Message);
                 return item;
             }
         }

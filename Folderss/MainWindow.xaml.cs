@@ -768,6 +768,7 @@ namespace Folderss
             browser.CompareFilesRequested -= Browser_CompareFilesRequested;
             browser.CompareFoldersRequested -= Browser_CompareFoldersRequested;
             browser.ViewerSettingsRequested -= Browser_ViewerSettingsRequested;
+            browser.InspectLockingProcessesRequested -= Browser_InspectLockingProcessesRequested;
             browser.Activated += Pane_Activated;
             browser.PathChanged += FolderBrowser_PathChanged;
             browser.FileOpenRequested += Browser_FileOpenRequested;
@@ -776,6 +777,7 @@ namespace Folderss
             // 우클릭 "뷰어 설정": 뷰어 탭이 쓰는 것과 같은 매핑 저장소를 넘겨 바꾼 값이 새로 여는 파일에 바로 적용되게 한다.
             browser.ViewerConfig = _viewerConfigService;
             browser.ViewerSettingsRequested += Browser_ViewerSettingsRequested;
+            browser.InspectLockingProcessesRequested += Browser_InspectLockingProcessesRequested;
             // 경로 복사 "상대 경로 (반대편 패널 기준)": 이 패널이 아닌 첫 폴더 패널(⋯ 메뉴 "반대편 패널"과 같은 규칙)
             browser.OppositeFolderProvider = () => GetFolderBrowsers().FirstOrDefault(pane => !ReferenceEquals(pane, browser))?.CurrentPath;
         }
@@ -788,6 +790,24 @@ namespace Folderss
         private void Browser_CompareFilesRequested(object sender, string[] files)
         {
             OpenFileCompare(files);
+        }
+
+        private void Browser_InspectLockingProcessesRequested(object sender, string path)
+        {
+            ShowFileLockInspectionWindow(path);
+        }
+
+        private void InspectLockedFile_Click(object sender, RoutedEventArgs e)
+        {
+            if (BlockedInArchive("압축 파일 내 가상 경로에서는 프로세스 조회를 지원하지 않습니다."))
+                return;
+            var path = ActivePane?.SelectedItems?.FirstOrDefault()?.FullPath ?? ActivePane?.CurrentPath;
+            if (string.IsNullOrWhiteSpace(path))
+            {
+                MessageBox.Show(this, "확인할 파일이나 폴더를 선택하세요.", "사용 중인 프로세스 확인", MessageBoxButton.OK, MessageBoxImage.Information);
+                return;
+            }
+            ShowFileLockInspectionWindow(path);
         }
 
         private void CompareFiles_Click(object sender, RoutedEventArgs e)

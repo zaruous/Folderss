@@ -235,8 +235,37 @@ namespace Folderss
             var title = snapshot.Errors.Count > 0
                 ? FileJobFormat.Verb(job.Kind) + " 중 일부 항목 실패"
                 : FileJobFormat.Verb(job.Kind);
-            MessageBox.Show(this, counts + string.Join(Environment.NewLine, lines), title, MessageBoxButton.OK,
-                snapshot.Errors.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+
+            var firstLocked = snapshot.FailureItems.FirstOrDefault(f => f.IsLockViolation);
+            if (firstLocked != null)
+            {
+                var askLock = MessageBox.Show(this,
+                    counts + string.Join(Environment.NewLine, lines) + "\n\n다른 프로그램이 사용 중이어서 실패한 항목이 있습니다. 사용 중인 프로세스를 확인하시겠습니까?",
+                    title, MessageBoxButton.YesNo, MessageBoxImage.Warning);
+                if (askLock == MessageBoxResult.Yes)
+                {
+                    ShowFileLockInspectionWindow(firstLocked.Path);
+                }
+            }
+            else
+            {
+                MessageBox.Show(this, counts + string.Join(Environment.NewLine, lines), title, MessageBoxButton.OK,
+                    snapshot.Errors.Count > 0 ? MessageBoxImage.Warning : MessageBoxImage.Information);
+            }
+        }
+
+        /// <summary>사용 중인 프로세스 조회 창을 띄운다.</summary>
+        internal void ShowFileLockInspectionWindow(string path)
+        {
+            if (string.IsNullOrWhiteSpace(path))
+                return;
+            var window = new FileLockInspectionWindow(path, retryPath =>
+            {
+                QueueFileDelete(new[] { retryPath }, permanently: false);
+            });
+            if (IsVisible)
+                window.Owner = this;
+            window.Show();
         }
 
         // ── 실행 취소 ───────────────────────────────────────────────

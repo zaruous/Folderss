@@ -62,6 +62,8 @@ namespace Folderss.Controls
         public event EventHandler ContextMenuRequested;
         /// <summary>목록 선택이 바뀌었다(폴더 비교 창이 반대쪽 같은 이름을 따라 고를 때 쓴다).</summary>
         public event EventHandler SelectedItemsChanged;
+        /// <summary>선택한 파일의 사용 중인 프로세스 조회를 요청했다.</summary>
+        public event EventHandler<string> InspectLockingProcessesRequested;
 
         private bool _safeMode;
         private Action<FileSystemItem> _compareDecorator;
@@ -1503,6 +1505,10 @@ namespace Folderss.Controls
             if (pathCopyMenu.HasValue)
                 customItems.Add(pathCopyMenu.Value);
 
+            var lockInspectionMenu = BuildLockInspectionShellMenu(selectedPaths);
+            if (lockInspectionMenu.HasValue)
+                customItems.Add(lockInspectionMenu.Value);
+
             var screenPoint = PointToScreen(e.GetPosition(this));
             try
             {
@@ -1523,6 +1529,22 @@ namespace Folderss.Controls
             }
 
             e.Handled = true;
+        }
+
+        private ShellContextMenuService.CustomMenuItem? BuildLockInspectionShellMenu(IReadOnlyList<string> paths)
+        {
+            if (IsInArchive || paths == null || paths.Count == 0)
+                return null;
+
+            var target = paths.FirstOrDefault(File.Exists) ?? paths.FirstOrDefault(Directory.Exists) ?? paths.FirstOrDefault();
+            if (string.IsNullOrWhiteSpace(target))
+                return null;
+
+            return new ShellContextMenuService.CustomMenuItem
+            {
+                Label = "사용 중인 프로세스 확인…",
+                Invoke = () => InspectLockingProcessesRequested?.Invoke(this, target)
+            };
         }
 
         public void NavigateUp()
@@ -2037,6 +2059,10 @@ namespace Folderss.Controls
             var pathCopyMenu = BuildPathCopyShellMenu(selectedPaths);
             if (pathCopyMenu.HasValue)
                 customItems.Add(pathCopyMenu.Value);
+
+            var lockInspectionMenu = BuildLockInspectionShellMenu(selectedPaths);
+            if (lockInspectionMenu.HasValue)
+                customItems.Add(lockInspectionMenu.Value);
 
             var screenPoint = PointToScreen(e.GetPosition(this));
             try

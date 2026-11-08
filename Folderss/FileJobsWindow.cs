@@ -146,6 +146,7 @@ namespace Folderss
             private readonly TextBlock _notes = new TextBlock { FontSize = 12, TextWrapping = TextWrapping.Wrap };
             private readonly Button _pause = new Button { MinWidth = 86, Margin = new Thickness(0, 0, 0, 4) };
             private readonly Button _cancel = new Button { MinWidth = 86 };
+            private readonly Button _inspectLock = new Button { Content = "잠금 확인…", MinWidth = 86, Margin = new Thickness(0, 0, 0, 4), Visibility = Visibility.Collapsed };
 
             public Border Root { get; }
 
@@ -185,7 +186,19 @@ namespace Folderss
                     _job.Cancel();
                     Update();
                 };
+                _inspectLock.Click += (s, e) =>
+                {
+                    if (_inspectLock.Tag is string lockPath)
+                    {
+                        var win = new FileLockInspectionWindow(lockPath);
+                        var owner = Window.GetWindow(_inspectLock);
+                        if (owner != null && owner.IsVisible)
+                            win.Owner = owner;
+                        win.Show();
+                    }
+                };
                 var buttons = new StackPanel { Margin = new Thickness(10, 0, 0, 0), VerticalAlignment = VerticalAlignment.Top };
+                buttons.Children.Add(_inspectLock);
                 buttons.Children.Add(_pause);
                 buttons.Children.Add(_cancel);
 
@@ -216,6 +229,17 @@ namespace Folderss
                 _errors.Visibility = s.Errors.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
                 _notes.Text = string.Join("\n", s.Notes.Take(3)) + (s.Notes.Count > 3 ? string.Format("\n… 외 {0}개", s.Notes.Count - 3) : string.Empty);
                 _notes.Visibility = s.Notes.Count == 0 ? Visibility.Collapsed : Visibility.Visible;
+
+                var lockedFailure = s.FailureItems?.FirstOrDefault(f => f.IsLockViolation);
+                if (lockedFailure != null && s.IsFinished)
+                {
+                    _inspectLock.Visibility = Visibility.Visible;
+                    _inspectLock.Tag = lockedFailure.Path;
+                }
+                else
+                {
+                    _inspectLock.Visibility = Visibility.Collapsed;
+                }
 
                 _pause.Content = s.State == FileJobState.Paused || _job.IsPauseRequested ? "▶ 계속" : "⏸ 일시정지";
                 _pause.Visibility = s.CanPause ? Visibility.Visible : Visibility.Collapsed;

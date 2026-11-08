@@ -136,6 +136,17 @@ namespace Folderss.Services
         }
     }
 
+    /// <summary>파일 작업 실패 상세 항목.</summary>
+    public sealed class FileJobFailureItem
+    {
+        public string Path { get; set; }
+        public string ErrorMessage { get; set; }
+        public int? Win32ErrorCode { get; set; }
+        public bool IsLockViolation { get; set; }
+        public bool IsAccessDenied { get; set; }
+        public bool IsDirectory { get; set; }
+    }
+
     /// <summary>진행률 창에 보일 한 순간의 상태(변하지 않는 값).</summary>
     public sealed class FileJobSnapshot
     {
@@ -156,6 +167,7 @@ namespace Folderss.Services
         public TimeSpan? Remaining { get; set; }
         public IReadOnlyList<string> Errors { get; set; }
         public IReadOnlyList<string> Notes { get; set; }
+        public IReadOnlyList<FileJobFailureItem> FailureItems { get; set; } = Array.Empty<FileJobFailureItem>();
         public bool IsFinished { get; set; }
         public bool CanPause { get; set; }
 
@@ -191,6 +203,7 @@ namespace Folderss.Services
         private readonly TransferRate _rate = new TransferRate();
         private readonly List<string> _errors = new List<string>();
         private readonly List<string> _notes = new List<string>();
+        private readonly List<FileJobFailureItem> _failureItems = new List<FileJobFailureItem>();
         private FileJobState _state = FileJobState.Queued;
         private string _currentItem;
         private int _totalItems, _doneItems, _skippedItems, _failedItems, _totalFiles, _doneFiles;
@@ -220,6 +233,7 @@ namespace Folderss.Services
         /// <summary>끝난 뒤 남은 항목(되돌리기에서 막혀 그대로 둔 항목 등) 설명. 끝나기 전에는 비어 있다.</summary>
         public IReadOnlyList<string> Notes { get { lock (_sync) return _notes.ToList(); } }
         public IReadOnlyList<string> Errors { get { lock (_sync) return _errors.ToList(); } }
+        public IReadOnlyList<FileJobFailureItem> FailureItems { get { lock (_sync) return _failureItems.ToList(); } }
 
         public FileJobState State { get { lock (_sync) return _state; } }
         public bool IsFinished { get { var state = State; return state == FileJobState.Completed || state == FileJobState.Cancelled || state == FileJobState.Failed; } }
@@ -270,6 +284,7 @@ namespace Folderss.Services
                     Remaining = finished || state != FileJobState.Running ? null : _rate.Remaining(_totalBytes - _processedBytes),
                     Errors = _errors.ToList(),
                     Notes = _notes.ToList(),
+                    FailureItems = _failureItems.ToList(),
                     IsFinished = finished,
                     CanPause = Kind != FileJobKind.Undo && (state == FileJobState.Running || state == FileJobState.Paused || state == FileJobState.Preparing)
                 };
@@ -376,6 +391,27 @@ namespace Folderss.Services
             {
                 _failedItems++;
                 _errors.Add(error);
+            }
+        }
+
+        internal void ItemFailed(string path, Exception ex, string displayError)
+        {
+            lock (_sync)
+            {
+                _failedItems++;
+                _errors.Add(displayError ?? (path + ": " + ex?.Message));
+                if (!string.IsNullOrEmpty(path))
+                {
+                    _failureItems.Add(new FileJobFailureItem
+                    {
+                        Path = path,
+                        ErrorMessage = ex?.Message ?? displayError,
+                        Win32ErrorCode = FileLockService.GetWin32ErrorCode(ex),
+                        IsLockViolation = FileLockService.IsSharingOrLockViolation(ex),
+                        IsAccessDenied = FileLockService.IsAccessDenied(ex),
+                        IsDirectory = Directory.Exists(path)
+                    });
+                }
             }
         }
 
