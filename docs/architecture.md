@@ -199,6 +199,7 @@ Folderss/
 - 테마 파일 키 검사: `tests/Folderss.SearchTests/ThemeFileTests`(모든 테마가 `Black.xaml`과 같은 키, 이름 중복 없음, 기본 테마가 외부 검사도 통과, 위험 요소 거부)
 
 ### MarkdownViewer 이미지 리소스 해석
+- `markdown-app.js/html`의 미리보기·분할 보기 이미지는 클릭하면 뷰어 전용 확대 화면을 연다. Ctrl+휠은 포인터 기준 배율 변경, 왼쪽/가운데 버튼 드래그는 이동, Esc는 닫기다. 확대 화면은 미리보기 DOM 밖에 있어 HTML/PDF 내보내기 내용에 포함되지 않는다.
 - 미리보기 HTML은 `https://folderss-viewer/markdown-app.html`(가상 호스트 → `Viewers/Resources`)에서 로드되므로,
   마크다운 본문의 상대 경로 이미지(`![](img/foo.png)`, `![](../assets/foo.png)` 등)를 그대로 두면
   현재 파일 기준이 아니라 `Resources` 폴더 기준으로 요청되어 항상 깨진다.
@@ -781,7 +782,7 @@ Folderss/
   연산마다 `SyncRows` → `RecordChange` 한 번(실행 취소 한 단계). 너비 끌기 중에는 화면에 만든 그 표의 행만 다시 그리고 놓을 때 기록한다.
   셀 손잡이는 셀에 처음 마우스를 올릴 때 만든다(행 추가 비용에 넣지 않음).
 - 이미지 `BlockImageLoader`: 파일 읽기·디코딩은 스레드 풀에서(화면 폭 × DPI로 `DecodePixelWidth`, 400px 단위), Freeze한 결과를 UI 스레드로. 최근 64개 LRU,
-  원본 픽셀 크기를 기억해 행을 만들기 전 높이 추정에 쓴다. 클립보드 이미지 붙여넣기(`images/<문서이름>-<시각>.png`), 탐색기/폴더 패널 파일 드래그 앤 드롭(외부 폴더 이미지는 `BlockImageDropDialog`), 우측 핸들 폭 조절(`width`), 정렬(`align`), 원본 크기 보기(`BlockImagePreviewWindow`), 수동 원격 이미지 로드(`이번만 불러오기`, `RemoteContentPolicy`·`NetworkSettingsService` 인증서 검증)를 지원한다. 수식(`Math`, `$$...$$` 및 인라인 `$...$`)은 순수 C# WPF 수식 렌더러(`BlockMathRenderer`)로 그리며, 목차(`Toc`, `[TOC]`/`<!-- toc -->`), 파일 첨부(`File`, `[📎 이름](경로)`), 북마크(`Bookmark`, `[🔖 제목](URL)`), 제목 1~6(`Heading1`~`Heading6`, 4~6은 enum 끝에 추가), 토글 제목 1~3(`Toggle` + `heading`), 콜아웃 아이콘 선택기(`Callout` + `icon`)를 지원한다.
+  원본 픽셀 크기를 기억해 행을 만들기 전 높이 추정에 쓴다. 클립보드 이미지 붙여넣기(`images/<문서이름>-<시각>.png`), 탐색기/폴더 패널 파일 드래그 앤 드롭(외부 폴더 이미지는 `BlockImageDropDialog`), 우측 핸들 폭 조절(`width`), 정렬(`align`), 원본 크기 보기(`BlockImagePreviewWindow`: 창 맞춤, Ctrl+휠 포인터 기준 확대·축소, 왼쪽/가운데 버튼 드래그 이동), 수동 원격 이미지 로드(`이번만 불러오기`, `RemoteContentPolicy`·`NetworkSettingsService` 인증서 검증)를 지원한다. 수식(`Math`, `$$...$$` 및 인라인 `$...$`)은 순수 C# WPF 수식 렌더러(`BlockMathRenderer`)로 그리며, 목차(`Toc`, `[TOC]`/`<!-- toc -->`), 파일 첨부(`File`, `[📎 이름](경로)`), 북마크(`Bookmark`, `[🔖 제목](URL)`), 제목 1~6(`Heading1`~`Heading6`, 4~6은 enum 끝에 추가), 토글 제목 1~3(`Toggle` + `heading`), 콜아웃 아이콘 선택기(`Callout` + `icon`)를 지원한다.
   페이지 링크(`Page`, `[📄 제목](경로.md)`, #77 Phase 2): 페이지 = `.md` 파일. 카드 제목을 누르면 `PageOpenRequested` → 뷰어 `IFileOpenRequester.FileOpenRequested`로 새 탭에서 연다(파일이 없으면 만들지 묻는다).
   `/페이지`의 `BlockPageDialog`는 하위 페이지(문서 옆 `문서이름/제목.md`, 제목 한 줄)를 새로 만들거나 기존 문서를 연결한다. 백링크·이동 경로는 #74. 파일·북마크·페이지는 `EditorBlock.IsLinkCard`로 같이 다룬다.
 - 키: `OnPreviewKeyDown` 한 곳에서 처리(Ctrl+S/Z/Y → 블록 선택 모드 → `/` 메뉴 → 표 셀(`HandleTableKey`) → 입력란). 한글 조합 중 Enter(`Key.ImeProcessed`)는 조합이 끝난 뒤

@@ -704,11 +704,17 @@ namespace Folderss.Controls
     /// <summary>이미지 블록의 '원본 크기로 보기' 모달 창.</summary>
     internal sealed class BlockImagePreviewWindow : Window
     {
+        private const double MinZoom = 0.1;
+        private const double MaxZoom = 8;
+        private const double ImagePadding = 12;
+
         public BlockImagePreviewWindow(ImageSource imageSource, string title, string localPath = null, Action onOpenInExplorer = null)
         {
             var bitmap = imageSource as BitmapSource;
             var pixelW = bitmap != null ? bitmap.PixelWidth : 800;
             var pixelH = bitmap != null ? bitmap.PixelHeight : 600;
+            var imageWidth = imageSource.Width;
+            var imageHeight = imageSource.Height;
             Title = string.IsNullOrWhiteSpace(title) ? "이미지 원본 보기" : title;
             Width = Math.Min(1200, Math.Max(480, pixelW + 60));
             Height = Math.Min(860, Math.Max(360, pixelH + 90));
@@ -736,11 +742,65 @@ namespace Folderss.Controls
             var img = new Image
             {
                 Source = imageSource,
-                Stretch = Stretch.None,
+                Stretch = Stretch.Fill,
+                Width = imageWidth,
+                Height = imageHeight,
                 HorizontalAlignment = HorizontalAlignment.Center,
                 VerticalAlignment = VerticalAlignment.Center,
             };
             RenderOptions.SetBitmapScalingMode(img, BitmapScalingMode.HighQuality);
+
+            var canvas = new Grid();
+            canvas.Children.Add(img);
+            var scroller = new ScrollViewer
+            {
+                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+                Content = canvas,
+            };
+            var zoomLabel = new TextBlock
+            {
+                VerticalAlignment = VerticalAlignment.Center,
+                Margin = new Thickness(0, 0, 12, 0),
+                ToolTip = "Ctrl+휠: 확대/축소 · 왼쪽/가운데 버튼 드래그: 이동",
+            };
+            zoomLabel.SetResourceReference(TextBlock.ForegroundProperty, "SecondaryText");
+            double zoom = 1;
+            var changingFitForWheel = false;
+
+            void ApplyZoom(double nextZoom, Point? pointer = null)
+            {
+                nextZoom = Math.Clamp(nextZoom, MinZoom, MaxZoom);
+                if (!double.IsFinite(nextZoom) || imageWidth <= 0 || imageHeight <= 0)
+                    return;
+
+                var cursor = pointer ?? new Point(scroller.ViewportWidth / 2, scroller.ViewportHeight / 2);
+                var oldLeft = img.TranslatePoint(new Point(), canvas).X;
+                var oldTop = img.TranslatePoint(new Point(), canvas).Y;
+                var imageX = (scroller.HorizontalOffset + cursor.X - oldLeft) / zoom;
+                var imageY = (scroller.VerticalOffset + cursor.Y - oldTop) / zoom;
+
+                zoom = nextZoom;
+                img.Width = imageWidth * zoom;
+                img.Height = imageHeight * zoom;
+                canvas.Width = Math.Max(scroller.ViewportWidth, img.Width + ImagePadding * 2);
+                canvas.Height = Math.Max(scroller.ViewportHeight, img.Height + ImagePadding * 2);
+                zoomLabel.Text = string.Format(CultureInfo.InvariantCulture, "{0:0}%", zoom * 100);
+                scroller.UpdateLayout();
+
+                var newOrigin = img.TranslatePoint(new Point(), canvas);
+                scroller.ScrollToHorizontalOffset(newOrigin.X + imageX * zoom - cursor.X);
+                scroller.ScrollToVerticalOffset(newOrigin.Y + imageY * zoom - cursor.Y);
+            }
+
+            double FitZoom()
+            {
+                if (imageWidth <= 0 || imageHeight <= 0)
+                    return 1;
+                return Math.Min(1, Math.Min(
+                    Math.Max(1, scroller.ViewportWidth - ImagePadding * 2) / imageWidth,
+                    Math.Max(1, scroller.ViewportHeight - ImagePadding * 2) / imageHeight));
+            }
 
             var fitToggle = new CheckBox
             {
@@ -749,10 +809,74 @@ namespace Folderss.Controls
                 Margin = new Thickness(0, 0, 12, 0),
             };
             fitToggle.SetResourceReference(ForegroundProperty, "PrimaryText");
-            fitToggle.Checked += (_, __) => img.Stretch = Stretch.Uniform;
-            fitToggle.Unchecked += (_, __) => img.Stretch = Stretch.None;
+            fitToggle.Checked += (_, __) => ApplyZoom(FitZoom());
+            fitToggle.Unchecked += (_, __) =>
+            {
+                if (!changingFitForWheel)
+                    ApplyZoom(1);
+            };
+
+            scroller.SizeChanged += (_, __) => ApplyZoom(fitToggle.IsChecked == true ? FitZoom() : zoom);
+            scroller.PreviewMouseWheel += (_, e) =>
+            {
+                if ((Keyboard.Modifiers & ModifierKeys.Control) == 0)
+                    return;
+                var nextZoom = zoom * Math.Pow(1.2, e.Delta / 120.0);
+                if (fitToggle.IsChecked == true)
+                {
+                    changingFitForWheel = true;
+                    fitToggle.IsChecked = false;
+                    changingFitForWheel = false;
+                }
+                ApplyZoom(nextZoom, e.GetPosition(scroller));
+                e.Handled = true;
+            };
+
+            var dragging = false;
+            var dragButton = MouseButton.Left;
+            var dragStart = new Point();
+            var startHorizontalOffset = 0.0;
+            var startVerticalOffset = 0.0;
+            scroller.PreviewMouseDown += (_, e) =>
+            {
+                if ((e.ChangedButton != MouseButton.Left && e.ChangedButton != MouseButton.Middle) ||
+                    !(e.OriginalSource is DependencyObject source && ElementTree.IsWithin(source, canvas)))
+                    return;
+                dragging = true;
+                dragButton = e.ChangedButton;
+                dragStart = e.GetPosition(scroller);
+                startHorizontalOffset = scroller.HorizontalOffset;
+                startVerticalOffset = scroller.VerticalOffset;
+                scroller.Cursor = Cursors.SizeAll;
+                scroller.CaptureMouse();
+                e.Handled = true;
+            };
+            scroller.PreviewMouseMove += (_, e) =>
+            {
+                if (!dragging)
+                    return;
+                var delta = e.GetPosition(scroller) - dragStart;
+                scroller.ScrollToHorizontalOffset(startHorizontalOffset - delta.X);
+                scroller.ScrollToVerticalOffset(startVerticalOffset - delta.Y);
+                e.Handled = true;
+            };
+            scroller.PreviewMouseUp += (_, e) =>
+            {
+                if (!dragging || e.ChangedButton != dragButton)
+                    return;
+                dragging = false;
+                scroller.Cursor = null;
+                scroller.ReleaseMouseCapture();
+                e.Handled = true;
+            };
+            scroller.LostMouseCapture += (_, __) =>
+            {
+                dragging = false;
+                scroller.Cursor = null;
+            };
 
             bar.Children.Add(info);
+            bar.Children.Add(zoomLabel);
             bar.Children.Add(fitToggle);
             if (!string.IsNullOrEmpty(localPath) && onOpenInExplorer != null)
             {
@@ -770,15 +894,9 @@ namespace Folderss.Controls
             bar.Children.Add(closeBtn);
             root.Children.Add(bar);
 
-            var scroller = new ScrollViewer
-            {
-                HorizontalScrollBarVisibility = ScrollBarVisibility.Auto,
-                VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-                Content = img,
-                Padding = new Thickness(12),
-            };
             root.Children.Add(scroller);
             Content = root;
+            Loaded += (_, __) => ApplyZoom(zoom);
 
             PreviewKeyDown += (_, e) =>
             {

@@ -305,7 +305,18 @@ mark.md-find-hit.active {
 }
 #mdv-preview-pane th { background: var(--panel); font-weight: 600; }
 #mdv-preview-pane tr:hover { background: var(--hover); }
-#mdv-preview-pane img { max-width: 100%; border-radius: 4px; }
+#mdv-preview-pane img { max-width: 100%; border-radius: 4px; cursor: zoom-in; }
+
+/* 미리보기 이미지를 문서 밖에서 확대해 출력용 복제본에는 포함하지 않는다. */
+#mdv-image-viewer { display: none; position: fixed; inset: 0; z-index: 1000; background: var(--bg); color: var(--fg); }
+#mdv-image-viewer.open { display: flex; flex-direction: column; }
+#mdv-image-toolbar { height: 38px; flex: none; display: flex; align-items: center; gap: 12px; padding: 0 12px; background: var(--panel); border-bottom: 1px solid var(--border); }
+#mdv-image-toolbar span:first-child { font-weight: 600; }
+#mdv-image-hint { color: var(--fg2); flex: 1; }
+#mdv-image-close { color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: 3px 10px; cursor: pointer; }
+#mdv-image-stage { position: relative; flex: 1; overflow: hidden; cursor: grab; touch-action: none; }
+#mdv-image-stage.dragging { cursor: grabbing; }
+#mdv-image-full { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; transform-origin: center; user-select: none; -webkit-user-drag: none; pointer-events: none; }
 #mdv-preview-pane hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
 #mdv-preview-pane input[type=checkbox] { margin-right: .4em; }
 
@@ -357,6 +368,7 @@ body.mode-split #mdv-split-handle:hover { background: var(--accent); }
   /* 인쇄·PDF는 흰 바탕이라 어두운 테마의 밝은 코드 색이 안 보이므로 코드 색을 끈다 */
   #mdv-operation-surface pre code span { color: inherit !important; }
   #mdv-root { display: none !important; }
+  #mdv-image-viewer { display: none !important; }
   #mdv-operation-surface {
     display: flex !important;
     width: 100%;
@@ -508,6 +520,15 @@ body.mode-split #mdv-split-handle:hover { background: var(--accent); }
       <div id="mdv-preview-pane"></div>
     </div>
   </div>
+</div>
+<div id="mdv-image-viewer" role="dialog" aria-modal="true" aria-label="이미지 확대 보기">
+  <div id="mdv-image-toolbar">
+    <span>이미지 보기</span>
+    <span id="mdv-image-zoom">100%</span>
+    <span id="mdv-image-hint">Ctrl+휠: 확대/축소 · 왼쪽/가운데 드래그: 이동</span>
+    <button id="mdv-image-close" type="button">닫기 (Esc)</button>
+  </div>
+  <div id="mdv-image-stage"><img id="mdv-image-full" alt=""></div>
 </div>
 <div id="mdv-operation-surface" aria-hidden="true"></div>
 

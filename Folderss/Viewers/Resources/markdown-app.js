@@ -231,6 +231,7 @@ function resetEditorPaneSizeIfNotSplit(mode) {
 }
 
 function setMode(mode) {
+  closeImageViewer();
   _mode = mode;
   document.body.className = _theme + ' mode-' + mode;
   document.getElementById('btnEdit').classList.toggle('active', mode === 'edit');
@@ -266,6 +267,11 @@ document.addEventListener('click', function(e) {
 });
 
 document.addEventListener('keydown', function(e) {
+  if (e.key === 'Escape' && imageViewer.classList.contains('open')) {
+    e.preventDefault();
+    closeImageViewer();
+    return;
+  }
   // 편집기 밖(Preview 모드 등)에 포커스가 있어도 편집한 내용을 저장할 수 있게 문서 전체에서 받는다.
   if (e.ctrlKey && !e.shiftKey && !e.altKey && e.key.toLowerCase() === 's') {
     e.preventDefault();
@@ -288,6 +294,93 @@ document.addEventListener('keydown', function(e) {
     else findNext();
   }
 });
+
+// 미리보기/분할 보기의 이미지 클릭은 문서 링크보다 먼저 받아 확대 화면을 연다.
+var imageViewer = document.getElementById('mdv-image-viewer');
+var imageStage = document.getElementById('mdv-image-stage');
+var fullImage = document.getElementById('mdv-image-full');
+var imageZoomLabel = document.getElementById('mdv-image-zoom');
+var imageZoom = 1;
+var imagePanX = 0;
+var imagePanY = 0;
+var imageDrag = null;
+
+function renderImageViewer() {
+  fullImage.style.transform = 'translate(-50%, -50%) translate(' + imagePanX + 'px, ' + imagePanY + 'px) scale(' + imageZoom + ')';
+  imageZoomLabel.textContent = Math.round(imageZoom * 100) + '%';
+}
+
+function closeImageViewer() {
+  if (!imageViewer.classList.contains('open')) return;
+  imageViewer.classList.remove('open');
+  imageDrag = null;
+  imageStage.classList.remove('dragging');
+  fullImage.removeAttribute('src');
+}
+
+function openImageViewer(source) {
+  imageZoom = 1;
+  imagePanX = 0;
+  imagePanY = 0;
+  fullImage.onload = function() {
+    imageZoom = Math.min(1, (imageStage.clientWidth - 32) / fullImage.naturalWidth,
+      (imageStage.clientHeight - 32) / fullImage.naturalHeight);
+    if (!Number.isFinite(imageZoom) || imageZoom <= 0) imageZoom = 1;
+    renderImageViewer();
+  };
+  fullImage.src = source.currentSrc || source.src;
+  fullImage.alt = source.alt || '';
+  imageViewer.classList.add('open');
+  renderImageViewer();
+  document.getElementById('mdv-image-close').focus();
+}
+
+document.getElementById('mdv-preview-pane').addEventListener('click', function(e) {
+  if (e.target.tagName !== 'IMG') return;
+  e.preventDefault();
+  e.stopPropagation();
+  openImageViewer(e.target);
+}, true);
+
+document.getElementById('mdv-image-close').addEventListener('click', closeImageViewer);
+imageStage.addEventListener('wheel', function(e) {
+  if (!e.ctrlKey) return;
+  e.preventDefault();
+  var nextZoom = Math.max(Math.min(0.1, imageZoom), Math.min(8, imageZoom * Math.pow(1.2, -e.deltaY / 100)));
+  var centerX = imageStage.clientWidth / 2;
+  var centerY = imageStage.clientHeight / 2;
+  var ratio = nextZoom / imageZoom;
+  imagePanX = e.clientX - imageStage.getBoundingClientRect().left - centerX
+    - (e.clientX - imageStage.getBoundingClientRect().left - centerX - imagePanX) * ratio;
+  imagePanY = e.clientY - imageStage.getBoundingClientRect().top - centerY
+    - (e.clientY - imageStage.getBoundingClientRect().top - centerY - imagePanY) * ratio;
+  imageZoom = nextZoom;
+  renderImageViewer();
+}, { passive: false });
+
+imageStage.addEventListener('pointerdown', function(e) {
+  if (e.button !== 0 && e.button !== 1) return;
+  e.preventDefault();
+  imageDrag = { id: e.pointerId, x: e.clientX, y: e.clientY, panX: imagePanX, panY: imagePanY };
+  imageStage.setPointerCapture(e.pointerId);
+  imageStage.classList.add('dragging');
+});
+imageStage.addEventListener('pointermove', function(e) {
+  if (!imageDrag || imageDrag.id !== e.pointerId) return;
+  imagePanX = imageDrag.panX + e.clientX - imageDrag.x;
+  imagePanY = imageDrag.panY + e.clientY - imageDrag.y;
+  renderImageViewer();
+});
+function stopImageDrag(e) {
+  if (!imageDrag || imageDrag.id !== e.pointerId) return;
+  imageDrag = null;
+  imageStage.classList.remove('dragging');
+  if (imageStage.hasPointerCapture(e.pointerId)) imageStage.releasePointerCapture(e.pointerId);
+}
+imageStage.addEventListener('pointerup', stopImageDrag);
+imageStage.addEventListener('pointercancel', stopImageDrag);
+imageStage.addEventListener('lostpointercapture', stopImageDrag);
+imageStage.addEventListener('auxclick', function(e) { if (e.button === 1) e.preventDefault(); });
 
 function exportHtml() {
   document.getElementById('exportMenu').classList.remove('open');
@@ -1079,6 +1172,7 @@ var app = {
   shareContent: shareContent,
   clearOperationSurface: clearOperationSurface,
   open: function(content, theme, mode, largeFileMode, filePath) {
+    closeImageViewer();
     _content = content;
     applyTheme(theme);
     _filePath = filePath || null;
