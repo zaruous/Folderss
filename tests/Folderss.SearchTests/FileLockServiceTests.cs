@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
@@ -97,6 +97,7 @@ namespace Folderss.SearchTests
             {
                 Process = new FileLockService.RM_UNIQUE_PROCESS { dwProcessId = 77777 },
                 strAppName = "notepad.exe",
+                TSSessionId = (uint)System.Diagnostics.Process.GetCurrentProcess().SessionId,
                 ApplicationType = FileLockService.RM_APP_TYPE.RmMainWindow
             };
             var evalUserApp = FileLockService.EvaluateProcess(userAppInfo);
@@ -105,6 +106,26 @@ namespace Folderss.SearchTests
             Assert.False(evalUserApp.IsCurrentProcess);
             Assert.True(evalUserApp.CanRequestClose);
             Assert.True(evalUserApp.CanForceKill);
+        }
+
+        [Fact]
+        public void OtherOrUnknownSession_CannotCloseOrKill()
+        {
+            using var current = System.Diagnostics.Process.GetCurrentProcess();
+            foreach (var session in new[] { (uint)current.SessionId + 1, uint.MaxValue })
+            {
+                var info = new FileLockService.RM_PROCESS_INFO
+                {
+                    Process = new FileLockService.RM_UNIQUE_PROCESS { dwProcessId = 77777 },
+                    strAppName = "other-app",
+                    TSSessionId = session,
+                    ApplicationType = FileLockService.RM_APP_TYPE.RmMainWindow
+                };
+                var evaluated = FileLockService.EvaluateProcess(info);
+                Assert.False(evaluated.CanRequestClose);
+                Assert.False(evaluated.CanForceKill);
+                Assert.Contains("세션", evaluated.UnclosableReason);
+            }
         }
 
         [Fact]

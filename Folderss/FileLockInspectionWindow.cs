@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
@@ -298,14 +298,13 @@ namespace Folderss
             if (selected == null || !selected.CanForceKill)
                 return;
 
-            var confirm = MessageBox.Show(this,
-                $"프로세스 '{selected.DisplayName}' (PID: {selected.ProcessId})을(를) 강제 종료하시겠습니까?\n\n저장되지 않은 작업이나 데이터가 완전히 손실될 수 있습니다.\n계속하시겠습니까?",
-                "프로세스 강제 종료 경고",
-                MessageBoxButton.YesNo,
-                MessageBoxImage.Warning,
-                MessageBoxResult.No);
-
-            if (confirm != MessageBoxResult.Yes)
+            var confirm = new GitForceConfirmDialog(
+                "프로세스 강제 종료",
+                $"'{selected.DisplayName}' (PID: {selected.ProcessId})을(를) 종료합니다.",
+                "강제 종료 사용",
+                "저장되지 않은 작업이나 데이터가 손실될 수 있으며 되돌릴 수 없습니다.",
+                "확인") { Owner = this };
+            if (confirm.ShowDialog() != true || !confirm.Force)
                 return;
 
             var (exited, message) = FileLockService.ForceKillProcess(selected);

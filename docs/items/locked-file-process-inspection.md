@@ -1,6 +1,6 @@
 # 잠긴 파일의 사용 프로세스 확인과 종료
 
-- 상태: Ready for Verification
+- 상태: Done
 
 ## 요구사항
 
@@ -87,3 +87,13 @@
 
 - 2026-11-08: 사용자 제안을 Todo 아이템으로 등록하고 조회·종료·재시도 범위를 정리.
 - 2026-11-08: `FileLockService`, `FileLockInspectionWindow` 구현, 대기열 실패 상세 정보 연동, 폴더 패널/메인 메뉴/작업 창 진입점 연결, 단위 테스트 작성 및 통과 확인 (Ready for Verification으로 전환).
+
+### 2026-11-08 코드 리뷰 후 보완
+
+- 요구사항: 강제 종료 확인 체크, 폴더의 여러 잠금 후보 조회, 다른 사용자 세션의 종료 차단을 보완한다.
+- 구현: 기존 `GitForceConfirmDialog`를 재사용해 강제 옵션을 기본 꺼짐으로 두고 확인 체크 후에만 실행한다. 폴더에서 찾은 후보 최대 10개를 Restart Manager 한 세션에 모두 등록한다. 조회 시 세션 ID가 다르거나 불명확하면 종료 버튼을 막고, 정상/강제 종료 직전에도 실제 프로세스 세션을 재확인한다.
+- 변경 파일: `FileLockService.cs`, `FileLockInspectionWindow.cs`, `FileLockServiceTests.cs`, `README.md`, `docs/architecture.md`, 본 문서.
+- 검증: `dotnet test tests/Folderss.SearchTests/Folderss.SearchTests.csproj --filter "FileLockServiceTests|FileJobQueueTests"` — 50개 통과, Exit: 0. 다른/알 수 없는 세션의 종료 차단 회귀 테스트 포함.
+- 빌드: 실행 중 앱의 출력 파일 잠금을 피하려고 `dotnet build .\Folderss.sln -c Debug -p:OutputPath=D:\git\tmp\folderss-lock-review-build\` 실행 — Exit: 0, 오류 0개, 경고 7개.
+- 제한: 폴더 탐색은 기존의 깊이 8 및 후보 10개 제한을 유지하고 결과 메시지에 표시한다. 이번 보완의 UI 조작 및 실제 타 사용자 세션 종료 시도는 수행하지 않았다.
+- 2026-11-08: 사용자 최종 승인에 따라 상태를 Done으로 전환.

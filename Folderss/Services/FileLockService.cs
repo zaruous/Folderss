@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.ComponentModel;
 using System.Diagnostics;
@@ -324,15 +324,14 @@ namespace Folderss.Services
                         return result;
                     }
 
-                    // 감지된 첫 번째 잠긴 파일에 대해 Restart Manager 조회를 수행
-                    var targetFile = candidates[0];
-                    var (procs, err) = QueryRestartManager(new[] { targetFile });
+                    // 탐색 범위에서 찾은 모든 후보를 한 세션에 등록한다.
+                    var (procs, err) = QueryRestartManager(candidates.ToArray());
                     result.Processes = procs;
                     result.ErrorCode = err;
                     result.Success = err == ErrorSuccess;
                     result.Message = procs.Count > 0
-                        ? $"폴더 하위 잠긴 파일 '{Path.GetFileName(targetFile)}'을(를) 사용하는 프로세스 {procs.Count}개가 감지되었습니다."
-                        : $"폴더 하위 파일 '{Path.GetFileName(targetFile)}'이(가) 열려 있으나 점유 프로세스 정보를 가져오지 못했습니다 (오류 코드: {err}).";
+                        ? $"폴더 하위 후보 파일 {candidates.Count}개를 사용하는 프로세스 {procs.Count}개가 감지되었습니다. (최대 10개 파일, 깊이 8까지 조회)"
+                        : $"폴더 하위 후보 파일 {candidates.Count}개의 점유 프로세스가 감지되지 않았습니다 (오류 코드: {err}, 최대 10개 파일, 깊이 8까지 조회).";
                     return result;
                 }
 
@@ -578,6 +577,12 @@ namespace Folderss.Services
                 result.CanForceKill = false;
                 result.UnclosableReason = "Windows 서비스 프로세스입니다 (서비스 관리자에서 관리해야 합니다).";
             }
+            else if (info.TSSessionId != CurrentSessionId)
+            {
+                result.CanRequestClose = false;
+                result.CanForceKill = false;
+                result.UnclosableReason = "다른 사용자 세션이거나 세션을 확인할 수 없는 프로세스입니다.";
+            }
             else
             {
                 // 일반 프로세스
@@ -586,6 +591,11 @@ namespace Folderss.Services
             }
 
             return result;
+        }
+
+        private static uint CurrentSessionId
+        {
+            get { using var current = Process.GetCurrentProcess(); return (uint)current.SessionId; }
         }
 
         public static DateTime? ConvertFileTimeToDateTime(System.Runtime.InteropServices.ComTypes.FILETIME fileTime)
@@ -640,6 +650,13 @@ namespace Folderss.Services
 
             using (proc)
             {
+                try
+                {
+                    if ((uint)proc.SessionId != CurrentSessionId)
+                        return (false, "다른 사용자 세션의 프로세스는 종료할 수 없습니다.");
+                }
+                catch (Exception ex) { return (false, "프로세스 세션 확인 실패: " + ex.Message); }
+
                 // PID 재사용 검증 (시작 시각 확인)
                 if (info.StartTimeUtc.HasValue)
                 {
@@ -725,6 +742,13 @@ namespace Folderss.Services
 
             using (proc)
             {
+                try
+                {
+                    if ((uint)proc.SessionId != CurrentSessionId)
+                        return (false, "다른 사용자 세션의 프로세스는 종료할 수 없습니다.");
+                }
+                catch (Exception ex) { return (false, "프로세스 세션 확인 실패: " + ex.Message); }
+
                 // 재검증
                 if (proc.Id == Environment.ProcessId)
                     return (false, "현재 애플리케이션은 강제 종료할 수 없습니다.");

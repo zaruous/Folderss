@@ -948,3 +948,5 @@ WPF 기본 `ContextMenu`는 `SystemDropShadowChrome`으로 테두리가 두껍�
     → 모든 DynamicResource 바인딩 자동 갱신
 ```
 
+
+- 잠금 진단 보완: 폴더는 잠금 후보 최대 10개(깊이 8)를 한 Restart Manager 세션에 등록한다. 종료는 현재 사용자 세션에 한정하고 실행 직전에도 재검증한다. 강제 종료 확인은 `GitForceConfirmDialog`를 재사용한다.
