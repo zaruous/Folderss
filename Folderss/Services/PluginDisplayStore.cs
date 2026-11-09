@@ -15,6 +15,12 @@ namespace Folderss.Services
         public const string Main = "main";
         public const string FileName = "display.json";
 
+        /// <summary>
+        /// 플러그인이 아닌 기본 기능 Git의 표시 방식 키. 설정 > 플러그인 목록에 항상 보이고 같은 파일에 저장한다.
+        /// 플러그인 ID 규칙(<c>PluginPackage.IdPattern</c>)에 ':'가 없어 플러그인 ID와 겹치지 않는다.
+        /// </summary>
+        public const string BuiltinGitId = "builtin:git";
+
         public static string GetPath(string pluginsDirectory)
         {
             return Path.Combine(pluginsDirectory, FileName);

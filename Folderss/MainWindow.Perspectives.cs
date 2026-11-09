@@ -12,7 +12,8 @@ namespace Folderss
 {
     /// <summary>
     /// 퍼스펙티브: 메인 창 전체를 파일 화면(DockManager)과 메인 창에 띄운 플러그인 화면 사이에서 바꾼다
-    /// (이클립스 Java SE / Java EE 퍼스펙티브 전환처럼). 표시 방식이 <see cref="PluginDisplayStore.Main"/>인 플러그인만 여기로 온다.
+    /// (이클립스 Java SE / Java EE 퍼스펙티브 전환처럼). 표시 방식이 <see cref="PluginDisplayStore.Main"/>인 플러그인과
+    /// 기본 기능 Git(<see cref="PluginDisplayStore.BuiltinGitId"/>)만 여기로 온다.
     /// DockManager는 다른 부모로 옮기지 않고 <see cref="UIElement.Visibility"/>만 바꾼다 — 옮기면 도킹 콘텐츠의 논리 부모가 꼬인다.
     /// 플러그인 뷰는 처음 열 때 한 번 만들고 닫을 때까지 유지한다(전환해도 상태가 남게).
     /// </summary>
@@ -24,6 +25,11 @@ namespace Folderss
             public PluginManifest Manifest;
             public FrameworkElement View;
             public ToggleButton Button;
+            public string Icon = "🔌";
+            /// <summary>퍼스펙티브를 닫을 때(팝업으로 옮길 때는 아님). 플러그인은 null — Dispose를 부르지 않는다.</summary>
+            public Action Closed;
+            /// <summary>같은 뷰를 팝업 창에 넣어 연다.</summary>
+            public Action MoveToPopup;
         }
 
         private readonly List<PluginPerspective> _perspectives = new List<PluginPerspective>();
@@ -63,7 +69,36 @@ namespace Folderss
             if (view == null)
                 return;
 
-            var perspective = new PluginPerspective { Id = manifest.Id, Manifest = manifest, View = view };
+            OpenPerspective(new PluginPerspective
+            {
+                Id = manifest.Id,
+                Manifest = manifest,
+                View = view,
+                MoveToPopup = () => PluginManager.ShowViewWindow(manifest, view, this)
+            });
+        }
+
+        /// <summary>Git을 메인 창 퍼스펙티브로 연다(설정 > 플러그인의 "Git (기본 기능)" 표시 방식이 메인 창일 때).</summary>
+        private void OpenGitPerspective(GitView view)
+        {
+            var perspective = new PluginPerspective
+            {
+                Id = PluginDisplayStore.BuiltinGitId,
+                Manifest = new PluginManifest { Id = PluginDisplayStore.BuiltinGitId, Name = "Git", Description = "Git 저장소 (기본 기능)" },
+                View = view,
+                Icon = "⎇",
+                Closed = view.Shutdown,
+                MoveToPopup = () => new GitWindow(view) { Owner = this }.Show()
+            };
+            // git이 없거나 버전이 맞지 않으면 뷰가 Loaded 중에 닫기를 요청한다 — 레이아웃 처리 중에 떼지 않게 다음 순서에서.
+            view.CloseRequested += () => Dispatcher.BeginInvoke(new Action(() => ClosePerspective(perspective)), DispatcherPriority.Background);
+            OpenPerspective(perspective);
+        }
+
+        private void OpenPerspective(PluginPerspective perspective)
+        {
+            var manifest = perspective.Manifest;
+            var view = perspective.View;
             try
             {
                 view.Visibility = Visibility.Collapsed;
@@ -143,12 +178,27 @@ namespace Folderss
 
         private void ClosePerspective(PluginPerspective perspective)
         {
+            if (DetachPerspective(perspective))
+                perspective.Closed?.Invoke();
+        }
+
+        /// <summary>앱 종료 때 열린 퍼스펙티브의 정리 작업(Git: 진행 중인 git 프로세스 종료)을 부른다.</summary>
+        private void ShutdownPerspectives()
+        {
+            foreach (var perspective in _perspectives.ToList())
+                perspective.Closed?.Invoke();
+        }
+
+        /// <summary>퍼스펙티브를 목록·화면에서 떼어 낸다. 뷰 자체는 건드리지 않는다(팝업으로 옮길 수 있게).</summary>
+        private bool DetachPerspective(PluginPerspective perspective)
+        {
             if (!_perspectives.Remove(perspective))
-                return;
+                return false;
             // 팝업 창을 닫을 때와 같이 트리에서 떼어 내기만 한다(Unloaded가 온다). Dispose는 부르지 않는다 —
             // 팝업도 부르지 않고, 플러그인이 같은 뷰를 다시 돌려줄 수도 있다.
             PerspectiveHost.Children.Remove(perspective.View);
             ShowPerspective(_activePerspective == perspective ? null : _activePerspective);
+            return true;
         }
 
         /// <summary>
@@ -162,10 +212,10 @@ namespace Folderss
             {
                 if (!_perspectives.Contains(perspective))
                     return;
-                ClosePerspective(perspective);
+                DetachPerspective(perspective);
                 // 다른 퍼스펙티브가 보이는 중에 옮기면 이 뷰는 접혀(Collapsed) 있다.
                 perspective.View.Visibility = Visibility.Visible;
-                PluginManager.ShowViewWindow(perspective.Manifest, perspective.View, this);
+                perspective.MoveToPopup();
             }), DispatcherPriority.Background);
         }
 
@@ -240,7 +290,7 @@ namespace Folderss
                 ClosePerspective(perspective);
             };
 
-            var button = CreateBarButton("🔌", perspective.Manifest.DisplayName, close);
+            var button = CreateBarButton(perspective.Icon, perspective.Manifest.DisplayName, close);
             button.ToolTip = string.IsNullOrWhiteSpace(perspective.Manifest.Description)
                 ? perspective.Manifest.DisplayName
                 : perspective.Manifest.DisplayName + "\n" + perspective.Manifest.Description;
