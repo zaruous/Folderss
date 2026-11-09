@@ -157,12 +157,13 @@ Folderss/
 ├── FileJobsWindow.cs               — 파일 작업 진행률 창(비모달, 대기열 전체·일시정지·취소)과 이름 충돌 대화상자 `FileConflictDialog`(GitDialogBase 상속), 코드로 구성
 ├── FileLockInspectionWindow.cs       — 사용 중인 프로세스 조회 및 종료/재시도 대화상자 (비모달, Restart Manager 기반 프로세스 스냅숏, 정상/강제 종료, 삭제 재시도), 코드로 구성
 ├── GitDialogs.cs                   — Git 선택 대화상자(GitDialogBase + reset·브랜치·체크아웃·워킹트리·브랜치 업데이트·원격 브랜치 삭제·저장소 설정), 코드로 구성
-├── GitWindow.xaml/.cs              — 다중 저장소 Git 창 (비모달, ⋯ 메뉴 > Git 저장소…)
+├── GitView.xaml/.cs                — 다중 저장소 Git 화면(UserControl). 팝업 창과 메인 창 퍼스펙티브가 같은 뷰를 담는다
+├── GitWindow.xaml/.cs              — Git 팝업 창 (비모달, ⋯ 메뉴 > Git 저장소…). GitView를 담기만 하고 닫을 때 `GitView.Shutdown`
 ├── FileCompareWindow.cs            — 폴더 패널에서 고른 두 파일 비교 창 (비모달, ComparePairHeader, 좌우 바꾸기, GitDiffView + `GitLibDiff`, 안 되면 `git diff --no-index`), 코드로 구성
 ├── DirectoryCompareWindow.cs       — 폴더 비교 창 (비모달, 좌우 FolderBrowser 안전 모드 + 가운데 분할선·▶◀ 이동 + 작업 이력 패널). 같은 파일에 `CompareConfirmDialog`·`DirectoryCompareOptionsDialog`(GitDialogBase 상속), 코드로 구성
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── ArchiveDialogs.cs               — `ArchiveExtractDialog`·`ArchiveCompressDialog`(GitDialogBase 상속), `ArchiveProgressWindow`(0.4초 넘는 작업만, 취소), `ArchiveOperations`(백그라운드 실행·오류 알림·zip 이름 폴더 풀기)
-├── MainWindow.Perspectives.cs      — (partial) 퍼스펙티브: 메인 창을 파일 화면(DockManager)과 메인 창에 띄운 플러그인 화면 사이에서 전환, 제목 표시줄 전환 버튼, Ctrl+F8, 플러그인 예외 시 떼어 내기
+├── MainWindow.Perspectives.cs      — (partial) 퍼스펙티브: 메인 창을 파일 화면(DockManager)과 메인 창에 띄운 플러그인·Git 화면 사이에서 전환, 제목 표시줄 전환 버튼, Ctrl+F8, 플러그인 예외 시 떼어 내기
 ├── MainWindow.Archive.cs           — MainWindow의 zip 연결: 파일 작업 가드(`BlockedInArchive`), 이동·복사 처리, 반대편 패널, 결과 선택, ⋯ 메뉴 `압축 풀기…`·`zip으로 압축…`
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 네트워크, 경로 복사, 플러그인)
@@ -555,9 +556,15 @@ Folderss/
 - **압축**: `ZipArchiveService.CreateZip`(같은 폴더 임시 파일 후 이름 바꿈, UTF-8 이름, 빈 폴더 포함, 하위 링크 폴더는 안으로 안 들어감, 만드는 zip 자신 제외). 진행 창·오류 알림은 `ArchiveOperations`.
 - 회귀 테스트: `tests/Folderss.SearchTests/ZipArchiveTests.cs`(가상 경로, 목록 트리, CP949·UTF-8(플래그 유무)·NFD 이름, 위험한 이름, 손상·암호, 복사/합치기 충돌 모드, 이름 정리, zip 변경 감지, 취소, 만들기, 임시 사본·정리).
 
-### Git 창 (GitWindow)
+### Git 창 (GitView / GitWindow)
 - 진입: `MainWindow.ShowGit_Click` — 기준 폴더는 `GitSettings.BaseFolderMode`(기본: 폴더 하나 선택 시 그 폴더, 아니면 `CurrentPath`).
   드라이브 루트면 한 번 확인. 창은 비모달(`Show`)이고 여러 개 열 수 있다.
+- 화면은 `GitView`(UserControl), 팝업은 이를 담는 `GitWindow`. 표시 방식은 `PluginDisplayStore.BuiltinGitId`(`builtin:git`, 플러그인 ID 규칙상 겹치지 않음)로
+  플러그인과 같은 `plugins\display.json`에 저장하고 설정 > 플러그인 목록 맨 위 기본 기능 행(`PluginListItem.IsBuiltIn`, 제거·업데이트 불가)에서 고른다.
+  메인이면 `MainWindow.OpenGitPerspective` — 퍼스펙티브는 하나만, 열려 있으면 `ShowGit_Click`은 전환만 한다(기준 폴더 유지).
+  - `GitView`는 창이 아니므로 대화상자 주인은 `OwnerWindow`(`Window.GetWindow(this)`), 닫기는 `CloseRequested`(git 없음·버전 미달), 정리는 담는 쪽이 `Shutdown()`(팝업 `Closed`, 퍼스펙티브 닫기, 앱 종료 `ShutdownPerspectives`).
+    퍼스펙티브 → 팝업 옮기기는 같은 뷰를 새 `GitWindow`에 넣는다(`Loaded`가 다시 와도 탐색은 처음 한 번만).
+  - 설정 저장 반영(`ApplySavedSettings`)은 팝업 `GitWindow.View`와 퍼스펙티브의 `GitView`를 모두 돈다.
 - 탐색: `GitRepositoryScanner.Scan`이 `.git` 폴더/파일을 저장소로 보고, 찾아도 안으로 계속 내려간다(중첩 저장소).
   reparse point·제외 폴더·`.git`은 들어가지 않는다. 상위 저장소(`IsAncestor`)는 맨 앞. 찾는 즉시 행을 추가하고 status를 읽는다.
 - 조회 경로: 저장소 선택 시 브랜치·로그·upstream 비교·stash·워킹트리(로그에서 커밋을 고르면 그 커밋 파일 목록도)는 `GitLibReader`(LibGit2Sharp)로 프로세스 없이 읽는다(`GitWindow.ReadLibAsync`).

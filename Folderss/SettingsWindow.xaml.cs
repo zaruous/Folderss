@@ -37,6 +37,9 @@ namespace Folderss
         public string Id { get { return Manifest.Id; } }
         public string Status { get; set; }
 
+        /// <summary>플러그인이 아닌 기본 기능(Git) 행. 표시 방식만 바꿀 수 있고 제거·업데이트할 수 없다.</summary>
+        public bool IsBuiltIn { get; set; }
+
         /// <summary>설정 창이 저장할 때까지 들고 있는 표시 방식 사전(id → popup/main). 콤보에서 바꾸면 여기에 쓴다.</summary>
         internal IDictionary<string, string> DisplayModes { get; set; }
 
@@ -1191,6 +1194,14 @@ namespace Folderss
                     DisplayModes = _workingPluginDisplay
                 })
                 .ToList();
+            // 기본 기능 Git은 플러그인이 아니지만 표시 방식(팝업/메인 창)을 같은 곳에서 고르도록 항상 맨 위에 둔다.
+            items.Insert(0, new PluginListItem
+            {
+                Manifest = new PluginManifest { Id = PluginDisplayStore.BuiltinGitId, Name = "Git (기본 기능)", Version = "-" },
+                Status = "기본 기능",
+                IsBuiltIn = true,
+                DisplayModes = _workingPluginDisplay
+            });
             PluginList.ItemsSource = items;
             PluginErrorText.Text = errors.Count == 0 ? string.Empty : string.Format("읽지 못한 zip {0}개", errors.Count);
             PluginErrorText.ToolTip = errors.Count == 0 ? null : string.Join("\n", errors);
@@ -1240,7 +1251,7 @@ namespace Folderss
         private async void PluginUpdate_Click(object sender, RoutedEventArgs e)
         {
             var row = PluginList.SelectedItem as PluginListItem;
-            if (row == null)
+            if (row == null || ExplainBuiltIn(row, "업데이트"))
                 return;
 
             var temporary = Path.Combine(Path.GetTempPath(), "folderss-plugin-" + Guid.NewGuid().ToString("N") + ".zip");
@@ -1424,10 +1435,20 @@ namespace Folderss
                     MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        /// <summary>기본 기능 행이면 안내하고 true.</summary>
+        private bool ExplainBuiltIn(PluginListItem row, string action)
+        {
+            if (!row.IsBuiltIn)
+                return false;
+            MessageBox.Show(this, string.Format("{0}은(는) 플러그인이 아닌 기본 기능이라 {1}할 수 없습니다. 표시 방식만 바꿀 수 있습니다.", row.Name, action),
+                "플러그인 " + action, MessageBoxButton.OK, MessageBoxImage.Information);
+            return true;
+        }
+
         private void PluginRemove_Click(object sender, RoutedEventArgs e)
         {
             var row = PluginList.SelectedItem as PluginListItem;
-            if (row == null)
+            if (row == null || ExplainBuiltIn(row, "제거"))
                 return;
             if (MessageBox.Show(string.Format("{0}({1})을 제거할까요?\n플러그인 설정·데이터(plugin-data)는 남겨 둡니다.", row.Name, row.Id),
                     "플러그인 제거", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)

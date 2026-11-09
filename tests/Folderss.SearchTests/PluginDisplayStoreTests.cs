@@ -68,5 +68,17 @@ namespace Folderss.SearchTests
             Assert.False(modes.ContainsKey("a.b"));
             Assert.Equal(PluginDisplayStore.Main, modes["c.d"]);
         }
+
+        [Fact]
+        public void BuiltinGit_RoundTrips_AndCannotBeAPluginId()
+        {
+            // 기본 기능 Git의 표시 방식도 같은 파일에 저장한다. 플러그인 ID로는 쓸 수 없는 키여야 플러그인 설정과 겹치지 않는다.
+            Assert.Equal(PluginDisplayStore.Popup, PluginDisplayStore.Get(_root, PluginDisplayStore.BuiltinGitId));
+            PluginDisplayStore.Save(_root, new Dictionary<string, string> { { PluginDisplayStore.BuiltinGitId, PluginDisplayStore.Main } });
+            Assert.Equal(PluginDisplayStore.Main, PluginDisplayStore.Get(_root, PluginDisplayStore.BuiltinGitId));
+
+            var manifest = new PluginManifest { Id = PluginDisplayStore.BuiltinGitId, Assembly = "a.dll", Type = "A.Plugin" };
+            Assert.Throws<InvalidDataException>(() => PluginPackage.Validate(manifest));
+        }
     }
 }

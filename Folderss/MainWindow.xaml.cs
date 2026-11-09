@@ -1265,6 +1265,7 @@ namespace Folderss
             if (IsVisible)
                 SaveCurrentLayoutState();
             DisposeAllDisposableDocumentContent();
+            ShutdownPerspectives();
 
             _trayIcon?.Dispose();
             _trayIcon = null;
@@ -1736,6 +1737,14 @@ namespace Folderss
 
         private void ShowGit_Click(object sender, RoutedEventArgs e)
         {
+            // 메인 창에 띄운 Git이 있으면 그 화면으로 전환만 한다(작성 중인 커밋 메시지·선택 유지). 기준 폴더는 화면 안 "변경…"으로 바꾼다.
+            var gitPerspective = FindPerspective(PluginDisplayStore.BuiltinGitId);
+            if (gitPerspective != null)
+            {
+                ShowPerspective(gitPerspective);
+                return;
+            }
+
             var pane = ActivePane;
             if (pane == null || BlockedInArchive("Git 창을 열 수 없습니다"))
                 return;
@@ -1761,10 +1770,14 @@ namespace Folderss
                     "Git", MessageBoxButton.YesNo, MessageBoxImage.Question, MessageBoxResult.No) != MessageBoxResult.Yes)
                 return;
 
-            GitWindow gitWindow = null;
-            gitWindow = new GitWindow(fullPath, settings, CurrentDiffSettings, CountModifiedDocumentsUnder, OpenViewerTab,
-                tab => OpenSettings(gitWindow, tab)) { Owner = this };
-            gitWindow.Show();
+            GitView gitView = null;
+            gitView = new GitView(fullPath, settings, CurrentDiffSettings, CountModifiedDocumentsUnder, OpenViewerTab,
+                tab => OpenSettings(Window.GetWindow(gitView), tab));
+            // 표시 방식은 설정 > 플러그인의 "Git (기본 기능)" 행(plugins\display.json). 기본은 팝업.
+            if (PluginManager.GetDisplayMode(PluginDisplayStore.BuiltinGitId) == PluginDisplayStore.Main)
+                OpenGitPerspective(gitView);
+            else
+                new GitWindow(gitView) { Owner = this }.Show();
         }
 
         private GitSettings _gitSettings;
@@ -2138,13 +2151,15 @@ namespace Folderss
             // 콘솔 패널은 설정을 자체 캐시하므로 저장 직후 다시 읽혀 열린 탭의 폰트 크기를 바로 바꾼다.
             _consolePanel?.ApplySettings();
 
-            // 열려 있는 Git 창·두 파일 비교 창에도 바로 반영한다.
+            // 열려 있는 Git 창(팝업·퍼스펙티브)·두 파일 비교 창에도 바로 반영한다.
             if (win.SavedGitSettings != null && win.SavedDiffSettings != null)
             {
                 _gitSettings = win.SavedGitSettings;
                 _diffSettings = win.SavedDiffSettings;
-                foreach (var gitWindow in Application.Current.Windows.OfType<GitWindow>())
-                    gitWindow.ApplySettings(_gitSettings, _diffSettings);
+                var gitViews = Application.Current.Windows.OfType<GitWindow>().Select(w => w.View)
+                    .Concat(_perspectives.Select(p => p.View).OfType<GitView>());
+                foreach (var gitView in gitViews.ToList())
+                    gitView.ApplySettings(_gitSettings, _diffSettings);
                 foreach (var compareWindow in Application.Current.Windows.OfType<FileCompareWindow>())
                     compareWindow.ApplySettings(_diffSettings);
             }
