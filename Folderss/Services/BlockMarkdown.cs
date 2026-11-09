@@ -640,6 +640,33 @@ namespace Folderss.Services
             }
         }
 
+        /// <summary>
+        /// 블록 글을 이미지 블록 경로로 볼 수 있으면 그 경로(블록 메뉴 "전환 > 이미지"). 한 줄이어야 하고,
+        /// http·https·file 주소는 확장자와 관계없이(이미지 URL은 확장자가 없을 때가 많다), 그 밖의 글은 이미지 파일 경로(<paramref name="isImageFile"/>)일 때만. 아니면 null.
+        /// </summary>
+        public static string ImageSourceOf(string text, Func<string, bool> isImageFile)
+        {
+            var value = (text ?? string.Empty).Trim();
+            if (value.StartsWith("<") && value.EndsWith(">"))
+                value = value.Substring(1, value.Length - 2).Trim();
+            if (value.Length == 0 || value.IndexOf('\n') >= 0)
+                return null;
+            Uri uri;
+            if (value.IndexOf(' ') < 0 && Uri.TryCreate(value, UriKind.Absolute, out uri) &&
+                (uri.Scheme == Uri.UriSchemeHttp || uri.Scheme == Uri.UriSchemeHttps || uri.Scheme == Uri.UriSchemeFile))
+                return value;
+            if (value.Contains("://"))
+                return null;
+            try
+            {
+                return isImageFile(value) ? value : null;
+            }
+            catch (ArgumentException)
+            {
+                return null;   // 경로에 쓸 수 없는 글자
+            }
+        }
+
         /// <summary>표 한 줄을 셀로 나눈다. 앞뒤 <c>|</c>는 떼고 <c>\|</c>는 셀 안의 글자로 본다.</summary>
         public static List<string> SplitTableRow(string line)
         {

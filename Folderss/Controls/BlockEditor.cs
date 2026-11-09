@@ -1335,6 +1335,55 @@ namespace Folderss.Controls
             RecordChange();
         }
 
+        /// <summary>"전환 > 이미지"를 켤지: 고른 블록이 모두 서식 글 블록이고 글이 이미지 주소·경로인지.</summary>
+        private bool CanTurnIntoImage(int first, int last)
+        {
+            if (first < 0 || last >= _blocks.Count)
+                return false;
+            for (var i = first; i <= last; i++)
+            {
+                var block = _blocks[i];
+                if (!EditorBlock.HasInlineFormatting(block.Kind) || block.Kind == BlockKind.TableRow ||
+                    BlockMarkdown.ImageSourceOf(block.Text, IsImageFile) == null)
+                    return false;
+            }
+            return true;
+        }
+
+        /// <summary>"전환 > 이미지": 블록 글을 이미지 경로로 옮긴다(대체 텍스트는 비움). 실행 취소 한 단계.</summary>
+        private void TurnIntoImage(int first, int last)
+        {
+            if (!CanTurnIntoImage(first, last))
+                return;
+            for (var i = first; i <= last; i++)
+            {
+                var block = _blocks[i];
+                var source = BlockMarkdown.ImageSourceOf(block.Text, IsImageFile);
+                block.Kind = BlockKind.Image;
+                block.Text = string.Empty;
+                block.Source = source;
+            }
+            BlockOperations.NormalizeIndents(_blocks);
+            SyncRows();
+            UpdateSelectionVisuals();
+            RecordChange();
+        }
+
+        /// <summary>블록 메뉴 "이미지 주소 편집": 이미지 블록의 경로 입력란에 커서를 두고 전체 선택. 고치면 바로 다시 그리고 실행 취소 기록(OnMetaChanged).</summary>
+        private void EditImageSource(BlockRow row)
+        {
+            // 메뉴가 닫히며 포커스를 되돌린 뒤에 옮긴다.
+            Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+            {
+                var index = IndexOf(row);
+                if (index < 0 || row.Block.Kind != BlockKind.Image)
+                    return;
+                _selAnchor = _selActive = -1;
+                UpdateSelectionVisuals();
+                row.FocusMeta();
+            }));
+        }
+
         /// <summary>Ctrl+Enter: 할 일 체크, 토글 접기·펴기, 코드·원문·수식 블록에서는 아래에 새 문단.</summary>
         private void ToggleState(BlockRow row)
         {
@@ -2173,6 +2222,13 @@ namespace Folderss.Controls
                 var toggleHeading = command.ToggleHeading;
                 turnInto.Items.Add(CreateMenuItem(command.Title, command.Hint, () => { if (valid()) TurnInto(first(), last(), kind, false, toggleHeading); }));
             }
+            // 이미지는 경로가 있어야 해서 위 목록(종류만 바꾸는 명령)에 없다. 블록 글이 이미지 주소·경로일 때만 켠다.
+            var toImage = CreateMenuItem("이미지", "![](주소)", () => { if (valid()) TurnIntoImage(first(), last()); });
+            toImage.IsEnabled = CanTurnIntoImage(first(), last());
+            toImage.ToolTip = toImage.IsEnabled ? "블록 글(주소·경로)을 이미지 블록으로 바꿉니다."
+                : "블록 글이 한 줄짜리 이미지 주소(http·https·file)나 이미지 파일 경로일 때만 바꿀 수 있습니다.";
+            ToolTipService.SetShowOnDisabled(toImage, true);
+            turnInto.Items.Add(toImage);
             menu.Items.Add(turnInto);
             menu.Items.Add(CreateColorMenu(first, last, valid));
             menu.Items.Add(CreateColumnMenu(row, first, last, valid));
@@ -2195,6 +2251,7 @@ namespace Folderss.Controls
                 alignMenu.Items.Add(new Separator());
                 alignMenu.Items.Add(CreateMenuItem("원래 크기(폭 초기화)", string.Empty, () => row.ResetImageWidth()));
                 menu.Items.Add(alignMenu);
+                menu.Items.Add(CreateMenuItem("이미지 주소 편집", string.Empty, () => EditImageSource(row)));
                 menu.Items.Add(CreateMenuItem("원본 크기로 보기", string.Empty, () => row.OpenImagePreview()));
                 menu.Items.Add(CreateMenuItem("탐색기에서 열기", string.Empty, () => RevealInExplorer(ResolveImagePath(row.Block.Source))));
             }
