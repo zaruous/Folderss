@@ -809,7 +809,7 @@ Folderss/
 - 측정(약 1만 1천 줄, 블록 9,862개, 표 행 8,301개, 이미지 60개, Debug): 열기 0.13~0.17초, 글자 입력 약 15ms, 표 Enter 행 추가 50~65ms(편집기 키 처리 5~6ms, 나머지는
   새 TextBox 포커스 후 WPF 그리기·입력기 처리), 실행 취소 약 25ms, 한 화면씩 이동 약 30ms, 큰 폭 점프 30~70ms, 구조 재계산·기록 비교·위치 계산 각 1~2ms.
   그 밖에 처음 겪은 성능 문제: 세로 스크롤바 `Auto`의 이중 측정(→ `Visible`), UI Automation 전체 트리 갱신(→ `OnCreateAutomationPeer`로 화면에 보이는 블록만).
-- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`, 표 첫 행의 `colwidths`·`noheader`,
+- 사이드카(#78 D안): Markdown으로 나타낼 수 없는 속성(`color`, `background`, `width`, `align`, `heading`, `icon`, `size`, `title`, `description`, `column`, `colratio`, 표 첫 행의 `colwidths`·`noheader`, 표 행의 셀 안 줄바꿈 `cellbreaks`(`Services/TableCellBreaks` — 값 `셀해시:위치,…;…`, 본문에는 공백, 셀 글이 바뀌면 그 셀만 버림),
   줄 안 밑줄·글자 색·형광펜 `marks`(#76 9번 — 값 `해시|u:0-4;c=red:5-7;h=yellow:6-11`, 보이는 글자 기준, 해시가 다르면 버림))은 `EditorBlock.Attributes`에 두고
   문서 옆 `문서.md.meta.json`(`BlockSidecar`)에 저장한다 — Markdown 파일은 순수하게 남는다. 속성은 "Markdown에 쓰인 블록 순번 + (종류·본문) 해시 + 앞 블록 해시"로
   붙인다: 문서 전체 해시가 같으면 순번으로, 다른 도구에서 고쳤으면 같은 내용의 블록을 순서대로 찾아(같은 내용이 여럿이면 앞 블록까지 맞는 쪽) 붙이고,

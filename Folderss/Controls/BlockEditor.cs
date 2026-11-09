@@ -718,6 +718,19 @@ namespace Folderss.Controls
                 return;
             }
 
+            // 한글 조합 중 표 셀 Ctrl+Enter: 조합한 글자가 들어간 뒤에 셀 안 줄바꿈.
+            if (e.Key == Key.ImeProcessed && e.ImeProcessedKey == Key.Enter && mods == ModifierKeys.Control &&
+                row.Block.Kind == BlockKind.TableRow)
+            {
+                e.Handled = true;
+                Dispatcher.BeginInvoke(DispatcherPriority.Input, new Action(() =>
+                {
+                    if (IndexOf(row) >= 0 && row.Editor is BlockTextBox box && box.IsKeyboardFocused)
+                        InsertCellBreak(box);
+                }));
+                return;
+            }
+
             if (_slashRow == row && _slashPopup.IsOpen && HandleSlashKey(key, mods))
             {
                 e.Handled = true;
