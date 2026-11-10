@@ -9,6 +9,28 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## v1.9.2 (2026-11-10)
+
+### Git 퍼스펙티브 (#86)
+
+- Git 창을 플러그인처럼 메인 창 퍼스펙티브로 띄울 수 있게 함. 설정 > 플러그인 목록 맨 위 `Git (기본 기능)` 행에서 팝업/메인 선택(제거·업데이트 불가, `plugins\display.json`의 `builtin:git`).
+  `GitWindow` 내용을 `GitView`(UserControl)로 분리하고 팝업 `GitWindow`는 뷰를 담기만 함. 메인에 열려 있으면 `Git 저장소…`는 그 화면으로 전환만 함. `docs/items/git-perspective.md`
+
+### 블록 편집기 (#87)
+
+- **표 셀 안 줄바꿈**: 표 셀에서 `Ctrl+Enter`(Enter는 행 추가 그대로). Markdown에는 태그 없이 공백, 줄바꿈 위치는 사이드카 `cellbreaks`(#78). `docs/items/block-table-cell-line-break.md`
+- **전환 > 이미지 / 이미지 주소 편집**: URL·이미지 경로 글 블록을 블록 메뉴 `전환 > 이미지`로 이미지 블록으로(주소가 아니면 꺼짐), 이미지 블록 메뉴 `이미지 주소 편집`. `docs/items/block-image-turn-into-and-edit-source.md`
+
+### 함께 포함
+
+- **Text 편집기**: 읽기 전용 Text 뷰어를 AvalonEdit 기반 편집기로 교체(편집·저장, 찾기/바꾸기, 인코딩 감지·변환, 큰 로그 파일 성능), `.txt`·`.log` 기본 연결. 툴바 인코딩 변환(읽은 인코딩 → 저장할 인코딩). `docs/items/text-editor-lightweight.md`
+- **이미지 확대·이동**: Markdown 미리보기·분할 보기 이미지 클릭 확대 화면, 블록 편집기 이미지 팝업 — `Ctrl+휠` 포인터 기준 확대·축소, 왼쪽/가운데 버튼 끌기 이동. `docs/items/markdown-preview-image-zoom-pan.md`, `docs/items/block-image-preview-zoom-pan.md`
+- **잠긴 파일 사용 프로세스 확인**: 삭제 실패·파일 패널에서 사용 중인 프로세스 조회(Restart Manager), 정상/강제 종료(시스템·서비스·자기 자신 차단, PID 재검증) 후 대기열로 삭제 재시도. `docs/items/locked-file-process-inspection.md`
+
+### 알려진 문제
+
+- 블록 편집기에서 `/이미지`로 넣은 뒤 `미리보기`로 전환하면 COMException으로 페이지가 표시되지 않는다는 보고 — 재현 정보 확인 중.
+
 ## v1.9.1 (2026-11-05)
 
 ### 파일 패널 우클릭 "뷰어 설정"
