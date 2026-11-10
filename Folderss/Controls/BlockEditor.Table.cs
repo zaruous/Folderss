@@ -17,7 +17,7 @@ namespace Folderss.Controls
         // 가상화 패널이 화면에 보이는 행만 만들므로 행이 수천 개인 표도 행 추가·입력 비용이 문서 크기와 무관하다.
 
         /// <summary>
-        /// 표 셀 키: Tab/Shift+Tab 다음·이전 셀(마지막 셀에서 Tab은 행 추가), Enter 아래에 행 추가, ↑↓ 같은 열의 위·아래 행,
+        /// 표 셀 키: Tab/Shift+Tab 다음·이전 셀(마지막 셀에서 Tab은 행 추가), Enter 아래에 행 추가, Ctrl+Enter 셀 안 줄바꿈, ↑↓ 같은 열의 위·아래 행,
         /// ←→ 셀 경계에서 이웃 셀, 빈 행 첫 셀 맨 앞 Backspace는 행 삭제. 처리하지 않은 키는 일반 블록 키로 넘긴다.
         /// </summary>
         private bool HandleTableKey(BlockRow row, Key key, ModifierKeys mods)
@@ -54,7 +54,12 @@ namespace Folderss.Controls
                         InsertTableRow(index + 1, column);
                         return true;
                     }
-                    // 셀은 한 줄. Shift+Enter 줄바꿈은 막는다.
+                    if (mods == ModifierKeys.Control && editor is BlockTextBox box)
+                    {
+                        InsertCellBreak(box);
+                        return true;
+                    }
+                    // Shift+Enter는 막는다(셀 줄바꿈은 Ctrl+Enter).
                     return mods == ModifierKeys.Shift;
 
                 case Key.Up:
@@ -98,6 +103,14 @@ namespace Folderss.Controls
                     return mods == ModifierKeys.None && editor.SelectionLength == 0 && editor.CaretIndex == editor.Text.Length;
             }
             return false;
+        }
+
+        /// <summary>셀 안 줄바꿈(Ctrl+Enter). 선택한 글은 줄바꿈으로 바꾼다. 저장은 <see cref="OnCellTextChanged"/>.</summary>
+        private static void InsertCellBreak(BlockTextBox editor)
+        {
+            var at = editor.SelectionStart;
+            editor.SelectedText = "\n";
+            editor.Select(at + 1, 0);
         }
 
         private bool IsSameTable(int a, int b)
@@ -234,7 +247,10 @@ namespace Folderss.Controls
         {
             if (_suppressTextChanged)
                 return;
-            row.Block.Text = row.JoinedCells();
+            // 셀 안 줄바꿈: 본문에는 공백으로(글자 수 같음), 위치는 사이드카 속성으로(Markdown에 태그를 넣지 않음, #78).
+            var texts = row.CellEditTexts();
+            row.Block.Text = BlockMarkdown.JoinCells(texts);
+            TableCellBreaks.Update(row.Block, texts);
             RecordChange(row);
             if (row.Editor.IsKeyboardFocused)
                 ScheduleCaretIntoView(row.Editor);

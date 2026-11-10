@@ -1761,7 +1761,8 @@ namespace Folderss.Controls
             private void SyncCells()
             {
                 var grid = EnsureTableGrid();
-                var values = BlockMarkdown.SplitCells(Block.Text);
+                // 셀 안 줄바꿈(사이드카 cellbreaks)을 넣은 글. 본문과 글자 수가 같다.
+                var values = TableCellBreaks.EditTexts(Block);
                 var count = Math.Max(1, Math.Max(_tableColumns, values.Length));
                 while (_cellHosts.Count < count)
                     AddCellHost(grid);
@@ -1963,7 +1964,7 @@ namespace Folderss.Controls
                 if (_cells[index] != null)
                     return _cells[index];
                 _editing = true;
-                var values = BlockMarkdown.SplitCells(Block.Text);
+                var values = TableCellBreaks.EditTexts(Block);
                 AddCellEditor(index, index < values.Length ? values[index] : string.Empty);
                 _cellDisplays[index].Visibility = Visibility.Collapsed;
                 _appliedTextColor = null;
@@ -2004,6 +2005,17 @@ namespace Folderss.Controls
             }
 
             /// <summary>표 셀 본문들을 블록 본문(탭 구분)으로 합친다.</summary>
+            /// <summary>셀마다 입력란 글(없으면 줄바꿈을 넣은 블록 셀 글). 셀 안 줄바꿈이 들어 있다.</summary>
+            public string[] CellEditTexts()
+            {
+                var values = TableCellBreaks.EditTexts(Block);
+                var count = Math.Max(values.Length, _cellHosts.Count);
+                var result = new string[count];
+                for (var i = 0; i < count; i++)
+                    result[i] = i < _cells.Count && _cells[i] != null ? _cells[i].Text : i < values.Length ? values[i] : string.Empty;
+                return result;
+            }
+
             public string JoinedCells()
             {
                 var values = BlockMarkdown.SplitCells(Block.Text);
