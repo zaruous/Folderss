@@ -11,5 +11,5 @@ using System.Windows;
 // (없으면 windows7.0 이상으로 표시된 라이브러리(AvalonEdit) 호출마다 CA1416 경고).
 [assembly: System.Runtime.Versioning.SupportedOSPlatform("windows7.0")]
 [assembly: ThemeInfo(ResourceDictionaryLocation.None, ResourceDictionaryLocation.SourceAssembly)]
-[assembly: AssemblyVersion("1.9.1.0")]
-[assembly: AssemblyFileVersion("1.9.1.0")]
+[assembly: AssemblyVersion("1.9.2.0")]
+[assembly: AssemblyFileVersion("1.9.2.0")]
