@@ -126,6 +126,7 @@ Folderss/
 │   ├── PluginAppSettings       — 플러그인에 주는 본체 설정 읽기 전용 키 목록
 │   ├── PluginSessionRecord     — 플러그인 비정상 종료 감지 기록(plugin-sessions)·로그
 │   ├── SettingsFile            — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 후 교체)
+│   ├── CrashLog                — 본체 크래시 로그 (처리되지 않은 예외의 전체 스택을 crash-log.txt에)
 │   ├── ClipboardService        — 클립보드 읽기·쓰기 (다른 프로그램이 점유 중이면 알리고 실패 반환)
 │   ├── ScreenCaptureService    — 화면 캡쳐 순수 계산 (선택 영역 → 픽셀 사각형, 저장 파일 이름, 확장자 → 형식)
 │   ├── CaptureSettingsService  — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더)
@@ -606,6 +607,7 @@ Folderss\Themes\Controls.xaml
 | `plugins\sources.json` | 플러그인별 설치 출처 (로컬 / GitHub 저장소) |
 | `plugin-data\<id>\settings.json` | 플러그인별 설정 |
 | `plugin-log.txt` | 플러그인 오류·비정상 종료 로그 |
+| `crash-log.txt` | 본체 크래시 로그 — 처리되지 않은 예외의 전체 스택·스레드·포커스 요소 (5MB 넘으면 `crash-log.txt.old`로 교체) |
 | `plugin-sessions\<pid>.json` | 플러그인을 로드한 실행의 기록 (정상 종료 시 삭제, 남아 있으면 다음 시작 때 비정상 종료로 알림) |
 
 ## 단축키
