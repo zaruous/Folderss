@@ -117,6 +117,8 @@
                                 <MenuItem Header="디스크 사용량 보기" Click="ShowDiskUsage_Click"/>
                                 <MenuItem Header="디스크 사용량 미니 패널" Click="ShowDiskUsageMini_Click"/>
                                 <Separator/>
+                                <MenuItem Header="크래시 정보…" Click="ShowCrashReports_Click"
+                                          ToolTip="크래시 로그·플러그인 로그·이벤트 뷰어(Folderss.exe 오류)·보존된 덤프를 모아 보고, 붙여넣기 좋게 복사합니다."/>
                                 <MenuItem Header="기본 도킹 배치로 초기화" Click="ResetDockLayout_Click"/>
                             </MenuItem>
                             <!-- 항목은 메뉴를 열 때 활성 패널의 선택으로 채운다 (FolderBrowser.FillPathCopyMenu) -->

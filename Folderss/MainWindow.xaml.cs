@@ -79,6 +79,7 @@ namespace Folderss
 
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
+            StartRuntimeWatch();
             // 구버전 콘솔 레이아웃(LayoutAnchorable 방식)만 정리한다.
             var layoutPath = Path.Combine(
                 Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
@@ -2693,6 +2694,23 @@ namespace Folderss
         private void About_Click(object sender, RoutedEventArgs e)
         {
             new AboutWindow { Owner = this }.ShowDialog();
+        }
+
+        private CrashReportWindow _crashReportWindow;
+
+        /// <summary>⋯ 메뉴 > 보기 > 크래시 정보: 하나만 띄우고, 이미 열려 있으면 앞으로 가져온다.</summary>
+        private void ShowCrashReports_Click(object sender, RoutedEventArgs e)
+        {
+            if (_crashReportWindow != null)
+            {
+                if (_crashReportWindow.WindowState == WindowState.Minimized)
+                    _crashReportWindow.WindowState = WindowState.Normal;
+                _crashReportWindow.Activate();
+                return;
+            }
+            _crashReportWindow = new CrashReportWindow { Owner = this };
+            _crashReportWindow.Closed += (s, args) => _crashReportWindow = null;
+            _crashReportWindow.Show();
         }
 
         private void Exit_Click(object sender, RoutedEventArgs e)

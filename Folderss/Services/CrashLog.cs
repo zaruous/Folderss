@@ -38,6 +38,22 @@ namespace Folderss.Services
                     args.ExceptionObject as Exception, args.ExceptionObject);
             TaskScheduler.UnobservedTaskException += (sender, args) =>
                 Write("관찰되지 않은 Task 예외(앱은 계속 실행)", args.Exception, null);
+
+            // 기록에 쓰는 어셈블리(스택 줄 번호용 PDB 읽기 등)를 한가할 때 미리 불러 둔다.
+            // 실행 중 .NET 업데이트로 런타임 폴더가 지워진 뒤에는 새로 불러오지 못해 기록 자체가 실패한다(07:57 크래시).
+            Application.Current?.Dispatcher.BeginInvoke(DispatcherPriority.ApplicationIdle, new Action(() =>
+            {
+                try
+                {
+                    Build("preload", new InvalidOperationException(), null);
+                    using (var stream = new FileStream(Path.GetTempFileName(), FileMode.Open, FileAccess.ReadWrite, FileShare.None, 4096, FileOptions.DeleteOnClose | FileOptions.WriteThrough))
+                    using (var writer = new StreamWriter(stream, new UTF8Encoding(false)))
+                        writer.Write(string.Empty);
+                }
+                catch (Exception)
+                {
+                }
+            }));
         }
 
         /// <summary>UI 스레드 예외를 아무도 처리하지 않을 때(곧 종료) App.DispatcherUnhandledException에서 부른다.</summary>

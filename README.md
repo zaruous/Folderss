@@ -127,6 +127,7 @@ Folderss/
 │   ├── PluginSessionRecord     — 플러그인 비정상 종료 감지 기록(plugin-sessions)·로그
 │   ├── SettingsFile            — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 후 교체)
 │   ├── CrashLog                — 본체 크래시 로그 (처리되지 않은 예외의 전체 스택을 crash-log.txt에)
+│   ├── RuntimeWatch            — 실행 중 .NET 런타임 교체 감지 (재시작 안내)
 │   ├── ClipboardService        — 클립보드 읽기·쓰기 (다른 프로그램이 점유 중이면 알리고 실패 반환)
 │   ├── ScreenCaptureService    — 화면 캡쳐 순수 계산 (선택 영역 → 픽셀 사각형, 저장 파일 이름, 확장자 → 형식)
 │   ├── CaptureSettingsService  — 화면 캡쳐 설정 저장 (capture-settings.xml: 기본 저장 폴더, 기본값 사진 폴더)
@@ -160,6 +161,7 @@ Folderss/
 ├── CaptureResultWindow         — 화면 캡쳐 결과 팝업 (편집 도구 줄, 클립보드 복사, 활성 폴더에 저장, 다른 이름으로 저장, 크기 조절 대화상자)
 ├── CaptureEditor               — 캡쳐 편집면 (흰 페이지 + 캡쳐 이미지 오브젝트, 선택·이동·핸들 크기 변경, 사각형·타원·화살표·텍스트·자르기, 되돌리기, 합쳐서 내보내기)
 ├── AboutWindow                 — 버전 정보 창
+├── CrashReportWindow           — 크래시 정보 창 (크래시·플러그인 로그, 이벤트 뷰어, 덤프를 모아 보기·복사)
 └── PromptWindow                — 이름 변경·새 폴더 입력 다이얼로그
 
 Folderss.PluginContract/     — 플러그인 계약 DLL (IFolderssPlugin, IPluginManager, IFolderPanel, IPluginSettingsPage)
@@ -508,6 +510,18 @@ GitHub에서 설치한 플러그인은 목록에서 선택하고 `업데이트`�
 - 앱 종료 시 열려 있던 폴더 위치와 활성 폴더를 저장하고 다음 실행 시 복원합니다.
 - 도킹 배치는 창을 닫아 트레이로 숨길 때 즉시 저장되며, 다음 실행 시 패널의 분할 방향과 크기를 함께 복원합니다.
 - `보기 > 기본 도킹 배치로 초기화`로 저장된 배치를 버리고 기본 배치로 되돌릴 수 있습니다.
+
+### 크래시 정보
+
+- `⋯ > 보기 > 크래시 정보…`에서 크래시 관련 기록을 시간순(최신 위)으로 모아 봅니다.
+  - `crash-log.txt` — 본체의 처리되지 않은 예외(전체 스택·스레드·포커스 요소)
+  - `plugin-log.txt` — 플러그인 예외·비정상 종료
+  - 이벤트 뷰어 Application 로그의 Folderss.exe 항목(Application Error 1000, WER 1001, .NET Runtime 1026, 최근 30일)
+  - 보존된 크래시 덤프(`Folderss.exe*.dmp`, WER LocalDumps 폴더·`%LOCALAPPDATA%\CrashDumps`)와 `dotnet-dump` 분석 명령
+- `선택 항목 복사`(상세 창에서 일부를 골랐으면 그 부분)·`전체 복사`로 이슈·대화에 붙여넣기 좋은 글자를 복사합니다.
+- Folderss를 켜 둔 채 Windows Update 등이 .NET 런타임을 새 패치로 바꾸면(옛 버전 폴더 삭제) 처음 쓰는 기능에서 앱이 종료될 수 있습니다.
+  이를 1분마다 감지해 다시 시작을 안내합니다(`예` → 저장 확인 등 종료 절차 후 자동 재시작, `아니요` → 30분 뒤 다시 알림).
+- 예외 훅이 돌지 못하는 크래시(네이티브 경계 등)는 로그가 남지 않으므로, 덤프 보존이 설정되지 않았으면 `덤프 보존 설정 명령 복사`로 관리자 PowerShell 명령을 받을 수 있습니다.
 
 ### 문서 탭 컨텍스트 메뉴
 

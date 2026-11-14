@@ -130,6 +130,8 @@ Folderss/
 │   ├── PluginSessionRecord.cs      — PluginSessionLog: plugin-sessions\<pid>.json 기록·주인 없는 기록 수거·plugin-log.txt (순수 로직)
 │   ├── SettingsFile.cs             — 설정 파일 원자적 쓰기 헬퍼 (임시 파일 → File.Move 교체, 실패는 예외)
 │   ├── CrashLog.cs                 — 본체 크래시 로그 crash-log.txt: AppDomain 종료 훅·처리 안 된 UI 예외·관찰 안 된 Task 예외의 전체 스택(5MB 넘으면 .old로 교체)
+│   ├── RuntimeWatch.cs             — 실행 중 공용 .NET 런타임 파일이 업데이트로 지워졌는지 판단(감시 파일·사라진 파일·버전, 순수 로직). 타이머·재시작 안내는 MainWindow.RuntimeWatch.cs
+│   ├── CrashReportParser.cs        — crash-log.txt·plugin-log.txt를 항목(시각·출처·요약·전체)으로 나누기, 최신순 정렬, 복사 글자 만들기 (순수 로직)
 │   ├── ClipboardService.cs         — 클립보드 읽기·쓰기. 다른 프로그램이 점유 중(CLIPBRD_E_CANT_OPEN)이면 경고 후 false (앱 종료 방지)
 │   ├── CaptureAnnotation.cs        — 캡쳐 편집 도형·캡쳐 이미지 자리 하나(불변 값): 이동·자르기/크기 조절 변환(굵기·글자는 기하 평균 배율), 정리, 선택 판정(상자형은 테두리 상자 안, 화살표는 선 거리), 핸들 목록·판정·끌기(이미지 모서리는 비율 유지), 맨 위 도형 찾기 (순수 로직)
 │   ├── ScreenCaptureService.cs     — 화면 캡쳐 순수 계산: 오버레이 좌표 → 이미지 픽셀 사각형(비율 변환), 빠른 저장 파일 이름, 확장자 → 저장 형식, 화살표 머리 좌표, 크기 조절 비율 유지 (순수 로직)
@@ -165,6 +167,7 @@ Folderss/
 ├── DiffToolLauncher.cs             — 외부 비교 도구 실행 공용(사전 검사·안내 + `git difftool`), Git 창·두 파일 비교 창이 사용
 ├── ArchiveDialogs.cs               — `ArchiveExtractDialog`·`ArchiveCompressDialog`(GitDialogBase 상속), `ArchiveProgressWindow`(0.4초 넘는 작업만, 취소), `ArchiveOperations`(백그라운드 실행·오류 알림·zip 이름 폴더 풀기)
 ├── MainWindow.Perspectives.cs      — (partial) 퍼스펙티브: 메인 창을 파일 화면(DockManager)과 메인 창에 띄운 플러그인·Git 화면 사이에서 전환, 제목 표시줄 전환 버튼, Ctrl+F8, 플러그인 예외 시 떼어 내기
+├── MainWindow.RuntimeWatch.cs      — (partial) 실행 중 .NET 런타임 교체 감지(1분 타이머) → 재시작 안내, 예 → 종료 절차 후 App.OnExit에서 다시 실행
 ├── MainWindow.Archive.cs           — MainWindow의 zip 연결: 파일 작업 가드(`BlockedInArchive`), 이동·복사 처리, 반대편 패널, 결과 선택, ⋯ 메뉴 `압축 풀기…`·`zip으로 압축…`
 ├── DiffReportDialog.cs             — HTML 보고서 형식 선택 대화상자 + 저장 흐름(`DiffReportExporter`)
 ├── SettingsWindow.xaml/.cs         — 설정 창 (테마, 단축키, 뷰어, 열기 프로그램, 콘솔, Git, 비교, 캡쳐, 네트워크, 경로 복사, 플러그인)
@@ -173,6 +176,7 @@ Folderss/
 ├── CaptureResultWindow.cs          — 화면 캡쳐 결과 팝업(비모달): 편집 도구 줄, 클립보드 복사, 활성 폴더에 빠른 저장, ▾ 메뉴(다른 이름으로 저장, 기본 저장 폴더 탐색기로 열기), 저장 후 탐색기 열기 확인 (`SettingsFile.Write`로 임시 파일 후 교체), 편집 후 미저장 닫기 확인. 같은 파일에 `CaptureResizeDialog`(GitDialogBase 상속)
 ├── CaptureEditor.cs                — 캡쳐 편집면: 흰 페이지 위에 캡쳐 이미지(배열 [0], `Kind == Image`, 비트맵은 하나로 고정)와 도형. 상태 = (페이지 크기, 불변 `CaptureAnnotation` 배열). 화면 요소는 배열에서 매번 다시 만들고 저장·복사 때만 `Render`(RenderTargetBitmap)로 합침(바꾼 것이 없으면 캡쳐 원본 그대로). 내보내는 층과 미리보기·선택 표시·텍스트 입력 층 분리. 선택(이미지·도형 이동·핸들, 도형 Delete), 자르기·크기 조절은 페이지 크기만 바꾸고 이미지·도형은 좌표 변환. `ExpandPageToDisplay`(처음 열 때 모니터 해상도만큼 흰 배경), `ResizePage`(배경만 변경). 상태 스냅숏 되돌리기. 좌표는 페이지 픽셀, 표시는 LayoutTransform으로 1:1
 ├── AboutWindow.cs                  — 정보 창
+├── CrashReportWindow.cs            — ⋯ > 보기 > 크래시 정보: crash-log·plugin-log·이벤트 뷰어(Application Error/WER/.NET Runtime, Folderss.exe, 30일)·덤프(.dmp)를 한 목록으로, 선택/전체 복사, 덤프 보존(LocalDumps) 설정 명령 복사. 수집은 Task.Run
 ├── PromptWindow.cs                 — 이름 변경·새 폴더 입력 다이얼로그
 ├── App.xaml/.cs                    — 앱 진입점, 테마 초기 로드, 플러그인 발 UI 예외 처리
 └── docs/
