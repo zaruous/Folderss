@@ -9,6 +9,15 @@ v1.6.0 작업 시점에 각 항목의 커밋을 `git tag --contains`로 대조�
 
 ---
 
+## v1.9.3 (2026-11-14)
+
+### 크래시 진단·실행 중 .NET 런타임 교체 대응
+
+- **원인 확인**: 블록 편집기 `Ctrl+X` 중 종료는 앱이 켜진 채 Windows Update가 .NET 8.0.33 폴더를 지워, WPF RichTextBox 잘라내기가 처음 불러오는 `System.Text.Encoding.CodePages`를 찾지 못해 난 것(덤프 문자열·MsiInstaller 기록으로 확인). Ctrl+X 코드 버그 아님.
+- **런타임 교체 감지**: 1분마다 실행 중 런타임 파일을 확인해 사라지면 재시작 안내(예 → 저장 확인 등 종료 절차 후 자동 재시작, 아니요 → 30분 뒤 재알림). `CodePages`·크래시 기록 경로는 시작 시 미리 불러 감지 전에도 죽지 않게 함.
+- **크래시 로그**: 본체의 처리되지 않은 예외(UI·종료 훅·관찰 안 된 Task)를 `%LOCALAPPDATA%\Folderss\crash-log.txt`에 전체 스택·스레드·포커스 요소와 함께 기록.
+- **크래시 정보 창**: `⋯ > 보기 > 크래시 정보…` — crash-log·plugin-log·이벤트 뷰어(Folderss.exe)·보존된 덤프를 한 목록으로, 선택/전체 복사, 덤프 보존(LocalDumps) 설정 명령 복사. `docs/items/crash-log.md`
+
 ## v1.9.2 (2026-11-10)
 
 ### Git 퍼스펙티브 (#86)

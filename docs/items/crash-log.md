@@ -1,6 +1,6 @@
 # 본체 크래시 로그 (crash-log.txt)
 
-- 상태: Ready for Verification
+- 상태: Ready for Verification (v1.9.3 포함)
 - 계기: 블록 편집기(.md, `builtin:blocks`)에서 Ctrl+X 잘라내기 중 앱 종료(2026-11-14 07:57, Release 1.9.2.0).
   이벤트 뷰어에는 `Application Error` 1000 / WER 1001(예외 코드 0xe0434352 = 처리되지 않은 .NET 예외)만 있고
   `.NET Runtime` 1026(스택) 항목이 없었으며, WER 덤프(.mdmp)는 임시 폴더에서 이미 지워져 원인을 알 수 없었다.
