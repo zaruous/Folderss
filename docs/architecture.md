@@ -207,7 +207,7 @@ Folderss/
 - 테마 파일 키 검사: `tests/Folderss.SearchTests/ThemeFileTests`(모든 테마가 `Black.xaml`과 같은 키, 이름 중복 없음, 기본 테마가 외부 검사도 통과, 위험 요소 거부)
 
 ### MarkdownViewer 이미지 리소스 해석
-- `markdown-app.js/html`의 미리보기·분할 보기 이미지는 클릭하면 뷰어 전용 확대 화면을 연다. Ctrl+휠은 포인터 기준 배율 변경, 왼쪽/가운데 버튼 드래그는 이동, Esc는 닫기다. 확대 화면은 미리보기 DOM 밖에 있어 HTML/PDF 내보내기 내용에 포함되지 않는다.
+- `markdown-app.js/html`의 미리보기·분할 보기 이미지와 Mermaid 다이어그램(`.mermaid-wrap svg`, SVG 복제본을 `#mdv-diagram-full`에 담음 — 벡터라 처음 배율을 화면 맞춤으로 키움)은 클릭하면 뷰어 전용 확대 화면을 연다. Ctrl+휠은 포인터 기준 배율 변경, 왼쪽/가운데 버튼 드래그는 이동, Esc는 닫기다. 확대 화면은 미리보기 DOM 밖에 있어 HTML/PDF 내보내기 내용에 포함되지 않는다.
 - 미리보기 HTML은 `https://folderss-viewer/markdown-app.html`(가상 호스트 → `Viewers/Resources`)에서 로드되므로,
   마크다운 본문의 상대 경로 이미지(`![](img/foo.png)`, `![](../assets/foo.png)` 등)를 그대로 두면
   현재 파일 기준이 아니라 `Resources` 폴더 기준으로 요청되어 항상 깨진다.

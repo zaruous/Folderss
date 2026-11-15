@@ -316,7 +316,7 @@ mark.md-find-hit.active {
 #mdv-image-close { color: var(--fg); background: var(--panel); border: 1px solid var(--border); border-radius: 3px; padding: 3px 10px; cursor: pointer; }
 #mdv-image-stage { position: relative; flex: 1; overflow: hidden; cursor: grab; touch-action: none; }
 #mdv-image-stage.dragging { cursor: grabbing; }
-#mdv-image-full { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; transform-origin: center; user-select: none; -webkit-user-drag: none; pointer-events: none; }
+#mdv-image-full, #mdv-diagram-full { position: absolute; left: 50%; top: 50%; max-width: none; max-height: none; transform-origin: center; user-select: none; -webkit-user-drag: none; pointer-events: none; }
 #mdv-preview-pane hr { border: none; border-top: 1px solid var(--border); margin: 1.5em 0; }
 #mdv-preview-pane input[type=checkbox] { margin-right: .4em; }
 
@@ -336,7 +336,7 @@ mark.md-find-hit.active {
 
 /* mermaid wrapper */
 .mermaid-wrap { text-align: center; margin: .8em 0; }
-.mermaid-wrap svg { max-width: 100%; }
+.mermaid-wrap svg { max-width: 100%; cursor: zoom-in; }
 
 /* scrollbar */
 ::-webkit-scrollbar { width: 8px; height: 8px; }
@@ -523,12 +523,12 @@ body.mode-split #mdv-split-handle:hover { background: var(--accent); }
 </div>
 <div id="mdv-image-viewer" role="dialog" aria-modal="true" aria-label="이미지 확대 보기">
   <div id="mdv-image-toolbar">
-    <span>이미지 보기</span>
+    <span id="mdv-image-title">이미지 보기</span>
     <span id="mdv-image-zoom">100%</span>
     <span id="mdv-image-hint">Ctrl+휠: 확대/축소 · 왼쪽/가운데 드래그: 이동</span>
     <button id="mdv-image-close" type="button">닫기 (Esc)</button>
   </div>
-  <div id="mdv-image-stage"><img id="mdv-image-full" alt=""></div>
+  <div id="mdv-image-stage"><img id="mdv-image-full" alt=""><div id="mdv-diagram-full"></div></div>
 </div>
 <div id="mdv-operation-surface" aria-hidden="true"></div>
 

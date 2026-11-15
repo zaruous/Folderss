@@ -300,13 +300,17 @@ var imageViewer = document.getElementById('mdv-image-viewer');
 var imageStage = document.getElementById('mdv-image-stage');
 var fullImage = document.getElementById('mdv-image-full');
 var imageZoomLabel = document.getElementById('mdv-image-zoom');
+var imageTitle = document.getElementById('mdv-image-title');
+var diagramHost = document.getElementById('mdv-diagram-full');
+// 확대·이동을 적용할 요소: 이미지면 fullImage, Mermaid 다이어그램이면 복제한 SVG를 담은 diagramHost.
+var zoomTarget = fullImage;
 var imageZoom = 1;
 var imagePanX = 0;
 var imagePanY = 0;
 var imageDrag = null;
 
 function renderImageViewer() {
-  fullImage.style.transform = 'translate(-50%, -50%) translate(' + imagePanX + 'px, ' + imagePanY + 'px) scale(' + imageZoom + ')';
+  zoomTarget.style.transform = 'translate(-50%, -50%) translate(' + imagePanX + 'px, ' + imagePanY + 'px) scale(' + imageZoom + ')';
   imageZoomLabel.textContent = Math.round(imageZoom * 100) + '%';
 }
 
@@ -316,9 +320,18 @@ function closeImageViewer() {
   imageDrag = null;
   imageStage.classList.remove('dragging');
   fullImage.removeAttribute('src');
+  diagramHost.replaceChildren();
+}
+
+function showZoomTarget(target, title) {
+  zoomTarget = target;
+  fullImage.style.display = target === fullImage ? '' : 'none';
+  diagramHost.style.display = target === diagramHost ? '' : 'none';
+  imageTitle.textContent = title;
 }
 
 function openImageViewer(source) {
+  showZoomTarget(fullImage, '이미지 보기');
   imageZoom = 1;
   imagePanX = 0;
   imagePanY = 0;
@@ -335,18 +348,50 @@ function openImageViewer(source) {
   document.getElementById('mdv-image-close').focus();
 }
 
+// Mermaid 다이어그램은 SVG를 복제해 같은 확대 화면에 띄운다. 벡터라서 처음부터 화면에 맞게 키운다.
+function openDiagramViewer(svg) {
+  var box = svg.viewBox && svg.viewBox.baseVal;
+  var rect = svg.getBoundingClientRect();
+  var width = box && box.width > 0 ? box.width : rect.width;
+  var height = box && box.height > 0 ? box.height : rect.height;
+  if (!(width > 0 && height > 0)) return;
+  var clone = svg.cloneNode(true);
+  clone.removeAttribute('style');
+  clone.setAttribute('width', '100%');
+  clone.setAttribute('height', '100%');
+  diagramHost.replaceChildren(clone);
+  diagramHost.style.width = width + 'px';
+  diagramHost.style.height = height + 'px';
+  showZoomTarget(diagramHost, '다이어그램 보기');
+  imagePanX = 0;
+  imagePanY = 0;
+  imageViewer.classList.add('open');
+  imageZoom = Math.min((imageStage.clientWidth - 32) / width, (imageStage.clientHeight - 32) / height);
+  if (!Number.isFinite(imageZoom) || imageZoom <= 0) imageZoom = 1;
+  renderImageViewer();
+  document.getElementById('mdv-image-close').focus();
+}
+
 document.getElementById('mdv-preview-pane').addEventListener('click', function(e) {
-  if (e.target.tagName !== 'IMG') return;
+  if (e.target.tagName === 'IMG') {
+    e.preventDefault();
+    e.stopPropagation();
+    openImageViewer(e.target);
+    return;
+  }
+  var wrap = e.target.closest && e.target.closest('.mermaid-wrap');
+  var svg = wrap && wrap.querySelector('svg');
+  if (!svg) return;
   e.preventDefault();
   e.stopPropagation();
-  openImageViewer(e.target);
+  openDiagramViewer(svg);
 }, true);
 
 document.getElementById('mdv-image-close').addEventListener('click', closeImageViewer);
 imageStage.addEventListener('wheel', function(e) {
   if (!e.ctrlKey) return;
   e.preventDefault();
-  var nextZoom = Math.max(Math.min(0.1, imageZoom), Math.min(8, imageZoom * Math.pow(1.2, -e.deltaY / 100)));
+  var nextZoom = Math.max(Math.min(0.1, imageZoom), Math.min(Math.max(8, imageZoom), imageZoom * Math.pow(1.2, -e.deltaY / 100)));
   var centerX = imageStage.clientWidth / 2;
   var centerY = imageStage.clientHeight / 2;
   var ratio = nextZoom / imageZoom;
