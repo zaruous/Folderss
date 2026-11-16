@@ -1862,10 +1862,26 @@ namespace Folderss
             return GetFolderBrowsers().Any(pane => pane.IsPinLockedDestination(directory));
         }
 
+        /// <summary>고정(📌) 중인 폴더 패널마다 "• 탭 제목 — 고정 경로" 한 줄. 없으면 빈 문자열.</summary>
+        private string DescribePinnedPanels()
+        {
+            var documents = GetAllLayoutDocuments().ToList();
+            return string.Join("\n", GetFolderBrowsers()
+                .Where(pane => pane.IsFolderPinned)
+                .Select(pane =>
+                {
+                    var title = documents.FirstOrDefault(doc => ReferenceEquals(doc.Content, pane))?.Title;
+                    return "• " + (string.IsNullOrWhiteSpace(title) ? "폴더 패널" : title) + " — " + pane.PinnedPath;
+                }));
+        }
+
         public static void ShowPinLockedMessage()
         {
+            // 잠금은 모든 폴더 패널의 고정을 검사하므로, 다른(가려진) 패널의 고정 때문에 막혀도 원인을 알 수 있게 고정 중인 패널을 모두 보인다.
+            var pinned = (Application.Current?.MainWindow as MainWindow)?.DescribePinnedPanels();
             MessageBox.Show(
-                "고정된 폴더입니다. 폴더 구조를 변경할 수 없습니다.\n트리뷰의 고정(📌) 버튼을 해제하면 변경할 수 있습니다.",
+                "고정된 폴더입니다. 폴더 구조를 변경할 수 없습니다.\n트리뷰의 고정(📌) 버튼을 해제하면 변경할 수 있습니다." +
+                (string.IsNullOrEmpty(pinned) ? string.Empty : "\n\n현재 고정 중인 패널:\n" + pinned),
                 "폴더 고정",
                 MessageBoxButton.OK,
                 MessageBoxImage.Warning);
